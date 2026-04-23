@@ -1,0 +1,13 @@
+package com.ssafer.ssafer;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class SsaferApplicationTests {
+
+  @Test
+  void contextLoads() {
+  }
+
+}
