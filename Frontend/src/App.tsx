@@ -1,13 +1,7 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import AppRouter from './app/router';
 
 function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<div className="p-10 text-2xl font-bold">SSAFER Frontend</div>} />
-      </Routes>
-    </BrowserRouter>
-  );
+  return <AppRouter />;
 }
 
 export default App;
