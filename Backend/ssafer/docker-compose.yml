@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ssafer-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ssafer
+      POSTGRES_USER: ssafer
+      POSTGRES_PASSWORD: ssafer
+    ports:
+      - "5432:5432"
+    volumes:
+      - ssafer-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ssafer -d ssafer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ssafer-postgres-data:

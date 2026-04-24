@@ -1,0 +1,91 @@
+package com.ssafer.scan.domain.entity;
+
+import com.ssafer.scan.domain.enums.RequestActorType;
+import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.domain.enums.ScanStatus;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.time.LocalDateTime;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+@Getter
+@Builder
+@Entity
+@Table(name = "scans")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+public class Scan {
+
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
+
+  @Column(name = "project_id", nullable = false)
+  private Long projectId;
+
+  @Column(name = "requested_by_user_id")
+  private Long requestedByUserId;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "request_actor_type", nullable = false, length = 20)
+  private RequestActorType requestActorType;
+
+  @Column(name = "agent_id")
+  private Long agentId;
+
+  @Column(name = "custom_rule_set_id")
+  private Long customRuleSetId;
+
+  @Column(name = "parent_scan_id")
+  private Long parentScanId;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "scan_mode", nullable = false, length = 20)
+  private ScanMode scanMode;
+
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 20)
+  private ScanStatus status;
+
+  @Column(name = "progress_step", length = 100)
+  private String progressStep;
+
+  @Column(name = "failure_reason", columnDefinition = "text")
+  private String failureReason;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "target_snapshot_json")
+  private String targetSnapshotJson;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "raw_result_json")
+  private String rawResultJson;
+
+  @Column(name = "raw_result_path", length = 500)
+  private String rawResultPath;
+
+  @Column(name = "requested_at", nullable = false)
+  private LocalDateTime requestedAt;
+
+  @Column(name = "started_at")
+  private LocalDateTime startedAt;
+
+  @Column(name = "completed_at")
+  private LocalDateTime completedAt;
+
+  @Column(name = "last_updated_at", nullable = false)
+  private LocalDateTime lastUpdatedAt;
+}
