@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+
 import { ROUTES } from '../constants/routes';
 
 function NotFoundPage() {

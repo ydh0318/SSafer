@@ -1,4 +1,5 @@
 import { Link, Outlet } from 'react-router-dom';
+
 import { ROUTES } from '../../constants/routes';
 import { useAuthStore } from '../../store/authStore';
 
@@ -20,7 +21,10 @@ function AppLayout() {
             <Link className="transition hover:text-white" to={ROUTES.projects}>
               Projects
             </Link>
-            <Link className="transition hover:text-white" to={ROUTES.resultDetail.replace(':scanId', '1')}>
+            <Link
+              className="transition hover:text-white"
+              to={ROUTES.resultDetail.replace(':scanId', '1')}
+            >
               Results
             </Link>
             {isAuthenticated ? (

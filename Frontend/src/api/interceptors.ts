@@ -4,9 +4,10 @@ import axios, {
   type AxiosRequestConfig,
   type InternalAxiosRequestConfig,
 } from 'axios';
-import { tokenStorage } from './tokenStorage';
+
 import { useAuthStore } from '../store/authStore';
 import type { ApiSuccessResponse, TokenReissueData } from '../types/api';
+import { tokenStorage } from './tokenStorage';
 
 type RetryableRequestConfig = AxiosRequestConfig & {
   _retry?: boolean;
@@ -64,7 +65,8 @@ export const setupInterceptors = (client: AxiosInstance) => {
       originalRequest._retry = true;
 
       try {
-        const reissueResponse = await refreshClient.post<ApiSuccessResponse<TokenReissueData>>(REISSUE_PATH);
+        const reissueResponse =
+          await refreshClient.post<ApiSuccessResponse<TokenReissueData>>(REISSUE_PATH);
         const nextAccessToken = extractAccessToken(
           reissueResponse.data,
           reissueResponse.headers.authorization,
