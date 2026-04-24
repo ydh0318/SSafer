@@ -5,6 +5,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { tokenStorage } from './tokenStorage';
+import { useAuthStore } from '../store/authStore';
 import type { ApiSuccessResponse, TokenReissueData } from '../types/api';
 
 type RetryableRequestConfig = AxiosRequestConfig & {
@@ -73,13 +74,13 @@ export const setupInterceptors = (client: AxiosInstance) => {
           throw new Error('Access token was not returned from reissue API.');
         }
 
-        tokenStorage.setAccessToken(nextAccessToken);
+        useAuthStore.getState().setAccessToken(nextAccessToken);
         originalRequest.headers = originalRequest.headers ?? {};
         originalRequest.headers.Authorization = getAuthorizationHeader(nextAccessToken);
 
         return client(originalRequest);
       } catch (reissueError) {
-        tokenStorage.clearAccessToken();
+        useAuthStore.getState().logout();
         return Promise.reject(reissueError);
       }
     },
