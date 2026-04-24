@@ -78,7 +78,7 @@ class GuestEnterControllerTest {
             .content("{\"deviceId\":"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
-        .andExpect(jsonPath("$.message").value("요청 값 형식 오류"))
+        .andExpect(jsonPath("$.message").value("요청 파라미터 형식 오류"))
         .andExpect(jsonPath("$.data").isMap());
   }
 

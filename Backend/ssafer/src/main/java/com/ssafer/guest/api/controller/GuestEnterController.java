@@ -29,7 +29,7 @@ public class GuestEnterController {
   public ResponseEntity<ApiResponse<GuestEnterResponseData>> enter(
       @RequestBody(required = false) GuestEnterRequest request
   ) {
-    // 게스트 입장은 요청 바디가 비어 있어도 허용하며, 이 경우 deviceId는 null로 전달한다.
+    // 게스트 진입은 요청 바디가 비어 있어도 허용하며, 이 경우 deviceId는 null로 전달한다.
     String deviceId = request != null ? request.deviceId() : null;
     GuestEnterResult result = guestEnterUseCase.enter(new GuestEnterCommand(deviceId));
     GuestEnterResponseData data = new GuestEnterResponseData(

@@ -3,7 +3,7 @@ package com.ssafer.global.error;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
-  INVALID_PARAMETER(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", "요청 값 형식 오류"),
+  INVALID_PARAMETER(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", "요청 파라미터 형식 오류"),
   INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "서버 내부 오류");
 
   private final HttpStatus status;
