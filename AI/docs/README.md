@@ -9,6 +9,7 @@
 1_ollama_setup.md
 2_langchain_setup.md
 3_scan_result_input.md
+4_explain_chain.md
 ```
 
 ## 문서 설명
@@ -19,3 +20,4 @@
 | `1_ollama_setup.md` | Ollama CLI 설치, 모델 설치, 모델 실행 확인 |
 | `2_langchain_setup.md` | LangChain과 Ollama 연동 설정 |
 | `3_scan_result_input.md` | scan_result.json 입력 처리 |
+| `4_explain_chain.md` | Explain Chain 구축 |
