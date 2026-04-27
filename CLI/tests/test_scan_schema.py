@@ -230,6 +230,57 @@ def test_trivy_findings_normalized_to_schema():
     assert findings[0]["id"] == "FND-0001"
 
 
+def test_trivy_misconfiguration_fields_map_from_raw_json():
+    raw_misconfiguration = {
+        "ID": "DS-0002",
+        "Title": "Image user should not be 'root'",
+        "Severity": "HIGH",
+        "Message": "Last USER command in Dockerfile should not be 'root'",
+        "CauseMetadata": {
+            "StartLine": 2,
+            "Code": {
+                "Lines": [
+                    {
+                        "Number": 2,
+                        "Content": "USER root",
+                    }
+                ]
+            },
+        },
+    }
+    artifacts = [
+        {
+            "type": "trivy-json",
+            "target": "Dockerfile",
+            "hash": "sha256:abc",
+            "content": {
+                "Results": [
+                    {
+                        "Target": "Dockerfile",
+                        "Misconfigurations": [raw_misconfiguration],
+                    }
+                ]
+            },
+        }
+    ]
+
+    finding = _normalize_trivy_findings(artifacts, 0)[0]
+
+    assert set(finding) == FINDING_SCHEMA_KEYS
+    assert finding["id"] == "FND-0001"
+    assert re.match(r"^FND-\d{4}$", finding["id"])
+    assert finding["ruleId"] == raw_misconfiguration["ID"]
+    assert finding["source"] == "trivy"
+    assert backend_finding_source_type(finding["source"]) == "TRIVY"
+    assert finding["severity"] == raw_misconfiguration["Severity"]
+    assert finding["file"] == "Dockerfile"
+    assert finding["line"] == raw_misconfiguration["CauseMetadata"]["StartLine"]
+    assert finding["title"] == raw_misconfiguration["Title"]
+    assert len(finding["title"]) <= 255
+    assert finding["maskedEvidence"] == raw_misconfiguration["Message"]
+    assert len(finding["maskedEvidence"]) <= 120
+
+
 def test_trivy_findings_vulnerabilities_normalized():
     artifacts = [
         {
