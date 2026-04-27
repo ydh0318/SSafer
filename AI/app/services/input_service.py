@@ -6,14 +6,14 @@ def format_finding_for_llm(finding: dict[str, Any]) -> str:
 
     return "\n".join(
         [
-            f"Finding ID: {finding['id']}",
-            f"Rule ID: {finding['ruleId']}",
-            f"Source: {finding['source']}",
-            f"Severity: {finding['severity']}",
-            f"File: {finding['file']}",
-            f"Line: {line}",
-            f"Title: {finding['title']}",
-            "Evidence:",
+            f"탐지 ID: {finding['id']}",
+            f"규칙 ID: {finding['ruleId']}",
+            f"탐지 출처: {finding['source']}",
+            f"심각도: {finding['severity']}",
+            f"파일: {finding['file']}",
+            f"줄 번호: {line}",
+            f"제목: {finding['title']}",
+            "근거:",
             finding["maskedEvidence"],
         ]
     )
