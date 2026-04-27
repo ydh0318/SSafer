@@ -2,18 +2,21 @@
 
 FastAPI 기반 AI 서버입니다.
 
-## Setup
+## Documents
+
+```text
+docs/0_fastapi_setup.md
+docs/1_ollama_setup.md
+docs/2_langchain_ollama_setup.md
+```
+
+## Quick Start
 
 ```bash
-cd /S14P31B105/AI
+cd /home/eunsu/S14P31B105/AI
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-## Run
-
-```bash
 uvicorn app.main:app --reload
 ```
 
