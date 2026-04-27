@@ -7,6 +7,7 @@
 ```text
 보안 설명 생성 프롬프트 정의
 LangChain Explain Chain 구현
+finding 기반 설명 생성 로직 구현
 ```
 
 ## 2. 프롬프트 파일
@@ -128,9 +129,51 @@ RunnableSequence
 dict_keys(['finding_input'])
 ```
 
-## 9. 다음 작업
+## 9. Finding 기반 설명 생성 로직
+
+검증된 finding을 Explain Chain에 전달해 설명을 생성하는 서비스는 아래 파일에 있습니다.
 
 ```text
-finding 기반 설명 생성 로직 구현
+app/services/explain_service.py
+```
+
+현재 구현된 함수:
+
+```python
+generate_finding_explanation(finding: dict) -> str
+generate_finding_explanations(findings: list[dict]) -> list[dict[str, str]]
+```
+
+처리 흐름:
+
+```text
+finding dict
+→ format_finding_for_llm()
+→ create_explain_chain()
+→ chain.invoke({"finding_input": ...})
+→ explanation 문자열 반환
+```
+
+여러 finding을 처리할 때는 각 finding의 `id`와 생성된 `explanation`을 함께 반환합니다.
+
+## 10. 로직 import 확인
+
+아래 명령어로 설명 생성 서비스가 정상 import되는지 확인할 수 있습니다.
+
+```bash
+cd /home/eunsu/S14P31B105/AI
+source .venv/bin/activate
+python -c "from app.services.explain_service import generate_finding_explanation, generate_finding_explanations; print(generate_finding_explanation.__name__, generate_finding_explanations.__name__)"
+```
+
+정상 출력 예시:
+
+```text
+generate_finding_explanation generate_finding_explanations
+```
+
+## 11. 다음 작업
+
+```text
 설명 결과 출력 테스트
 ```
