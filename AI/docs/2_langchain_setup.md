@@ -112,5 +112,34 @@ python -c "from app.core.llm import get_ollama_llm; llm = get_ollama_llm(); prin
 ChatOllama llama3.2:3b http://127.0.0.1:11434
 ```
 
-이 단계는 LLM 객체 생성 확인입니다. 실제 프롬프트 호출 테스트는 다음 단계에서 진행합니다.
+이 단계는 LLM 객체 생성 확인입니다.
 
+## 6. LLM 호출 테스트
+
+LangChain을 통해 Ollama 모델에 실제 프롬프트를 보내는 테스트 스크립트는 아래 파일입니다.
+
+```text
+scripts/test_llm_call.py
+```
+
+먼저 Ollama 서버를 실행합니다.
+
+```bash
+ollama serve
+```
+
+다른 터미널에서 테스트 스크립트를 실행합니다.
+
+```bash
+cd /home/eunsu/S14P31B105/AI
+source .venv/bin/activate
+python scripts/test_llm_call.py
+```
+
+정상이라면 아래처럼 출력됩니다.
+
+```text
+OK
+```
+
+이 응답이 출력되면 LangChain이 로컬 Ollama 모델을 실제로 호출한 것입니다.
