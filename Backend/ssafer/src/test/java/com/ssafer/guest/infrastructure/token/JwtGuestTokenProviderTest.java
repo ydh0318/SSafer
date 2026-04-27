@@ -27,6 +27,9 @@ class JwtGuestTokenProviderTest {
     assertThat(claims.getSubject()).startsWith("guest:");
     assertThat(claims.getIssuer()).isEqualTo("ssafer");
     assertThat(claims.get("role", String.class)).isEqualTo("GUEST");
+    assertThat(claims.get("guestOwnerKeyHash", String.class))
+        .hasSize(64)
+        .matches("^[0-9a-f]{64}$");
     assertThat(claims.getExpiration().toInstant()).isEqualTo(result.expiresAt());
   }
 }

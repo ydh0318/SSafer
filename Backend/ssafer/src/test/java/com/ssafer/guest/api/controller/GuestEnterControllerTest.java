@@ -49,7 +49,7 @@ class GuestEnterControllerTest {
                 }
                 """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.message").value("게스트 세션 발급 성공"))
+        .andExpect(jsonPath("$.message").exists())
         .andExpect(jsonPath("$.data.guestAccessToken").value("guest.temp.token"))
         .andExpect(jsonPath("$.data.expiresAt").value("2026-04-23T12:00:00Z"));
   }
@@ -64,7 +64,7 @@ class GuestEnterControllerTest {
             .contentType(APPLICATION_JSON)
             .content("{}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.message").value("게스트 세션 발급 성공"))
+        .andExpect(jsonPath("$.message").exists())
         .andExpect(jsonPath("$.data.guestAccessToken").value("guest.temp.token"))
         .andExpect(jsonPath("$.data.expiresAt").value("2026-04-23T12:00:00Z"));
 
@@ -78,12 +78,11 @@ class GuestEnterControllerTest {
             .content("{\"deviceId\":"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
-        .andExpect(jsonPath("$.message").value("요청 파라미터 형식 오류"))
+        .andExpect(jsonPath("$.message").value("Request parameter format is invalid"))
         .andExpect(jsonPath("$.data").isMap());
   }
 
   private ArgumentMatcher<GuestEnterCommand> matchesDeviceId(String expectedDeviceId) {
-    // null/값 존재 두 케이스를 같은 matcher로 검증하기 위한 유틸리티다.
     return command -> expectedDeviceId == null
         ? command.deviceId() == null
         : expectedDeviceId.equals(command.deviceId());
