@@ -47,6 +47,7 @@ _GOOSE_RIGHT = [
 
 _TRACK_W = 36
 _GOOSE_W = 8
+_REPORT_EVIDENCE_MAX = 80
 
 
 def _walking_panel(pos: int, direction: int, frame: int, step: str) -> Panel:
@@ -326,9 +327,10 @@ def _print_findings(scan: dict) -> None:
     finding_table.add_column("Location", overflow="fold")
     finding_table.add_column("Rule")
     finding_table.add_column("Title", overflow="fold")
+    finding_table.add_column("Evidence", overflow="fold")
 
     if not findings:
-        finding_table.add_row("-", "-", "-", "-", "-", "-")
+        finding_table.add_row("-", "-", "-", "-", "-", "-", "-")
         console.print(finding_table)
         return
 
@@ -343,8 +345,20 @@ def _print_findings(scan: dict) -> None:
             location,
             str(finding.get("ruleId") or "-"),
             str(finding.get("title") or "-"),
+            _format_report_evidence(finding.get("maskedEvidence")),
         )
     console.print(finding_table)
+
+
+def _format_report_evidence(value: object) -> str:
+    if value is None:
+        return "-"
+    text = str(value).replace("\r", " ").replace("\n", " ").strip()
+    if not text:
+        return "-"
+    if len(text) <= _REPORT_EVIDENCE_MAX:
+        return text
+    return text[: _REPORT_EVIDENCE_MAX - 3] + "..."
 
 
 def _count_trivy_artifact_findings(content: dict) -> int:
