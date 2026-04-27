@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ScanNodeRepository extends JpaRepository<ScanNode, Long> {
 
+  long countByScanId(Long scanId);
+
   List<ScanNode> findByScanId(Long scanId);
 
   Optional<ScanNode> findByIdAndScanId(Long id, Long scanId);
