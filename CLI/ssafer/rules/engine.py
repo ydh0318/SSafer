@@ -40,14 +40,17 @@ class RuleEngine:
                 EnvPlainSecretRule(),
             ]
         self._rules = rules
+        self.warnings: list[str] = []
 
     def run(self, context: ScanContext) -> list[Finding]:
         findings: list[Finding] = []
+        self.warnings = []
         for rule in self._rules:
             try:
                 findings.extend(rule.check(context))
-            except Exception:
-                pass  # 룰 실패는 스캔 중단하지 않음
+            except Exception as exc:
+                rule_id = getattr(rule, "rule_id", rule.__class__.__name__)
+                self.warnings.append(f"Rule {rule_id} failed: {exc}")
 
         for idx, finding in enumerate(findings, start=1):
             finding.id = f"FND-{idx:04d}"

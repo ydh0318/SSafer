@@ -358,3 +358,36 @@ services:
     assert len(findings) > 0
     for f in findings:
         assert f.source == "custom-rule"
+
+
+def test_rule_engine_records_failed_rule_warning():
+    class FailingRule:
+        rule_id = "BROKEN_RULE"
+        severity = "HIGH"
+
+        def check(self, context: ScanContext) -> list[Finding]:
+            raise RuntimeError("boom")
+
+    class PassingRule:
+        rule_id = "PASSING_RULE"
+        severity = "LOW"
+
+        def check(self, context: ScanContext) -> list[Finding]:
+            return [
+                Finding(
+                    rule_id=self.rule_id,
+                    source="custom-rule",
+                    severity=self.severity,
+                    file="test.yml",
+                    line=None,
+                    title="Passing rule",
+                    masked_evidence="test=***MASKED***",
+                )
+            ]
+
+    engine = RuleEngine([FailingRule(), PassingRule()])
+    findings = engine.run(_ctx())
+
+    assert len(findings) == 1
+    assert findings[0].id == "FND-0001"
+    assert engine.warnings == ["Rule BROKEN_RULE failed: boom"]

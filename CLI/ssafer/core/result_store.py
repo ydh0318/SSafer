@@ -94,7 +94,9 @@ def run_scan(
         env_files=files.env_files,
         project_root=project_root,
     )
-    custom_rule_findings = RuleEngine().run(scan_context)
+    rule_engine = RuleEngine()
+    custom_rule_findings = rule_engine.run(scan_context)
+    warnings.extend(rule_engine.warnings)
 
     _step("환경변수 파일 파싱 중...")
     env_metadata = parse_env_metadata(files.env_files, salt, project_root, warnings)
