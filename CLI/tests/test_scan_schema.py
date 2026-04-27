@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+import ssafer.core.result_store as result_store
 from ssafer.core.result_store import _normalize_trivy_findings, backend_finding_source_type, load_last_scan
 
 
@@ -77,6 +78,25 @@ def test_scanned_at_is_iso8601(tmp_path: Path):
     loaded = load_last_scan(tmp_path)
     assert loaded is not None
     assert ISO8601_RE.match(loaded["scannedAt"]), f"scannedAt format wrong: {loaded['scannedAt']}"
+
+
+def test_rule_engine_warning_makes_scan_partial(tmp_path: Path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("PUBLIC_MODE=dev\n", encoding="utf-8")
+
+    class FakeRuleEngine:
+        warnings = ["Rule BROKEN_RULE failed: boom"]
+
+        def run(self, context: Any) -> list:
+            return []
+
+    monkeypatch.setattr(result_store, "RuleEngine", FakeRuleEngine)
+
+    scan = result_store.run_scan(tmp_path)
+
+    assert scan["analysisStatus"] == "PARTIAL"
+    assert scan["warnings"] == ["Rule BROKEN_RULE failed: boom"]
+    assert scan["cliSummary"]["warnings"] == 1
 
 
 # ── findings 구조 검증 ────────────────────────────────────────────────────────
