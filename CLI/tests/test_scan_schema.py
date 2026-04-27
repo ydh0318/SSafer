@@ -8,11 +8,21 @@ from typing import Any
 
 import pytest
 
-from ssafer.core.result_store import _normalize_trivy_findings, load_last_scan
+from ssafer.core.result_store import _normalize_trivy_findings, backend_finding_source_type, load_last_scan
 
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 ISO8601_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+FINDING_SCHEMA_KEYS = {
+    "id",
+    "ruleId",
+    "source",
+    "severity",
+    "file",
+    "line",
+    "title",
+    "maskedEvidence",
+}
 
 
 def _write_scan(project_root: Path, scan: dict[str, Any]) -> None:
@@ -82,6 +92,62 @@ def test_findings_source_never_ai(tmp_path: Path):
     assert loaded is not None
     for finding in loaded["findings"]:
         assert finding["source"] != "ai"
+
+
+def test_finding_sources_map_to_backend_source_types():
+    assert backend_finding_source_type("trivy") == "TRIVY"
+    assert backend_finding_source_type("custom-rule") == "CUSTOM_RULE"
+
+
+def test_ai_finding_source_is_not_mapped_to_backend():
+    with pytest.raises(ValueError, match="Unsupported finding source"):
+        backend_finding_source_type("ai")
+
+
+def test_findings_share_common_schema_for_cli_backend_and_frontend():
+    custom_finding = {
+        "id": "FND-0001",
+        "ruleId": "ENV_PLAIN_SECRET",
+        "source": "custom-rule",
+        "severity": "HIGH",
+        "file": ".env",
+        "line": 1,
+        "title": "Plain secret in env file",
+        "maskedEvidence": "DB_PASSWORD=***MASKED***",
+    }
+    trivy_finding = _normalize_trivy_findings([
+        {
+            "type": "trivy-json",
+            "target": "Dockerfile",
+            "hash": "sha256:abc",
+            "content": {
+                "Results": [
+                    {
+                        "Target": "Dockerfile",
+                        "Misconfigurations": [
+                            {
+                                "ID": "DS001",
+                                "Title": "Test misconfig",
+                                "Severity": "HIGH",
+                                "Message": "some message",
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+    ], 1)[0]
+
+    for finding in [custom_finding, trivy_finding]:
+        assert set(finding) == FINDING_SCHEMA_KEYS
+        assert finding["source"] in {"trivy", "custom-rule"}
+        assert backend_finding_source_type(finding["source"]) in {"TRIVY", "CUSTOM_RULE"}
+        assert isinstance(finding["ruleId"], str) and finding["ruleId"]
+        assert isinstance(finding["severity"], str) and finding["severity"]
+        assert isinstance(finding["file"], str) and finding["file"]
+        assert finding["line"] is None or isinstance(finding["line"], int)
+        assert isinstance(finding["title"], str) and finding["title"]
+        assert isinstance(finding["maskedEvidence"], str)
 
 
 def test_findings_id_format_fnd_xxxx(tmp_path: Path):
