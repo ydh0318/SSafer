@@ -12,6 +12,7 @@ public final class ScanBasicResponseMapper {
   }
 
   public static ScanBasicResponse toResponse(Scan scan) {
+    // 기본 조회는 scans 테이블 메타데이터를 그대로 응답 DTO로 옮긴다.
     return new ScanBasicResponse(
         scan.getId(),
         scan.getProjectId(),
