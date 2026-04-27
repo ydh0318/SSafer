@@ -7,6 +7,7 @@
 ```text
 scan_result.json 파일 로딩 구현
 findings 배열 추출 로직 구현
+finding 필수 필드 검증
 ```
 
 ## 2. 샘플 입력 파일
@@ -59,25 +60,54 @@ findings 필드가 배열인지 확인
 findings 배열의 각 항목이 JSON object인지 확인
 ```
 
-## 5. 로딩 및 추출 확인
+## 5. Finding 필수 필드 검증
 
-아래 명령어로 `scan_result.json` 로딩과 `findings` 추출을 확인할 수 있습니다.
+각 finding은 아래 필드를 반드시 포함해야 합니다.
+
+```text
+id
+ruleId
+source
+severity
+file
+line
+title
+maskedEvidence
+```
+
+검증 함수:
+
+```python
+validate_findings_required_fields(findings: list[dict]) -> None
+```
+
+검증 규칙:
+
+```text
+필수 필드 누락 여부 확인
+line은 integer 또는 null 허용
+line을 제외한 필수 필드는 비어 있지 않은 string이어야 함
+```
+
+## 6. 로딩, 추출, 검증 확인
+
+아래 명령어로 `scan_result.json` 로딩, `findings` 추출, 필수 필드 검증을 확인할 수 있습니다.
 
 ```bash
 cd /home/eunsu/S14P31B105/AI
 source .venv/bin/activate
-python -c "from app.loaders.scan_loader import load_scan_result, extract_findings; data = load_scan_result('data/scan_result.json'); findings = extract_findings(data); print(len(findings), findings[0]['id'], findings[-1]['id'])"
+python -c "from app.loaders.scan_loader import load_scan_result, extract_findings, validate_findings_required_fields; data = load_scan_result('data/scan_result.json'); findings = extract_findings(data); validate_findings_required_fields(findings); print('validated', len(findings))"
 ```
 
 정상 출력 예시:
 
 ```text
-3 FND-0001 FND-0003
+validated 3
 ```
 
-## 6. API 연결 확인
+## 7. API 연결 확인
 
-현재 `/analysis`는 `scan_result.json` 파일을 로딩하고 `findings` 배열을 추출한 뒤 상태를 반환합니다.
+현재 `/analysis`는 `scan_result.json` 파일을 로딩하고 `findings` 배열을 추출한 뒤 필수 필드를 검증합니다.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/analysis \
@@ -89,16 +119,9 @@ curl -X POST http://127.0.0.1:8000/analysis \
 
 ```json
 {
-  "status": "loaded",
-  "message": "scan_result.json loaded. findings=3",
+  "status": "validated",
+  "message": "scan_result.json loaded and validated. findings=3",
   "scan_result_path": "data/scan_result.json",
   "finding_count": 3
 }
-```
-
-## 7. 다음 작업
-
-```text
-finding 필수 필드 검증
-finding → LLM 입력 데이터 변환
 ```
