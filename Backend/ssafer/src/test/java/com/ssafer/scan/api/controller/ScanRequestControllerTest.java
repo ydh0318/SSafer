@@ -94,7 +94,7 @@ class ScanRequestControllerTest {
     String requestBody = """
         {
           "projectName": "sample-app",
-          "source": "CLI"
+          "source": "UNKNOWN"
         }
         """;
 
@@ -102,6 +102,31 @@ class ScanRequestControllerTest {
             .contentType(MediaType.APPLICATION_JSON)
             .content(requestBody))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void createScanWithoutSourceStillAccepted() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(currentActorProvider.getCurrentActor()).thenReturn(AuthenticatedActor.member(1L));
+    when(scanRegistrationService.register(any(), any(CreateScanRequest.class))).thenReturn(
+        new ScanRegistrationResult(
+            1002L,
+            2002L,
+            ScanStatus.REQUESTED,
+            "s3://ssafer/raw/1002/scan_result.json",
+            "https://presigned-url.example.com"));
+
+    String requestBody = """
+        {
+          "projectName": "sample-app"
+        }
+        """;
+
+    mockMvc.perform(post("/api/v1/scans")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(requestBody))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.data.scanId").value(1002));
   }
 
   private MockMvc buildMockMvc() {

@@ -3,7 +3,6 @@ package com.ssafer.scan.api.dto;
 import com.ssafer.scan.domain.enums.ScanRequestSource;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 // 스캔 시작 API(POST /api/v1/scans) 요청 본문.
@@ -13,8 +12,7 @@ public record CreateScanRequest(
     @Size(max = 255)
     String projectName,
 
-    @Schema(description = "스캔 요청 출처", example = "AGENT")
-    @NotNull
+    @Schema(description = "스캔 요청 출처(미지정 시 CLI)", example = "CLI", defaultValue = "CLI", nullable = true)
     ScanRequestSource source,
 
     @Schema(description = "스캔 이름", example = "로컬 서버 점검", nullable = true)

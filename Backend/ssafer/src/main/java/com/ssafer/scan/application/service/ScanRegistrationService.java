@@ -10,6 +10,7 @@ import com.ssafer.project.domain.repository.ProjectRepository;
 import com.ssafer.scan.api.dto.CreateScanRequest;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
+import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
@@ -31,6 +32,7 @@ public class ScanRegistrationService {
 
   private final ProjectRepository projectRepository;
   private final ScanRepository scanRepository;
+  private final RawUploadUrlIssuer rawUploadUrlIssuer;
   private final ObjectMapper objectMapper;
 
   @Value("${APP_SCAN_RAW_S3_BUCKET:ssafer}")
@@ -46,6 +48,7 @@ public class ScanRegistrationService {
 
     // 회원/게스트 소유 범위에서 프로젝트를 찾고, 없으면 새로 만든다.
     Project project = findOrCreateProject(actor, normalizedProjectName);
+    ScanRequestSource source = resolveSource(request.source());
 
     LocalDateTime now = LocalDateTime.now();
     // 스캔 시작 시점에는 REQUESTED 상태로 row를 만들고, 요청 스냅샷을 JSON으로 남긴다.
@@ -55,22 +58,24 @@ public class ScanRegistrationService {
         .requestActorType(actor.isMember() ? RequestActorType.USER : RequestActorType.GUEST)
         .scanMode(com.ssafer.scan.domain.enums.ScanMode.AGENT)
         .status(ScanStatus.REQUESTED)
-        .targetSnapshotJson(serializeTargetSnapshot(request))
+        .targetSnapshotJson(serializeTargetSnapshot(request, source))
         .requestedAt(now)
         .lastUpdatedAt(now)
         .build();
 
     Scan saved = scanRepository.save(scan);
-    String rawResultPath = buildRawResultPath(saved.getId());
+    String objectKey = buildRawResultKey(saved.getId());
+    String rawResultPath = buildRawResultPath(objectKey);
     // scanId가 생성된 뒤에 고정 규칙(raw/{scanId}/scan_result.json)으로 경로를 채운다.
     scanRepository.updateRawResultPath(saved.getId(), rawResultPath);
+    String rawUploadUrl = rawUploadUrlIssuer.issuePutUrl(objectKey);
 
     return new ScanRegistrationResult(
         saved.getId(),
         project.getId(),
         saved.getStatus(),
         rawResultPath,
-        null
+        rawUploadUrl
     );
   }
 
@@ -125,15 +130,23 @@ public class ScanRegistrationService {
     return collapsed.toLowerCase(Locale.ROOT);
   }
 
-  private String buildRawResultPath(Long scanId) {
-    // raw 결과 경로는 팀 합의 규칙으로 고정한다.
-    return "s3://" + rawResultBucket + "/raw/" + scanId + "/scan_result.json";
+  private String buildRawResultKey(Long scanId) {
+    return "raw/" + scanId + "/scan_result.json";
   }
 
-  private String serializeTargetSnapshot(CreateScanRequest request) {
+  private String buildRawResultPath(String objectKey) {
+    // raw 결과 경로는 팀 합의 규칙으로 고정한다.
+    return "s3://" + rawResultBucket + "/" + objectKey;
+  }
+
+  private ScanRequestSource resolveSource(ScanRequestSource source) {
+    return source != null ? source : ScanRequestSource.CLI;
+  }
+
+  private String serializeTargetSnapshot(CreateScanRequest request, ScanRequestSource source) {
     // 스캔 시작 요청 원문 일부를 저장해 이후 추적/디버깅에 활용한다.
     Map<String, Object> snapshot = new LinkedHashMap<>();
-    snapshot.put("source", request.source().name());
+    snapshot.put("source", source.name());
     snapshot.put("scanName", request.scanName());
     snapshot.put("targetPath", request.targetPath());
     snapshot.put("includeLogs", request.includeLogs());
