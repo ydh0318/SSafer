@@ -116,7 +116,20 @@ ChatOllama llama3.2:3b http://127.0.0.1:11434
 
 ## 6. LLM 호출 테스트
 
-LangChain을 통해 Ollama 모델에 실제 프롬프트를 보내는 테스트 스크립트는 아래 파일입니다.
+LangChain을 통해 Ollama 모델에 실제 프롬프트를 보내는 기본 응답 생성 함수는 아래 파일에 있습니다.
+
+```text
+app/services/llm_service.py
+```
+
+```python
+def generate_basic_response(prompt: str) -> str:
+    llm = get_ollama_llm()
+    response = llm.invoke(prompt)
+    return response.content
+```
+
+이 함수를 실행해보는 테스트 스크립트는 아래 파일입니다.
 
 ```text
 scripts/test_llm_call.py
@@ -142,4 +155,4 @@ python scripts/test_llm_call.py
 OK
 ```
 
-이 응답이 출력되면 LangChain이 로컬 Ollama 모델을 실제로 호출한 것입니다.
+이 응답이 출력되면 LangChain이 로컬 Ollama 모델을 실제로 호출하고, 기본 응답을 생성한 것입니다.

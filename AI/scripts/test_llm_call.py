@@ -4,13 +4,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
-from app.core.llm import get_ollama_llm
+from app.services.llm_service import generate_basic_response
 
 
 def main():
-    llm = get_ollama_llm()
-    response = llm.invoke("Reply with only this word: OK")
-    print(response.content)
+    response = generate_basic_response("Reply with only this word: OK")
+    print(response)
 
 
 if __name__ == "__main__":
