@@ -22,3 +22,19 @@ def load_scan_result(scan_result_path: str) -> dict[str, Any]:
         raise ValueError("scan_result.json root must be a JSON object.")
 
     return data
+
+
+def extract_findings(scan_result: dict[str, Any]) -> list[dict[str, Any]]:
+    findings = scan_result.get("findings")
+
+    if findings is None:
+        raise ValueError("scan_result.json must contain a findings field.")
+
+    if not isinstance(findings, list):
+        raise ValueError("scan_result.json findings field must be an array.")
+
+    for index, finding in enumerate(findings):
+        if not isinstance(finding, dict):
+            raise ValueError(f"findings[{index}] must be a JSON object.")
+
+    return findings
