@@ -9,10 +9,12 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
 import com.ssafer.scan.api.dto.ScanBasicResponse;
+import com.ssafer.scan.api.dto.ScanFindingDetailResponse;
 import com.ssafer.scan.api.dto.ScanFindingListItemResponse;
 import com.ssafer.scan.api.dto.ScanFindingListResponseData;
 import com.ssafer.scan.api.dto.ScanSummaryResponse;
 import com.ssafer.scan.application.service.ScanBasicQueryService;
+import com.ssafer.scan.application.service.ScanFindingDetailQueryService;
 import com.ssafer.scan.application.service.ScanFindingListQueryService;
 import com.ssafer.scan.application.service.ScanSummaryQueryService;
 import com.ssafer.scan.domain.enums.FindingSourceType;
@@ -42,6 +44,9 @@ class ScanQueryControllerTest {
 
   @Mock
   private ScanFindingListQueryService scanFindingListQueryService;
+
+  @Mock
+  private ScanFindingDetailQueryService scanFindingDetailQueryService;
 
   @InjectMocks
   private ScanQueryController scanQueryController;
@@ -207,6 +212,66 @@ class ScanQueryControllerTest {
         .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
 
     mockMvc.perform(get("/api/v1/scans/999/findings"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+        .andExpect(jsonPath("$.message").value("Resource not found"));
+  }
+
+  @Test
+  void getScanFindingDetailReturnsOkResponse() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanFindingDetailQueryService.getScanFindingDetail(1001L, 2001L))
+        .thenReturn(new ScanFindingDetailResponse(
+            2001L,
+            1001L,
+            3001L,
+            FindingSourceType.TRIVY,
+            "sha256:abc123",
+            Severity.HIGH,
+            "CONFIG",
+            "Image user should not be 'root'",
+            "Running containers with root is risky",
+            "Dockerfile",
+            2,
+            "Dockerfile",
+            "DS-0002",
+            "Container escape",
+            "Use non-root user",
+            "{\"line\":2}",
+            ResolutionStatus.OPEN,
+            1L,
+            LocalDateTime.of(2026, 4, 27, 10, 0),
+            "Patch prepared",
+            "Dockerfile.bak",
+            "/backup/Dockerfile.bak",
+            "{\"size\":128}",
+            LocalDateTime.of(2026, 4, 27, 10, 5),
+            LocalDateTime.of(2026, 4, 27, 9, 30)
+        ));
+
+    mockMvc.perform(get("/api/v1/scans/1001/findings/2001"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("스캔 취약점 상세 조회 성공"))
+        .andExpect(jsonPath("$.data.findingId").value(2001))
+        .andExpect(jsonPath("$.data.scanId").value(1001))
+        .andExpect(jsonPath("$.data.scanNodeId").value(3001))
+        .andExpect(jsonPath("$.data.sourceType").value("TRIVY"))
+        .andExpect(jsonPath("$.data.severity").value("HIGH"))
+        .andExpect(jsonPath("$.data.category").value("CONFIG"))
+        .andExpect(jsonPath("$.data.title").value("Image user should not be 'root'"))
+        .andExpect(jsonPath("$.data.filePath").value("Dockerfile"))
+        .andExpect(jsonPath("$.data.lineNumber").value(2))
+        .andExpect(jsonPath("$.data.ruleCode").value("DS-0002"))
+        .andExpect(jsonPath("$.data.resolutionStatus").value("OPEN"));
+  }
+
+  @Test
+  void getScanFindingDetailWhenMissingReturnsNotFound() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanFindingDetailQueryService.getScanFindingDetail(1001L, 9999L))
+        .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
+
+    mockMvc.perform(get("/api/v1/scans/1001/findings/9999"))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("NOT_FOUND"))
         .andExpect(jsonPath("$.message").value("Resource not found"));
