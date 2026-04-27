@@ -2,22 +2,21 @@
 
 FastAPI 기반 AI 서버입니다.
 
-## Setup
+## Documents
+
+```text
+docs/0_fastapi_setup.md
+docs/1_ollama_setup.md
+docs/2_langchain_ollama_setup.md
+```
+
+## Quick Start
 
 ```bash
 cd /home/eunsu/S14P31B105/AI
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-## Ollama
-
-Ollama 설치와 모델 실행 방법은 [docs/ollama_setup.md](docs/ollama_setup.md)를 참고하세요.
-
-## Run
-
-```bash
 uvicorn app.main:app --reload
 ```
 
