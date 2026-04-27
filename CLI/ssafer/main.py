@@ -265,6 +265,7 @@ def _print_scan_details(scan: dict, project_root: Path) -> None:
     console.print(output_table)
 
     _print_targets(scan)
+    _print_findings(scan)
     _print_artifacts(scan)
 
 
@@ -314,6 +315,36 @@ def _print_artifacts(scan: dict) -> None:
             finding_count,
         )
     console.print(artifact_table)
+
+
+def _print_findings(scan: dict) -> None:
+    findings = scan.get("findings", [])
+    finding_table = Table(title="Findings")
+    finding_table.add_column("ID")
+    finding_table.add_column("Source")
+    finding_table.add_column("Severity")
+    finding_table.add_column("Location", overflow="fold")
+    finding_table.add_column("Rule")
+    finding_table.add_column("Title", overflow="fold")
+
+    if not findings:
+        finding_table.add_row("-", "-", "-", "-", "-", "-")
+        console.print(finding_table)
+        return
+
+    for finding in findings:
+        file_path = finding.get("file") or "-"
+        line = finding.get("line")
+        location = f"{file_path}:{line}" if line else file_path
+        finding_table.add_row(
+            str(finding.get("id") or "-"),
+            str(finding.get("source") or "-"),
+            str(finding.get("severity") or "-"),
+            location,
+            str(finding.get("ruleId") or "-"),
+            str(finding.get("title") or "-"),
+        )
+    console.print(finding_table)
 
 
 def _count_trivy_artifact_findings(content: dict) -> int:
