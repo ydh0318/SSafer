@@ -11,6 +11,7 @@ import com.ssafer.scan.domain.enums.Severity;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanNodeRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,8 @@ public class ScanSummaryQueryService {
     projectAuthorizationService.loadAuthorizedProjectOrThrow(scan.getProjectId(), actor);
 
     // 맵 형태 집계는 프론트가 그대로 키-값으로 소비할 수 있게 변환해 둔다.
+    Map<Severity, Long> severityCounts = toSeverityCountMap(
+        scanFindingRepository.countSeverityByScanId(scanId));
     Map<String, Long> categoryCounts = toCountMap(scanFindingRepository.countCategoryByScanId(scanId));
     Map<String, Long> sourceCounts = toCountMap(scanFindingRepository.countSourceTypeByScanId(scanId));
     Map<String, Long> resolutionCounts = toCountMap(scanFindingRepository.countResolutionStatusByScanId(scanId));
@@ -47,15 +50,24 @@ public class ScanSummaryQueryService {
         scan.getProjectId(),
         scanFindingRepository.countByScanId(scanId),
         scanNodeRepository.countByScanId(scanId),
-        scanFindingRepository.countByScanIdAndSeverity(scanId, Severity.CRITICAL),
-        scanFindingRepository.countByScanIdAndSeverity(scanId, Severity.HIGH),
-        scanFindingRepository.countByScanIdAndSeverity(scanId, Severity.MEDIUM),
-        scanFindingRepository.countByScanIdAndSeverity(scanId, Severity.LOW),
-        scanFindingRepository.countByScanIdAndSeverity(scanId, Severity.INFO),
+        severityCounts.getOrDefault(Severity.CRITICAL, 0L),
+        severityCounts.getOrDefault(Severity.HIGH, 0L),
+        severityCounts.getOrDefault(Severity.MEDIUM, 0L),
+        severityCounts.getOrDefault(Severity.LOW, 0L),
+        severityCounts.getOrDefault(Severity.INFO, 0L),
         categoryCounts,
         sourceCounts,
         resolutionCounts
     );
+  }
+
+  private Map<Severity, Long> toSeverityCountMap(List<Object[]> rows) {
+    Map<Severity, Long> counts = new EnumMap<>(Severity.class);
+    // severity 분포는 enum 키를 그대로 유지하면 응답 필드별 카운트를 꺼내기 쉽다.
+    for (Object[] row : rows) {
+      counts.put((Severity) row[0], ((Number) row[1]).longValue());
+    }
+    return counts;
   }
 
   private Map<String, Long> toCountMap(List<Object[]> rows) {

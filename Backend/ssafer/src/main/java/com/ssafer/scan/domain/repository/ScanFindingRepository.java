@@ -16,6 +16,15 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long> 
 
   long countByScanIdAndSeverity(Long scanId, Severity severity);
 
+  // severity 분포는 요약 카드에서 자주 쓰이므로 한 번의 group by 결과로 모은다.
+  @Query("""
+      select f.severity, count(f)
+      from ScanFinding f
+      where f.scanId = :scanId
+      group by f.severity
+      """)
+  List<Object[]> countSeverityByScanId(@Param("scanId") Long scanId);
+
   Page<ScanFinding> findByScanId(Long scanId, Pageable pageable);
 
   Page<ScanFinding> findByScanIdAndSeverity(Long scanId, Severity severity, Pageable pageable);

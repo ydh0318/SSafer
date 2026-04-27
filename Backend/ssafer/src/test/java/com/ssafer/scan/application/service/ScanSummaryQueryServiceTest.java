@@ -67,11 +67,13 @@ class ScanSummaryQueryServiceTest {
     when(scanRepository.findById(1001L)).thenReturn(Optional.of(scan));
     when(scanFindingRepository.countByScanId(1001L)).thenReturn(12L);
     when(scanNodeRepository.countByScanId(1001L)).thenReturn(3L);
-    when(scanFindingRepository.countByScanIdAndSeverity(1001L, Severity.CRITICAL)).thenReturn(1L);
-    when(scanFindingRepository.countByScanIdAndSeverity(1001L, Severity.HIGH)).thenReturn(2L);
-    when(scanFindingRepository.countByScanIdAndSeverity(1001L, Severity.MEDIUM)).thenReturn(4L);
-    when(scanFindingRepository.countByScanIdAndSeverity(1001L, Severity.LOW)).thenReturn(3L);
-    when(scanFindingRepository.countByScanIdAndSeverity(1001L, Severity.INFO)).thenReturn(2L);
+    when(scanFindingRepository.countSeverityByScanId(1001L)).thenReturn(List.<Object[]>of(
+        new Object[]{Severity.CRITICAL, 1L},
+        new Object[]{Severity.HIGH, 2L},
+        new Object[]{Severity.MEDIUM, 4L},
+        new Object[]{Severity.LOW, 3L},
+        new Object[]{Severity.INFO, 2L}
+    ));
     when(scanFindingRepository.countCategoryByScanId(1001L)).thenReturn(List.<Object[]>of(
         new Object[]{"CONFIG", 2L},
         new Object[]{"SECRET", 1L}
