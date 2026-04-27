@@ -17,6 +17,11 @@ from ssafer.core.sanitize import sanitize_compose_yaml
 from ssafer.core.trivy import run_trivy_config, trivy_version
 from ssafer.rules.engine import RuleEngine, ScanContext
 
+BACKEND_FINDING_SOURCE_TYPES = {
+    "trivy": "TRIVY",
+    "custom-rule": "CUSTOM_RULE",
+}
+
 
 def run_scan(
     project_root: Path,
@@ -167,7 +172,7 @@ def run_scan(
 
     _step("결과 저장 중...")
     result_path = results_dir / f"{scan_id}.json"
-    result_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     (results_dir / "last_scan.txt").write_text(result_path.name, encoding="utf-8")
     return result
 
@@ -217,6 +222,13 @@ def _compose_set_manifest(compose_set: Any, root: Path) -> dict[str, Any]:
 
 def _safe_artifact_name(name: str) -> str:
     return "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in name)
+
+
+def backend_finding_source_type(source: str) -> str:
+    try:
+        return BACKEND_FINDING_SOURCE_TYPES[source]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported finding source for backend mapping: {source}") from exc
 
 
 def _normalize_trivy_findings(artifacts: list[dict[str, Any]], start_index: int) -> list[dict[str, Any]]:
