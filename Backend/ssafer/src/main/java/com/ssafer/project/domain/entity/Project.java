@@ -122,4 +122,34 @@ public class Project {
   public Instant getDeletedAt() {
     return deletedAt;
   }
+
+  public void update(
+      boolean nameProvided,
+      String name,
+      boolean descriptionProvided,
+      String description,
+      boolean defaultScanModeProvided,
+      ScanMode defaultScanMode,
+      boolean monitorEnabledProvided,
+      Boolean monitorEnabled
+  ) {
+    // PATCH 정책: 요청에 포함된 필드만 반영하고, 미포함 필드는 기존 값을 유지한다.
+    if (nameProvided) {
+      this.name = name;
+    }
+    if (descriptionProvided) {
+      this.description = description;
+    }
+    if (defaultScanModeProvided) {
+      this.defaultScanMode = defaultScanMode;
+    }
+    if (monitorEnabledProvided) {
+      this.monitorEnabled = monitorEnabled;
+    }
+  }
+
+  public void softDelete() {
+    // hard delete 대신 deleted_at 타임스탬프를 기록한다.
+    this.deletedAt = Instant.now();
+  }
 }
