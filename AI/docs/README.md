@@ -8,6 +8,7 @@
 0_fastapi_setup.md
 1_ollama_setup.md
 2_langchain_setup.md
+3_scan_result_input.md
 ```
 
 ## 문서 설명
@@ -17,3 +18,4 @@
 | `0_fastapi_setup.md` | FastAPI 서버 가상환경, 실행, 기본 엔드포인트 확인 |
 | `1_ollama_setup.md` | Ollama CLI 설치, 모델 설치, 모델 실행 확인 |
 | `2_langchain_setup.md` | LangChain과 Ollama 연동 설정 |
+| `3_scan_result_input.md` | scan_result.json 입력 처리 |
