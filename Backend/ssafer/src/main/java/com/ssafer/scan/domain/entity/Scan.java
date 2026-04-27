@@ -3,7 +3,6 @@ package com.ssafer.scan.domain.entity;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -21,6 +20,10 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/**
+ * 스캔 요청부터 실행, 결과 적재까지의 전체 상태를 표현하는 루트 엔티티다.
+ * Raw 결과 업로드 API는 이 엔티티의 raw result 관련 필드만 갱신한다.
+ */
 @Getter
 @Builder
 @Entity
@@ -88,4 +91,27 @@ public class Scan {
 
   @Column(name = "last_updated_at", nullable = false)
   private LocalDateTime lastUpdatedAt;
+
+  /**
+   * 내부 raw 결과 업로드 시점에 바뀌는 필드만 한 번에 갱신한다.
+   * scan 생성에 쓰이는 식별/소유 필드는 여기서 변경하지 않는다.
+   */
+  public void updateRawResult(
+      ScanStatus status,
+      String progressStep,
+      String failureReason,
+      String rawResultJson,
+      String rawResultPath,
+      LocalDateTime startedAt,
+      LocalDateTime completedAt,
+      LocalDateTime lastUpdatedAt) {
+    this.status = status;
+    this.progressStep = progressStep;
+    this.failureReason = failureReason;
+    this.rawResultJson = rawResultJson;
+    this.rawResultPath = rawResultPath;
+    this.startedAt = startedAt;
+    this.completedAt = completedAt;
+    this.lastUpdatedAt = lastUpdatedAt;
+  }
 }
