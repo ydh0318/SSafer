@@ -1,0 +1,21 @@
+FROM python:3.11-slim AS runtime
+
+RUN useradd -m -u 1001 ssafer
+
+WORKDIR /app
+
+COPY AI/requirements.txt ./
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+COPY AI/app ./app
+RUN chown -R ssafer:ssafer /app
+
+USER ssafer
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "1", \
+     "--timeout-keep-alive", "75"]
