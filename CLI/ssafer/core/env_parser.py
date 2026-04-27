@@ -11,7 +11,7 @@ def parse_env_metadata(env_files: list[Path], project_salt: str, root: Path, war
     for env_file in env_files:
         keys: list[dict] = []
         try:
-            lines = env_file.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = env_file.read_text(encoding="utf-8-sig", errors="replace").splitlines()
         except OSError as exc:
             warnings.append(f"Failed to read env file {env_file}: {exc}")
             continue
@@ -21,7 +21,7 @@ def parse_env_metadata(env_files: list[Path], project_salt: str, root: Path, war
             if not stripped or stripped.startswith("#") or "=" not in stripped:
                 continue
             key, value = stripped.split("=", 1)
-            key = key.strip()
+            key = normalize_env_key(key)
             value = _strip_quotes(value.strip())
             secret_like = is_secret_key(key) or classify_value(value) == "secret-like"
             keys.append(
@@ -42,3 +42,7 @@ def _strip_quotes(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1]
     return value
+
+
+def normalize_env_key(key: str) -> str:
+    return key.strip().lstrip("\ufeff")

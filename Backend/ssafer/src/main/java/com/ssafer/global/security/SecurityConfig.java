@@ -48,6 +48,7 @@ public class SecurityConfig {
             .requestMatchers(HttpMethod.POST, "/api/v1/guests/enter").permitAll()
             // 프로젝트 관리 API는 회원/게스트 모두 Bearer 인증 필수
             .requestMatchers("/api/v1/projects/**").authenticated()
+            .requestMatchers("/api/v1/scans/**").authenticated()
             .anyRequest().permitAll()
         )
         .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
