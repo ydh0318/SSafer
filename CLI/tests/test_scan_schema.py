@@ -266,7 +266,9 @@ def test_trivy_misconfiguration_fields_map_from_raw_json():
 
     finding = _normalize_trivy_findings(artifacts, 0)[0]
 
+    assert set(finding) == FINDING_SCHEMA_KEYS
     assert finding["id"] == "FND-0001"
+    assert re.match(r"^FND-\d{4}$", finding["id"])
     assert finding["ruleId"] == raw_misconfiguration["ID"]
     assert finding["source"] == "trivy"
     assert backend_finding_source_type(finding["source"]) == "TRIVY"
@@ -274,7 +276,9 @@ def test_trivy_misconfiguration_fields_map_from_raw_json():
     assert finding["file"] == "Dockerfile"
     assert finding["line"] == raw_misconfiguration["CauseMetadata"]["StartLine"]
     assert finding["title"] == raw_misconfiguration["Title"]
+    assert len(finding["title"]) <= 255
     assert finding["maskedEvidence"] == raw_misconfiguration["Message"]
+    assert len(finding["maskedEvidence"]) <= 120
 
 
 def test_trivy_findings_vulnerabilities_normalized():
