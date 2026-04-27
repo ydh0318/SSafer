@@ -9,12 +9,19 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
 import com.ssafer.scan.api.dto.ScanBasicResponse;
+import com.ssafer.scan.api.dto.ScanFindingListItemResponse;
+import com.ssafer.scan.api.dto.ScanFindingListResponseData;
 import com.ssafer.scan.api.dto.ScanSummaryResponse;
 import com.ssafer.scan.application.service.ScanBasicQueryService;
+import com.ssafer.scan.application.service.ScanFindingListQueryService;
 import com.ssafer.scan.application.service.ScanSummaryQueryService;
+import com.ssafer.scan.domain.enums.FindingSourceType;
+import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.Severity;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +39,9 @@ class ScanQueryControllerTest {
 
   @Mock
   private ScanSummaryQueryService scanSummaryQueryService;
+
+  @Mock
+  private ScanFindingListQueryService scanFindingListQueryService;
 
   @InjectMocks
   private ScanQueryController scanQueryController;
@@ -124,6 +134,79 @@ class ScanQueryControllerTest {
         .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
 
     mockMvc.perform(get("/api/v1/scans/999/summary"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+        .andExpect(jsonPath("$.message").value("Resource not found"));
+  }
+
+  @Test
+  void getScanFindingsReturnsOkResponse() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanFindingListQueryService.getScanFindings(
+        1001L,
+        Severity.HIGH,
+        "CONFIG",
+        FindingSourceType.TRIVY,
+        ResolutionStatus.OPEN,
+        3001L,
+        0,
+        20
+    )).thenReturn(new ScanFindingListResponseData(
+        List.of(
+            new ScanFindingListItemResponse(
+                2001L,
+                1001L,
+                3001L,
+                FindingSourceType.TRIVY,
+                Severity.HIGH,
+                "CONFIG",
+                "Image user should not be 'root'",
+                "Dockerfile",
+                2,
+                "Dockerfile",
+                "DS-0002",
+                ResolutionStatus.OPEN,
+                LocalDateTime.of(2026, 4, 27, 9, 30)
+            )
+        ),
+        0,
+        20,
+        1L,
+        1
+    ));
+
+    mockMvc.perform(get("/api/v1/scans/1001/findings")
+            .param("severity", "HIGH")
+            .param("category", "CONFIG")
+            .param("sourceType", "TRIVY")
+            .param("resolutionStatus", "OPEN")
+            .param("scanNodeId", "3001")
+            .param("page", "0")
+            .param("size", "20"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("스캔 취약점 목록 조회 성공"))
+        .andExpect(jsonPath("$.data.page").value(0))
+        .andExpect(jsonPath("$.data.size").value(20))
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.totalPages").value(1))
+        .andExpect(jsonPath("$.data.items[0].findingId").value(2001))
+        .andExpect(jsonPath("$.data.items[0].scanId").value(1001))
+        .andExpect(jsonPath("$.data.items[0].scanNodeId").value(3001))
+        .andExpect(jsonPath("$.data.items[0].sourceType").value("TRIVY"))
+        .andExpect(jsonPath("$.data.items[0].severity").value("HIGH"))
+        .andExpect(jsonPath("$.data.items[0].category").value("CONFIG"))
+        .andExpect(jsonPath("$.data.items[0].lineNumber").value(2))
+        .andExpect(jsonPath("$.data.items[0].resolutionStatus").value("OPEN"));
+  }
+
+  @Test
+  void getScanFindingsWhenMissingReturnsNotFound() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanFindingListQueryService.getScanFindings(
+        999L, null, null, null, null, null, 0, 20))
+        .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
+
+    mockMvc.perform(get("/api/v1/scans/999/findings"))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("NOT_FOUND"))
         .andExpect(jsonPath("$.message").value("Resource not found"));

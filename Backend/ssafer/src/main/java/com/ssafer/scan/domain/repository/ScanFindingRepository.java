@@ -7,10 +7,12 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long> {
+public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
+    JpaSpecificationExecutor<ScanFinding> {
 
   long countByScanId(Long scanId);
 
@@ -29,7 +31,7 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long> 
 
   Page<ScanFinding> findByScanIdAndSeverity(Long scanId, Severity severity, Pageable pageable);
 
-  // category는 문자열 컬럼이라 enum 없이도 현재 저장된 값 기준으로 바로 집계한다.
+  // category는 문자열 컬럼이므로 현재 저장된 값 기준으로 바로 집계한다.
   @Query("""
       select f.category, count(f)
       from ScanFinding f
@@ -38,7 +40,7 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long> 
       """)
   List<Object[]> countCategoryByScanId(@Param("scanId") Long scanId);
 
-  // sourceType별 결과 분포를 요약 카드에서 바로 보여주기 위한 집계다.
+  // sourceType별 분포는 요약 카드에서 바로 보여주기 위한 집계다.
   @Query("""
       select f.sourceType, count(f)
       from ScanFinding f
@@ -47,7 +49,7 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long> 
       """)
   List<Object[]> countSourceTypeByScanId(@Param("scanId") Long scanId);
 
-  // 처리 상태별 개수는 후속 조치 현황을 보여줄 때 사용한다.
+  // 처리 상태별 개수는 후속 조치 현황을 보여주는데 사용한다.
   @Query("""
       select f.resolutionStatus, count(f)
       from ScanFinding f
