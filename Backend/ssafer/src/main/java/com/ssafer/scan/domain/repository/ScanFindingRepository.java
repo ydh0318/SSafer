@@ -27,6 +27,8 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long> 
 
   Page<ScanFinding> findByScanId(Long scanId, Pageable pageable);
 
+  List<ScanFinding> findByScanIdOrderByCreatedAtDesc(Long scanId);
+
   Page<ScanFinding> findByScanIdAndSeverity(Long scanId, Severity severity, Pageable pageable);
 
   // category는 문자열 컬럼이라 enum 없이도 현재 저장된 값 기준으로 바로 집계한다.
