@@ -36,6 +36,9 @@ public class Scan {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  @Column(name = "external_scan_id", length = 100)
+  private String externalScanId;
+
   @Column(name = "project_id", nullable = false)
   private Long projectId;
 

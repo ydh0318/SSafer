@@ -9,10 +9,13 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
 import com.ssafer.scan.api.dto.ScanBasicResponse;
+import com.ssafer.scan.api.dto.ScanSummaryResponse;
 import com.ssafer.scan.application.service.ScanBasicQueryService;
+import com.ssafer.scan.application.service.ScanSummaryQueryService;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import java.time.LocalDateTime;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +29,9 @@ class ScanQueryControllerTest {
 
   @Mock
   private ScanBasicQueryService scanBasicQueryService;
+
+  @Mock
+  private ScanSummaryQueryService scanSummaryQueryService;
 
   @InjectMocks
   private ScanQueryController scanQueryController;
@@ -69,6 +75,55 @@ class ScanQueryControllerTest {
         .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
 
     mockMvc.perform(get("/api/v1/scans/999"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+        .andExpect(jsonPath("$.message").value("Resource not found"));
+  }
+
+  @Test
+  void getScanSummaryReturnsOkResponse() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+
+    when(scanSummaryQueryService.getScanSummary(1001L)).thenReturn(new ScanSummaryResponse(
+        1001L,
+        101L,
+        12L,
+        3L,
+        1L,
+        2L,
+        4L,
+        3L,
+        2L,
+        Map.of("CONFIG", 2L, "SECRET", 1L),
+        Map.of("TRIVY", 2L, "CUSTOM_RULE", 1L),
+        Map.of("OPEN", 3L)));
+
+    mockMvc.perform(get("/api/v1/scans/1001/summary"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("스캔 결과 요약 조회 성공"))
+        .andExpect(jsonPath("$.data.scanId").value(1001))
+        .andExpect(jsonPath("$.data.projectId").value(101))
+        .andExpect(jsonPath("$.data.totalFindings").value(12))
+        .andExpect(jsonPath("$.data.nodeCount").value(3))
+        .andExpect(jsonPath("$.data.criticalCount").value(1))
+        .andExpect(jsonPath("$.data.highCount").value(2))
+        .andExpect(jsonPath("$.data.mediumCount").value(4))
+        .andExpect(jsonPath("$.data.lowCount").value(3))
+        .andExpect(jsonPath("$.data.infoCount").value(2))
+        .andExpect(jsonPath("$.data.categoryCounts.CONFIG").value(2))
+        .andExpect(jsonPath("$.data.categoryCounts.SECRET").value(1))
+        .andExpect(jsonPath("$.data.sourceCounts.TRIVY").value(2))
+        .andExpect(jsonPath("$.data.sourceCounts.CUSTOM_RULE").value(1))
+        .andExpect(jsonPath("$.data.resolutionCounts.OPEN").value(3));
+  }
+
+  @Test
+  void getScanSummaryWhenMissingReturnsNotFound() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanSummaryQueryService.getScanSummary(999L))
+        .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
+
+    mockMvc.perform(get("/api/v1/scans/999/summary"))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("NOT_FOUND"))
         .andExpect(jsonPath("$.message").value("Resource not found"));
