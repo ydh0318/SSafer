@@ -1,0 +1,74 @@
+# EC2 #2 dev: 분석 서버 (로컬 개발 환경)
+# 사전 준비: docker network create ssafer-dev
+# 실행: docker compose --env-file .env up -d
+
+name: ssafer-ec2-dev
+
+services:
+  redis-llm:
+    image: redis:7.4-alpine
+    container_name: ssafer-redis-llm-dev
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_LLM_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      # 6380으로 publish해서 ec1 redis(6379)와 충돌 방지
+      - "6380:6379"
+    volumes:
+      - redis-llm-data:/data
+    networks:
+      - ec2-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_LLM_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  fastapi:
+    build:
+      context: ../../../../
+      dockerfile: Infra/docker/dockerfiles/Dockerfile.fastapi
+    container_name: ssafer-fastapi-dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      REDIS_HOST: redis-llm
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_LLM_PASSWORD}
+      # dev: ssafer-dev 네트워크에서 spring 컨테이너 이름으로 직접 접근
+      SPRING_CALLBACK_URL: http://spring:8080/api/v1/internal/callback
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      HASDATA_API_KEY: ${HASDATA_API_KEY}
+    ports:
+      - "8000:8000"
+    networks:
+      - ec2-internal
+      - ssafer-dev
+    depends_on:
+      redis-llm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  redis-llm-data:
+
+networks:
+  ec2-internal:
+    driver: bridge
+  ssafer-dev:
+    external: true

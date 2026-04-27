@@ -1,0 +1,75 @@
+# EC2 #2 prod: 분석 서버 (private IP만 사용, 외부 직접 접근 불가)
+# EC2 #1 Spring이 http://{EC2_2_PRIVATE_IP}:8000 으로 분석 요청
+# FastAPI가 http://{EC2_1_PRIVATE_IP}:8080/api/v1/internal/callback 으로 결과 콜백
+#
+# UFW 설정 (1회):
+#   sudo ufw allow 22/tcp
+#   sudo ufw allow from <EC2_1_PRIVATE_IP> to any port 8000 proto tcp
+#   sudo ufw enable
+
+name: ssafer-ec2-prod
+
+services:
+  redis-llm:
+    image: redis:7.4-alpine
+    container_name: ssafer-redis-llm
+    restart: always
+    command: >
+      redis-server
+      --requirepass ${REDIS_LLM_PASSWORD}
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-llm-data:/data
+    networks:
+      - ec2-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_LLM_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  fastapi:
+    image: ${FASTAPI_IMAGE}
+    container_name: ssafer-fastapi
+    restart: always
+    env_file:
+      - .env
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      REDIS_HOST: redis-llm
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_LLM_PASSWORD}
+      # EC2 #1 Spring private IP로 직접 콜백 (nginx 우회)
+      SPRING_CALLBACK_URL: http://${EC2_1_PRIVATE_IP}:8080/api/v1/internal/callback
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      HASDATA_API_KEY: ${HASDATA_API_KEY}
+    # EC2 #1에서만 접근 가능 (UFW로 제어)
+    ports:
+      - "8000:8000"
+    networks:
+      - ec2-internal
+    depends_on:
+      redis-llm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+volumes:
+  redis-llm-data:
+
+networks:
+  ec2-internal:
+    driver: bridge
