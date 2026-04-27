@@ -61,7 +61,7 @@ class ScanRequestControllerTest {
     mockMvc.perform(post("/api/v1/scans")
             .contentType(MediaType.APPLICATION_JSON)
             .content(requestBody))
-        .andExpect(status().isOk())
+        .andExpect(status().isCreated())
         .andExpect(jsonPath("$.message").value("Agent 로컬 스캔 시작 등록 성공"))
         .andExpect(jsonPath("$.data.scanId").value(1001))
         .andExpect(jsonPath("$.data.projectId").value(2001))

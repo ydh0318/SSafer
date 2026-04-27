@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -47,6 +48,8 @@ public class ScanRequestController {
         result.rawResultPath(),
         result.rawUploadUrl());
 
-    return ResponseEntity.ok(ApiResponse.success(CREATE_SCAN_SUCCESS_MESSAGE, data));
+    // 스캔 등록으로 서버 리소스(scans row)가 생성되므로 201 Created를 반환한다.
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(ApiResponse.success(CREATE_SCAN_SUCCESS_MESSAGE, data));
   }
 }
