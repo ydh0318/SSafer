@@ -6,6 +6,7 @@
 
 ```text
 보안 설명 생성 프롬프트 정의
+LangChain Explain Chain 구현
 ```
 
 ## 2. 프롬프트 파일
@@ -84,4 +85,52 @@ python -c "from app.prompts.explain_prompt import EXPLAIN_PROMPT; messages = EXP
 2
 system
 Analyze the following security finding.
+```
+
+## 7. Explain Chain 구현
+
+Explain Chain은 아래 파일에 정의되어 있습니다.
+
+```text
+app/chains/explain_chain.py
+```
+
+현재 구현된 함수:
+
+```python
+create_explain_chain()
+```
+
+구성:
+
+```text
+EXPLAIN_PROMPT
+→ ChatOllama
+→ StrOutputParser
+```
+
+즉, 프롬프트에 `finding_input`을 넣으면 Ollama 모델이 설명을 생성하고, 최종 결과를 문자열로 반환하는 구조입니다.
+
+## 8. Chain 생성 확인
+
+아래 명령어로 Explain Chain이 정상 생성되는지 확인할 수 있습니다.
+
+```bash
+cd /home/eunsu/S14P31B105/AI
+source .venv/bin/activate
+python -c "from app.chains.explain_chain import create_explain_chain; chain = create_explain_chain(); print(type(chain).__name__); print(chain.input_schema.model_json_schema().get('properties', {}).keys())"
+```
+
+정상 출력 예시:
+
+```text
+RunnableSequence
+dict_keys(['finding_input'])
+```
+
+## 9. 다음 작업
+
+```text
+finding 기반 설명 생성 로직 구현
+설명 결과 출력 테스트
 ```
