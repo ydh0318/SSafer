@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from ssafer.core.result_store import _normalize_trivy_findings, load_last_scan
+from ssafer.core.result_store import _normalize_trivy_findings, backend_finding_source_type, load_last_scan
 
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
@@ -82,6 +82,16 @@ def test_findings_source_never_ai(tmp_path: Path):
     assert loaded is not None
     for finding in loaded["findings"]:
         assert finding["source"] != "ai"
+
+
+def test_finding_sources_map_to_backend_source_types():
+    assert backend_finding_source_type("trivy") == "TRIVY"
+    assert backend_finding_source_type("custom-rule") == "CUSTOM_RULE"
+
+
+def test_ai_finding_source_is_not_mapped_to_backend():
+    with pytest.raises(ValueError, match="Unsupported finding source"):
+        backend_finding_source_type("ai")
 
 
 def test_findings_id_format_fnd_xxxx(tmp_path: Path):
