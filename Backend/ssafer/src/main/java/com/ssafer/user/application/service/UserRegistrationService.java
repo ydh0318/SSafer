@@ -1,5 +1,6 @@
 package com.ssafer.user.application.service;
 
+import com.ssafer.auth.application.service.EmailVerificationService;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.user.domain.entity.User;
@@ -18,13 +19,16 @@ public class UserRegistrationService {
   private static final int MAX_DISPLAY_NAME_LENGTH = 100;
   private static final int MAX_PASSWORD_LENGTH = 72;
 
+  private final EmailVerificationService emailVerificationService;
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
 
   public UserRegistrationService(
+      EmailVerificationService emailVerificationService,
       UserRepository userRepository,
       PasswordEncoder passwordEncoder
   ) {
+    this.emailVerificationService = emailVerificationService;
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
   }
@@ -35,6 +39,11 @@ public class UserRegistrationService {
     String email = normalizeEmailOrThrow(rawEmail);
     String displayName = normalizeDisplayNameOrThrow(rawDisplayName);
     String password = normalizePasswordOrThrow(rawPassword);
+
+    // 회원가입은 이메일 인증이 끝난 주소에만 허용한다.
+    if (!emailVerificationService.isVerifiedEmail(email)) {
+      throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_REQUIRED);
+    }
 
     // 사전 중복 확인으로 빠르게 실패시키고, 아래 save 구간에서 한 번 더 DB 제약을 방어한다.
     if (userRepository.existsByEmail(email)) {
@@ -50,6 +59,8 @@ public class UserRegistrationService {
 
     try {
       User saved = userRepository.save(user);
+      // 회원가입이 끝나면 verified 상태는 재사용되지 않도록 제거한다.
+      emailVerificationService.clearVerifiedEmail(email);
       return saved.getId();
     } catch (DataIntegrityViolationException ex) {
       // 동시 가입 경쟁 상황으로 save 시점에만 중복이 드러날 수 있어서 한 번 더 확인한다.
