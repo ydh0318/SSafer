@@ -62,6 +62,9 @@ public class ScanFinding {
   @Column(name = "file_path", length = 500)
   private String filePath;
 
+  @Column(name = "line_number")
+  private Integer lineNumber;
+
   @Column(name = "resource_name", length = 255)
   private String resourceName;
 

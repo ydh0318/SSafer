@@ -280,6 +280,16 @@ def test_env_plain_secret_detects_hardcoded(tmp_path: Path):
     assert "supersecret" not in findings[0].masked_evidence
 
 
+def test_env_plain_secret_strips_utf8_bom_from_key(tmp_path: Path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("\ufeffDB_PASSWORD=supersecret123\n", encoding="utf-8")
+    findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
+    assert len(findings) == 1
+    assert "DB_PASSWORD" in findings[0].title
+    assert "\ufeff" not in findings[0].title
+    assert findings[0].masked_evidence == "DB_PASSWORD=***MASKED***"
+
+
 def test_env_plain_secret_ignores_placeholder(tmp_path: Path):
     env_file = tmp_path / ".env"
     env_file.write_text("DB_PASSWORD=changeme\n", encoding="utf-8")
@@ -348,3 +358,36 @@ services:
     assert len(findings) > 0
     for f in findings:
         assert f.source == "custom-rule"
+
+
+def test_rule_engine_records_failed_rule_warning():
+    class FailingRule:
+        rule_id = "BROKEN_RULE"
+        severity = "HIGH"
+
+        def check(self, context: ScanContext) -> list[Finding]:
+            raise RuntimeError("boom")
+
+    class PassingRule:
+        rule_id = "PASSING_RULE"
+        severity = "LOW"
+
+        def check(self, context: ScanContext) -> list[Finding]:
+            return [
+                Finding(
+                    rule_id=self.rule_id,
+                    source="custom-rule",
+                    severity=self.severity,
+                    file="test.yml",
+                    line=None,
+                    title="Passing rule",
+                    masked_evidence="test=***MASKED***",
+                )
+            ]
+
+    engine = RuleEngine([FailingRule(), PassingRule()])
+    findings = engine.run(_ctx())
+
+    assert len(findings) == 1
+    assert findings[0].id == "FND-0001"
+    assert engine.warnings == ["Rule BROKEN_RULE failed: boom"]

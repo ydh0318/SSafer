@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+import ssafer.core.result_store as result_store
 from ssafer.core.result_store import _normalize_trivy_findings, backend_finding_source_type, load_last_scan
 
 
@@ -77,6 +78,25 @@ def test_scanned_at_is_iso8601(tmp_path: Path):
     loaded = load_last_scan(tmp_path)
     assert loaded is not None
     assert ISO8601_RE.match(loaded["scannedAt"]), f"scannedAt format wrong: {loaded['scannedAt']}"
+
+
+def test_rule_engine_warning_makes_scan_partial(tmp_path: Path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("PUBLIC_MODE=dev\n", encoding="utf-8")
+
+    class FakeRuleEngine:
+        warnings = ["Rule BROKEN_RULE failed: boom"]
+
+        def run(self, context: Any) -> list:
+            return []
+
+    monkeypatch.setattr(result_store, "RuleEngine", FakeRuleEngine)
+
+    scan = result_store.run_scan(tmp_path)
+
+    assert scan["analysisStatus"] == "PARTIAL"
+    assert scan["warnings"] == ["Rule BROKEN_RULE failed: boom"]
+    assert scan["cliSummary"]["warnings"] == 1
 
 
 # ── findings 구조 검증 ────────────────────────────────────────────────────────
@@ -208,6 +228,57 @@ def test_trivy_findings_normalized_to_schema():
     assert findings[0]["ruleId"] == "DS001"
     assert findings[0]["severity"] == "HIGH"
     assert findings[0]["id"] == "FND-0001"
+
+
+def test_trivy_misconfiguration_fields_map_from_raw_json():
+    raw_misconfiguration = {
+        "ID": "DS-0002",
+        "Title": "Image user should not be 'root'",
+        "Severity": "HIGH",
+        "Message": "Last USER command in Dockerfile should not be 'root'",
+        "CauseMetadata": {
+            "StartLine": 2,
+            "Code": {
+                "Lines": [
+                    {
+                        "Number": 2,
+                        "Content": "USER root",
+                    }
+                ]
+            },
+        },
+    }
+    artifacts = [
+        {
+            "type": "trivy-json",
+            "target": "Dockerfile",
+            "hash": "sha256:abc",
+            "content": {
+                "Results": [
+                    {
+                        "Target": "Dockerfile",
+                        "Misconfigurations": [raw_misconfiguration],
+                    }
+                ]
+            },
+        }
+    ]
+
+    finding = _normalize_trivy_findings(artifacts, 0)[0]
+
+    assert set(finding) == FINDING_SCHEMA_KEYS
+    assert finding["id"] == "FND-0001"
+    assert re.match(r"^FND-\d{4}$", finding["id"])
+    assert finding["ruleId"] == raw_misconfiguration["ID"]
+    assert finding["source"] == "trivy"
+    assert backend_finding_source_type(finding["source"]) == "TRIVY"
+    assert finding["severity"] == raw_misconfiguration["Severity"]
+    assert finding["file"] == "Dockerfile"
+    assert finding["line"] == raw_misconfiguration["CauseMetadata"]["StartLine"]
+    assert finding["title"] == raw_misconfiguration["Title"]
+    assert len(finding["title"]) <= 255
+    assert finding["maskedEvidence"] == raw_misconfiguration["Message"]
+    assert len(finding["maskedEvidence"]) <= 120
 
 
 def test_trivy_findings_vulnerabilities_normalized():

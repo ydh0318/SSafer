@@ -9,3 +9,5 @@ class AnalysisResponse(BaseModel):
     status: str
     message: str
     scan_result_path: str
+    finding_count: int
+    llm_input_count: int

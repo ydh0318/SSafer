@@ -94,7 +94,9 @@ def run_scan(
         env_files=files.env_files,
         project_root=project_root,
     )
-    custom_rule_findings = RuleEngine().run(scan_context)
+    rule_engine = RuleEngine()
+    custom_rule_findings = rule_engine.run(scan_context)
+    warnings.extend(rule_engine.warnings)
 
     _step("환경변수 파일 파싱 중...")
     env_metadata = parse_env_metadata(files.env_files, salt, project_root, warnings)
@@ -249,7 +251,7 @@ def _normalize_trivy_findings(artifacts: list[dict[str, Any]], start_index: int)
                     "source": "trivy",
                     "severity": misconf.get("Severity", "UNKNOWN"),
                     "file": file_target,
-                    "line": None,
+                    "line": _trivy_misconfiguration_line(misconf),
                     "title": misconf.get("Title", ""),
                     "maskedEvidence": (misconf.get("Message") or "")[:120],
                 })
@@ -278,6 +280,11 @@ def _normalize_trivy_findings(artifacts: list[dict[str, Any]], start_index: int)
                     "maskedEvidence": (secret.get("Match") or "")[:120],
                 })
     return findings
+
+
+def _trivy_misconfiguration_line(misconfiguration: dict[str, Any]) -> int | None:
+    line = (misconfiguration.get("CauseMetadata") or {}).get("StartLine")
+    return line if isinstance(line, int) else None
 
 
 def _docker_compose_version() -> str | None:

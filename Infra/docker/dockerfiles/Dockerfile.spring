@@ -1,0 +1,26 @@
+FROM eclipse-temurin:21-jdk-alpine AS builder
+WORKDIR /workspace
+
+COPY Backend/ssafer/mvnw ./
+COPY Backend/ssafer/.mvn .mvn/
+COPY Backend/ssafer/pom.xml ./
+RUN ./mvnw dependency:go-offline -B
+
+COPY Backend/ssafer/src ./src
+RUN ./mvnw package -DskipTests -B
+
+FROM eclipse-temurin:21-jre-alpine AS runtime
+
+RUN addgroup -S ssafer && adduser -S ssafer -G ssafer
+
+WORKDIR /app
+COPY --from=builder /workspace/target/*.jar app.jar
+RUN chown ssafer:ssafer app.jar
+
+USER ssafer
+EXPOSE 8080
+
+ENTRYPOINT ["java", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-jar", "app.jar"]

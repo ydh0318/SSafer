@@ -47,6 +47,7 @@ _GOOSE_RIGHT = [
 
 _TRACK_W = 36
 _GOOSE_W = 8
+_REPORT_EVIDENCE_MAX = 80
 
 
 def _walking_panel(pos: int, direction: int, frame: int, step: str) -> Panel:
@@ -265,6 +266,7 @@ def _print_scan_details(scan: dict, project_root: Path) -> None:
     console.print(output_table)
 
     _print_targets(scan)
+    _print_findings(scan)
     _print_artifacts(scan)
 
 
@@ -314,6 +316,49 @@ def _print_artifacts(scan: dict) -> None:
             finding_count,
         )
     console.print(artifact_table)
+
+
+def _print_findings(scan: dict) -> None:
+    findings = scan.get("findings", [])
+    finding_table = Table(title="Findings")
+    finding_table.add_column("ID")
+    finding_table.add_column("Source")
+    finding_table.add_column("Severity")
+    finding_table.add_column("Location", overflow="fold")
+    finding_table.add_column("Rule")
+    finding_table.add_column("Title", overflow="fold")
+    finding_table.add_column("Evidence", overflow="fold")
+
+    if not findings:
+        finding_table.add_row("-", "-", "-", "-", "-", "-", "-")
+        console.print(finding_table)
+        return
+
+    for finding in findings:
+        file_path = finding.get("file") or "-"
+        line = finding.get("line")
+        location = f"{file_path}:{line}" if line else file_path
+        finding_table.add_row(
+            str(finding.get("id") or "-"),
+            str(finding.get("source") or "-"),
+            str(finding.get("severity") or "-"),
+            location,
+            str(finding.get("ruleId") or "-"),
+            str(finding.get("title") or "-"),
+            _format_report_evidence(finding.get("maskedEvidence")),
+        )
+    console.print(finding_table)
+
+
+def _format_report_evidence(value: object) -> str:
+    if value is None:
+        return "-"
+    text = str(value).replace("\r", " ").replace("\n", " ").strip()
+    if not text:
+        return "-"
+    if len(text) <= _REPORT_EVIDENCE_MAX:
+        return text
+    return text[: _REPORT_EVIDENCE_MAX - 3] + "..."
 
 
 def _count_trivy_artifact_findings(content: dict) -> int:

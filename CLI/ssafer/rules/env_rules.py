@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ssafer.core.env_parser import normalize_env_key
 from ssafer.core.sanitize import is_placeholder, is_safe_key, is_secret_key, make_masked_evidence
 from ssafer.rules.base import BaseRule, Finding
 from ssafer.rules.engine import ScanContext
@@ -27,7 +28,7 @@ class EnvPlainSecretRule(BaseRule):
     def _check_file(self, env_file: Path, project_root: Path) -> list[Finding]:
         findings: list[Finding] = []
         try:
-            lines = env_file.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = env_file.read_text(encoding="utf-8-sig", errors="replace").splitlines()
         except OSError:
             return findings
 
@@ -40,7 +41,7 @@ class EnvPlainSecretRule(BaseRule):
             if "=" not in stripped:
                 continue
             key, raw_value = stripped.split("=", 1)
-            key = key.strip()
+            key = normalize_env_key(key)
             value = _strip_quotes(raw_value)
 
             if (
