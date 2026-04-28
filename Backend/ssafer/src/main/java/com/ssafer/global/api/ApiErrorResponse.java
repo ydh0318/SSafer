@@ -11,4 +11,8 @@ public record ApiErrorResponse(
   public static ApiErrorResponse of(String code, String message) {
     return new ApiErrorResponse(code, message, Map.of());
   }
+
+  public static ApiErrorResponse of(String code, String message, Map<String, Object> data) {
+    return new ApiErrorResponse(code, message, data);
+  }
 }
