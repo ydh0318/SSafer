@@ -94,7 +94,7 @@ EC2 #1 prod compose 디렉터리에서 실행합니다.
 
 ```bash
 cd /var/lib/jenkins/ssafer/S14P31B105/Infra/docker/ec2-1/prod
-docker compose --env-file .env up -d postgres n8n
+sudo -u jenkins docker compose --env-file .env up -d postgres n8n
 ```
 
 전체 배포에서는 Jenkins pipeline 또는 deploy script가 compose를 실행합니다.
@@ -104,8 +104,8 @@ docker compose --env-file .env up -d postgres n8n
 컨테이너 상태:
 
 ```bash
-docker compose --env-file .env ps n8n
-docker compose --env-file .env logs -f n8n
+sudo -u jenkins docker compose --env-file .env ps n8n
+sudo -u jenkins docker compose --env-file .env logs -f n8n
 ```
 
 로컬 확인:
@@ -121,6 +121,22 @@ curl -I https://k14b105.p.ssafy.io/n8n/
 ```
 
 첫 접속 시 owner 계정을 생성합니다.
+
+## .env 권한 확인
+
+운영 `.env`는 Jenkins가 읽는 secret 파일이므로 아래 권한을 권장합니다.
+
+```bash
+sudo chown jenkins:jenkins .env
+sudo chmod 600 .env
+```
+
+이 상태에서는 `ubuntu` 사용자가 직접 `docker compose --env-file .env ...`를 실행하면 `.env: permission denied`가 발생할 수 있습니다. 수동 확인은 `sudo -u jenkins`로 실행합니다.
+
+```bash
+sudo -u jenkins docker compose --env-file .env config >/dev/null
+sudo -u jenkins docker compose --env-file .env config | grep -n "N8N_EDITOR_BASE_URL\\|N8N_PROXY_HOPS"
+```
 
 ## 주의사항
 

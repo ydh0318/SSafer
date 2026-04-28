@@ -13,6 +13,20 @@ EC2 #2: /home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-2/prod/.env
 
 `.env.example`은 Git에 커밋하고, 실제 `.env`는 서버에만 두며 `chmod 600 .env`로 보호합니다.
 
+EC2 #1의 실제 `.env`는 Jenkins가 읽는 파일이므로 아래 권한을 권장합니다.
+
+```bash
+sudo chown jenkins:jenkins /var/lib/jenkins/ssafer/S14P31B105/Infra/docker/ec2-1/prod/.env
+sudo chmod 600 /var/lib/jenkins/ssafer/S14P31B105/Infra/docker/ec2-1/prod/.env
+```
+
+수동 검증 시 `ubuntu` 사용자가 `.env`를 직접 읽지 못할 수 있으므로 `sudo -u jenkins`를 사용합니다.
+
+```bash
+cd /var/lib/jenkins/ssafer/S14P31B105/Infra/docker/ec2-1/prod
+sudo -u jenkins docker compose --env-file .env config >/dev/null
+```
+
 ## EC2 #1 운영 env
 
 EC2 #1은 Spring, PostgreSQL, Redis, n8n, NGINX를 실행합니다.
@@ -127,7 +141,8 @@ Jenkins 배포 검증을 계속하려면 EC2 #1 `.env`부터 준비합니다.
 ```bash
 cd /var/lib/jenkins/ssafer/S14P31B105/Infra/docker/ec2-1/prod
 cp .env.example .env
-chmod 600 .env
+sudo chown jenkins:jenkins .env
+sudo chmod 600 .env
 ```
 
 필수로 먼저 채울 값:
