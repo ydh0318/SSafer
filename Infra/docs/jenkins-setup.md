@@ -136,17 +136,18 @@ sudo -u jenkins docker ps
 
 ## 배포 전 서버 파일
 
-EC2 #1에는 Jenkins가 쓸 배포 루트가 아래 경로로 준비되어 있어야 합니다.
+EC2 #1에는 Jenkins가 쓸 배포 루트가 아래 경로로 준비되어 있어야 합니다. Jenkins 프로세스가 `/home/ubuntu` 하위 경로에 쓰기 권한을 갖지 못할 수 있으므로 Jenkins home 아래를 배포 루트로 사용합니다.
 
 ```text
-/home/ubuntu/ssafer/S14P31B105
+/var/lib/jenkins/ssafer/S14P31B105
 ```
 
 Jenkins가 EC2 #1 배포 파일을 동기화할 수 있도록 권한을 부여합니다.
 
 ```bash
-sudo mkdir -p /home/ubuntu/ssafer/S14P31B105
-sudo chown -R jenkins:jenkins /home/ubuntu/ssafer/S14P31B105
+sudo mkdir -p /var/lib/jenkins/ssafer/S14P31B105
+sudo chown -R jenkins:jenkins /var/lib/jenkins/ssafer
+sudo chmod -R u+rwX /var/lib/jenkins/ssafer
 ```
 
 EC2 #2에는 repo가 아래 경로로 clone되어 있어야 합니다.
@@ -158,7 +159,7 @@ EC2 #2에는 repo가 아래 경로로 clone되어 있어야 합니다.
 각 prod 디렉터리에는 실제 운영 `.env`가 있어야 합니다.
 
 ```text
-/home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-1/prod/.env
+/var/lib/jenkins/ssafer/S14P31B105/Infra/docker/ec2-1/prod/.env
 /home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-2/prod/.env
 ```
 

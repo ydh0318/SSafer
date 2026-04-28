@@ -33,7 +33,7 @@
 EC2 #1:
 
 ```bash
-docker compose --env-file .env -f /home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-1/prod/docker-compose.yml ps
+docker compose --env-file .env -f /var/lib/jenkins/ssafer/S14P31B105/Infra/docker/ec2-1/prod/docker-compose.yml ps
 curl -sf http://localhost:8080/actuator/health
 curl -Ik https://k14b105.p.ssafy.io
 ```
