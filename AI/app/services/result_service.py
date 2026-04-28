@@ -1,8 +1,18 @@
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 
 ANALYSIS_RESULT_SCHEMA_VERSION = "0.1"
+DEFAULT_ANALYSIS_RESULT_PATH = "data/analysis_result.json"
+
+
+def _resolve_path(path: str) -> Path:
+    resolved_path = Path(path)
+    if not resolved_path.is_absolute():
+        resolved_path = Path.cwd() / resolved_path
+    return resolved_path
 
 
 def _map_ai_results_by_finding_id(
@@ -115,3 +125,74 @@ def build_analysis_result(
         "resultCount": len(results),
         "results": results,
     }
+
+
+def validate_analysis_result(analysis_result: dict[str, Any]) -> None:
+    if not isinstance(analysis_result.get("schemaVersion"), str):
+        raise ValueError("analysis_result.schemaVersion must be a string.")
+
+    if not isinstance(analysis_result.get("generatedAt"), str):
+        raise ValueError("analysis_result.generatedAt must be a string.")
+
+    result_count = analysis_result.get("resultCount")
+    results = analysis_result.get("results")
+
+    if not isinstance(result_count, int):
+        raise ValueError("analysis_result.resultCount must be an integer.")
+
+    if not isinstance(results, list):
+        raise ValueError("analysis_result.results must be an array.")
+
+    if result_count != len(results):
+        raise ValueError("analysis_result.resultCount must match results length.")
+
+    for index, result in enumerate(results):
+        if not isinstance(result, dict):
+            raise ValueError(f"analysis_result.results[{index}] must be an object.")
+
+        finding_id = result.get("findingId")
+        if not isinstance(finding_id, str) or not finding_id.strip():
+            raise ValueError(
+                f"analysis_result.results[{index}].findingId must be a string."
+            )
+
+        explanation = result.get("explanation")
+        if not isinstance(explanation, str) or not explanation.strip():
+            raise ValueError(
+                f"analysis_result.results[{index}].explanation must be a string."
+            )
+
+        if not isinstance(result.get("fix"), dict):
+            raise ValueError(f"analysis_result.results[{index}].fix must be an object.")
+
+
+def save_analysis_result(
+    analysis_result: dict[str, Any],
+    output_path: str = DEFAULT_ANALYSIS_RESULT_PATH,
+) -> Path:
+    validate_analysis_result(analysis_result)
+
+    path = _resolve_path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("w", encoding="utf-8") as file:
+        json.dump(analysis_result, file, ensure_ascii=False, indent=2)
+        file.write("\n")
+
+    return path
+
+
+def load_analysis_result(output_path: str = DEFAULT_ANALYSIS_RESULT_PATH) -> dict[str, Any]:
+    path = _resolve_path(output_path)
+
+    try:
+        with path.open("r", encoding="utf-8-sig") as file:
+            analysis_result = json.load(file)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid analysis_result.json file: {path}") from exc
+
+    if not isinstance(analysis_result, dict):
+        raise ValueError("analysis_result.json root must be a JSON object.")
+
+    validate_analysis_result(analysis_result)
+    return analysis_result
