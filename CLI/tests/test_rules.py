@@ -297,6 +297,33 @@ def test_env_plain_secret_ignores_placeholder(tmp_path: Path):
     assert findings == []
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "your_gms_api_key_here",
+        "your-token",
+        "replace_me",
+        "dummy",
+        "sample",
+        "xxx",
+    ],
+)
+def test_env_plain_secret_ignores_common_placeholder_values(tmp_path: Path, value: str):
+    env_file = tmp_path / ".env.example"
+    env_file.write_text(f"GMS_API_KEY={value}\n", encoding="utf-8")
+    findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
+    assert findings == []
+
+
+def test_env_example_secret_like_value_is_medium(tmp_path: Path):
+    env_file = tmp_path / ".env.example"
+    env_file.write_text("GMS_API_KEY=real-looking-key-1234567890\n", encoding="utf-8")
+    findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
+    assert len(findings) == 1
+    assert findings[0].severity == "MEDIUM"
+    assert "예시 파일" in findings[0].title
+
+
 def test_env_plain_secret_ignores_empty(tmp_path: Path):
     env_file = tmp_path / ".env"
     env_file.write_text("DB_PASSWORD=\n", encoding="utf-8")
@@ -309,6 +336,50 @@ def test_env_plain_secret_ignores_comment(tmp_path: Path):
     env_file.write_text("# DB_PASSWORD=supersecret\n", encoding="utf-8")
     findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
     assert findings == []
+
+
+def test_env_plain_secret_git_ignored_file_is_low(tmp_path: Path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("DB_PASSWORD=supersecret123\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_git_check(command: list[str]) -> bool:
+        calls.append(command)
+        if "rev-parse" in command:
+            return True
+        if "ls-files" in command:
+            return False
+        if "check-ignore" in command:
+            return True
+        return False
+
+    monkeypatch.setattr("ssafer.rules.env_rules._git_check", fake_git_check)
+
+    findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
+
+    assert len(findings) == 1
+    assert findings[0].severity == "LOW"
+    assert "Git ignore" in findings[0].title
+    assert any("check-ignore" in command for command in calls)
+
+
+def test_env_plain_secret_git_tracked_file_stays_high(tmp_path: Path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("DB_PASSWORD=supersecret123\n", encoding="utf-8")
+
+    def fake_git_check(command: list[str]) -> bool:
+        if "rev-parse" in command:
+            return True
+        if "ls-files" in command:
+            return True
+        return False
+
+    monkeypatch.setattr("ssafer.rules.env_rules._git_check", fake_git_check)
+
+    findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
+
+    assert len(findings) == 1
+    assert findings[0].severity == "HIGH"
 
 
 # ── RuleEngine ───────────────────────────────────────────────────────────────

@@ -4,7 +4,12 @@ import json
 import os
 import shutil
 import subprocess
+from copy import deepcopy
 from pathlib import Path
+from typing import Any
+
+from ssafer.core.constants import MASK
+from ssafer.core.sanitize import sanitize_string
 
 
 def find_trivy_executable() -> str | None:
@@ -84,3 +89,31 @@ def count_trivy_findings(path: Path) -> int:
         total += len(result.get("Vulnerabilities", []) or [])
         total += len(result.get("Secrets", []) or [])
     return total
+
+
+def sanitize_trivy_json(data: dict[str, Any]) -> dict[str, Any]:
+    sanitized = deepcopy(data)
+    for result in sanitized.get("Results") or []:
+        for secret in result.get("Secrets") or []:
+            if isinstance(secret, dict) and secret.get("Match"):
+                secret["Match"] = MASK
+        for item in [
+            *(result.get("Misconfigurations") or []),
+            *(result.get("Secrets") or []),
+        ]:
+            _sanitize_cause_metadata(item)
+    return sanitized
+
+
+def _sanitize_cause_metadata(item: dict[str, Any]) -> None:
+    if not isinstance(item, dict):
+        return
+    metadata = item.get("CauseMetadata")
+    if not isinstance(metadata, dict):
+        return
+    code = metadata.get("Code")
+    if not isinstance(code, dict):
+        return
+    for line in code.get("Lines") or []:
+        if isinstance(line, dict) and isinstance(line.get("Content"), str):
+            line["Content"] = sanitize_string(line["Content"])

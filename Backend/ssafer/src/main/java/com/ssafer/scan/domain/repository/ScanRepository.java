@@ -3,11 +3,12 @@ package com.ssafer.scan.domain.repository;
 import com.ssafer.scan.domain.entity.Scan;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface ScanRepository extends JpaRepository<Scan, Long> {
+public interface ScanRepository extends JpaRepository<Scan, Long>, JpaSpecificationExecutor<Scan> {
 
   Optional<Scan> findByIdAndProjectId(Long id, Long projectId);
 
