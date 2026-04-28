@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
+import com.ssafer.auth.application.service.EmailVerificationService;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.user.domain.entity.User;
@@ -21,20 +22,23 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 class UserRegistrationServiceTest {
 
+  private EmailVerificationService emailVerificationService;
   private UserRepository userRepository;
   private PasswordEncoder passwordEncoder;
   private UserRegistrationService userRegistrationService;
 
   @BeforeEach
   void setUp() {
+    emailVerificationService = Mockito.mock(EmailVerificationService.class);
     userRepository = Mockito.mock(UserRepository.class);
     passwordEncoder = new BCryptPasswordEncoder();
-    userRegistrationService = new UserRegistrationService(userRepository, passwordEncoder);
+    userRegistrationService = new UserRegistrationService(emailVerificationService, userRepository, passwordEncoder);
   }
 
   @Test
   void registerStoresNormalizedValuesAndEncodedPassword() {
     User saved = new User("test@example.com", "Alice", "encoded", AccountStatus.ACTIVE);
+    given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
     given(userRepository.existsByEmail("test@example.com")).willReturn(false);
     given(userRepository.save(any(User.class))).willReturn(saved);
 
@@ -48,10 +52,22 @@ class UserRegistrationServiceTest {
     assertThat(captured.getDisplayName()).isEqualTo("Alice");
     assertThat(captured.getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
     assertThat(passwordEncoder.matches("  password123  ", captured.getPasswordHash())).isTrue();
+    then(emailVerificationService).should().clearVerifiedEmail("test@example.com");
+  }
+
+  @Test
+  void registerThrowsWhenEmailVerificationIsMissing() {
+    given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(false);
+
+    assertThatThrownBy(() -> userRegistrationService.register("test@example.com", "Alice", "password123"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.EMAIL_VERIFICATION_REQUIRED);
   }
 
   @Test
   void registerThrowsDuplicateEmailWhenEmailAlreadyExists() {
+    given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
     given(userRepository.existsByEmail("test@example.com")).willReturn(true);
 
     assertThatThrownBy(() -> userRegistrationService.register("test@example.com", "Alice", "password123"))
@@ -62,6 +78,7 @@ class UserRegistrationServiceTest {
 
   @Test
   void registerTranslatesUniqueConstraintViolationToDuplicateEmail() {
+    given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
     given(userRepository.existsByEmail("test@example.com")).willReturn(false, true);
     given(userRepository.save(any(User.class))).willThrow(new DataIntegrityViolationException("duplicate"));
 
@@ -73,6 +90,7 @@ class UserRegistrationServiceTest {
 
   @Test
   void registerRethrowsNonDuplicateDataIntegrityViolation() {
+    given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
     given(userRepository.existsByEmail("test@example.com")).willReturn(false, false);
     given(userRepository.save(any(User.class))).willThrow(new DataIntegrityViolationException("other constraint"));
 
