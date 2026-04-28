@@ -14,7 +14,7 @@ pipeline {
         DOCKERHUB_NAMESPACE = credentials('dockerhub-namespace')
         DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'
         EC2_2_SSH_CREDENTIALS = 'ec2-2-ssh-key'
-        DEPLOY_ROOT = '/home/ubuntu/ssafer/S14P31B105'
+        DEPLOY_ROOT = '/var/lib/jenkins/ssafer/S14P31B105'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         SPRING_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-spring:${IMAGE_TAG}"
         FASTAPI_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-fastapi:${IMAGE_TAG}"
