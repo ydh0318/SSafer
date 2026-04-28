@@ -1,15 +1,19 @@
+from typing import Any
+
 from app.loaders.scan_loader import (
     extract_findings,
     load_scan_result,
     validate_findings_required_fields,
 )
 from app.schemas.analysis import AnalysisRequest, AnalysisResponse
-from app.services.explain_service import generate_finding_explanations
-from app.services.fix_service import generate_finding_fixes
+
+from app.services.explain_service import generate_finding_explanation
+from app.services.fix_service import generate_finding_fix
 from app.services.input_service import format_findings_for_llm
 from app.services.result_service import (
     DEFAULT_ANALYSIS_RESULT_PATH,
-    build_analysis_result,
+    build_analysis_result_from_results,
+    build_structured_analysis_result,
     save_analysis_result,
 )
 
@@ -32,6 +36,21 @@ def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
     )
 
 
+def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:
+    explanation = generate_finding_explanation(finding)
+    fix = generate_finding_fix(finding)
+
+    return build_structured_analysis_result(
+        finding=finding,
+        explanation=explanation,
+        fix=fix,
+    )
+
+
+def analyze_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [analyze_finding(finding) for finding in findings]
+
+
 def run_analysis_pipeline(
     scan_result_path: str = "data/scan_result.json",
     output_path: str = DEFAULT_ANALYSIS_RESULT_PATH,
@@ -40,14 +59,11 @@ def run_analysis_pipeline(
     findings = extract_findings(scan_result)
     validate_findings_required_fields(findings)
 
-    explanations = generate_finding_explanations(findings)
-    fixes = generate_finding_fixes(findings)
+    structured_results = analyze_findings(findings)
 
-    analysis_result = build_analysis_result(
+    analysis_result = build_analysis_result_from_results(
         scan_result=scan_result,
-        findings=findings,
-        explanation_results=explanations,
-        fix_results=fixes,
+        structured_results=structured_results,
     )
     saved_path = save_analysis_result(analysis_result, output_path)
 
