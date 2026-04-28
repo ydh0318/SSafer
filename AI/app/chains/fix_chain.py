@@ -6,4 +6,4 @@ from app.prompts.fix_prompt import FIX_PROMPT
 
 
 def create_fix_chain() -> Runnable:
-    return FIX_PROMPT | get_ollama_llm() | StrOutputParser()
+    return FIX_PROMPT | get_ollama_llm(response_format="json") | StrOutputParser()

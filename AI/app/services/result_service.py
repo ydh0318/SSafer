@@ -127,6 +127,21 @@ def build_analysis_result(
     }
 
 
+def build_analysis_result_from_results(
+    scan_result: dict[str, Any],
+    structured_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "schemaVersion": ANALYSIS_RESULT_SCHEMA_VERSION,
+        "scanId": scan_result.get("scanId"),
+        "source": scan_result.get("source"),
+        "scannedAt": scan_result.get("scannedAt"),
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "resultCount": len(structured_results),
+        "results": structured_results,
+    }
+
+
 def validate_analysis_result(analysis_result: dict[str, Any]) -> None:
     if not isinstance(analysis_result.get("schemaVersion"), str):
         raise ValueError("analysis_result.schemaVersion must be a string.")
