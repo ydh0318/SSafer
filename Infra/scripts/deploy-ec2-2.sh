@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # EC2 #2 (분석 서버) 배포 스크립트
-# Jenkins CI에서 SSH로 호출: ssh ubuntu@ec2-2 'bash /home/ubuntu/ssafer/scripts/deploy-ec2-2.sh'
-# 전제: /home/ubuntu/ssafer/ec2-2/prod/ 에 docker-compose.yml과 .env가 존재
+# Jenkins CI에서 SSH로 호출: ssh ubuntu@ec2-2 'bash /home/ubuntu/ssafer/S14P31B105/Infra/scripts/deploy-ec2-2.sh'
+# 전제: /home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-2/prod/ 에 docker-compose.yml과 .env가 존재
 
 set -euo pipefail
 
-DEPLOY_DIR="/home/ubuntu/ssafer/ec2-2/prod"
+DEPLOY_DIR="${DEPLOY_DIR:-/home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-2/prod}"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 ENV_FILE="${DEPLOY_DIR}/.env"
 

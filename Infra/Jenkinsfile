@@ -1,0 +1,90 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        DOCKERHUB_NAMESPACE = credentials('dockerhub-namespace')
+        DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'
+        EC2_2_SSH_CREDENTIALS = 'ec2-2-ssh-key'
+        EC2_2_HOST = credentials('ec2-2-host')
+        DEPLOY_ROOT = '/home/ubuntu/ssafer/S14P31B105'
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        SPRING_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-spring:${IMAGE_TAG}"
+        FASTAPI_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-fastapi:${IMAGE_TAG}"
+        NGINX_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-nginx:${IMAGE_TAG}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Images') {
+            steps {
+                sh '''
+                    docker build -f Infra/docker/dockerfiles/Dockerfile.spring -t "$SPRING_IMAGE" .
+                    docker build -f Infra/docker/dockerfiles/Dockerfile.fastapi -t "$FASTAPI_IMAGE" .
+                    docker build -f Infra/docker/dockerfiles/nginx/Dockerfile -t "$NGINX_IMAGE" .
+                '''
+            }
+        }
+
+        stage('Push Images') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CREDENTIALS, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASSWORD')]) {
+                    sh '''
+                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push "$SPRING_IMAGE"
+                        docker push "$FASTAPI_IMAGE"
+                        docker push "$NGINX_IMAGE"
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Sync EC2 #1 Deploy Files') {
+            steps {
+                sh '''
+                    mkdir -p "$DEPLOY_ROOT/Infra/docker/ec2-1/prod"
+                    mkdir -p "$DEPLOY_ROOT/Infra/scripts"
+                    cp -R Infra/docker/ec2-1/prod/* "$DEPLOY_ROOT/Infra/docker/ec2-1/prod/"
+                    cp Infra/scripts/deploy-ec2-1.sh "$DEPLOY_ROOT/Infra/scripts/deploy-ec2-1.sh"
+                    chmod +x "$DEPLOY_ROOT/Infra/scripts/deploy-ec2-1.sh"
+                '''
+            }
+        }
+
+        stage('Deploy EC2 #1') {
+            steps {
+                sh '''
+                    SPRING_IMAGE="$SPRING_IMAGE" NGINX_IMAGE="$NGINX_IMAGE" \
+                    bash "$DEPLOY_ROOT/Infra/scripts/deploy-ec2-1.sh"
+                '''
+            }
+        }
+
+        stage('Deploy EC2 #2') {
+            steps {
+                sshagent(credentials: [env.EC2_2_SSH_CREDENTIALS]) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no ubuntu@"$EC2_2_HOST" \
+                          'cd /home/ubuntu/ssafer/S14P31B105 && git pull && FASTAPI_IMAGE='"$FASTAPI_IMAGE"' bash Infra/scripts/deploy-ec2-2.sh'
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker image prune -f || true'
+        }
+    }
+}
