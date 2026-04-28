@@ -12,10 +12,12 @@ import com.ssafer.scan.api.dto.ScanBasicResponse;
 import com.ssafer.scan.api.dto.ScanFindingDetailResponse;
 import com.ssafer.scan.api.dto.ScanFindingListItemResponse;
 import com.ssafer.scan.api.dto.ScanFindingListResponseData;
+import com.ssafer.scan.api.dto.ScanStatusResponse;
 import com.ssafer.scan.api.dto.ScanSummaryResponse;
 import com.ssafer.scan.application.service.ScanBasicQueryService;
 import com.ssafer.scan.application.service.ScanFindingDetailQueryService;
 import com.ssafer.scan.application.service.ScanFindingListQueryService;
+import com.ssafer.scan.application.service.ScanStatusQueryService;
 import com.ssafer.scan.application.service.ScanSummaryQueryService;
 import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
@@ -38,13 +40,12 @@ class ScanQueryControllerTest {
 
   @Mock
   private ScanBasicQueryService scanBasicQueryService;
-
+  @Mock
+  private ScanStatusQueryService scanStatusQueryService;
   @Mock
   private ScanSummaryQueryService scanSummaryQueryService;
-
   @Mock
   private ScanFindingListQueryService scanFindingListQueryService;
-
   @Mock
   private ScanFindingDetailQueryService scanFindingDetailQueryService;
 
@@ -81,6 +82,40 @@ class ScanQueryControllerTest {
         .andExpect(jsonPath("$.data.status").value("DONE"))
         .andExpect(jsonPath("$.data.progressStep").value("completed"))
         .andExpect(jsonPath("$.data.rawResultPath").value("s3://ssafer/raw/1001/scan_result.json"));
+  }
+
+  @Test
+  void getScanStatusReturnsOkResponse() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanStatusQueryService.getScanStatus(1001L)).thenReturn(new ScanStatusResponse(
+        1001L,
+        ScanStatus.FAILED,
+        "ANALYSIS_FAILED",
+        LocalDateTime.of(2026, 4, 27, 9, 0),
+        LocalDateTime.of(2026, 4, 27, 9, 1),
+        LocalDateTime.of(2026, 4, 27, 9, 3),
+        "Agent timeout"
+    ));
+
+    mockMvc.perform(get("/api/v1/scans/1001/status"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("스캔 진행 상태 조회 성공"))
+        .andExpect(jsonPath("$.data.scanId").value(1001))
+        .andExpect(jsonPath("$.data.status").value("FAILED"))
+        .andExpect(jsonPath("$.data.progressStep").value("ANALYSIS_FAILED"))
+        .andExpect(jsonPath("$.data.errorMessage").value("Agent timeout"));
+  }
+
+  @Test
+  void getScanStatusWhenMissingReturnsNotFound() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanStatusQueryService.getScanStatus(999L))
+        .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
+
+    mockMvc.perform(get("/api/v1/scans/999/status"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+        .andExpect(jsonPath("$.message").value("Resource not found"));
   }
 
   @Test
