@@ -6,11 +6,14 @@ pipeline {
         disableConcurrentBuilds()
     }
 
+    parameters {
+        booleanParam(name: 'DEPLOY_EC2_2', defaultValue: false, description: 'Deploy FastAPI worker server on EC2 #2')
+    }
+
     environment {
         DOCKERHUB_NAMESPACE = credentials('dockerhub-namespace')
         DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'
         EC2_2_SSH_CREDENTIALS = 'ec2-2-ssh-key'
-        EC2_2_HOST = credentials('ec2-2-host')
         DEPLOY_ROOT = '/home/ubuntu/ssafer/S14P31B105'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         SPRING_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-spring:${IMAGE_TAG}"
@@ -71,12 +74,17 @@ pipeline {
         }
 
         stage('Deploy EC2 #2') {
+            when {
+                expression { return params.DEPLOY_EC2_2 }
+            }
             steps {
-                sshagent(credentials: [env.EC2_2_SSH_CREDENTIALS]) {
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no ubuntu@"$EC2_2_HOST" \
-                          'cd /home/ubuntu/ssafer/S14P31B105 && git pull && FASTAPI_IMAGE='"$FASTAPI_IMAGE"' bash Infra/scripts/deploy-ec2-2.sh'
-                    '''
+                withCredentials([string(credentialsId: 'ec2-2-host', variable: 'EC2_2_HOST')]) {
+                    sshagent(credentials: [env.EC2_2_SSH_CREDENTIALS]) {
+                        sh '''
+                            ssh -o StrictHostKeyChecking=no ubuntu@"$EC2_2_HOST" \
+                              'cd /home/ubuntu/ssafer/S14P31B105 && git pull && FASTAPI_IMAGE='"$FASTAPI_IMAGE"' bash Infra/scripts/deploy-ec2-2.sh'
+                        '''
+                    }
                 }
             }
         }
@@ -84,7 +92,7 @@ pipeline {
 
     post {
         always {
-            sh 'docker image prune -f || true'
+            sh(script: 'docker image prune -f || true', returnStatus: true)
         }
     }
 }
