@@ -336,10 +336,11 @@ def _print_findings(scan: dict) -> None:
     finding_table.add_column("Rule")
     finding_table.add_column("Location", overflow="fold")
     finding_table.add_column("Title", overflow="fold")
+    finding_table.add_column("Evidence", overflow="fold")
     finding_table.add_column("IDs", overflow="fold")
 
     if not finding_groups:
-        finding_table.add_row("-", "-", "-", "-", "-", "-")
+        finding_table.add_row("-", "-", "-", "-", "-", "-", "-")
         console.print(finding_table)
         return
 
@@ -350,6 +351,7 @@ def _print_findings(scan: dict) -> None:
             group["ruleId"],
             group["location"],
             group["title"],
+            group["evidence"],
             group["ids"],
         )
     console.print(finding_table)
@@ -369,6 +371,7 @@ def _group_report_findings(findings: list[dict]) -> list[dict[str, str | int]]:
                 "ruleId": rule_id,
                 "severity": severity,
                 "title": title,
+                "evidence": evidence,
                 "locations": [],
                 "ids": [],
             },
@@ -387,6 +390,7 @@ def _group_report_findings(findings: list[dict]) -> list[dict[str, str | int]]:
                 "ruleId": str(group["ruleId"]),
                 "location": locations,
                 "title": str(group["title"]),
+                "evidence": str(group["evidence"]),
                 "ids": _join_compact(ids, max_items=5),
             }
         )

@@ -56,6 +56,7 @@ def test_group_report_findings_compacts_duplicate_compose_findings():
             "ruleId": "COMPOSE_LATEST_TAG",
             "location": "docker-compose (default, ec2, local)",
             "title": "service uses latest tag",
+            "evidence": "services.web.image=latest",
             "ids": "FND-0001, FND-0002, FND-0003",
         }
     ]
