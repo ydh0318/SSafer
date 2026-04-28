@@ -1,4 +1,8 @@
+from datetime import datetime, timezone
 from typing import Any
+
+
+ANALYSIS_RESULT_SCHEMA_VERSION = "0.1"
 
 
 def _map_ai_results_by_finding_id(
@@ -88,3 +92,26 @@ def build_structured_analysis_results_by_finding_id(
         )
 
     return structured_results
+
+
+def build_analysis_result(
+    scan_result: dict[str, Any],
+    findings: list[dict[str, Any]],
+    explanation_results: list[dict[str, Any]],
+    fix_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    results = build_structured_analysis_results_by_finding_id(
+        findings=findings,
+        explanation_results=explanation_results,
+        fix_results=fix_results,
+    )
+
+    return {
+        "schemaVersion": ANALYSIS_RESULT_SCHEMA_VERSION,
+        "scanId": scan_result.get("scanId"),
+        "source": scan_result.get("source"),
+        "scannedAt": scan_result.get("scannedAt"),
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "resultCount": len(results),
+        "results": results,
+    }
