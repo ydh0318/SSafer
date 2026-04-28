@@ -1,0 +1,11 @@
+project_name: S14P31B105
+
+upload:
+  endpoint: http://localhost:8080
+  token_env: SSAFER_TOKEN
+
+rules:
+  exclude: []
+
+masking:
+  extra_patterns: []

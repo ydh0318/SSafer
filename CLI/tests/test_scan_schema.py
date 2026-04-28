@@ -99,6 +99,27 @@ def test_rule_engine_warning_makes_scan_partial(tmp_path: Path, monkeypatch):
     assert scan["cliSummary"]["warnings"] == 1
 
 
+def test_project_config_name_is_written_to_scan_result(tmp_path: Path, monkeypatch):
+    (tmp_path / "ssafer.yml").write_text("project_name: my-app\n", encoding="utf-8")
+    monkeypatch.setattr(result_store, "trivy_version", lambda: None)
+    monkeypatch.setattr(result_store, "_docker_compose_version", lambda: None)
+
+    scan = result_store.run_scan(tmp_path)
+
+    assert scan["projectName"] == "my-app"
+
+
+def test_invalid_project_config_is_recorded_as_scan_warning(tmp_path: Path, monkeypatch):
+    (tmp_path / "ssafer.yml").write_text("upload: [", encoding="utf-8")
+    monkeypatch.setattr(result_store, "trivy_version", lambda: None)
+    monkeypatch.setattr(result_store, "_docker_compose_version", lambda: None)
+
+    scan = result_store.run_scan(tmp_path)
+
+    assert any("Failed to parse ssafer.yml" in warning for warning in scan["warnings"])
+    assert scan["cliSummary"]["warnings"] == len(scan["warnings"])
+
+
 # ── findings 구조 검증 ────────────────────────────────────────────────────────
 
 def test_findings_source_never_ai(tmp_path: Path):

@@ -10,6 +10,7 @@ from typing import Any
 
 from ssafer import __version__
 from ssafer.core.compose import build_compose_sets, render_effective_config
+from ssafer.core.config import load_project_config
 from ssafer.core.env_parser import parse_env_metadata
 from ssafer.core.finder import discover_project_files
 from ssafer.core.hashing import hash_file, hash_text, load_or_create_project_salt
@@ -34,6 +35,7 @@ def run_scan(
 
     warnings: list[str] = []
     project_root = project_root.resolve()
+    project_config = load_project_config(project_root, warnings)
     _step("프로젝트 파일 탐색 중...")
     files = discover_project_files(project_root)
     salt = load_or_create_project_salt(project_root)
@@ -141,6 +143,7 @@ def run_scan(
     result = {
         "schemaVersion": "0.1",
         "scanId": scan_id,
+        "projectName": project_config.project_name,
         "source": "cli",
         "scannedAt": scanned_at,
         "toolVersion": __version__,
