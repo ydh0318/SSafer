@@ -4,6 +4,7 @@ WORKDIR /workspace
 COPY Backend/ssafer/mvnw ./
 COPY Backend/ssafer/.mvn .mvn/
 COPY Backend/ssafer/pom.xml ./
+RUN chmod +x ./mvnw
 RUN ./mvnw dependency:go-offline -B
 
 COPY Backend/ssafer/src ./src

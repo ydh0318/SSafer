@@ -16,7 +16,11 @@ class ScanContext:
 
 
 class RuleEngine:
-    def __init__(self, rules: list[BaseRule] | None = None) -> None:
+    def __init__(
+        self,
+        rules: list[BaseRule] | None = None,
+        excluded_rule_ids: list[str] | None = None,
+    ) -> None:
         if rules is None:
             from ssafer.rules.compose_rules import (
                 ComposeExposedDbPortRule,
@@ -39,7 +43,11 @@ class RuleEngine:
                 ComposeNoMemoryLimitRule(),
                 EnvPlainSecretRule(),
             ]
-        self._rules = rules
+        excluded = set(excluded_rule_ids or [])
+        self._rules = [
+            rule for rule in rules
+            if getattr(rule, "rule_id", rule.__class__.__name__) not in excluded
+        ]
         self.warnings: list[str] = []
 
     def run(self, context: ScanContext) -> list[Finding]:

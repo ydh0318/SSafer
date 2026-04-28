@@ -3,7 +3,7 @@
   "scanId": "a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd",
   "source": "cli",
   "scannedAt": "2026-04-27T00:26:05Z",
-  "generatedAt": "2026-04-28T02:06:57.644971+00:00",
+  "generatedAt": "2026-04-28T04:37:48.779685+00:00",
   "resultCount": 3,
   "results": [
     {
@@ -15,18 +15,20 @@
       "line": 1,
       "title": "환경변수 파일에 시크릿이 하드코딩됨: ﻿DB_PASSWORD",
       "maskedEvidence": "﻿DB_PASSWORD=***MASKED***",
-      "explanation": "설명 FND-0001",
+      "explanation": "1. 취약점 요약\n environment variable 파일(.env)에 시크릿을 하드코딩하여 보안을 위협합니다.\n\n2. 위험한 이유\n 환경변수 파일에 시크릿이 노출되면 공격자가 쉽게 접근할 수 있습니다. 이 경우, 시크릿은 보안을 위협하는 중요한 정보입니다.\n\n3. 악용 가능 시나리오\n 공격자는 environment variable 파일(.env)에서 DB_PASSWORD를 얻어 데이터베이스에 접근하여 민감한 정보를 악용할 수 있습니다.\n\n4. 예상 영향\n 환경변수 파일(.env)에 시크릿이 노출되면 보안 위협을 받을 가능성이 높습니다. 이 경우, 공격자가 데이터베이스에 접근하여 민감한 정보를 악용할 수 있습니다.\n\n5. 심각도 해석\n 심각도는 HIGH로 분류되어 있으며, environment variable 파일(.env)에서 시크릿이 노출되면 보안 위협을 받을 가능성이 높습니다.",
       "fix": {
-        "summary": "수정",
+        "summary": "환경변수 파일에 시크릿이 하드코딩되어 있으므로 secret를 environment variable로 바꾸어야 합니다.",
         "priority": "high",
         "recommendedActions": [
-          "a",
-          "b"
+          "secret를 environment variable로 바꾸기",
+          "environment variable의 value를 secrets manager와 연결하기",
+          "배포 환경에서 secret를 environment variable로 주입하기",
+          "secrets manager와 environment variable의 value를 확인하기"
         ],
-        "codeGuidance": "c",
-        "verification": "v",
+        "codeGuidance": "environment variable를 사용하여 secret를 보안할 수 있습니다. environment variable의 value는 secrets manager와 연결되어야 합니다.",
+        "verification": "secret가 environment variable로 바뀐 후, environment variable의 value를 secrets manager와 연결하고 배포 환경에서 secret를 environment variable로 주입하는 것을 확인하세요.",
         "cautions": [
-          "x"
+          "secrets manager와 environment variable의 value를 잘 관리해야 합니다."
         ]
       }
     },
@@ -39,18 +41,19 @@
       "line": null,
       "title": "Image user should not be 'root'",
       "maskedEvidence": "Last USER command in Dockerfile should not be 'root'",
-      "explanation": "설명 FND-0002",
+      "explanation": "1. 취약점 요약\nDockerfile에 'root' 사용하지 않는 것을 확인해야 합니다.\n\n2. 위험한 이유\n'root' 사용 시, Docker 이미지의 권한이 강해져서 보안을 위협할 수 있습니다.\n\n3. 악용 가능 시나리오\n'root' 사용 시, 공격자가 Docker 이미지에 취약점을 악용하여 시스템을 제어할 수 있습니다.\n\n4. 예상 영향\nDocker 이미지의 보안이 약화되어서 시스템의 보안이 위협받을 수 있습니다.\n\n5. 심각도 해석\n심각도는 HIGH로, 이 취약점은 매우 중요한 보안 문제입니다.",
       "fix": {
-        "summary": "수정",
+        "summary": "Dockerfile에서 USER 명령이 'root'가 아닌 다른 사용자로 설정되어야 합니다.",
         "priority": "high",
         "recommendedActions": [
-          "a",
-          "b"
+          "Dockerfile에서 USER 명령을 수정하여 'root'를 제외한 다른 사용자를 사용합니다. 예: `USER anotheruser`",
+          "Dockerfile에서 USER 명령이 'root'로 설정되어 있는 경우, 'root'를 제거하고 다른 사용자로 설정합니다.",
+          "Dockerfile의 USER 명령을 수정하여 사용자 ID를 지정할 수 있습니다. 예: `USER 1001`"
         ],
-        "codeGuidance": "c",
-        "verification": "v",
+        "codeGuidance": "Dockerfile에서 USER 명령을 수정하여 'root'를 제외한 다른 사용자를 사용합니다. 예: `USER anotheruser`",
+        "verification": "수정 후 Dockerfile를 확인하여 USER 명령이 'root'가 아닌 다른 사용자로 설정되어 있는지 확인합니다.",
         "cautions": [
-          "x"
+          "Dockerfile에서 USER 명령을 수정할 때, 사용자 ID를 지정할 수 있으므로 주의해야 합니다."
         ]
       }
     },
@@ -63,18 +66,19 @@
       "line": null,
       "title": "No HEALTHCHECK defined",
       "maskedEvidence": "Add HEALTHCHECK instruction in your Dockerfile",
-      "explanation": "설명 FND-0003",
+      "explanation": "1. 취약점 요약\n보안 취약점 FND-0003는 Dockerfile에 HEALTHCHECK instruction가 정의되지 않은 경우를 나타냅니다. HEALTHCHECK instruction는 컨테이너가 정상적으로 작동하는지 확인하기 위해 사용됩니다.\n\n2. 위험한 이유\nHEALTHCHECK instruction가 absence로 인해 컨테이너가 정상적으로 작동하지 않을 수 있습니다. 이 경우, 컨테이너가 정상적으로 작동하지 않으면 서비스나 애플리케이션에 영향을 줄 수 있습니다.\n\n3. 악용 가능 시나리오\n악용 가능한 시나리오는 HEALTHCHECK instruction absence로 인해 컨테이너가 정상적으로 작동하지 않아 서비스나 애플리케이션에 접근할 수 있는 경우입니다. 예를 들어, 컨테이너 내의 application server가 정상적으로 작동하지 않으면, 사용자들이 application server에 접근할 수 없습니다.\n\n4. 예상 영향\nHEALTHCHECK instruction absence로 인해 서비스나 애플리케이션에 영향을 줄 수 있습니다. 예를 들어, 사용자들이 application server에 접근할 수 없을 때, 사용자들은 service나 application server에 대한 오류 메시지를 받을 수 있습니다.\n\n5. 심각도 해석\n심각도는 LOW로 분류되어 있지만, HEALTHCHECK instruction absence로 인해 서비스나 애플리케이션에 영향을 줄 수 있으므로, 주의가 필요합니다. 보안 취약점은 심각도가 낮아도, 사용자 데이터를 보호하는 것은 중요하다는 점을 reminder할 수 있습니다.",
       "fix": {
-        "summary": "수정",
-        "priority": "high",
+        "summary": "Dockerfile에 HEALTHCHECK instruction를 추가합니다.",
+        "priority": "low",
         "recommendedActions": [
-          "a",
-          "b"
+          "Dockerfile에 HEALTHCHECK instruction를 추가합니다. 예시: `RUN healthcheck --interval=1m --timeout=10s --retries=3`",
+          "HEALTHCHECK instruction가 있는지 확인합니다. Dockerfile의 내용을 확인하여 HEALTHCHECK instruction가 있는지 확인합니다.",
+          "Docker image에 HEALTHCHECK instruction이 없는 경우, HEALTHCHECK instruction를 추가합니다."
         ],
-        "codeGuidance": "c",
-        "verification": "v",
+        "codeGuidance": "Dockerfile에 HEALTHCHECK instruction를 추가하는 방법은 다음과 같습니다.\n* `RUN healthcheck --interval=1m --timeout=10s --retries=3`",
+        "verification": "HEALTHCHECK instruction가 있는지 확인하고, Docker image의 HEALTHCHECK instruction이 correct한지 확인합니다.",
         "cautions": [
-          "x"
+          "Dockerfile에 HEALTHCHECK instruction를 추가할 때, interval, timeout, retries parameter를 잘 설정해야 합니다."
         ]
       }
     }

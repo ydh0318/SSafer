@@ -11,8 +11,12 @@ ENV_TOKEN_KEY = "SSAFER_TOKEN"
 DEFAULT_API_URL = "http://localhost:8080"
 
 
-def load_token() -> str | None:
+def load_token(token_env_key: str | None = None) -> str | None:
     """토큰 우선순위: 1) 환경변수 SSAFER_TOKEN  2) ~/.ssafer/config.yml"""
+    if token_env_key:
+        env_token = os.environ.get(token_env_key)
+        if env_token:
+            return env_token.strip()
     env_token = os.environ.get(ENV_TOKEN_KEY)
     if env_token:
         return env_token.strip()
