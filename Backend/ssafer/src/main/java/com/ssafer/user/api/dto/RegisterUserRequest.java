@@ -1,14 +1,24 @@
 package com.ssafer.user.api.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 @Schema(description = "회원가입 요청")
 public record RegisterUserRequest(
     @Schema(description = "로그인에 사용할 이메일", example = "test@example.com")
+    @NotBlank(message = "이메일은 필수입니다.")
+    @Email(message = "올바른 이메일 형식이어야 합니다.")
+    @Size(max = 255, message = "이메일은 255자 이하여야 합니다.")
     String email,
     @Schema(description = "서비스에서 표시할 사용자명", example = "Alice")
+    @NotBlank(message = "사용자명은 필수입니다.")
+    @Size(max = 100, message = "사용자명은 100자 이하여야 합니다.")
     String displayName,
     @Schema(description = "로그인 비밀번호", example = "password123")
+    @NotBlank(message = "비밀번호는 필수입니다.")
+    @Size(min = 8, max = 72, message = "비밀번호는 8자 이상 72자 이하여야 합니다.")
     String password
 ) {
 }
