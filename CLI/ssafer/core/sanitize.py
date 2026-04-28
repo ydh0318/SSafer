@@ -184,8 +184,31 @@ def classify_value(value: str) -> str:
 
 def is_placeholder(value: str) -> bool:
     normalized = value.strip().lower()
-    return normalized in {"changeme", "change-me", "todo", "example", "password", "admin", "root", "test"} or (
-        normalized.startswith("${") and normalized.endswith("}")
+    compact = normalized.replace("-", "_")
+    return (
+        normalized in {
+            "changeme",
+            "change-me",
+            "todo",
+            "example",
+            "password",
+            "admin",
+            "root",
+            "test",
+            "dummy",
+            "sample",
+            "replace_me",
+            "replace-me",
+            "your-token",
+            "your_token",
+            "xxx",
+            "xxxx",
+        }
+        or normalized.startswith("${") and normalized.endswith("}")
+        or compact.startswith("your_") and compact.endswith("_here")
+        or compact.endswith("_here")
+        or compact.startswith("replace_")
+        or set(compact) == {"x"}
     )
 
 

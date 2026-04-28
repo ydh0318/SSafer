@@ -430,6 +430,39 @@ def test_trivy_masked_evidence_max_120_chars():
     assert len(findings[0]["maskedEvidence"]) <= 120
 
 
+def test_trivy_secret_finding_uses_sanitized_match():
+    artifacts = [
+        {
+            "type": "trivy-json",
+            "target": "Dockerfile",
+            "hash": "sha256:abc",
+            "content": {
+                "Results": [
+                    {
+                        "Target": "Dockerfile",
+                        "Secrets": [
+                            {
+                                "RuleID": "aws-access-key-id",
+                                "Title": "AWS Access Key",
+                                "Severity": "HIGH",
+                                "StartLine": 4,
+                                "Match": "***MASKED***",
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+    ]
+
+    finding = _normalize_trivy_findings(artifacts, 0)[0]
+
+    assert finding["ruleId"] == "aws-access-key-id"
+    assert finding["source"] == "trivy"
+    assert finding["line"] == 4
+    assert finding["maskedEvidence"] == "***MASKED***"
+
+
 def test_non_trivy_artifacts_ignored():
     artifacts = [
         {"type": "env-metadata", "target": ".env", "hash": "sha256:abc", "content": {}},
