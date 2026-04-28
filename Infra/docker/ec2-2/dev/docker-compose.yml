@@ -37,6 +37,9 @@ services:
     env_file:
       - .env
     environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.1}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       REDIS_HOST: redis-llm
       REDIS_PORT: 6379
