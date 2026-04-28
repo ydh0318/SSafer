@@ -6,6 +6,7 @@ public enum ErrorCode {
   UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Authentication is required or token is invalid"),
   FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "You do not have permission to access this resource"),
   NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "Resource not found"),
+  DUPLICATE_EMAIL(HttpStatus.CONFLICT, "DUPLICATE_EMAIL", "Email is already registered"),
   INVALID_PARAMETER(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", "Request parameter format is invalid"),
   INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "Internal server error");
 

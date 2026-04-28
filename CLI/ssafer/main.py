@@ -187,6 +187,15 @@ def login(
 
 
 @app.command()
+def logout() -> None:
+    """Clear the saved SSAfer upload token."""
+    from ssafer.core.auth import clear_token
+
+    clear_token()
+    console.print("[green]Saved SSAfer token cleared.[/green]")
+
+
+@app.command()
 def report(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root containing .ssafer results."),
     details: bool = typer.Option(False, "--details", "-d", help="Print targets, artifacts, and output paths."),
@@ -385,9 +394,15 @@ def _print_upload_response(response: dict) -> None:
 
 def _upload_or_exit(path: Path, api_url: str | None) -> dict:
     from ssafer.core.auth import load_endpoint, load_token
+    from ssafer.core.config import load_project_config
 
-    token = load_token()
-    effective_url = api_url or load_endpoint()
+    config_warnings: list[str] = []
+    project_config = load_project_config(path, config_warnings)
+    for warning in config_warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
+
+    token = load_token(project_config.upload.token_env)
+    effective_url = api_url or project_config.upload.endpoint or load_endpoint()
     if token is None:
         console.print(
             "[yellow]인증 토큰이 없습니다. 먼저 [bold]ssafer login[/bold]을 실행하거나\n"
