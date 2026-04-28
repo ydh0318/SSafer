@@ -186,6 +186,15 @@ def login(
 
 
 @app.command()
+def logout() -> None:
+    """Clear the saved SSAfer upload token."""
+    from ssafer.core.auth import clear_token
+
+    clear_token()
+    console.print("[green]Saved SSAfer token cleared.[/green]")
+
+
+@app.command()
 def report(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root containing .ssafer results."),
     details: bool = typer.Option(False, "--details", "-d", help="Print targets, artifacts, and output paths."),

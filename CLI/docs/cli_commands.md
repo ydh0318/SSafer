@@ -10,9 +10,11 @@
 | `ssafer report --path <dir> --details` | 마지막 스캔 결과의 상세 정보, 스캔 대상, findings, artifacts를 출력한다. |
 | `ssafer upload --path <dir>` | 마지막 스캔 패키지를 백엔드 API로 전송한다. |
 | `ssafer login` | 업로드에 사용할 인증 토큰을 저장하고, 업로드 시 Bearer 헤더에 포함되도록 설정한다. |
-| `ssafer login --logout` | 저장된 인증 토큰을 삭제한다. |
+| `ssafer logout` | 저장된 인증 토큰을 삭제한다. |
 | `ssafer install-tools` | Trivy 설치를 안내하거나 Windows 환경에서 winget 기반 설치를 시도한다. |
 | `ssafer version` | 현재 SSAfer CLI 버전을 출력한다. |
+
+참고: 기존 `ssafer login --logout`도 호환성 목적으로 동작하지만, 사용자-facing 명령은 `ssafer logout`을 기준으로 사용한다.
 
 ## 생성되는 주요 파일
 
