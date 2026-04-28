@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from ssafer.core.config import load_project_config
 from ssafer.core.result_store import load_last_scan
 
 
@@ -20,7 +21,8 @@ def upload_last_scan(
     if scan is None:
         raise RuntimeError("No local scan package found. Run 'ssafer run' first.")
 
-    base_url = (api_url or DEFAULT_API_URL).rstrip("/")
+    project_config = load_project_config(project_root, [])
+    base_url = (api_url or project_config.upload.endpoint or DEFAULT_API_URL).rstrip("/")
     headers: dict[str, str] = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"

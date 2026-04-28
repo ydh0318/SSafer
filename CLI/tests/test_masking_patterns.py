@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from ssafer.core.config import MaskingPatternConfig
 from ssafer.core.sanitize import (
+    compile_extra_masking_patterns,
     is_safe_key,
     make_masked_evidence,
     sanitize_compose_yaml,
@@ -90,3 +92,38 @@ services:
     result = sanitize_compose_yaml(raw)
     assert "8080" in result
     assert "myapikey123" not in result
+
+
+def test_sanitize_compose_yaml_applies_extra_patterns():
+    raw = """
+services:
+  app:
+    image: company-internal.com/my-app:1.0
+    environment:
+      NODE_ENV: production
+      PUBLIC_URL: https://company-internal.com/app
+"""
+    warnings: list[str] = []
+    patterns = compile_extra_masking_patterns(
+        [MaskingPatternConfig("internal_domain", r"company-internal\.com", "[REDACTED]")],
+        warnings,
+    )
+
+    result = sanitize_compose_yaml(raw, extra_patterns=patterns)
+
+    assert warnings == []
+    assert "company-internal.com" not in result
+    assert "[REDACTED]" in result
+
+
+def test_invalid_extra_masking_pattern_records_warning():
+    warnings: list[str] = []
+
+    patterns = compile_extra_masking_patterns(
+        [MaskingPatternConfig("broken", "(", "[REDACTED]")],
+        warnings,
+    )
+
+    assert patterns == []
+    assert len(warnings) == 1
+    assert "Invalid masking.extra_patterns regex 'broken'" in warnings[0]
