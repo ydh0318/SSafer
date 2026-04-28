@@ -22,7 +22,7 @@ GitLab MR event
 → GitLab API로 MR metadata/diff 조회
 → review agent 또는 LLM API 호출
 → GitLab MR comment 작성
-→ 필요 시 Jira/Slack 알림
+→ 필요 시 Jira 기록
 ```
 
 Jenkins Webhook은 배포 자동화용이고, n8n Webhook은 MR 리뷰/알림 자동화용으로 분리합니다.
@@ -126,6 +126,6 @@ curl -I https://k14b105.p.ssafy.io/n8n/
 
 - n8n DB와 Spring DB는 같은 PostgreSQL instance 안에서 DB 이름만 분리합니다.
 - `N8N_ENCRYPTION_KEY`는 반드시 백업합니다.
-- GitLab/Jira/Slack/API token은 서버 `.env`보다 n8n Credential로 관리하는 것을 우선합니다.
+- GitLab/Jira/Review Agent token은 서버 `.env`보다 n8n Credential로 관리하는 것을 우선합니다.
 - `/n8n/` subpath 운영은 reverse proxy 설정에 민감합니다. 화면 리소스나 webhook URL이 깨지면 `N8N_EDITOR_BASE_URL`, `WEBHOOK_URL`, `N8N_PROXY_HOPS`, NGINX `/n8n/` proxy header를 함께 확인합니다.
 - n8n image tag는 운영 안정성을 위해 추후 `latest` 대신 고정 버전으로 바꾸는 것을 권장합니다.

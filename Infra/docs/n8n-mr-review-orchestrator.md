@@ -14,7 +14,7 @@ GitLab Merge Request event
 → MR metadata/diff 조회
 → Review Agent 또는 LLM API 호출
 → GitLab MR comment 작성
-→ Slack/Jira 알림 또는 기록
+→ 필요 시 Jira 기록
 ```
 
 ## Webhook 분리 기준
@@ -94,8 +94,8 @@ n8n: https://k14b105.p.ssafy.io/n8n/webhook/...
 5. GitLab MR comment 작성
    - 자동 리뷰 결과를 MR discussion/comment로 등록
 
-6. Notification
-   - 실패 또는 high-risk finding이 있으면 Slack/Jira 알림
+6. Optional Jira Record
+   - 실패 또는 high-risk finding을 Jira에 기록할지 팀 정책에 따라 결정
 
 ## n8n credentials
 
@@ -105,7 +105,6 @@ n8n: https://k14b105.p.ssafy.io/n8n/webhook/...
 | --- | --- | --- |
 | `gitlab-review-token` | read_api, api 또는 MR comment 가능 권한 | MR diff 조회 및 comment 작성 |
 | `review-agent-token` | review API 호출 권한 | 자동 리뷰 agent 호출 |
-| `slack-webhook-url` | incoming webhook | 리뷰 결과 알림 |
 | `jira-token` | issue/comment 권한 | Jira 기록 또는 이슈 생성 |
 
 GitLab token은 최소 권한 원칙을 따릅니다. comment 작성까지 n8n이 수행하려면 단순 `read_repository`보다 더 넓은 API 권한이 필요할 수 있습니다.
@@ -136,5 +135,5 @@ secret 값은 n8n Credential 또는 workflow variable로 관리하고 문서나 
 - 중복 리뷰 방지: commit SHA 또는 MR updated_at 기준으로 idempotency 처리
 - 리뷰 범위 제한: lockfile, generated file, binary file 제외
 - comment update 방식: 매번 새 댓글이 아니라 기존 bot 댓글 수정
-- Slack/Jira 알림 조건 분리
+- Jira 기록 조건 분리
 - Review Agent timeout/retry 정책 추가

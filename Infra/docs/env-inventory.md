@@ -90,7 +90,7 @@ CLI endpoint는 기본값이 `http://localhost:8080`이며, 로그인/설정 흐
 
 ## n8n workflow credentials
 
-n8n은 MR 자동 리뷰 오케스트레이터로 사용합니다. GitLab/Jira/Slack/Review Agent 연동에 필요한 token은 서버 `.env`가 아니라 n8n Credential 저장소에 등록하는 것을 기본 원칙으로 합니다.
+n8n은 MR 자동 리뷰 오케스트레이터로 사용합니다. GitLab/Jira/Review Agent 연동에 필요한 token은 서버 `.env`가 아니라 n8n Credential 저장소에 등록하는 것을 기본 원칙으로 합니다.
 
 후보 credential:
 
@@ -99,7 +99,6 @@ n8n은 MR 자동 리뷰 오케스트레이터로 사용합니다. GitLab/Jira/Sl
 | `gitlab-review-token` | n8n workflow | MR metadata/diff 조회, MR comment 작성 |
 | `review-agent-token` | n8n workflow | 리뷰 agent 또는 LLM gateway 호출 |
 | `jira-token` | n8n workflow | 필요 시 Jira 이슈/코멘트 연동 |
-| `slack-webhook-url` | n8n workflow | 리뷰 결과 또는 실패 알림 |
 
 n8n Credential은 `N8N_ENCRYPTION_KEY`로 암호화되므로 해당 키를 반드시 백업합니다.
 
