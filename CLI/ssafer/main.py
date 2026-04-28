@@ -331,13 +331,13 @@ def _print_findings(scan: dict) -> None:
     findings = scan.get("findings", [])
     finding_groups = _group_report_findings(findings)
     finding_table = Table(title="Findings")
+    finding_table.add_column("IDs", overflow="fold")
     finding_table.add_column("Count", justify="right")
     finding_table.add_column("Severity")
     finding_table.add_column("Rule")
     finding_table.add_column("Location", overflow="fold")
     finding_table.add_column("Title", overflow="fold")
     finding_table.add_column("Evidence", overflow="fold")
-    finding_table.add_column("IDs", overflow="fold")
 
     if not finding_groups:
         finding_table.add_row("-", "-", "-", "-", "-", "-", "-")
@@ -346,13 +346,13 @@ def _print_findings(scan: dict) -> None:
 
     for group in finding_groups:
         finding_table.add_row(
+            group["ids"],
             str(group["count"]),
             group["severity"],
             group["ruleId"],
             group["location"],
             group["title"],
             group["evidence"],
-            group["ids"],
         )
     console.print(finding_table)
 
