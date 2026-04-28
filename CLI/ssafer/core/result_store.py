@@ -10,10 +10,11 @@ from typing import Any
 
 from ssafer import __version__
 from ssafer.core.compose import build_compose_sets, render_effective_config
+from ssafer.core.config import load_project_config
 from ssafer.core.env_parser import parse_env_metadata
 from ssafer.core.finder import discover_project_files
 from ssafer.core.hashing import hash_file, hash_text, load_or_create_project_salt
-from ssafer.core.sanitize import sanitize_compose_yaml
+from ssafer.core.sanitize import compile_extra_masking_patterns, sanitize_compose_yaml
 from ssafer.core.trivy import run_trivy_config, trivy_version
 from ssafer.rules.engine import RuleEngine, ScanContext
 
@@ -34,6 +35,8 @@ def run_scan(
 
     warnings: list[str] = []
     project_root = project_root.resolve()
+    project_config = load_project_config(project_root, warnings)
+    extra_masking_patterns = compile_extra_masking_patterns(project_config.masking.extra_patterns, warnings)
     _step("프로젝트 파일 탐색 중...")
     files = discover_project_files(project_root)
     salt = load_or_create_project_salt(project_root)
@@ -65,7 +68,7 @@ def run_scan(
             continue
 
         _step(f"민감정보 마스킹 중: {compose_set.name}")
-        sanitized = sanitize_compose_yaml(raw_config)
+        sanitized = sanitize_compose_yaml(raw_config, extra_patterns=extra_masking_patterns)
         safe_name = _safe_artifact_name(compose_set.name)
         sanitized_path = sanitized_dir / f"{safe_name}.compose.yml"
         sanitized_path.write_text(sanitized, encoding="utf-8")
@@ -94,7 +97,7 @@ def run_scan(
         env_files=files.env_files,
         project_root=project_root,
     )
-    rule_engine = RuleEngine()
+    rule_engine = RuleEngine(excluded_rule_ids=project_config.rules.exclude)
     custom_rule_findings = rule_engine.run(scan_context)
     warnings.extend(rule_engine.warnings)
 
@@ -141,6 +144,7 @@ def run_scan(
     result = {
         "schemaVersion": "0.1",
         "scanId": scan_id,
+        "projectName": project_config.project_name,
         "source": "cli",
         "scannedAt": scanned_at,
         "toolVersion": __version__,

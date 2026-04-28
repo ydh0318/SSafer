@@ -391,3 +391,19 @@ def test_rule_engine_records_failed_rule_warning():
     assert len(findings) == 1
     assert findings[0].id == "FND-0001"
     assert engine.warnings == ["Rule BROKEN_RULE failed: boom"]
+
+
+def test_rule_engine_excludes_configured_rule_ids():
+    yaml = """
+services:
+  app:
+    image: myapp:latest
+    privileged: true
+"""
+    engine = RuleEngine(excluded_rule_ids=["COMPOSE_LATEST_TAG"])
+
+    findings = engine.run(_ctx({"default": yaml}))
+
+    assert findings
+    assert all(f.rule_id != "COMPOSE_LATEST_TAG" for f in findings)
+    assert any(f.rule_id == "COMPOSE_PRIVILEGED_MODE" for f in findings)
