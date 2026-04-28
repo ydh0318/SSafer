@@ -30,6 +30,8 @@ EC2 #1은 Spring, PostgreSQL, Redis, n8n, NGINX를 실행합니다.
 | `AWS_SECRET_ACCESS_KEY` | spring | S3 secret |
 | `AWS_REGION` | spring | AWS region |
 | `AWS_S3_BUCKET` | spring | scan artifact bucket |
+| `APP_SCAN_RAW_S3_BUCKET` | spring | raw scan result bucket |
+| `APP_SCAN_RAW_S3_REGION` | spring | raw scan result bucket region |
 | `EC2_2_PRIVATE_IP` | spring compose | FastAPI 분석 서버 private IP |
 | `INTERNAL_TOKEN` | spring, fastapi | 서버 간 내부 호출 공유 secret |
 | `N8N_ENCRYPTION_KEY` | n8n | n8n credentials 암호화 키 |
@@ -131,6 +133,8 @@ AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 AWS_REGION
 AWS_S3_BUCKET
+APP_SCAN_RAW_S3_BUCKET
+APP_SCAN_RAW_S3_REGION
 EC2_2_PRIVATE_IP
 INTERNAL_TOKEN
 N8N_ENCRYPTION_KEY

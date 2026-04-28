@@ -87,6 +87,8 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_REGION: ${AWS_REGION}
       AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      APP_SCAN_RAW_S3_BUCKET: ${APP_SCAN_RAW_S3_BUCKET}
+      APP_SCAN_RAW_S3_REGION: ${APP_SCAN_RAW_S3_REGION:-ap-northeast-2}
       SPRING_PROFILES_ACTIVE: prod
     # EC2 #2 콜백을 위해 호스트 전체 바인딩 (UFW로 접근 제어)
     ports:
