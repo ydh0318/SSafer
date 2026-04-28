@@ -15,7 +15,7 @@ from ssafer.core.env_parser import parse_env_metadata
 from ssafer.core.finder import discover_project_files
 from ssafer.core.hashing import hash_file, hash_text, load_or_create_project_salt
 from ssafer.core.sanitize import compile_extra_masking_patterns, sanitize_compose_yaml
-from ssafer.core.trivy import run_trivy_config, trivy_version
+from ssafer.core.trivy import run_trivy_config, sanitize_trivy_json, trivy_version
 from ssafer.rules.engine import RuleEngine, ScanContext
 
 BACKEND_FINDING_SOURCE_TYPES = {
@@ -124,14 +124,15 @@ def run_scan(
             continue
         trivy_findings += count
         try:
-            content = json.loads(output_path.read_text(encoding="utf-8"))
+            raw_content = json.loads(output_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            content = {}
+            raw_content = {}
+        content = sanitize_trivy_json(raw_content)
         artifacts.append(
             {
                 "type": "trivy-json",
                 "target": str(dockerfile.relative_to(project_root)),
-                "hash": hash_file(output_path),
+                "hash": hash_text(json.dumps(content, sort_keys=True, ensure_ascii=False)),
                 "content": content,
             }
         )
