@@ -1,0 +1,16 @@
+package com.ssafer.agent.domain.repository;
+
+import com.ssafer.agent.domain.entity.AgentTask;
+import com.ssafer.agent.domain.enums.AgentTaskStatus;
+import java.util.Collection;
+import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AgentTaskRepository extends JpaRepository<AgentTask, Long> {
+
+  // 미처리 상태(PENDING/SENT/ACKED/RUNNING) 작업을 queued_at 오름차순으로 조회할 때 사용한다.
+  List<AgentTask> findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(
+      Long agentId,
+      Collection<AgentTaskStatus> statuses
+  );
+}
