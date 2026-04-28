@@ -6,12 +6,15 @@ from typing import Any
 
 import httpx
 import pytest
+from typer.testing import CliRunner
 
 import ssafer.core.auth as auth_module
 import ssafer.core.upload as upload_module
+import ssafer.main as main_module
 from ssafer.core.auth import clear_token, load_endpoint, load_token, save_token
 from ssafer.core.result_store import load_last_scan
 from ssafer.core.upload import upload_last_scan
+from ssafer.main import app
 
 
 # ── auth.py 테스트 ─────────────────────────────────────────────────────────────
@@ -20,6 +23,20 @@ def test_load_token_from_env_var(monkeypatch, tmp_path):
     monkeypatch.setattr(auth_module, "CONFIG_PATH", tmp_path / "config.yml")
     monkeypatch.setenv("SSAFER_TOKEN", "env-token-123")
     assert load_token() == "env-token-123"
+
+
+def test_load_token_from_custom_env_var(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", tmp_path / "config.yml")
+    monkeypatch.delenv("SSAFER_TOKEN", raising=False)
+    monkeypatch.setenv("PROJECT_SSAFER_TOKEN", "project-token-123")
+    assert load_token("PROJECT_SSAFER_TOKEN") == "project-token-123"
+
+
+def test_custom_token_env_takes_priority(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", tmp_path / "config.yml")
+    monkeypatch.setenv("SSAFER_TOKEN", "default-token")
+    monkeypatch.setenv("PROJECT_SSAFER_TOKEN", "project-token")
+    assert load_token("PROJECT_SSAFER_TOKEN") == "project-token"
 
 
 def test_load_token_from_config_file(monkeypatch, tmp_path):
@@ -74,6 +91,18 @@ def test_clear_token(monkeypatch, tmp_path):
     monkeypatch.delenv("SSAFER_TOKEN", raising=False)
     save_token("to-delete")
     clear_token()
+    assert load_token() is None
+
+
+def test_logout_command_clears_saved_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.delenv("SSAFER_TOKEN", raising=False)
+    save_token("to-delete")
+
+    result = CliRunner().invoke(app, ["logout"])
+
+    assert result.exit_code == 0
     assert load_token() is None
 
 
@@ -141,3 +170,34 @@ def test_upload_no_auth_header_when_no_token(tmp_path, monkeypatch):
     upload_last_scan(tmp_path, token=None)
     assert len(captured) == 1
     assert "Authorization" not in captured[0]["headers"]
+
+
+def test_cli_upload_uses_project_config_endpoint_and_token_env(tmp_path, monkeypatch):
+    _write_scan(tmp_path, {"scanId": "test-789"})
+    (tmp_path / "ssafer.yml").write_text(
+        """
+upload:
+  endpoint: https://project-api.example.com
+  token_env: PROJECT_SSAFER_TOKEN
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PROJECT_SSAFER_TOKEN", "project-token")
+    captured: dict[str, Any] = {}
+
+    def fake_upload_last_scan(path: Path, api_url: str | None = None, token: str | None = None):
+        captured["path"] = path
+        captured["api_url"] = api_url
+        captured["token"] = token
+        return {"scanId": "ok"}
+
+    monkeypatch.setattr(main_module, "upload_last_scan", fake_upload_last_scan)
+
+    response = main_module._upload_or_exit(tmp_path, api_url=None)
+
+    assert response == {"scanId": "ok"}
+    assert captured == {
+        "path": tmp_path,
+        "api_url": "https://project-api.example.com",
+        "token": "project-token",
+    }

@@ -87,6 +87,9 @@ def test_rule_engine_warning_makes_scan_partial(tmp_path: Path, monkeypatch):
     class FakeRuleEngine:
         warnings = ["Rule BROKEN_RULE failed: boom"]
 
+        def __init__(self, excluded_rule_ids: list[str] | None = None):
+            pass
+
         def run(self, context: Any) -> list:
             return []
 
@@ -97,6 +100,75 @@ def test_rule_engine_warning_makes_scan_partial(tmp_path: Path, monkeypatch):
     assert scan["analysisStatus"] == "PARTIAL"
     assert scan["warnings"] == ["Rule BROKEN_RULE failed: boom"]
     assert scan["cliSummary"]["warnings"] == 1
+
+
+def test_project_config_name_is_written_to_scan_result(tmp_path: Path, monkeypatch):
+    (tmp_path / "ssafer.yml").write_text("project_name: my-app\n", encoding="utf-8")
+    monkeypatch.setattr(result_store, "trivy_version", lambda: None)
+    monkeypatch.setattr(result_store, "_docker_compose_version", lambda: None)
+
+    scan = result_store.run_scan(tmp_path)
+
+    assert scan["projectName"] == "my-app"
+
+
+def test_invalid_project_config_is_recorded_as_scan_warning(tmp_path: Path, monkeypatch):
+    (tmp_path / "ssafer.yml").write_text("upload: [", encoding="utf-8")
+    monkeypatch.setattr(result_store, "trivy_version", lambda: None)
+    monkeypatch.setattr(result_store, "_docker_compose_version", lambda: None)
+
+    scan = result_store.run_scan(tmp_path)
+
+    assert any("Failed to parse ssafer.yml" in warning for warning in scan["warnings"])
+    assert scan["cliSummary"]["warnings"] == len(scan["warnings"])
+
+
+def test_project_config_rule_excludes_are_passed_to_rule_engine(tmp_path: Path, monkeypatch):
+    (tmp_path / "ssafer.yml").write_text(
+        """
+rules:
+  exclude:
+    - DOCKER_LATEST_TAG
+""",
+        encoding="utf-8",
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeRuleEngine:
+        warnings: list[str] = []
+
+        def __init__(self, excluded_rule_ids: list[str] | None = None):
+            captured["excluded_rule_ids"] = excluded_rule_ids
+
+        def run(self, context: Any) -> list:
+            return []
+
+    monkeypatch.setattr(result_store, "RuleEngine", FakeRuleEngine)
+    monkeypatch.setattr(result_store, "trivy_version", lambda: None)
+    monkeypatch.setattr(result_store, "_docker_compose_version", lambda: None)
+
+    result_store.run_scan(tmp_path)
+
+    assert captured["excluded_rule_ids"] == ["DOCKER_LATEST_TAG"]
+
+
+def test_invalid_extra_masking_regex_is_recorded_as_scan_warning(tmp_path: Path, monkeypatch):
+    (tmp_path / "ssafer.yml").write_text(
+        """
+masking:
+  extra_patterns:
+    - name: broken
+      regex: "("
+      mask: "[REDACTED]"
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(result_store, "trivy_version", lambda: None)
+    monkeypatch.setattr(result_store, "_docker_compose_version", lambda: None)
+
+    scan = result_store.run_scan(tmp_path)
+
+    assert any("Invalid masking.extra_patterns regex 'broken'" in warning for warning in scan["warnings"])
 
 
 # ── findings 구조 검증 ────────────────────────────────────────────────────────

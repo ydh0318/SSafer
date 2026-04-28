@@ -1,0 +1,39 @@
+project_name: S14P31B105
+
+upload:
+  # 서버 엔드포인트
+  endpoint: http://localhost:8080
+  # endpoint: https://ssafer.co.kr
+
+  # 백엔드 서버에 결과 업로드 시 사용할 토큰을 환경 변수에서 가져옵니다.
+  token_env: SSAFER_TOKEN
+
+rules:
+  exclude: []
+  # 특정 룰을 끄고 싶으면 아래처럼 리스트에 추가하세요.
+  # 예: DOCKER_LATEST_TAG 룰은 실행 대상에서 제외됩니다.
+  # exclude:
+  #   - DOCKER_LATEST_TAG
+
+masking:
+  extra_patterns: []
+  # 프로젝트에서 추가로 숨기고 싶은 값이 있으면 아래처럼 패턴을 추가하세요.
+  # 예: 회사 내부 도메인 company-internal.com을 결과 JSON에서 [REDACTED]로 바꿉니다.
+  # extra_patterns:
+  #   - name: internal_domain
+  #     regex: "company-internal\\.com"
+  #     mask: "[REDACTED]"
+  #
+  # 보완 전:
+  # services:
+  #   app:
+  #     image: company-internal.com/my-app:1.0
+  #     environment:
+  #       API_URL: https://company-internal.com/api
+  #
+  # 보완 후:
+  # services:
+  #   app:
+  #     image: [REDACTED]/my-app:1.0
+  #     environment:
+  #       API_URL: https://[REDACTED]/api

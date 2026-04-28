@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -20,49 +21,79 @@ PRIVATE_KEY_RE = re.compile(
 )
 
 
-def sanitize_compose_yaml(raw_yaml: str) -> str:
+@dataclass(frozen=True)
+class CompiledMaskingPattern:
+    name: str
+    regex: re.Pattern[str]
+    mask: str
+
+
+def compile_extra_masking_patterns(patterns: list[Any], warnings: list[str]) -> list[CompiledMaskingPattern]:
+    compiled: list[CompiledMaskingPattern] = []
+    for pattern in patterns:
+        try:
+            compiled.append(
+                CompiledMaskingPattern(
+                    name=pattern.name,
+                    regex=re.compile(pattern.regex),
+                    mask=pattern.mask,
+                )
+            )
+        except re.error as exc:
+            warnings.append(f"Invalid masking.extra_patterns regex '{pattern.name}': {exc}")
+    return compiled
+
+
+def sanitize_compose_yaml(raw_yaml: str, extra_patterns: list[CompiledMaskingPattern] | None = None) -> str:
+    extra_patterns = extra_patterns or []
     try:
         document = yaml.safe_load(raw_yaml) or {}
     except yaml.YAMLError:
-        return conservative_mask_text(raw_yaml)
-    sanitized = sanitize_obj(document)
+        return conservative_mask_text(raw_yaml, extra_patterns)
+    sanitized = sanitize_obj(document, extra_patterns=extra_patterns)
     return yaml.safe_dump(sanitized, sort_keys=False, allow_unicode=False)
 
 
-def sanitize_obj(value: Any, key_hint: str | None = None) -> Any:
+def sanitize_obj(
+    value: Any,
+    key_hint: str | None = None,
+    extra_patterns: list[CompiledMaskingPattern] | None = None,
+) -> Any:
+    extra_patterns = extra_patterns or []
     if isinstance(value, dict):
         sanitized: dict[Any, Any] = {}
         for key, child in value.items():
             key_text = str(key)
             if key_text in {"environment", "labels"}:
-                sanitized[key] = sanitize_mapping_or_list(child)
+                sanitized[key] = sanitize_mapping_or_list(child, extra_patterns)
             elif key_text in {"command", "entrypoint"}:
-                sanitized[key] = sanitize_command(child)
+                sanitized[key] = sanitize_command(child, extra_patterns)
             elif key_text == "args":
-                sanitized[key] = sanitize_mapping_or_list(child)
+                sanitized[key] = sanitize_mapping_or_list(child, extra_patterns)
             elif is_secret_key(key_text):
                 sanitized[key] = MASK
             else:
-                sanitized[key] = sanitize_obj(child, key_text)
+                sanitized[key] = sanitize_obj(child, key_text, extra_patterns)
         return sanitized
     if isinstance(value, list):
-        return [sanitize_obj(item, key_hint) for item in value]
+        return [sanitize_obj(item, key_hint, extra_patterns) for item in value]
     if isinstance(value, str):
         if key_hint and is_secret_key(key_hint):
             return MASK
-        return sanitize_string(value)
+        return sanitize_string(value, extra_patterns)
     return deepcopy(value)
 
 
-def sanitize_mapping_or_list(value: Any) -> Any:
+def sanitize_mapping_or_list(value: Any, extra_patterns: list[CompiledMaskingPattern] | None = None) -> Any:
+    extra_patterns = extra_patterns or []
     if isinstance(value, dict):
         result: dict[Any, Any] = {}
         for key, child in value.items():
             key_text = str(key)
             if is_safe_key(key_text):
-                result[key] = child
+                result[key] = sanitize_string(child, extra_patterns) if isinstance(child, str) else child
             else:
-                result[key] = MASK if is_secret_key(key_text) else sanitize_obj(child, key_text)
+                result[key] = MASK if is_secret_key(key_text) else sanitize_obj(child, key_text, extra_patterns)
         return result
     if isinstance(value, list):
         result: list[Any] = []
@@ -70,18 +101,19 @@ def sanitize_mapping_or_list(value: Any) -> Any:
             if isinstance(item, str) and "=" in item:
                 key, child = item.split("=", 1)
                 if is_safe_key(key):
-                    result.append(item)
+                    result.append(f"{key}={sanitize_string(child, extra_patterns)}")
                 else:
-                    result.append(f"{key}={MASK if is_secret_key(key) else sanitize_string(child)}")
+                    result.append(f"{key}={MASK if is_secret_key(key) else sanitize_string(child, extra_patterns)}")
             else:
-                result.append(sanitize_obj(item))
+                result.append(sanitize_obj(item, extra_patterns=extra_patterns))
         return result
-    return sanitize_obj(value)
+    return sanitize_obj(value, extra_patterns=extra_patterns)
 
 
-def sanitize_command(value: Any) -> Any:
+def sanitize_command(value: Any, extra_patterns: list[CompiledMaskingPattern] | None = None) -> Any:
+    extra_patterns = extra_patterns or []
     if isinstance(value, str):
-        masked = sanitize_url_credentials(value)
+        masked = apply_extra_patterns(sanitize_url_credentials(value), extra_patterns)
         if SECRET_VALUE_RE.search(masked):
             return "***MASKED_COMMAND_CONTAINS_SECRET***"
         return masked
@@ -89,14 +121,22 @@ def sanitize_command(value: Any) -> Any:
         joined = " ".join(str(item) for item in value)
         if SECRET_VALUE_RE.search(joined):
             return ["***MASKED_COMMAND_CONTAINS_SECRET***"]
-        return [sanitize_string(str(item)) for item in value]
-    return sanitize_obj(value)
+        return [sanitize_string(str(item), extra_patterns) for item in value]
+    return sanitize_obj(value, extra_patterns=extra_patterns)
 
 
-def sanitize_string(value: str) -> str:
+def sanitize_string(value: str, extra_patterns: list[CompiledMaskingPattern] | None = None) -> str:
+    extra_patterns = extra_patterns or []
     value = sanitize_url_credentials(value)
     value = AWS_KEY_RE.sub("AKIA****MASKED****", value)
     value = PRIVATE_KEY_RE.sub("[PRIVATE KEY REDACTED]", value)
+    value = apply_extra_patterns(value, extra_patterns)
+    return value
+
+
+def apply_extra_patterns(value: str, extra_patterns: list[CompiledMaskingPattern]) -> str:
+    for pattern in extra_patterns:
+        value = pattern.regex.sub(pattern.mask, value)
     return value
 
 
@@ -104,13 +144,14 @@ def sanitize_url_credentials(value: str) -> str:
     return URL_CREDENTIAL_RE.sub(lambda match: f"{match.group('scheme')}{match.group('user')}:{MASK}@", value)
 
 
-def conservative_mask_text(text: str) -> str:
+def conservative_mask_text(text: str, extra_patterns: list[CompiledMaskingPattern] | None = None) -> str:
+    extra_patterns = extra_patterns or []
     lines: list[str] = []
     for line in text.splitlines():
         if SECRET_VALUE_RE.search(line):
             lines.append(MASK)
         else:
-            lines.append(sanitize_url_credentials(line))
+            lines.append(sanitize_string(line, extra_patterns))
     return "\n".join(lines)
 
 

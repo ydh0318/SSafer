@@ -74,6 +74,40 @@ def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
     assert posted_urls == ["http://localhost:8080/api/scans"]
 
 
+def test_upload_last_scan_uses_project_config_endpoint(tmp_path: Path, monkeypatch):
+    scan = {"scanId": "local-scan-test", "artifacts": []}
+    _write_scan(tmp_path, scan)
+    (tmp_path / "ssafer.yml").write_text(
+        """
+upload:
+  endpoint: https://api.ssafer.dev
+""",
+        encoding="utf-8",
+    )
+    posted_urls: list[str] = []
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            posted_urls.append(url)
+            request = httpx.Request("POST", url)
+            return httpx.Response(200, json={"scanId": "remote-scan-1"}, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    upload.upload_last_scan(tmp_path)
+
+    assert posted_urls == ["https://api.ssafer.dev/api/scans"]
+
+
 def test_upload_last_scan_requires_existing_scan(tmp_path: Path):
     with pytest.raises(RuntimeError, match="No local scan package found"):
         upload.upload_last_scan(tmp_path)
