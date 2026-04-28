@@ -22,6 +22,8 @@ EC2 #1은 Spring, PostgreSQL, Redis, n8n, NGINX를 실행합니다.
 | `POSTGRES_DB` | postgres, spring | Spring 기본 DB 이름 |
 | `POSTGRES_USER` | postgres, spring, n8n | PostgreSQL 사용자 |
 | `POSTGRES_PASSWORD` | postgres, spring, n8n | PostgreSQL 비밀번호 |
+| `REDIS_HOST` | spring | Redis host |
+| `REDIS_PORT` | spring | Redis port |
 | `REDIS_PASSWORD` | redis, spring | Spring Redis 비밀번호 |
 | `JWT_SECRET` | spring | JWT 서명 키 |
 | `JWT_ISSUER` | spring | JWT issuer |
@@ -32,6 +34,11 @@ EC2 #1은 Spring, PostgreSQL, Redis, n8n, NGINX를 실행합니다.
 | `AWS_S3_BUCKET` | spring | scan artifact bucket |
 | `APP_SCAN_RAW_S3_BUCKET` | spring | raw scan result bucket |
 | `APP_SCAN_RAW_S3_REGION` | spring | raw scan result bucket region |
+| `RESEND_API_KEY` | spring | email verification provider API key |
+| `EMAIL_FROM_ADDRESS` | spring | 발신 이메일 주소 |
+| `EMAIL_VERIFICATION_CODE_TTL_SECONDS` | spring | 인증 코드 TTL |
+| `EMAIL_VERIFICATION_COOLDOWN_SECONDS` | spring | 재전송 cooldown |
+| `EMAIL_VERIFICATION_VERIFIED_TTL_SECONDS` | spring | 인증 완료 상태 TTL |
 | `EC2_2_PRIVATE_IP` | spring compose | FastAPI 분석 서버 private IP |
 | `INTERNAL_TOKEN` | spring, fastapi | 서버 간 내부 호출 공유 secret |
 | `N8N_ENCRYPTION_KEY` | n8n | n8n credentials 암호화 키 |
@@ -127,6 +134,8 @@ chmod 600 .env
 
 ```text
 POSTGRES_PASSWORD
+REDIS_HOST
+REDIS_PORT
 REDIS_PASSWORD
 JWT_SECRET
 AWS_ACCESS_KEY_ID
@@ -135,6 +144,11 @@ AWS_REGION
 AWS_S3_BUCKET
 APP_SCAN_RAW_S3_BUCKET
 APP_SCAN_RAW_S3_REGION
+RESEND_API_KEY
+EMAIL_FROM_ADDRESS
+EMAIL_VERIFICATION_CODE_TTL_SECONDS
+EMAIL_VERIFICATION_COOLDOWN_SECONDS
+EMAIL_VERIFICATION_VERIFIED_TTL_SECONDS
 EC2_2_PRIVATE_IP
 INTERNAL_TOKEN
 N8N_ENCRYPTION_KEY
