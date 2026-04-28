@@ -329,34 +329,97 @@ def _print_artifacts(scan: dict) -> None:
 
 def _print_findings(scan: dict) -> None:
     findings = scan.get("findings", [])
+    finding_groups = _group_report_findings(findings)
     finding_table = Table(title="Findings")
-    finding_table.add_column("ID")
-    finding_table.add_column("Source")
+    finding_table.add_column("Count", justify="right")
     finding_table.add_column("Severity")
-    finding_table.add_column("Location", overflow="fold")
     finding_table.add_column("Rule")
+    finding_table.add_column("Location", overflow="fold")
     finding_table.add_column("Title", overflow="fold")
-    finding_table.add_column("Evidence", overflow="fold")
+    finding_table.add_column("IDs", overflow="fold")
 
-    if not findings:
-        finding_table.add_row("-", "-", "-", "-", "-", "-", "-")
+    if not finding_groups:
+        finding_table.add_row("-", "-", "-", "-", "-", "-")
         console.print(finding_table)
         return
 
-    for finding in findings:
-        file_path = finding.get("file") or "-"
-        line = finding.get("line")
-        location = f"{file_path}:{line}" if line else file_path
+    for group in finding_groups:
         finding_table.add_row(
-            str(finding.get("id") or "-"),
-            str(finding.get("source") or "-"),
-            str(finding.get("severity") or "-"),
-            location,
-            str(finding.get("ruleId") or "-"),
-            str(finding.get("title") or "-"),
-            _format_report_evidence(finding.get("maskedEvidence")),
+            str(group["count"]),
+            group["severity"],
+            group["ruleId"],
+            group["location"],
+            group["title"],
+            group["ids"],
         )
     console.print(finding_table)
+
+
+def _group_report_findings(findings: list[dict]) -> list[dict[str, str | int]]:
+    groups: dict[tuple[str, str, str, str], dict[str, object]] = {}
+    for finding in findings:
+        rule_id = str(finding.get("ruleId") or "-")
+        severity = str(finding.get("severity") or "-")
+        title = str(finding.get("title") or "-")
+        evidence = _format_report_evidence(finding.get("maskedEvidence"))
+        key = (rule_id, severity, title, evidence)
+        group = groups.setdefault(
+            key,
+            {
+                "ruleId": rule_id,
+                "severity": severity,
+                "title": title,
+                "locations": [],
+                "ids": [],
+            },
+        )
+        group["locations"].append(_format_finding_location(finding))
+        group["ids"].append(str(finding.get("id") or "-"))
+
+    result: list[dict[str, str | int]] = []
+    for group in groups.values():
+        locations = _compact_locations(group["locations"])
+        ids = group["ids"]
+        result.append(
+            {
+                "count": len(ids),
+                "severity": str(group["severity"]),
+                "ruleId": str(group["ruleId"]),
+                "location": locations,
+                "title": str(group["title"]),
+                "ids": _join_compact(ids, max_items=5),
+            }
+        )
+    return result
+
+
+def _format_finding_location(finding: dict) -> str:
+    file_path = str(finding.get("file") or "-")
+    line = finding.get("line")
+    return f"{file_path}:{line}" if line else file_path
+
+
+def _compact_locations(locations: list[str]) -> str:
+    unique = list(dict.fromkeys(locations))
+    compose_sets = [_extract_compose_set(location) for location in unique]
+    if all(compose_sets):
+        return f"docker-compose ({', '.join(compose_sets)})"
+    return _join_compact(unique, max_items=3)
+
+
+def _extract_compose_set(location: str) -> str | None:
+    prefix = "docker-compose ("
+    if location.startswith(prefix) and location.endswith(")"):
+        return location[len(prefix):-1]
+    return None
+
+
+def _join_compact(items: list[str], max_items: int) -> str:
+    if not items:
+        return "-"
+    shown = items[:max_items]
+    suffix = f" +{len(items) - max_items}" if len(items) > max_items else ""
+    return ", ".join(shown) + suffix
 
 
 def _format_report_evidence(value: object) -> str:
