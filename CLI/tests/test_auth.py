@@ -6,12 +6,14 @@ from typing import Any
 
 import httpx
 import pytest
+from typer.testing import CliRunner
 
 import ssafer.core.auth as auth_module
 import ssafer.core.upload as upload_module
 from ssafer.core.auth import clear_token, load_endpoint, load_token, save_token
 from ssafer.core.result_store import load_last_scan
 from ssafer.core.upload import upload_last_scan
+from ssafer.main import app
 
 
 # ── auth.py 테스트 ─────────────────────────────────────────────────────────────
@@ -74,6 +76,18 @@ def test_clear_token(monkeypatch, tmp_path):
     monkeypatch.delenv("SSAFER_TOKEN", raising=False)
     save_token("to-delete")
     clear_token()
+    assert load_token() is None
+
+
+def test_logout_command_clears_saved_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.delenv("SSAFER_TOKEN", raising=False)
+    save_token("to-delete")
+
+    result = CliRunner().invoke(app, ["logout"])
+
+    assert result.exit_code == 0
     assert load_token() is None
 
 

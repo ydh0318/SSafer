@@ -252,3 +252,11 @@ python -m pytest
 - `ssafer/core/compose.py` — Compose 세트 구성
 - `ssafer/core/finder.py` — 파일 탐색
 - `ssafer/core/trivy.py` — Trivy 통합
+---
+
+## CLI 문서
+
+최신 CLI 명령어, 결과 JSON 구조, 회귀 테스트 기준은 아래 문서를 기준으로 관리한다.
+
+- [`docs/cli_commands.md`](docs/cli_commands.md): CLI 명령어와 생성 파일 정리
+- [`docs/cli_regression_tests.md`](docs/cli_regression_tests.md): 회귀 테스트 실행 기준
