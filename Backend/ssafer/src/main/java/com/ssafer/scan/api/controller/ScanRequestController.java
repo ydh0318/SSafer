@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 // 컨트롤러는 인증 주체 조회와 입출력 매핑만 담당하고, 비즈니스 로직은 서비스에 위임한다.
 public class ScanRequestController {
 
-  private static final String CREATE_SCAN_SUCCESS_MESSAGE = "Agent 로컬 스캔 시작 등록 성공";
+  private static final String CREATE_SCAN_SUCCESS_MESSAGE = "스캔 요청 등록 성공";
 
   private final CurrentActorProvider currentActorProvider;
   private final ScanRegistrationService scanRegistrationService;

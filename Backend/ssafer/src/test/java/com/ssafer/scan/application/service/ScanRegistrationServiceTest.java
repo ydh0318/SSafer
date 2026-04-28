@@ -59,9 +59,9 @@ class ScanRegistrationServiceTest {
       ReflectionTestUtils.setField(scan, "id", 1001L);
       return scan;
     });
-    given(scanRepository.updateRawResultPath(1001L, "s3://ssafer/raw/1001/scan_result.json")).willReturn(1);
-    given(rawUploadUrlIssuer.issuePutUrl("raw/1001/scan_result.json"))
-        .willReturn("https://presigned-url.example.com/raw/1001/scan_result.json");
+    given(scanRepository.updateRawResultPath(eq(1001L), any(String.class))).willReturn(1);
+    given(rawUploadUrlIssuer.issuePutUrl(any(String.class)))
+        .willReturn("https://presigned-url.example.com/upload");
 
     ScanRegistrationResult result = scanRegistrationService.register(
         AuthenticatedActor.member(1L),
@@ -71,8 +71,9 @@ class ScanRegistrationServiceTest {
     assertThat(result.scanId()).isEqualTo(1001L);
     assertThat(result.projectId()).isEqualTo(2001L);
     assertThat(result.status()).isEqualTo(ScanStatus.REQUESTED);
-    assertThat(result.rawResultPath()).isEqualTo("s3://ssafer/raw/1001/scan_result.json");
-    assertThat(result.rawUploadUrl()).isEqualTo("https://presigned-url.example.com/raw/1001/scan_result.json");
+    assertThat(result.rawResultPath()).startsWith("s3://ssafer/raw/1001/");
+    assertThat(result.rawResultPath()).endsWith("/scan_result.json");
+    assertThat(result.rawUploadUrl()).isEqualTo("https://presigned-url.example.com/upload");
     then(projectRepository).should().findByUserIdAndDeletedAtIsNull(1L);
     then(projectRepository).shouldHaveNoMoreInteractions();
 
@@ -90,8 +91,15 @@ class ScanRegistrationServiceTest {
     assertThat(snapshot.get("targetPath")).isEqualTo("/opt/app");
     assertThat(snapshot.get("includeLogs")).isEqualTo(false);
 
-    then(scanRepository).should().updateRawResultPath(1001L, "s3://ssafer/raw/1001/scan_result.json");
-    then(rawUploadUrlIssuer).should().issuePutUrl("raw/1001/scan_result.json");
+    ArgumentCaptor<String> pathCaptor = ArgumentCaptor.forClass(String.class);
+    then(scanRepository).should().updateRawResultPath(eq(1001L), pathCaptor.capture());
+    assertThat(pathCaptor.getValue()).startsWith("s3://ssafer/raw/1001/");
+    assertThat(pathCaptor.getValue()).endsWith("/scan_result.json");
+
+    ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+    then(rawUploadUrlIssuer).should().issuePutUrl(keyCaptor.capture());
+    assertThat(keyCaptor.getValue()).startsWith("raw/1001/");
+    assertThat(keyCaptor.getValue()).endsWith("/scan_result.json");
   }
 
   @Test
@@ -108,9 +116,9 @@ class ScanRegistrationServiceTest {
       ReflectionTestUtils.setField(scan, "id", 4001L);
       return scan;
     });
-    given(scanRepository.updateRawResultPath(4001L, "s3://ssafer/raw/4001/scan_result.json")).willReturn(1);
-    given(rawUploadUrlIssuer.issuePutUrl("raw/4001/scan_result.json"))
-        .willReturn("https://presigned-url.example.com/raw/4001/scan_result.json");
+    given(scanRepository.updateRawResultPath(eq(4001L), any(String.class))).willReturn(1);
+    given(rawUploadUrlIssuer.issuePutUrl(any(String.class)))
+        .willReturn("https://presigned-url.example.com/upload");
 
     ScanRegistrationResult result = scanRegistrationService.register(
         AuthenticatedActor.guest("guest-hash"),
@@ -119,8 +127,9 @@ class ScanRegistrationServiceTest {
 
     assertThat(result.projectId()).isEqualTo(3001L);
     assertThat(result.scanId()).isEqualTo(4001L);
-    assertThat(result.rawResultPath()).isEqualTo("s3://ssafer/raw/4001/scan_result.json");
-    assertThat(result.rawUploadUrl()).isEqualTo("https://presigned-url.example.com/raw/4001/scan_result.json");
+    assertThat(result.rawResultPath()).startsWith("s3://ssafer/raw/4001/");
+    assertThat(result.rawResultPath()).endsWith("/scan_result.json");
+    assertThat(result.rawUploadUrl()).isEqualTo("https://presigned-url.example.com/upload");
 
     ArgumentCaptor<Project> projectCaptor = ArgumentCaptor.forClass(Project.class);
     then(projectRepository).should().save(projectCaptor.capture());
@@ -129,7 +138,14 @@ class ScanRegistrationServiceTest {
     assertThat(savedProject.getUserId()).isNull();
     assertThat(savedProject.getName()).isEqualTo("sample app");
 
-    then(scanRepository).should().updateRawResultPath(eq(4001L), eq("s3://ssafer/raw/4001/scan_result.json"));
-    then(rawUploadUrlIssuer).should().issuePutUrl("raw/4001/scan_result.json");
+    ArgumentCaptor<String> guestPathCaptor = ArgumentCaptor.forClass(String.class);
+    then(scanRepository).should().updateRawResultPath(eq(4001L), guestPathCaptor.capture());
+    assertThat(guestPathCaptor.getValue()).startsWith("s3://ssafer/raw/4001/");
+    assertThat(guestPathCaptor.getValue()).endsWith("/scan_result.json");
+
+    ArgumentCaptor<String> guestKeyCaptor = ArgumentCaptor.forClass(String.class);
+    then(rawUploadUrlIssuer).should().issuePutUrl(guestKeyCaptor.capture());
+    assertThat(guestKeyCaptor.getValue()).startsWith("raw/4001/");
+    assertThat(guestKeyCaptor.getValue()).endsWith("/scan_result.json");
   }
 }

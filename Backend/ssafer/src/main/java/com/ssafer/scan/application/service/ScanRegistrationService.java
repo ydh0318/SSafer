@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -66,7 +67,7 @@ public class ScanRegistrationService {
     Scan saved = scanRepository.save(scan);
     String objectKey = buildRawResultKey(saved.getId());
     String rawResultPath = buildRawResultPath(objectKey);
-    // scanId가 생성된 뒤에 고정 규칙(raw/{scanId}/scan_result.json)으로 경로를 채운다.
+    // scanId + rawUploadId(UUID) 조합으로 경로를 만들어 동일 scanId 테스트 충돌을 방지한다.
     scanRepository.updateRawResultPath(saved.getId(), rawResultPath);
     String rawUploadUrl = rawUploadUrlIssuer.issuePutUrl(objectKey);
 
@@ -131,7 +132,9 @@ public class ScanRegistrationService {
   }
 
   private String buildRawResultKey(Long scanId) {
-    return "raw/" + scanId + "/scan_result.json";
+    // 같은 버킷에서 여러 개발자가 테스트해도 S3 key가 겹치지 않도록 업로드 ID를 분리한다.
+    String rawUploadId = UUID.randomUUID().toString();
+    return "raw/" + scanId + "/" + rawUploadId + "/scan_result.json";
   }
 
   private String buildRawResultPath(String objectKey) {

@@ -11,8 +11,8 @@ import com.ssafer.global.security.CurrentActorProvider;
 import com.ssafer.scan.api.dto.CreateScanRequest;
 import com.ssafer.scan.application.service.ScanRegistrationResult;
 import com.ssafer.scan.application.service.ScanRegistrationService;
-import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,7 +24,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 @ExtendWith(MockitoExtension.class)
-// 스캔 시작 컨트롤러의 요청/응답 계약과 검증 동작을 확인한다.
 class ScanRequestControllerTest {
 
   @Mock
@@ -37,7 +36,7 @@ class ScanRequestControllerTest {
   private ScanRequestController scanRequestController;
 
   @Test
-  void createScanReturnsOkResponse() throws Exception {
+  void createScanReturnsCreatedResponse() throws Exception {
     MockMvc mockMvc = buildMockMvc();
     when(currentActorProvider.getCurrentActor()).thenReturn(AuthenticatedActor.member(1L));
     when(scanRegistrationService.register(any(), any(CreateScanRequest.class))).thenReturn(
@@ -45,7 +44,7 @@ class ScanRequestControllerTest {
             1001L,
             2001L,
             ScanStatus.REQUESTED,
-            "s3://ssafer/raw/1001/scan_result.json",
+            "s3://ssafer/raw/1001/11111111-1111-1111-1111-111111111111/scan_result.json",
             "https://presigned-url.example.com"));
 
     String requestBody = """
@@ -62,11 +61,13 @@ class ScanRequestControllerTest {
             .contentType(MediaType.APPLICATION_JSON)
             .content(requestBody))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.message").value("Agent 로컬 스캔 시작 등록 성공"))
+        .andExpect(jsonPath("$.message").value("스캔 요청 등록 성공"))
         .andExpect(jsonPath("$.data.scanId").value(1001))
         .andExpect(jsonPath("$.data.projectId").value(2001))
         .andExpect(jsonPath("$.data.status").value("REQUESTED"))
-        .andExpect(jsonPath("$.data.rawResultPath").value("s3://ssafer/raw/1001/scan_result.json"))
+        .andExpect(jsonPath(
+            "$.data.rawResultPath",
+            Matchers.matchesPattern("^s3://ssafer/raw/1001/.+/scan_result\\.json$")))
         .andExpect(jsonPath("$.data.rawUploadUrl").value("https://presigned-url.example.com"));
   }
 
@@ -113,7 +114,7 @@ class ScanRequestControllerTest {
             1002L,
             2002L,
             ScanStatus.REQUESTED,
-            "s3://ssafer/raw/1002/scan_result.json",
+            "s3://ssafer/raw/1002/22222222-2222-2222-2222-222222222222/scan_result.json",
             "https://presigned-url.example.com"));
 
     String requestBody = """
