@@ -4,10 +4,12 @@ import com.ssafer.global.api.ApiResponse;
 import com.ssafer.scan.api.dto.ScanBasicResponse;
 import com.ssafer.scan.api.dto.ScanFindingDetailResponse;
 import com.ssafer.scan.api.dto.ScanFindingListResponseData;
+import com.ssafer.scan.api.dto.ScanStatusResponse;
 import com.ssafer.scan.api.dto.ScanSummaryResponse;
 import com.ssafer.scan.application.service.ScanBasicQueryService;
 import com.ssafer.scan.application.service.ScanFindingDetailQueryService;
 import com.ssafer.scan.application.service.ScanFindingListQueryService;
+import com.ssafer.scan.application.service.ScanStatusQueryService;
 import com.ssafer.scan.application.service.ScanSummaryQueryService;
 import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
@@ -29,31 +31,35 @@ import org.springframework.web.bind.annotation.RestController;
 public class ScanQueryController {
 
   private static final String GET_SCAN_BASIC_SUCCESS_MESSAGE = "스캔 기본 조회 성공";
+  private static final String GET_SCAN_STATUS_SUCCESS_MESSAGE = "스캔 진행 상태 조회 성공";
   private static final String GET_SCAN_SUMMARY_SUCCESS_MESSAGE = "스캔 결과 요약 조회 성공";
   private static final String GET_SCAN_FINDINGS_SUCCESS_MESSAGE = "스캔 취약점 목록 조회 성공";
   private static final String GET_SCAN_FINDING_DETAIL_SUCCESS_MESSAGE = "스캔 취약점 상세 조회 성공";
 
   private final ScanBasicQueryService scanBasicQueryService;
+  private final ScanStatusQueryService scanStatusQueryService;
   private final ScanSummaryQueryService scanSummaryQueryService;
   private final ScanFindingListQueryService scanFindingListQueryService;
   private final ScanFindingDetailQueryService scanFindingDetailQueryService;
 
   @GetMapping("/{scanId}")
-  @Operation(
-      summary = "스캔 기본 조회",
-      description = "스캔의 기본 메타데이터와 현재 진행 상태를 조회합니다.")
+  @Operation(summary = "스캔 기본 조회", description = "스캔의 기본 메타데이터와 현재 진행 상태를 조회합니다.")
   public ResponseEntity<ApiResponse<ScanBasicResponse>> getScanBasic(@PathVariable Long scanId) {
-    // 조회와 접근 검증은 서비스에서 처리하고 컨트롤러는 응답 포맷만 맞춘다.
     ScanBasicResponse data = scanBasicQueryService.getScanBasic(scanId);
     return ResponseEntity.ok(ApiResponse.success(GET_SCAN_BASIC_SUCCESS_MESSAGE, data));
   }
 
+  @GetMapping("/{scanId}/status")
+  @Operation(summary = "스캔 진행 상태 조회", description = "스캔의 현재 상태와 진행 단계를 조회합니다.")
+  public ResponseEntity<ApiResponse<ScanStatusResponse>> getScanStatus(@PathVariable Long scanId) {
+    // 상태 조회의 비즈니스 규칙(존재 여부/권한)은 서비스에서 처리하고, 컨트롤러는 입출력만 담당한다.
+    ScanStatusResponse data = scanStatusQueryService.getScanStatus(scanId);
+    return ResponseEntity.ok(ApiResponse.success(GET_SCAN_STATUS_SUCCESS_MESSAGE, data));
+  }
+
   @GetMapping("/{scanId}/summary")
-  @Operation(
-      summary = "스캔 결과 요약 조회",
-      description = "스캔 결과의 전체 개수와 분포 통계를 조회합니다.")
+  @Operation(summary = "스캔 결과 요약 조회", description = "스캔 결과의 전체 개수와 분포 통계를 조회합니다.")
   public ResponseEntity<ApiResponse<ScanSummaryResponse>> getScanSummary(@PathVariable Long scanId) {
-    // 요약 조회도 기본 조회와 동일하게 서비스에서 접근 검증까지 함께 처리한다.
     ScanSummaryResponse data = scanSummaryQueryService.getScanSummary(scanId);
     return ResponseEntity.ok(ApiResponse.success(GET_SCAN_SUMMARY_SUCCESS_MESSAGE, data));
   }
@@ -61,7 +67,7 @@ public class ScanQueryController {
   @GetMapping("/{scanId}/findings")
   @Operation(
       summary = "스캔 취약점 목록 조회",
-      description = "스캔에 속한 취약점 결과 목록을 필터와 페이지네이션 조건으로 조회합니다.")
+      description = "스캔에 대한 취약점 결과 목록을 필터와 페이지 조건으로 조회합니다.")
   public ResponseEntity<ApiResponse<ScanFindingListResponseData>> getScanFindings(
       @PathVariable Long scanId,
       @RequestParam(required = false) Severity severity,
@@ -72,7 +78,6 @@ public class ScanQueryController {
       @RequestParam(defaultValue = "0") Integer page,
       @RequestParam(defaultValue = "20") Integer size
   ) {
-    // 필터와 페이지 조건은 서비스에서 정리하고 컨트롤러는 요청 파라미터 전달만 맡는다.
     ScanFindingListResponseData data = scanFindingListQueryService.getScanFindings(
         scanId,
         severity,
@@ -87,14 +92,11 @@ public class ScanQueryController {
   }
 
   @GetMapping("/{scanId}/findings/{findingId}")
-  @Operation(
-      summary = "스캔 취약점 상세 조회",
-      description = "스캔에 속한 특정 취약점 결과의 상세 정보를 조회합니다.")
+  @Operation(summary = "스캔 취약점 상세 조회", description = "스캔에 대한 특정 취약점 결과의 상세 정보를 조회합니다.")
   public ResponseEntity<ApiResponse<ScanFindingDetailResponse>> getScanFindingDetail(
       @PathVariable Long scanId,
       @PathVariable Long findingId
   ) {
-    // 상세 조회 역시 서비스에서 스캔 소속과 프로젝트 접근 권한까지 함께 검증한다.
     ScanFindingDetailResponse data = scanFindingDetailQueryService.getScanFindingDetail(scanId, findingId);
     return ResponseEntity.ok(ApiResponse.success(GET_SCAN_FINDING_DETAIL_SUCCESS_MESSAGE, data));
   }
