@@ -12,12 +12,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
-/**
- * Bearer JWT를 검증하고, 프로젝트 권한 판별에 바로 쓸 수 있는 AuthenticatedActor로 변환한다.
- */
 public class JwtAuthenticationTokenParser {
 
   private static final String ROLE_CLAIM_KEY = "role";
+  private static final String TOKEN_TYPE_CLAIM_KEY = "tokenType";
+  private static final String ACCESS_TOKEN_TYPE = "ACCESS";
   private static final String GUEST_ROLE = "GUEST";
   private static final String GUEST_OWNER_KEY_HASH_CLAIM_KEY = "guestOwnerKeyHash";
 
@@ -40,13 +39,13 @@ public class JwtAuthenticationTokenParser {
           .parseSignedClaims(token)
           .getPayload();
 
-      // 우리 서버가 발급한 토큰인지 issuer로 1차 검증
+      // 우리 서버가 발급한 토큰인지 issuer로 먼저 검증한다.
       if (!issuer.equals(claims.getIssuer())) {
         throw unauthorized();
       }
 
       String role = claims.get(ROLE_CLAIM_KEY, String.class);
-      // role=GUEST면 guestOwnerKeyHash로 게스트 소유권을 판별한다.
+      // guest 토큰은 guestOwnerKeyHash를 기준으로 권한 주체를 복원한다.
       if (GUEST_ROLE.equals(role)) {
         String guestOwnerKeyHash = claims.get(GUEST_OWNER_KEY_HASH_CLAIM_KEY, String.class);
         if (guestOwnerKeyHash == null || guestOwnerKeyHash.isBlank()) {
@@ -55,7 +54,12 @@ public class JwtAuthenticationTokenParser {
         return AuthenticatedActor.guest(guestOwnerKeyHash);
       }
 
-      // 일반 회원 토큰은 sub를 userId로 사용한다.
+      // 회원 보호 API에는 access token만 허용해서 refresh token 오용을 막는다.
+      String tokenType = claims.get(TOKEN_TYPE_CLAIM_KEY, String.class);
+      if (!ACCESS_TOKEN_TYPE.equals(tokenType)) {
+        throw unauthorized();
+      }
+
       String subject = claims.getSubject();
       if (subject == null || subject.isBlank()) {
         throw unauthorized();
