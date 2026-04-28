@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "0.1",
+  "scanId": "a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd",
+  "source": "cli",
+  "scannedAt": "2026-04-27T00:26:05Z",
+  "generatedAt": "2026-04-28T02:06:57.644971+00:00",
+  "resultCount": 3,
+  "results": [
+    {
+      "findingId": "FND-0001",
+      "ruleId": "ENV_PLAIN_SECRET",
+      "source": "custom-rule",
+      "severity": "HIGH",
+      "file": ".env",
+      "line": 1,
+      "title": "환경변수 파일에 시크릿이 하드코딩됨: ﻿DB_PASSWORD",
+      "maskedEvidence": "﻿DB_PASSWORD=***MASKED***",
+      "explanation": "설명 FND-0001",
+      "fix": {
+        "summary": "수정",
+        "priority": "high",
+        "recommendedActions": [
+          "a",
+          "b"
+        ],
+        "codeGuidance": "c",
+        "verification": "v",
+        "cautions": [
+          "x"
+        ]
+      }
+    },
+    {
+      "findingId": "FND-0002",
+      "ruleId": "DS-0002",
+      "source": "trivy",
+      "severity": "HIGH",
+      "file": "Dockerfile",
+      "line": null,
+      "title": "Image user should not be 'root'",
+      "maskedEvidence": "Last USER command in Dockerfile should not be 'root'",
+      "explanation": "설명 FND-0002",
+      "fix": {
+        "summary": "수정",
+        "priority": "high",
+        "recommendedActions": [
+          "a",
+          "b"
+        ],
+        "codeGuidance": "c",
+        "verification": "v",
+        "cautions": [
+          "x"
+        ]
+      }
+    },
+    {
+      "findingId": "FND-0003",
+      "ruleId": "DS-0026",
+      "source": "trivy",
+      "severity": "LOW",
+      "file": "Dockerfile",
+      "line": null,
+      "title": "No HEALTHCHECK defined",
+      "maskedEvidence": "Add HEALTHCHECK instruction in your Dockerfile",
+      "explanation": "설명 FND-0003",
+      "fix": {
+        "summary": "수정",
+        "priority": "high",
+        "recommendedActions": [
+          "a",
+          "b"
+        ],
+        "codeGuidance": "c",
+        "verification": "v",
+        "cautions": [
+          "x"
+        ]
+      }
+    }
+  ]
+}
