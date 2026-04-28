@@ -25,6 +25,7 @@ class JwtAuthenticationTokenParserTest {
         .issuer("ssafer")
         .issuedAt(Date.from(Instant.now().truncatedTo(ChronoUnit.SECONDS)))
         .expiration(Date.from(Instant.now().plusSeconds(60)))
+        .claim("tokenType", "ACCESS")
         .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
         .compact();
 
@@ -60,6 +61,24 @@ class JwtAuthenticationTokenParserTest {
     JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(SECRET, "ssafer");
 
     assertThatThrownBy(() -> parser.parse("invalid-token"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.UNAUTHORIZED);
+  }
+
+  @Test
+  void refreshTokenCannotAuthenticateProtectedApi() {
+    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(SECRET, "ssafer");
+    String token = Jwts.builder()
+        .subject("123")
+        .issuer("ssafer")
+        .issuedAt(Date.from(Instant.now().truncatedTo(ChronoUnit.SECONDS)))
+        .expiration(Date.from(Instant.now().plusSeconds(60)))
+        .claim("tokenType", "REFRESH")
+        .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
+        .compact();
+
+    assertThatThrownBy(() -> parser.parse(token))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.UNAUTHORIZED);
