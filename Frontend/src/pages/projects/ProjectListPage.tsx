@@ -1,38 +1,129 @@
 import { Plus, Search } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { SeverityBadge, StatusPill } from '../../components/common/Badge';
 import MetricCard from '../../components/common/MetricCard';
 import SectionPanel from '../../components/common/SectionPanel';
 import { ROUTES } from '../../constants/routes';
 import ApiEndpointList from '../../features/api-specs/components/ApiEndpointList';
-import { projects } from '../../mocks/ssaferMockData';
+import ProjectCreateForm from '../../features/projects/components/ProjectCreateForm';
+import { createProject } from '../../features/projects/api/projects';
+import { useProjectStore } from '../../store/projectStore';
+import type { CreateProjectFormValues } from '../../types/project';
+
+const DEFAULT_FORM_VALUES: CreateProjectFormValues = {
+  name: '',
+  description: '',
+  defaultScanMode: 'AGENT',
+  monitorEnabled: false,
+};
 
 function ProjectListPage() {
+  const navigate = useNavigate();
+  const projects = useProjectStore((state) => state.projects);
+  const addProject = useProjectStore((state) => state.addProject);
+
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [formValues, setFormValues] = useState<CreateProjectFormValues>(DEFAULT_FORM_VALUES);
+
+  const guestProjectCount = useMemo(
+    () => projects.filter((project) => project.owner.toLowerCase().includes('guest')).length,
+    [projects],
+  );
+
+  const activeScanCount = useMemo(
+    () => projects.filter((project) => project.lastStatus === 'ANALYZING').length,
+    [projects],
+  );
+
+  const searchableNames = useMemo(() => projects.map((project) => project.name).join(', '), [projects]);
+
+  const resetForm = () => {
+    setFormValues(DEFAULT_FORM_VALUES);
+    setSubmitError(null);
+  };
+
+  const handleCreateToggle = () => {
+    setIsCreateOpen((prev) => !prev);
+    setSubmitError(null);
+  };
+
+  const handleCreateSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const created = await createProject(formValues);
+
+      addProject({
+        id: String(created.projectId),
+        name: formValues.name.trim(),
+        description: formValues.description.trim() || '설명이 아직 없는 새 프로젝트입니다.',
+        owner: 'Guest Workspace',
+        scans: 0,
+        lastStatus: 'NEW',
+        risk: 'LOW',
+        defaultScanMode: formValues.defaultScanMode,
+        monitorEnabled: formValues.monitorEnabled,
+      });
+
+      resetForm();
+      setIsCreateOpen(false);
+      navigate(ROUTES.projectDetail.replace(':projectId', String(created.projectId)));
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '프로젝트 생성에 실패했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_420px]">
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-3">
-          <MetricCard helper="O/G 접근 가능" label="Projects" value={projects.length} />
-          <MetricCard helper="최근 24시간 기준" label="Active scans" tone="sky" value="2" />
-          <MetricCard helper="게스트 워크스페이스" label="Guest projects" tone="green" value="1" />
+          <MetricCard helper="회원과 게스트 모두 생성 가능" label="Projects" value={projects.length} />
+          <MetricCard helper="현재 분석 상태인 프로젝트 수" label="Active scans" tone="sky" value={activeScanCount} />
+          <MetricCard helper="게스트 세션에서 만든 프로젝트 수" label="Guest projects" tone="green" value={guestProjectCount} />
         </div>
 
         <SectionPanel
           action={
-            <button className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800" type="button">
+            <button
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+              onClick={handleCreateToggle}
+              type="button"
+            >
               <Plus className="h-4 w-4" />
-              프로젝트 생성
+              {isCreateOpen ? '생성 폼 닫기' : '프로젝트 생성'}
             </button>
           }
-          description="프로젝트 생성, 목록 조회, 상세 진입을 담당합니다. 게스트와 로그인 사용자 모두 사용할 수 있는 O/G 영역입니다."
+          description="프로젝트 생성 API를 연결하고, 생성 직후 목록과 상세 화면에 반영되도록 프론트 상태를 함께 관리합니다."
           eyebrow="Project index"
           title="프로젝트 목록"
         >
           <div className="mb-5 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
             <Search className="h-4 w-4 text-slate-400" />
-            <span className="text-sm text-slate-500">sample-app, payment-api, docker-lab</span>
+            <span className="text-sm text-slate-500">{searchableNames || '생성된 프로젝트 이름이 여기에 표시됩니다.'}</span>
           </div>
+
+          {isCreateOpen ? (
+            <div className="mb-5">
+              <ProjectCreateForm
+                errorMessage={submitError}
+                isSubmitting={isSubmitting}
+                onCancel={() => {
+                  resetForm();
+                  setIsCreateOpen(false);
+                }}
+                onChange={setFormValues}
+                onSubmit={handleCreateSubmit}
+                value={formValues}
+              />
+            </div>
+          ) : null}
 
           <div className="grid gap-4 lg:grid-cols-3">
             {projects.map((project) => (

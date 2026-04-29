@@ -1,0 +1,64 @@
+name: ssafer-local
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ssafer-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ssafer
+      POSTGRES_USER: ssafer
+      POSTGRES_PASSWORD: ssafer
+    ports:
+      - "5432:5432"
+    volumes:
+      - ssafer-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ssafer -d ssafer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ssafer-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: maven:3.9.9-eclipse-temurin-21
+    container_name: ssafer-backend
+    working_dir: /app
+    restart: unless-stopped
+    volumes:
+      - ../Backend/ssafer:/app
+      - maven-repo:/root/.m2
+    env_file:
+      - ../Backend/ssafer/.env
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ssafer
+      SPRING_DATASOURCE_USERNAME: ssafer
+      SPRING_DATASOURCE_PASSWORD: ssafer
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    command: mvn spring-boot:run
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  ssafer-postgres-data:
+  maven-repo:
