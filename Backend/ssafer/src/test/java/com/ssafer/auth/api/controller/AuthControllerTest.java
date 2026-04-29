@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssafer.auth.application.service.AuthLoginService;
+import com.ssafer.auth.application.service.AuthLogoutService;
 import com.ssafer.auth.application.service.AuthTokenRefreshService;
 import com.ssafer.auth.application.service.AuthTokenResult;
 import com.ssafer.global.error.BusinessException;
@@ -26,12 +27,18 @@ class AuthControllerTest {
   private MockMvc mockMvc;
   private AuthLoginService authLoginService;
   private AuthTokenRefreshService authTokenRefreshService;
+  private AuthLogoutService authLogoutService;
 
   @BeforeEach
   void setUp() {
     authLoginService = Mockito.mock(AuthLoginService.class);
     authTokenRefreshService = Mockito.mock(AuthTokenRefreshService.class);
-    AuthController controller = new AuthController(authLoginService, authTokenRefreshService);
+    authLogoutService = Mockito.mock(AuthLogoutService.class);
+    AuthController controller = new AuthController(
+        authLoginService,
+        authTokenRefreshService,
+        authLogoutService
+    );
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
     validator.afterPropertiesSet();
     mockMvc = MockMvcBuilders.standaloneSetup(controller)
@@ -143,6 +150,52 @@ class AuthControllerTest {
         .willThrow(new BusinessException(ErrorCode.UNAUTHORIZED));
 
     mockMvc.perform(post("/api/v1/auth/refresh")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "refreshToken": "refresh-token"
+                }
+                """))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+  }
+
+  @Test
+  void logoutReturnsSuccessWhenRefreshTokenIsValid() throws Exception {
+    mockMvc.perform(post("/api/v1/auth/logout")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "refreshToken": "refresh-token"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Logout succeeded"));
+
+    then(authLogoutService).should().logout("refresh-token");
+  }
+
+  @Test
+  void logoutWithBlankTokenReturnsFieldErrors() throws Exception {
+    mockMvc.perform(post("/api/v1/auth/logout")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "refreshToken": " "
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.refreshToken").exists());
+  }
+
+  @Test
+  void logoutWithInvalidTokenReturnsUnauthorized() throws Exception {
+    Mockito.doThrow(new BusinessException(ErrorCode.UNAUTHORIZED))
+        .when(authLogoutService)
+        .logout("refresh-token");
+
+    mockMvc.perform(post("/api/v1/auth/logout")
             .contentType(APPLICATION_JSON)
             .content("""
                 {
