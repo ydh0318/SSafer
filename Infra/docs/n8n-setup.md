@@ -138,10 +138,28 @@ sudo -u jenkins docker compose --env-file .env config >/dev/null
 sudo -u jenkins docker compose --env-file .env config | grep -n "N8N_EDITOR_BASE_URL\\|N8N_PROXY_HOPS"
 ```
 
+## nginx 프록시 동작 원리
+
+`N8N_PATH=/n8n/` 설정 시 n8n SPA는 `/n8n/rest/...` 경로로 API를 호출한다.
+nginx는 `/n8n/` prefix를 제거하고 n8n 컨테이너의 `/rest/...`로 전달한다.
+n8n REST API는 내부적으로 `/rest/` 경로에 있으므로 정상 동작한다.
+
+```
+브라우저: GET /n8n/rest/settings
+nginx:    /n8n/ 매칭 → proxy_pass http://n8n:5678/ → GET /rest/settings ✓
+```
+
+문제 발생 시 nginx의 proxy_pass 경로를 변경하기 전에 반드시 n8n REST API 실제 경로를 먼저 확인한다.
+
+```bash
+docker exec ssafer-nginx wget -qO- http://n8n:5678/rest/settings 2>&1 | head -1
+# JSON 응답이면 /rest/ 가 올바른 경로
+```
+
 ## 주의사항
 
 - n8n DB와 Spring DB는 같은 PostgreSQL instance 안에서 DB 이름만 분리합니다.
 - `N8N_ENCRYPTION_KEY`는 반드시 백업합니다.
 - GitLab/Jira/Review Agent token은 서버 `.env`보다 n8n Credential로 관리하는 것을 우선합니다.
-- `/n8n/` subpath 운영은 reverse proxy 설정에 민감합니다. 화면 리소스나 webhook URL이 깨지면 `N8N_EDITOR_BASE_URL`, `WEBHOOK_URL`, `N8N_PROXY_HOPS`, NGINX `/n8n/` proxy header를 함께 확인합니다.
+- `/n8n/` subpath 운영은 reverse proxy 설정에 민감합니다. "Could not connect to server" 오류는 API 라우팅 문제이므로 브라우저 네트워크 탭에서 실패한 API 경로를 먼저 확인합니다.
 - n8n image tag는 운영 안정성을 위해 추후 `latest` 대신 고정 버전으로 바꾸는 것을 권장합니다.

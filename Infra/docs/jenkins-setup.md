@@ -65,29 +65,18 @@ sudo systemctl status jenkins --no-pager
 sudo cat /var/lib/jenkins/secrets/initialAdminPassword
 ```
 
-## 권장 포트
+## 권장 포트 및 Prefix
 
 Spring Boot가 `8080`을 사용할 예정이므로 Jenkins는 `9090`으로 변경합니다.
-
-현재 EC2 #1 서버에서는 `8988`, `8989`, `29418` 포트가 Gerrit 또는 기존 Java 서비스와 관련되어 있을 가능성이 높습니다. 특히 `8989`는 Jenkins 기본 포트가 아니며, 이미 다른 서비스와 충돌할 수 있으므로 Jenkins 포트로 사용하지 않습니다.
-
-```bash
-sudo systemctl edit jenkins
-```
-
-아래 내용을 입력합니다. `systemctl edit` 화면에서 `#`으로 시작하는 줄은 예시 주석이므로 그대로 두고, 주석이 아닌 새 줄에 추가하면 됩니다.
-
-```ini
-[Service]
-Environment="JENKINS_PORT=9090"
-```
-
-저장이 어렵다면 drop-in 파일을 직접 생성해도 됩니다.
+또한 nginx를 통해 HTTPS로 서빙하기 위해 `--prefix=/jenkins`를 함께 설정합니다.
 
 ```bash
 sudo mkdir -p /etc/systemd/system/jenkins.service.d
-printf '[Service]\nEnvironment="JENKINS_PORT=9090"\n' \
-  | sudo tee /etc/systemd/system/jenkins.service.d/override.conf
+sudo tee /etc/systemd/system/jenkins.service.d/override.conf <<'EOF'
+[Service]
+Environment="JENKINS_PORT=9090"
+Environment="JENKINS_OPTS=--prefix=/jenkins"
+EOF
 ```
 
 적용합니다.
@@ -96,12 +85,54 @@ printf '[Service]\nEnvironment="JENKINS_PORT=9090"\n' \
 sudo systemctl daemon-reload
 sudo systemctl restart jenkins
 sudo systemctl status jenkins --no-pager
+curl -I http://localhost:9090/jenkins/
+# 403 Forbidden + Set-Cookie Path=/jenkins → 정상
 ```
 
-UFW와 AWS Security Group도 Jenkins 접근 포트인 `9090` 기준으로 맞춥니다.
+> **주의**: `--prefix=/jenkins` 설정 후에는 GitLab Webhook URL도
+> `/jenkins/` 경로가 포함된 URL로 업데이트해야 합니다. (`gitlab-webhook.md` 참고)
+
+UFW는 내부 참고용으로만 열어둡니다. 외부 접근은 nginx 프록시를 통해서만 허용합니다.
 
 ```bash
 sudo ufw allow 9090/tcp
+```
+
+## nginx 프록시 설정
+
+HSTS 정책으로 인해 도메인에서 HTTP 포트(9090)로 직접 접근이 불가합니다.
+nginx `/jenkins/` 경로를 통해 HTTPS(443)로 서빙합니다.
+
+nginx.conf 443 서버 블록에 아래 location을 추가합니다.
+
+```nginx
+location /jenkins/ {
+    proxy_pass         http://172.18.0.1:9090/jenkins/;
+    proxy_http_version 1.1;
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    proxy_set_header   Upgrade           $http_upgrade;
+    proxy_set_header   Connection        "upgrade";
+    proxy_read_timeout 90s;
+    proxy_connect_timeout 10s;
+}
+```
+
+`172.18.0.1`은 nginx 컨테이너의 Docker bridge gateway IP입니다. 변경 시 아래로 확인합니다.
+
+```bash
+docker exec ssafer-nginx ip route | grep default
+# default via 172.18.0.1 dev eth0
+```
+
+nginx 이미지 재빌드 후 Jenkins URL을 설정합니다.
+
+Manage Jenkins → System → Jenkins URL:
+
+```
+https://k14b105.p.ssafy.io/jenkins/
 ```
 
 ## 필수 권한
@@ -178,9 +209,9 @@ docker compose version
 
 완료 기준:
 
-- `http://EC2_PUBLIC_IP:9090`에서 Jenkins 로그인 화면이 보임
+- `https://k14b105.p.ssafy.io/jenkins/`에서 Jenkins 로그인 화면이 보임
 - Jenkins service active
-- `9090` 포트에 Jenkins Java 프로세스가 떠 있음
+- `9090` 포트에 Jenkins Java 프로세스가 떠 있음 (`sudo ss -tlnp | grep 9090`)
 - Jenkins 사용자가 Docker 명령 실행 가능
 - Jenkins Pipeline job에서 `Infra/Jenkinsfile`을 읽을 수 있음
 
