@@ -5,6 +5,11 @@ import type {
   CreateProjectFormValues,
   CreateProjectRequest,
   CreateProjectResponseData,
+  ProjectDetailResponseData,
+  ProjectListQuery,
+  ProjectListResponseData,
+  UpdateProjectRequest,
+  UpdateProjectResponseData,
 } from '../../../types/project';
 
 function normalizeProjectRequest(values: CreateProjectFormValues): CreateProjectRequest {
@@ -26,5 +31,49 @@ export async function createProject(values: CreateProjectFormValues) {
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, '프로젝트 생성에 실패했습니다.'));
+  }
+}
+
+export async function getProjects(query: ProjectListQuery = {}) {
+  try {
+    const response = await apiClient.get<ApiSuccessResponse<ProjectListResponseData>>('/projects', {
+      params: {
+        page: query.page ?? 0,
+        size: query.size ?? 20,
+      },
+    });
+
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, '프로젝트 목록을 불러오지 못했습니다.'));
+  }
+}
+
+export async function getProjectDetail(projectId: string) {
+  try {
+    const response = await apiClient.get<ApiSuccessResponse<ProjectDetailResponseData>>(`/projects/${projectId}`);
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, '프로젝트 상세 정보를 불러오지 못했습니다.'));
+  }
+}
+
+export async function updateProject(projectId: string, payload: UpdateProjectRequest) {
+  try {
+    const response = await apiClient.patch<ApiSuccessResponse<UpdateProjectResponseData>>(
+      `/projects/${projectId}`,
+      payload,
+    );
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, '프로젝트 수정에 실패했습니다.'));
+  }
+}
+
+export async function deleteProject(projectId: string) {
+  try {
+    await apiClient.delete<ApiSuccessResponse<null>>(`/projects/${projectId}`);
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, '프로젝트 삭제에 실패했습니다.'));
   }
 }

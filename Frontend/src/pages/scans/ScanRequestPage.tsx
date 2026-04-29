@@ -2,60 +2,70 @@ import { Radio, UploadCloud, Wifi } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { StatusPill, TokenBadge } from '../../components/common/Badge';
+import { StatusPill } from '../../components/common/Badge';
 import SectionPanel from '../../components/common/SectionPanel';
 import { ROUTES } from '../../constants/routes';
-import ApiEndpointList from '../../features/api-specs/components/ApiEndpointList';
+
+function getProjectLabel(projectId: string | undefined) {
+  if (!projectId || !/^\d+$/.test(projectId)) {
+    return '선택한 프로젝트';
+  }
+
+  return `프로젝트 ${projectId}`;
+}
 
 function ScanRequestPage() {
-  const { projectId = 'p-101' } = useParams<{ projectId: string }>();
+  const { projectId } = useParams<{ projectId: string }>();
+  const projectLabel = getProjectLabel(projectId);
   const progressUrl = ROUTES.scanProgress.replace(':scanId', 'scan-a36');
 
   return (
-    <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_420px]">
-      <div className="space-y-6">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <RequestCard
-            actionLabel="업로드 점검 요청"
-            desc="Dockerfile, .env, docker-compose.yml을 업로드해 서버에서 점검합니다."
-            icon={<UploadCloud className="h-8 w-8" />}
-            tone="light"
-            title="업로드 기반 점검"
-            to={progressUrl}
-          >
-            <div className="rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
-              Dockerfile · .env · docker-compose.yml
-            </div>
-          </RequestCard>
-
-          <RequestCard
-            actionLabel="에이전트 점검 요청"
-            desc="설치형 agent가 WebSocket keepalive로 연결되고 미처리 task를 가져갑니다."
-            icon={<Wifi className="h-8 w-8" />}
-            tone="dark"
-            title="에이전트 기반 점검"
-            to={progressUrl}
-          >
-            <div className="rounded-lg bg-white/10 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-bold">Agent status</span>
-                <StatusPill value="ONLINE" />
-              </div>
-              <p className="mt-3 break-all font-mono text-xs text-slate-300">/ws/v1/internal/agents/connect</p>
-            </div>
-          </RequestCard>
-        </div>
-
-        <SectionPanel description={`${projectId} 프로젝트에서 점검 요청이 어떤 API로 나뉘는지 보여줍니다.`} eyebrow="Request branches" title="스캔 요청 분기">
-          <div className="grid gap-3 md:grid-cols-3">
-            <Branch desc="POST /scans/upload" title="업로드" token="O/G" />
-            <Branch desc="POST /scans/agent" title="Agent" token="O/G" />
-            <Branch desc="task polling, raw upload" title="Internal" token="INTERNAL" />
+    <div className="space-y-6">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RequestCard
+          actionLabel="업로드 스캔 시작"
+          desc="Dockerfile, .env, docker-compose.yml 같은 핵심 파일을 업로드해 빠르게 점검할 수 있습니다."
+          icon={<UploadCloud className="h-8 w-8" />}
+          tone="light"
+          title="파일 업로드 스캔"
+          to={progressUrl}
+        >
+          <div className="rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
+            Dockerfile / .env / docker-compose.yml
           </div>
-        </SectionPanel>
+        </RequestCard>
+
+        <RequestCard
+          actionLabel="에이전트 스캔 시작"
+          desc="에이전트를 연결해 실행 중인 환경에서 점검 흐름을 진행할 수 있습니다."
+          icon={<Wifi className="h-8 w-8" />}
+          tone="dark"
+          title="에이전트 스캔"
+          to={progressUrl}
+        >
+          <div className="rounded-lg bg-white/10 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-bold">Agent status</span>
+              <StatusPill value="ONLINE" />
+            </div>
+            <p className="mt-3 text-sm text-slate-300">
+              연결된 에이전트가 있으면 자동 수집 흐름을 이어서 사용할 수 있습니다.
+            </p>
+          </div>
+        </RequestCard>
       </div>
 
-      <ApiEndpointList compact screenId="scanRequest" />
+      <SectionPanel
+        description={`${projectLabel}에서 사용할 스캔 요청 방식을 선택할 수 있습니다.`}
+        eyebrow="Scan modes"
+        title="스캔 요청 경로"
+      >
+        <div className="grid gap-3 md:grid-cols-3">
+          <Branch desc="핵심 설정 파일을 업로드해 점검합니다." title="업로드" />
+          <Branch desc="실행 환경과 연결된 에이전트를 통해 수집합니다." title="에이전트" />
+          <Branch desc="프로젝트 상황에 맞는 방식으로 다음 단계를 이어갑니다." title="후속 처리" />
+        </div>
+      </SectionPanel>
     </div>
   );
 }
@@ -80,7 +90,9 @@ function RequestCard({
   const dark = tone === 'dark';
 
   return (
-    <section className={`rounded-lg p-6 shadow-sm md:p-8 ${dark ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-950'}`}>
+    <section
+      className={`rounded-lg p-6 shadow-sm md:p-8 ${dark ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-950'}`}
+    >
       <div className={dark ? 'text-slate-300' : 'text-slate-500'}>{icon}</div>
       <h2 className="mt-5 text-2xl font-black">{title}</h2>
       <p className={`mt-2 text-sm leading-6 ${dark ? 'text-slate-300' : 'text-slate-500'}`}>{desc}</p>
@@ -98,13 +110,10 @@ function RequestCard({
   );
 }
 
-function Branch({ title, desc, token }: { title: string; desc: string; token: 'O/G' | 'INTERNAL' }) {
+function Branch({ title, desc }: { title: string; desc: string }) {
   return (
     <div className="rounded-lg bg-slate-50 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-black text-slate-950">{title}</p>
-        <TokenBadge value={token} />
-      </div>
+      <p className="font-black text-slate-950">{title}</p>
       <p className="mt-2 text-sm text-slate-500">{desc}</p>
     </div>
   );

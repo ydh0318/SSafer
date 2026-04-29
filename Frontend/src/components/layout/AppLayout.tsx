@@ -3,28 +3,37 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 
 import { getScreenByPathname, SCREEN_SPECS } from '../../constants/apiSpecs';
 import { ROUTES } from '../../constants/routes';
-import TokenLegend from '../../features/api-specs/components/TokenLegend';
 import { useAuthStore } from '../../store/authStore';
-import { DomainBadge } from '../common/Badge';
-
-const routeByScreen = {
-  entry: ROUTES.root,
-  projects: ROUTES.projects,
-  projectDetail: ROUTES.projectDetail.replace(':projectId', 'p-101'),
-  scanRequest: ROUTES.scanRequest.replace(':projectId', 'p-101'),
-  scanProgress: ROUTES.scanProgress.replace(':scanId', 'scan-a36'),
-  result: ROUTES.scanDetail.replace(':scanId', 'scan-a36'),
-  findingDetail: ROUTES.findingDetail.replace(':scanId', 'scan-a36').replace(':findingId', 'FND-0001'),
-  history: ROUTES.history,
-  monitor: ROUTES.monitor.replace(':projectId', 'p-101'),
-  settings: ROUTES.settings,
-};
+import { useProjectStore } from '../../store/projectStore';
 
 function AppLayout() {
   const location = useLocation();
   const currentScreen = getScreenByPathname(location.pathname);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const logout = useAuthStore((state) => state.logout);
+  const projects = useProjectStore((state) => state.projects);
+  const firstProjectId = projects[0]?.id;
+
+  const routeByScreen = {
+    entry: ROUTES.root,
+    projects: ROUTES.projects,
+    projectDetail: firstProjectId
+      ? ROUTES.projectDetail.replace(':projectId', firstProjectId)
+      : ROUTES.projects,
+    scanRequest: firstProjectId
+      ? ROUTES.scanRequest.replace(':projectId', firstProjectId)
+      : ROUTES.projects,
+    scanProgress: ROUTES.scanProgress.replace(':scanId', 'scan-a36'),
+    result: ROUTES.scanDetail.replace(':scanId', 'scan-a36'),
+    findingDetail: ROUTES.findingDetail
+      .replace(':scanId', 'scan-a36')
+      .replace(':findingId', 'FND-0001'),
+    history: ROUTES.history,
+    monitor: firstProjectId
+      ? ROUTES.monitor.replace(':projectId', firstProjectId)
+      : ROUTES.projects,
+    settings: ROUTES.settings,
+  } as const;
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
@@ -36,7 +45,7 @@ function AppLayout() {
             </div>
             <div>
               <p className="text-xl font-black tracking-tight">SSAFER</p>
-              <p className="text-xs font-medium text-slate-500">API 기반 화면 설계</p>
+              <p className="text-xs font-medium text-slate-500">Security workspace</p>
             </div>
           </div>
 
@@ -47,7 +56,9 @@ function AppLayout() {
               return (
                 <Link
                   className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-bold transition ${
-                    item.id === currentScreen.id ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                    item.id === currentScreen.id
+                      ? 'bg-slate-950 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
                   }`}
                   key={item.id}
                   to={routeByScreen[item.id]}
@@ -59,10 +70,6 @@ function AppLayout() {
               );
             })}
           </nav>
-
-          <div className="mt-6">
-            <TokenLegend />
-          </div>
         </aside>
 
         <section className="min-w-0 flex-1">
@@ -70,20 +77,19 @@ function AppLayout() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                  {currentScreen.order} · {currentScreen.path}
+                  {currentScreen.order} / {currentScreen.path}
                 </p>
-                <h1 className="mt-1 text-2xl font-black tracking-tight md:text-3xl">{currentScreen.label}</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{currentScreen.summary}</p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {currentScreen.domains.map((domain) => (
-                    <DomainBadge key={domain} value={domain} />
-                  ))}
-                </div>
+                <h1 className="mt-1 text-2xl font-black tracking-tight md:text-3xl">
+                  {currentScreen.label}
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                  {currentScreen.summary}
+                </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                  {isAuthenticated ? 'USER TOKEN' : 'GUEST PREVIEW'}
+                  {isAuthenticated ? '로그인 상태' : '게스트 모드'}
                 </div>
                 {isAuthenticated ? (
                   <button
@@ -102,7 +108,9 @@ function AppLayout() {
               {SCREEN_SPECS.map((item) => (
                 <Link
                   className={`shrink-0 rounded-md px-3 py-2 text-xs font-bold ${
-                    item.id === currentScreen.id ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600'
+                    item.id === currentScreen.id
+                      ? 'bg-slate-950 text-white'
+                      : 'bg-slate-100 text-slate-600'
                   }`}
                   key={item.id}
                   to={routeByScreen[item.id]}

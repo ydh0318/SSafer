@@ -6,10 +6,10 @@ function FindingSummary({ findings }: { findings: FindingMock[] }) {
 
   return (
     <div className="grid gap-4 md:grid-cols-4">
-      <MetricCard helper="결과 요약 API" label="Critical" tone="red" value={totals.critical} />
-      <MetricCard helper="필터 가능" label="High" tone="orange" value={totals.high} />
-      <MetricCard helper="category 필터" label="Medium" tone="amber" value={totals.medium} />
-      <MetricCard helper="status/page/size" label="Low" tone="sky" value={totals.low} />
+      <MetricCard helper="즉시 조치가 필요한 항목" label="Critical" tone="red" value={totals.critical} />
+      <MetricCard helper="높은 우선순위의 위험" label="High" tone="orange" value={totals.high} />
+      <MetricCard helper="점검이 필요한 중간 위험" label="Medium" tone="amber" value={totals.medium} />
+      <MetricCard helper="참고 수준의 낮은 위험" label="Low" tone="sky" value={totals.low} />
     </div>
   );
 }
