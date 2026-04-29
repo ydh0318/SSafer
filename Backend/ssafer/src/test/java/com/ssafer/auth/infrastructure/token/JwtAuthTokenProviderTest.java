@@ -114,4 +114,41 @@ class JwtAuthTokenProviderTest {
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.UNAUTHORIZED);
   }
+
+  @Test
+  void revokeRefreshTokenDeletesStoredRefreshTokenWhenItMatches() {
+    RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
+        SECRET,
+        "ssafer",
+        7200,
+        1209600,
+        refreshTokenStore
+    );
+    AuthTokenResult issued = provider.issueTokens(1L);
+    given(refreshTokenStore.findByUserId(1L)).willReturn(java.util.Optional.of(issued.refreshToken()));
+
+    provider.revokeRefreshToken(issued.refreshToken());
+
+    then(refreshTokenStore).should().delete(1L);
+  }
+
+  @Test
+  void revokeRefreshTokenThrowsUnauthorizedWhenStoredRefreshTokenDoesNotMatch() {
+    RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
+        SECRET,
+        "ssafer",
+        7200,
+        1209600,
+        refreshTokenStore
+    );
+    AuthTokenResult issued = provider.issueTokens(1L);
+    given(refreshTokenStore.findByUserId(1L)).willReturn(java.util.Optional.of("another-refresh-token"));
+
+    assertThatThrownBy(() -> provider.revokeRefreshToken(issued.refreshToken()))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.UNAUTHORIZED);
+  }
 }

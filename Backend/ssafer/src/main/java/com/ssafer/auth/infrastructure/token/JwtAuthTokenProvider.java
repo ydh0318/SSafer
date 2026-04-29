@@ -101,6 +101,35 @@ public class JwtAuthTokenProvider implements AuthTokenProvider {
     }
   }
 
+  @Override
+  public void revokeRefreshToken(String refreshToken) {
+    try {
+      Claims claims = parseClaims(refreshToken);
+      validateIssuer(claims);
+
+      String tokenType = claims.get(TOKEN_TYPE_CLAIM_KEY, String.class);
+      if (!REFRESH_TOKEN_TYPE.equals(tokenType)) {
+        throw unauthorized();
+      }
+
+      Long userId = extractUserId(claims.getSubject());
+      String savedRefreshToken = refreshTokenStore.findByUserId(userId)
+          .orElseThrow(this::unauthorized);
+
+      // 현재 저장된 refresh token과 일치하는 경우에만 삭제해 다른 세션을 임의로 끊지 않게 한다.
+      if (!MessageDigest.isEqual(
+          savedRefreshToken.getBytes(StandardCharsets.UTF_8),
+          refreshToken.getBytes(StandardCharsets.UTF_8)
+      )) {
+        throw unauthorized();
+      }
+
+      refreshTokenStore.delete(userId);
+    } catch (JwtException | IllegalArgumentException ex) {
+      throw unauthorized();
+    }
+  }
+
   private String buildToken(String subject, Instant issuedAt, Instant expiresAt, String tokenType) {
     // 로그인 이후 access/refresh를 명확히 구분할 수 있도록 tokenType claim을 함께 넣는다.
     return Jwts.builder()
