@@ -4,6 +4,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
@@ -16,10 +17,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockServletContext;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -78,13 +81,18 @@ class SecurityConfigTest {
   @Test
   void memberApisRequireJwtAuthenticationByDefault() throws Exception {
     mockMvc.perform(get("/api/v1/projects"))
-        .andExpect(status().isUnauthorized());
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+        .andExpect(jsonPath("$.message").value("Authentication is required or token is invalid"))
+        .andExpect(jsonPath("$.data").isMap());
 
     mockMvc.perform(get("/api/v1/scans/1"))
-        .andExpect(status().isUnauthorized());
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
 
     mockMvc.perform(get("/api/v1/admin/probe"))
-        .andExpect(status().isUnauthorized());
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
   }
 
   @Test
@@ -107,7 +115,8 @@ class SecurityConfigTest {
     mockMvc.perform(post("/api/v1/internal/scans/1/raw-results")
             .contentType(MediaType.APPLICATION_JSON)
             .content("{}"))
-        .andExpect(status().isUnauthorized());
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
   }
 
   @Test
@@ -119,9 +128,25 @@ class SecurityConfigTest {
         .andExpect(status().isOk());
   }
 
+  @Test
+  void authenticatedMemberWithoutRequiredRoleGetsForbiddenResponse() throws Exception {
+    UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+        AuthenticatedActor.member(1L),
+        null,
+        List.of(new SimpleGrantedAuthority("ROLE_MEMBER"))
+    );
+
+    mockMvc.perform(get("/api/v1/admin/role-probe").with(authentication(authenticationToken)))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+        .andExpect(jsonPath("$.message").value("You do not have permission to access this resource"))
+        .andExpect(jsonPath("$.data").isMap());
+  }
+
   @Configuration
   @EnableWebMvc
   @EnableWebSecurity
+  @EnableMethodSecurity
   static class TestConfig {
 
     @Bean
@@ -201,6 +226,12 @@ class SecurityConfigTest {
 
     @GetMapping("/api/v1/admin/probe")
     String adminProbe() {
+      return "ok";
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/api/v1/admin/role-probe")
+    String adminRoleProbe() {
       return "ok";
     }
   }
