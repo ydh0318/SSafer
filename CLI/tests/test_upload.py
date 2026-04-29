@@ -152,8 +152,12 @@ def test_upload_last_scan_blocks_unmasked_secret_before_post(tmp_path: Path, mon
 
     monkeypatch.setattr(upload.httpx, "Client", FakeClient)
 
-    with pytest.raises(RuntimeError, match="Upload blocked"):
+    with pytest.raises(RuntimeError) as exc_info:
         upload.upload_last_scan(tmp_path)
+
+    message = str(exc_info.value)
+    assert "Upload blocked" in message
+    assert "$.artifacts[0].content.Results[0].Secrets[0].Match" in message
 
 
 def test_find_unmasked_secret_paths_ignores_masked_values_and_metadata():
@@ -189,3 +193,74 @@ def test_find_unmasked_secret_paths_reports_secret_key_values():
     assert upload.find_unmasked_secret_paths(payload) == [
         "$.artifacts[0].content.database.password"
     ]
+
+
+def test_find_unmasked_secret_paths_reports_private_key_blocks():
+    payload = {
+        "artifacts": [
+            {
+                "content": {
+                    "config": "-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----",
+                }
+            }
+        ]
+    }
+
+    assert upload.find_unmasked_secret_paths(payload) == [
+        "$.artifacts[0].content.config"
+    ]
+
+
+def test_find_unmasked_secret_paths_reports_token_values():
+    payload = {
+        "findings": [
+            {
+                "maskedEvidence": {
+                    "token": "plain-api-token",
+                }
+            }
+        ]
+    }
+
+    assert upload.find_unmasked_secret_paths(payload) == [
+        "$.findings[0].maskedEvidence.token"
+    ]
+
+
+def test_find_unmasked_secret_paths_ignores_masked_trivy_secret_match():
+    payload = {
+        "artifacts": [
+            {
+                "content": {
+                    "Results": [
+                        {
+                            "Secrets": [
+                                {
+                                    "RuleID": "aws-access-key-id",
+                                    "Match": "***MASKED***",
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+    assert upload.find_unmasked_secret_paths(payload) == []
+
+
+def test_find_unmasked_secret_paths_ignores_placeholder_secret_values():
+    payload = {
+        "artifacts": [
+            {
+                "content": {
+                    "api_key": "your_api_key_here",
+                    "password": "${DB_PASSWORD}",
+                    "token": "replace_me",
+                }
+            }
+        ]
+    }
+
+    assert upload.find_unmasked_secret_paths(payload) == []
