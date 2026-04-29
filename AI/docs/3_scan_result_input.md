@@ -9,6 +9,7 @@ scan_result.json 파일 로딩 구현
 scan_result.json 최상위 필수 필드 검증
 findings 배열 추출 로직 구현
 finding 필수 필드 검증
+invalid finding 분리 처리
 finding → LLM 입력 데이터 변환
 ```
 
@@ -112,7 +113,9 @@ maskedEvidence
 검증 함수:
 
 ```python
+validate_finding_required_fields(finding: dict, index: int) -> None
 validate_findings_required_fields(findings: list[dict]) -> None
+split_valid_invalid_findings(findings: list) -> tuple[list[dict], list[dict]]
 ```
 
 검증 규칙:
@@ -123,9 +126,21 @@ line은 integer 또는 null 허용
 line을 제외한 필수 필드는 비어 있지 않은 string이어야 함
 ```
 
+invalid finding은 전체 입력을 실패시키지 않고 아래 형식으로 분리합니다.
+
+```json
+{
+  "index": 1,
+  "findingId": "FND-0002",
+  "reason": "findings[1] missing required fields: maskedEvidence"
+}
+```
+
+`findingId`를 확인할 수 없는 경우에는 `null`로 기록합니다.
+
 ## 7. LLM 입력 데이터 변환
 
-검증된 finding은 LLM에 전달하기 좋은 텍스트 형식으로 변환합니다.
+검증을 통과한 valid finding만 LLM에 전달하기 좋은 텍스트 형식으로 변환합니다.
 
 변환 함수:
 
@@ -150,25 +165,25 @@ DB_PASSWORD=***MASKED***
 
 ## 8. 로딩, 추출, 검증, 변환 확인
 
-아래 명령어로 `scan_result.json` 로딩, `findings` 추출, 필수 필드 검증, LLM 입력 변환을 확인할 수 있습니다.
+아래 명령어로 `scan_result.json` 로딩, `findings` 추출, valid/invalid 분리, LLM 입력 변환을 확인할 수 있습니다.
 
 ```bash
 cd /home/eunsu/S14P31B105/AI
 source .venv/bin/activate
-python -c "from app.loaders.scan_loader import load_scan_result, extract_findings, validate_scan_result_required_fields, validate_findings_required_fields; from app.services.input_service import format_findings_for_llm; data = load_scan_result('data/scan_result.json'); validate_scan_result_required_fields(data); findings = extract_findings(data); validate_findings_required_fields(findings); inputs = format_findings_for_llm(findings); print('prepared', len(inputs)); print(inputs[0])"
+python -c "from app.loaders.scan_loader import load_scan_result, extract_findings, validate_scan_result_required_fields, split_valid_invalid_findings; from app.services.input_service import format_findings_for_llm; data = load_scan_result('data/scan_result.json'); validate_scan_result_required_fields(data); findings = extract_findings(data); valid, invalid = split_valid_invalid_findings(findings); inputs = format_findings_for_llm(valid); print('prepared', len(inputs), 'invalid', len(invalid)); print(inputs[0])"
 ```
 
 정상 출력 예시:
 
 ```text
-prepared 3
+prepared 3 invalid 0
 Finding ID: FND-0001
 ...
 ```
 
 ## 9. API 연결 확인
 
-현재 `/analysis`는 `scan_result.json` 파일을 로딩하고 `findings` 배열을 추출한 뒤 필수 필드를 검증하고 LLM 입력 데이터로 변환합니다.
+현재 `/analysis`는 `scan_result.json` 파일을 로딩하고 `findings` 배열을 추출한 뒤 valid/invalid finding을 분리하고, valid finding만 LLM 입력 데이터로 변환합니다.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/analysis \
@@ -181,10 +196,13 @@ curl -X POST http://127.0.0.1:8000/analysis \
 ```json
 {
   "status": "prepared",
-  "message": "scan_result.json loaded, validated, and converted. findings=3",
+  "message": "scan_result.json loaded, validated, and converted. findings=3, valid=3, invalid=0",
   "scan_result_path": "data/scan_result.json",
   "finding_count": 3,
-  "llm_input_count": 3
+  "valid_finding_count": 3,
+  "invalid_finding_count": 0,
+  "llm_input_count": 3,
+  "invalid_findings": []
 }
 ```
 

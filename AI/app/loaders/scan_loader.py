@@ -133,7 +133,7 @@ def validate_scan_result_required_fields(scan_result: dict[str, Any]) -> None:
         raise ValueError("scan_result.json findings field must be an array.")
 
 
-def extract_findings(scan_result: dict[str, Any]) -> list[dict[str, Any]]:
+def extract_findings(scan_result: dict[str, Any]) -> list[Any]:
     findings = scan_result.get("findings")
 
     if findings is None:
@@ -141,10 +141,6 @@ def extract_findings(scan_result: dict[str, Any]) -> list[dict[str, Any]]:
 
     if not isinstance(findings, list):
         raise ValueError("scan_result.json findings field must be an array.")
-
-    for index, finding in enumerate(findings):
-        if not isinstance(finding, dict):
-            raise ValueError(f"findings[{index}] must be a JSON object.")
 
     return findings
 
@@ -174,3 +170,55 @@ def validate_finding_required_fields(finding: dict[str, Any], index: int) -> Non
 def validate_findings_required_fields(findings: list[dict[str, Any]]) -> None:
     for index, finding in enumerate(findings):
         validate_finding_required_fields(finding, index)
+
+
+def build_invalid_finding(
+    index: int,
+    finding: Any,
+    reason: str,
+) -> dict[str, Any]:
+    finding_id = None
+    if isinstance(finding, dict):
+        raw_finding_id = finding.get("id")
+        if isinstance(raw_finding_id, str) and raw_finding_id.strip():
+            finding_id = raw_finding_id
+
+    return {
+        "index": index,
+        "findingId": finding_id,
+        "reason": reason,
+    }
+
+
+def split_valid_invalid_findings(
+    findings: list[Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    valid_findings: list[dict[str, Any]] = []
+    invalid_findings: list[dict[str, Any]] = []
+
+    for index, finding in enumerate(findings):
+        if not isinstance(finding, dict):
+            invalid_findings.append(
+                build_invalid_finding(
+                    index=index,
+                    finding=finding,
+                    reason=f"findings[{index}] must be a JSON object.",
+                )
+            )
+            continue
+
+        try:
+            validate_finding_required_fields(finding, index)
+        except ValueError as exc:
+            invalid_findings.append(
+                build_invalid_finding(
+                    index=index,
+                    finding=finding,
+                    reason=str(exc),
+                )
+            )
+            continue
+
+        valid_findings.append(finding)
+
+    return valid_findings, invalid_findings

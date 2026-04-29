@@ -3,7 +3,7 @@ from typing import Any
 from app.loaders.scan_loader import (
     extract_findings,
     load_scan_result,
-    validate_findings_required_fields,
+    split_valid_invalid_findings,
     validate_scan_result_required_fields,
 )
 from app.schemas.analysis import AnalysisRequest, AnalysisResponse
@@ -30,19 +30,26 @@ class FindingAnalysisError(RuntimeError):
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
     scan_result = load_scan_result(request.scan_result_path)
     validate_scan_result_required_fields(scan_result)
-    findings = extract_findings(scan_result)
-    validate_findings_required_fields(findings)
-    llm_inputs = format_findings_for_llm(findings)
+    raw_findings = extract_findings(scan_result)
+    valid_findings, invalid_findings = split_valid_invalid_findings(raw_findings)
+    llm_inputs = format_findings_for_llm(valid_findings)
+    status = "prepared"
+    if invalid_findings:
+        status = "prepared_with_invalid_findings"
 
     return AnalysisResponse(
-        status="prepared",
+        status=status,
         message=(
             "scan_result.json loaded, validated, and converted. "
-            f"findings={len(findings)}"
+            f"findings={len(raw_findings)}, "
+            f"valid={len(valid_findings)}, invalid={len(invalid_findings)}"
         ),
         scan_result_path=request.scan_result_path,
-        finding_count=len(findings),
+        finding_count=len(raw_findings),
+        valid_finding_count=len(valid_findings),
+        invalid_finding_count=len(invalid_findings),
         llm_input_count=len(llm_inputs),
+        invalid_findings=invalid_findings,
     )
 
 
@@ -85,8 +92,8 @@ def run_analysis_pipeline(
     try:
         scan_result = load_scan_result(scan_result_path)
         validate_scan_result_required_fields(scan_result)
-        findings = extract_findings(scan_result)
-        validate_findings_required_fields(findings)
+        raw_findings = extract_findings(scan_result)
+        findings, invalid_findings = split_valid_invalid_findings(raw_findings)
     except Exception as exc:
         return {
             "status": "failed",
@@ -105,7 +112,10 @@ def run_analysis_pipeline(
             "finding_id": exc.finding_id,
             "scan_result_path": scan_result_path,
             "analysis_result_path": output_path,
-            "finding_count": len(findings),
+            "finding_count": len(raw_findings),
+            "valid_finding_count": len(findings),
+            "invalid_finding_count": len(invalid_findings),
+            "invalid_findings": invalid_findings,
             "message": exc.message,
         }
     except Exception as exc:
@@ -114,7 +124,10 @@ def run_analysis_pipeline(
             "stage": "analysis",
             "scan_result_path": scan_result_path,
             "analysis_result_path": output_path,
-            "finding_count": len(findings),
+            "finding_count": len(raw_findings),
+            "valid_finding_count": len(findings),
+            "invalid_finding_count": len(invalid_findings),
+            "invalid_findings": invalid_findings,
             "message": str(exc),
         }
 
@@ -130,15 +143,25 @@ def run_analysis_pipeline(
             "stage": "output",
             "scan_result_path": scan_result_path,
             "analysis_result_path": output_path,
-            "finding_count": len(findings),
+            "finding_count": len(raw_findings),
+            "valid_finding_count": len(findings),
+            "invalid_finding_count": len(invalid_findings),
+            "invalid_findings": invalid_findings,
             "result_count": len(structured_results),
             "message": str(exc),
         }
 
+    status = "completed"
+    if invalid_findings:
+        status = "completed_with_invalid_findings"
+
     return {
-        "status": "completed",
+        "status": status,
         "scan_result_path": scan_result_path,
         "analysis_result_path": str(saved_path),
-        "finding_count": len(findings),
+        "finding_count": len(raw_findings),
+        "valid_finding_count": len(findings),
+        "invalid_finding_count": len(invalid_findings),
+        "invalid_findings": invalid_findings,
         "result_count": analysis_result["resultCount"],
     }
