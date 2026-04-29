@@ -81,6 +81,11 @@ public class User {
     return displayName;
   }
 
+  public void updateDisplayName(String displayName) {
+    // 사용자 설정 수정에서는 비밀번호와 분리해서 displayName만 변경한다.
+    this.displayName = displayName;
+  }
+
   public String getPasswordHash() {
     return passwordHash;
   }
