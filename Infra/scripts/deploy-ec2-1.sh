@@ -11,6 +11,15 @@ ENV_FILE="${DEPLOY_DIR}/.env"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+check_env_key() {
+  local key="$1"
+  if grep -Eq "^${key}=" "${ENV_FILE}"; then
+    log "env ${key}=SET"
+  else
+    log "env ${key}=MISSING"
+  fi
+}
+
 log "=== EC2 #1 배포 시작 ==="
 
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -18,7 +27,20 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
+log "DEPLOY_DIR=${DEPLOY_DIR}"
+log "COMPOSE_FILE=${COMPOSE_FILE}"
+log "ENV_FILE=${ENV_FILE}"
+check_env_key "AWS_REGION"
+check_env_key "AWS_S3_BUCKET"
+check_env_key "APP_SCAN_RAW_S3_BUCKET"
+check_env_key "APP_SCAN_RAW_S3_REGION"
+check_env_key "SPRING_IMAGE"
+check_env_key "NGINX_IMAGE"
+
 cd "${DEPLOY_DIR}"
+
+log "docker compose config 검증..."
+docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config > /dev/null
 
 log "이미지 pull 시작..."
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull
