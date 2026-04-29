@@ -183,6 +183,34 @@ class UserControllerTest {
   }
 
   @Test
+  void updateCurrentUserProfileWithBlankDisplayNameReturnsFieldErrors() throws Exception {
+    mockMvc.perform(patch("/api/v1/users/me/profile")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "displayName": " "
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.displayName").value("사용자명은 필수입니다."));
+  }
+
+  @Test
+  void updateCurrentUserProfileWithTooLongDisplayNameReturnsFieldErrors() throws Exception {
+    mockMvc.perform(patch("/api/v1/users/me/profile")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "displayName": "%s"
+                }
+                """.formatted("a".repeat(101))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.displayName").value("사용자명은 100자 이하여야 합니다."));
+  }
+
+  @Test
   void getCurrentUserProfileReturnsForbiddenForGuest() throws Exception {
     AuthenticatedActor actor = AuthenticatedActor.guest("guest-hash");
     given(currentActorProvider.getCurrentActor()).willReturn(actor);

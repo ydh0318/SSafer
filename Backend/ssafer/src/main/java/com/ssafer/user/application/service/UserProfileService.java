@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class UserProfileService {
 
+  private static final int MAX_DISPLAY_NAME_LENGTH = 100;
+
   private final UserRepository userRepository;
 
   public UserProfileService(UserRepository userRepository) {
@@ -27,7 +29,7 @@ public class UserProfileService {
   public UserProfileResult updateCurrentUserProfile(AuthenticatedActor actor, String displayName) {
     User user = loadCurrentMemberOrThrow(actor);
     // 사용자 설정 수정 API는 현재 태스크 범위에서 displayName 하나만 반영한다.
-    user.updateDisplayName(displayName);
+    user.updateDisplayName(normalizeDisplayNameOrThrow(displayName));
     return new UserProfileResult(user.getEmail(), user.getDisplayName());
   }
 
@@ -39,5 +41,18 @@ public class UserProfileService {
 
     return userRepository.findById(actor.userId())
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+  }
+
+  private String normalizeDisplayNameOrThrow(String rawDisplayName) {
+    if (rawDisplayName == null) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
+    String normalized = rawDisplayName.trim();
+    // DTO 검증이 있더라도 서비스 계층에서도 공백/길이 정책을 한 번 더 방어한다.
+    if (normalized.isEmpty() || normalized.length() > MAX_DISPLAY_NAME_LENGTH) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+    return normalized;
   }
 }

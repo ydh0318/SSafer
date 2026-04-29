@@ -45,7 +45,7 @@ class UserProfileServiceTest {
 
     UserProfileResult result = userProfileService.updateCurrentUserProfile(
         AuthenticatedActor.member(1L),
-        "Alice Updated"
+        "  Alice Updated  "
     );
 
     assertThat(result.email()).isEqualTo("user@ssafer.co.kr");
@@ -72,6 +72,20 @@ class UserProfileServiceTest {
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.NOT_FOUND);
+  }
+
+  @Test
+  void updateCurrentUserProfileThrowsInvalidParameterWhenDisplayNameIsBlank() {
+    User user = createUser(1L, "user@ssafer.co.kr", "Alice");
+    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+    assertThatThrownBy(() -> userProfileService.updateCurrentUserProfile(
+        AuthenticatedActor.member(1L),
+        " "
+    ))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.INVALID_PARAMETER);
   }
 
   private User createUser(Long userId, String email, String displayName) {

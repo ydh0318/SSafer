@@ -176,7 +176,7 @@ public class UserController {
       )
   })
   public ResponseEntity<ApiResponse<UserProfileResponseData>> updateCurrentUserProfile(
-      @RequestBody(required = false) UpdateUserProfileRequest request
+      @Valid @RequestBody(required = false) UpdateUserProfileRequest request
   ) {
     // 본문 자체가 없으면 수정할 값이 없으므로 잘못된 요청으로 처리한다.
     if (request == null || request.displayName() == null) {
