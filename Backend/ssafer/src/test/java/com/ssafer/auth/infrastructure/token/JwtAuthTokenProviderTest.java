@@ -20,6 +20,8 @@ import org.mockito.Mockito;
 class JwtAuthTokenProviderTest {
 
   private static final String SECRET = "this-is-a-very-secure-jwt-secret-key-2026";
+  private static final long ACCESS_TOKEN_EXPIRES_SECONDS = 900;
+  private static final long REFRESH_TOKEN_EXPIRES_SECONDS = 1209600;
 
   @Test
   void issueTokensContainsExpectedClaimsAndExpiration() {
@@ -27,8 +29,8 @@ class JwtAuthTokenProviderTest {
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
-        7200,
-        1209600,
+        ACCESS_TOKEN_EXPIRES_SECONDS,
+        REFRESH_TOKEN_EXPIRES_SECONDS,
         refreshTokenStore
     );
 
@@ -64,8 +66,8 @@ class JwtAuthTokenProviderTest {
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
-        7200,
-        1209600,
+        ACCESS_TOKEN_EXPIRES_SECONDS,
+        REFRESH_TOKEN_EXPIRES_SECONDS,
         Mockito.mock(RefreshTokenStore.class)
     );
 
@@ -80,8 +82,8 @@ class JwtAuthTokenProviderTest {
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
-        7200,
-        1209600,
+        ACCESS_TOKEN_EXPIRES_SECONDS,
+        REFRESH_TOKEN_EXPIRES_SECONDS,
         refreshTokenStore
     );
     AuthTokenResult firstIssue = provider.issueTokens(1L);
@@ -102,8 +104,8 @@ class JwtAuthTokenProviderTest {
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
-        7200,
-        1209600,
+        ACCESS_TOKEN_EXPIRES_SECONDS,
+        REFRESH_TOKEN_EXPIRES_SECONDS,
         refreshTokenStore
     );
     AuthTokenResult firstIssue = provider.issueTokens(1L);
@@ -121,8 +123,8 @@ class JwtAuthTokenProviderTest {
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
-        7200,
-        1209600,
+        ACCESS_TOKEN_EXPIRES_SECONDS,
+        REFRESH_TOKEN_EXPIRES_SECONDS,
         refreshTokenStore
     );
     AuthTokenResult issued = provider.issueTokens(1L);
@@ -139,8 +141,8 @@ class JwtAuthTokenProviderTest {
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
-        7200,
-        1209600,
+        ACCESS_TOKEN_EXPIRES_SECONDS,
+        REFRESH_TOKEN_EXPIRES_SECONDS,
         refreshTokenStore
     );
     AuthTokenResult issued = provider.issueTokens(1L);
@@ -150,5 +152,31 @@ class JwtAuthTokenProviderTest {
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.UNAUTHORIZED);
+  }
+
+  @Test
+  void reissueTokensThrowsUnauthorizedAfterLogoutRevokesStoredRefreshToken() {
+    RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
+        SECRET,
+        "ssafer",
+        ACCESS_TOKEN_EXPIRES_SECONDS,
+        REFRESH_TOKEN_EXPIRES_SECONDS,
+        refreshTokenStore
+    );
+    AuthTokenResult issued = provider.issueTokens(1L);
+    given(refreshTokenStore.findByUserId(1L))
+        // 로그아웃 시점에는 현재 refresh token이 살아 있고,
+        .willReturn(java.util.Optional.of(issued.refreshToken()))
+        // 로그아웃 이후 재발급 시도 시점에는 저장값이 사라진 상태를 표현한다.
+        .willReturn(java.util.Optional.empty());
+
+    provider.revokeRefreshToken(issued.refreshToken());
+
+    assertThatThrownBy(() -> provider.reissueTokens(issued.refreshToken()))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.UNAUTHORIZED);
+    then(refreshTokenStore).should().delete(1L);
   }
 }
