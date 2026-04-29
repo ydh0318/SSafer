@@ -34,6 +34,10 @@ class EnvPlainSecretRule(BaseRule):
             return findings
 
         rel_path = str(env_file.relative_to(project_root))
+        is_example_env = _is_example_env_file(env_file)
+        git_state = _git_file_state(env_file, project_root)
+        if not is_example_env and git_state == "ignored":
+            return findings
 
         for lineno, line in enumerate(lines, start=1):
             stripped = line.strip()
@@ -51,31 +55,26 @@ class EnvPlainSecretRule(BaseRule):
                 and value
                 and not is_placeholder(value)
             ):
-                severity = self._severity_for_env_file(env_file, project_root)
                 findings.append(Finding(
                     rule_id=self.rule_id,
                     source="custom-rule",
-                    severity=severity,
+                    severity=self._severity_for_env_file(is_example_env),
                     file=rel_path,
                     line=lineno,
-                    title=self._title_for_env_file(env_file, key, severity),
+                    title=self._title_for_env_file(is_example_env, key),
                     masked_evidence=make_masked_evidence(key),
                 ))
         return findings
 
-    def _severity_for_env_file(self, env_file: Path, project_root: Path) -> str:
-        if _is_example_env_file(env_file):
+    def _severity_for_env_file(self, is_example_env: bool) -> str:
+        if is_example_env:
             return "MEDIUM"
-        if _git_file_state(env_file, project_root) == "ignored":
-            return "LOW"
         return self.severity
 
-    def _title_for_env_file(self, env_file: Path, key: str, severity: str) -> str:
-        if _is_example_env_file(env_file):
+    def _title_for_env_file(self, is_example_env: bool, key: str) -> str:
+        if is_example_env:
             return f"환경변수 예시 파일에 실제 시크릿처럼 보이는 값이 있음: {key}"
-        if severity == "LOW":
-            return f"Git ignore된 .env 파일에 로컬 평문 시크릿이 있음: {key}"
-        return f"환경변수 파일에 시크릿이 하드코딩됨: {key}"
+        return f"Git에 추적 중인 환경변수 파일에 시크릿이 있음: {key}"
 
 
 def _is_example_env_file(path: Path) -> bool:
