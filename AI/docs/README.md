@@ -11,6 +11,7 @@
 3_scan_result_input.md
 4_explain_chain.md
 5_analysis_result_output.md
+6_fix_chain.md
 ```
 
 ## 문서 설명
@@ -23,3 +24,4 @@
 | `3_scan_result_input.md` | scan_result.json 입력 처리 |
 | `4_explain_chain.md` | Explain Chain 구축 |
 | `5_analysis_result_output.md` | analysis_result.json 출력 검증 |
+| `6_fix_chain.md` | Fix Chain 구축 |
