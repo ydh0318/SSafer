@@ -14,8 +14,17 @@ type RetryableRequestConfig = AxiosRequestConfig & {
 };
 
 const REISSUE_PATH = '/auth/reissue';
+const PUBLIC_PATH_PREFIXES = ['/guests/enter', '/auth', '/users'];
 
 const getAuthorizationHeader = (accessToken: string) => `Bearer ${accessToken}`;
+
+const isPublicRequestPath = (url?: string) => {
+  if (!url) {
+    return false;
+  }
+
+  return PUBLIC_PATH_PREFIXES.some((prefix) => url.startsWith(prefix));
+};
 
 const extractAccessToken = (response: ApiSuccessResponse<TokenReissueData>, header?: string) => {
   const tokenFromBody = response.data?.accessToken;
@@ -32,6 +41,11 @@ const extractAccessToken = (response: ApiSuccessResponse<TokenReissueData>, head
 };
 
 const attachAccessToken = (config: InternalAxiosRequestConfig) => {
+  if (isPublicRequestPath(config.url)) {
+    config.headers.delete('Authorization');
+    return config;
+  }
+
   const accessToken = tokenStorage.getAccessToken();
 
   if (!accessToken) {
@@ -57,8 +71,15 @@ export const setupInterceptors = (client: AxiosInstance) => {
       const status = error.response?.status;
       const requestUrl = originalRequest?.url ?? '';
       const isReissueRequest = requestUrl.includes(REISSUE_PATH);
+      const isPublicRequest = isPublicRequestPath(requestUrl);
 
-      if (!originalRequest || status !== 401 || originalRequest._retry || isReissueRequest) {
+      if (
+        !originalRequest ||
+        status !== 401 ||
+        originalRequest._retry ||
+        isReissueRequest ||
+        isPublicRequest
+      ) {
         return Promise.reject(error);
       }
 
