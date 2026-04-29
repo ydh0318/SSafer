@@ -1,7 +1,29 @@
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
+REQUIRED_SCAN_RESULT_FIELDS = (
+    "schemaVersion",
+    "scanId",
+    "source",
+    "scannedAt",
+    "analysisStatus",
+    "findings",
+)
+
+REQUIRED_STRING_SCAN_RESULT_FIELDS = (
+    "schemaVersion",
+    "scanId",
+    "source",
+    "scannedAt",
+    "analysisStatus",
+)
+
+SUPPORTED_SCAN_RESULT_SCHEMA_VERSIONS = ("0.1",)
+ALLOWED_SCAN_RESULT_SOURCES = ("cli",)
+ALLOWED_ANALYSIS_STATUSES = ("SUCCESS", "PARTIAL", "FAILED")
 REQUIRED_FINDING_FIELDS = (
     "id",
     "ruleId",
@@ -43,6 +65,72 @@ def load_scan_result(scan_result_path: str) -> dict[str, Any]:
         raise ValueError("scan_result.json root must be a JSON object.")
 
     return data
+
+
+def _is_iso8601_datetime(value: str) -> bool:
+    if "T" not in value:
+        return False
+
+    normalized = value.replace("Z", "+00:00")
+    try:
+        datetime.fromisoformat(normalized)
+    except ValueError:
+        return False
+    return True
+
+
+def validate_scan_result_required_fields(scan_result: dict[str, Any]) -> None:
+    missing_fields = [
+        field for field in REQUIRED_SCAN_RESULT_FIELDS if field not in scan_result
+    ]
+
+    if missing_fields:
+        raise ValueError(
+            "scan_result.json missing required fields: "
+            f"{', '.join(missing_fields)}"
+        )
+
+    for field in REQUIRED_STRING_SCAN_RESULT_FIELDS:
+        value = scan_result[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                f"scan_result.json field '{field}' must be a non-empty string."
+            )
+
+    schema_version = scan_result["schemaVersion"]
+    if schema_version not in SUPPORTED_SCAN_RESULT_SCHEMA_VERSIONS:
+        raise ValueError(
+            "scan_result.json schemaVersion must be one of: "
+            f"{', '.join(SUPPORTED_SCAN_RESULT_SCHEMA_VERSIONS)}."
+        )
+
+    try:
+        scan_id = UUID(scan_result["scanId"])
+    except ValueError as exc:
+        raise ValueError("scan_result.json scanId must be a valid UUID.") from exc
+    if scan_id.version != 4:
+        raise ValueError("scan_result.json scanId must be a valid UUID v4.")
+
+    source = scan_result["source"]
+    if source not in ALLOWED_SCAN_RESULT_SOURCES:
+        raise ValueError(
+            "scan_result.json source must be one of: "
+            f"{', '.join(ALLOWED_SCAN_RESULT_SOURCES)}."
+        )
+
+    scanned_at = scan_result["scannedAt"]
+    if not _is_iso8601_datetime(scanned_at):
+        raise ValueError("scan_result.json scannedAt must be an ISO 8601 datetime.")
+
+    analysis_status = scan_result["analysisStatus"]
+    if analysis_status not in ALLOWED_ANALYSIS_STATUSES:
+        raise ValueError(
+            "scan_result.json analysisStatus must be one of: "
+            f"{', '.join(ALLOWED_ANALYSIS_STATUSES)}."
+        )
+
+    if not isinstance(scan_result["findings"], list):
+        raise ValueError("scan_result.json findings field must be an array.")
 
 
 def extract_findings(scan_result: dict[str, Any]) -> list[dict[str, Any]]:

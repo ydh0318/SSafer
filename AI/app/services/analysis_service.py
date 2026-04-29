@@ -4,6 +4,7 @@ from app.loaders.scan_loader import (
     extract_findings,
     load_scan_result,
     validate_findings_required_fields,
+    validate_scan_result_required_fields,
 )
 from app.schemas.analysis import AnalysisRequest, AnalysisResponse
 
@@ -28,6 +29,7 @@ class FindingAnalysisError(RuntimeError):
 
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
     scan_result = load_scan_result(request.scan_result_path)
+    validate_scan_result_required_fields(scan_result)
     findings = extract_findings(scan_result)
     validate_findings_required_fields(findings)
     llm_inputs = format_findings_for_llm(findings)
@@ -82,6 +84,7 @@ def run_analysis_pipeline(
 ) -> dict[str, object]:
     try:
         scan_result = load_scan_result(scan_result_path)
+        validate_scan_result_required_fields(scan_result)
         findings = extract_findings(scan_result)
         validate_findings_required_fields(findings)
     except Exception as exc:

@@ -6,6 +6,7 @@
 
 ```text
 scan_result.json 파일 로딩 구현
+scan_result.json 최상위 필수 필드 검증
 findings 배열 추출 로직 구현
 finding 필수 필드 검증
 finding → LLM 입력 데이터 변환
@@ -43,7 +44,39 @@ JSON 파싱 실패 처리
 JSON root object 여부 확인
 ```
 
-## 4. Findings 추출
+## 4. scan_result.json 필수 필드 검증
+
+`scan_result.json` 최상위 객체는 아래 필드를 반드시 포함해야 합니다.
+
+```text
+schemaVersion
+scanId
+source
+scannedAt
+analysisStatus
+findings
+```
+
+검증 함수:
+
+```python
+validate_scan_result_required_fields(scan_result: dict) -> None
+```
+
+검증 규칙:
+
+```text
+필수 필드 누락 여부 확인
+schemaVersion, scanId, source, scannedAt, analysisStatus는 비어 있지 않은 string이어야 함
+schemaVersion은 지원 버전이어야 함
+scanId는 UUID v4 형식이어야 함
+source는 허용된 source 값이어야 함
+scannedAt은 ISO 8601 datetime 형식이어야 함
+analysisStatus는 SUCCESS, PARTIAL, FAILED 중 하나여야 함
+findings는 배열이어야 함
+```
+
+## 5. Findings 추출
 
 `scan_result.json`에서 AI 분석 대상이 되는 `findings` 배열을 추출합니다.
 
@@ -61,7 +94,7 @@ findings 필드가 배열인지 확인
 findings 배열의 각 항목이 JSON object인지 확인
 ```
 
-## 5. Finding 필수 필드 검증
+## 6. Finding 필수 필드 검증
 
 각 finding은 아래 필드를 반드시 포함해야 합니다.
 
@@ -90,7 +123,7 @@ line은 integer 또는 null 허용
 line을 제외한 필수 필드는 비어 있지 않은 string이어야 함
 ```
 
-## 6. LLM 입력 데이터 변환
+## 7. LLM 입력 데이터 변환
 
 검증된 finding은 LLM에 전달하기 좋은 텍스트 형식으로 변환합니다.
 
@@ -115,14 +148,14 @@ Evidence:
 DB_PASSWORD=***MASKED***
 ```
 
-## 7. 로딩, 추출, 검증, 변환 확인
+## 8. 로딩, 추출, 검증, 변환 확인
 
 아래 명령어로 `scan_result.json` 로딩, `findings` 추출, 필수 필드 검증, LLM 입력 변환을 확인할 수 있습니다.
 
 ```bash
 cd /home/eunsu/S14P31B105/AI
 source .venv/bin/activate
-python -c "from app.loaders.scan_loader import load_scan_result, extract_findings, validate_findings_required_fields; from app.services.input_service import format_findings_for_llm; data = load_scan_result('data/scan_result.json'); findings = extract_findings(data); validate_findings_required_fields(findings); inputs = format_findings_for_llm(findings); print('prepared', len(inputs)); print(inputs[0])"
+python -c "from app.loaders.scan_loader import load_scan_result, extract_findings, validate_scan_result_required_fields, validate_findings_required_fields; from app.services.input_service import format_findings_for_llm; data = load_scan_result('data/scan_result.json'); validate_scan_result_required_fields(data); findings = extract_findings(data); validate_findings_required_fields(findings); inputs = format_findings_for_llm(findings); print('prepared', len(inputs)); print(inputs[0])"
 ```
 
 정상 출력 예시:
@@ -133,7 +166,7 @@ Finding ID: FND-0001
 ...
 ```
 
-## 8. API 연결 확인
+## 9. API 연결 확인
 
 현재 `/analysis`는 `scan_result.json` 파일을 로딩하고 `findings` 배열을 추출한 뒤 필수 필드를 검증하고 LLM 입력 데이터로 변환합니다.
 
@@ -155,7 +188,7 @@ curl -X POST http://127.0.0.1:8000/analysis \
 }
 ```
 
-## 9. 다음 작업
+## 10. 다음 작업
 
 ```text
 Explain Chain 구축
