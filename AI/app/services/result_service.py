@@ -207,6 +207,58 @@ def build_analysis_result_from_results(
     }
 
 
+def _collect_unique_ids(
+    items: list[dict[str, Any]],
+    key: str,
+    path: str,
+) -> list[str]:
+    ids: list[str] = []
+    seen_ids: set[str] = set()
+
+    for index, item in enumerate(items):
+        value = item.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{path}[{index}].{key} must be a non-empty string.")
+
+        if value in seen_ids:
+            raise ValueError(f"Duplicate {key}: {value}")
+
+        seen_ids.add(value)
+        ids.append(value)
+
+    return ids
+
+
+def validate_finding_id_mapping(
+    findings: list[dict[str, Any]],
+    analysis_result: dict[str, Any],
+) -> None:
+    validate_analysis_result(analysis_result)
+
+    input_finding_ids = _collect_unique_ids(findings, "id", "findings")
+    output_finding_ids = _collect_unique_ids(
+        analysis_result["results"],
+        "findingId",
+        "analysis_result.results",
+    )
+
+    input_finding_id_set = set(input_finding_ids)
+    output_finding_id_set = set(output_finding_ids)
+    missing_ids = sorted(input_finding_id_set - output_finding_id_set)
+    extra_ids = sorted(output_finding_id_set - input_finding_id_set)
+
+    if missing_ids or extra_ids:
+        details: list[str] = []
+        if missing_ids:
+            details.append(f"missing output findingId: {', '.join(missing_ids)}")
+        if extra_ids:
+            details.append(f"unexpected output findingId: {', '.join(extra_ids)}")
+        raise ValueError(
+            "analysis_result findingId mapping must match input findings: "
+            + "; ".join(details)
+        )
+
+
 def validate_analysis_result(analysis_result: dict[str, Any]) -> None:
     missing_fields = [
         field
@@ -252,8 +304,13 @@ def validate_analysis_result(analysis_result: dict[str, Any]) -> None:
     if result_count != len(results):
         raise ValueError("analysis_result.resultCount must match results length.")
 
+    seen_finding_ids: set[str] = set()
     for index, result in enumerate(results):
         validate_analysis_result_item(result, index)
+        finding_id = result["findingId"]
+        if finding_id in seen_finding_ids:
+            raise ValueError(f"Duplicate findingId in analysis_result: {finding_id}")
+        seen_finding_ids.add(finding_id)
 
 
 def validate_analysis_result_item(result: Any, index: int) -> None:

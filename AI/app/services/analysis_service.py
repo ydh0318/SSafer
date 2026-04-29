@@ -16,6 +16,7 @@ from app.services.result_service import (
     build_analysis_result_from_results,
     build_structured_analysis_result,
     save_analysis_result,
+    validate_finding_id_mapping,
 )
 
 
@@ -136,6 +137,7 @@ def run_analysis_pipeline(
             scan_result=scan_result,
             structured_results=structured_results,
         )
+        validate_finding_id_mapping(findings, analysis_result)
         saved_path = save_analysis_result(analysis_result, output_path)
     except Exception as exc:
         return {

@@ -9,6 +9,7 @@ analysis_result.json 최상위 필수 필드 검증
 results 배열 및 resultCount 일치 여부 검증
 result 단위 필수 필드 검증
 fix 객체 상세 스키마 검증
+입력 findings와 출력 results의 findingId 매핑 검증
 저장 전 출력 검증
 로드 후 출력 검증
 ```
@@ -33,6 +34,7 @@ app/services/result_service.py
 
 ```python
 validate_analysis_result(analysis_result: dict) -> None
+validate_finding_id_mapping(findings: list[dict], analysis_result: dict) -> None
 validate_analysis_result_item(result: Any, index: int) -> None
 validate_fix_schema(fix: Any, path: str = "fix") -> None
 save_analysis_result(analysis_result: dict, output_path: str) -> Path
@@ -62,6 +64,7 @@ scannedAt, generatedAt은 ISO 8601 datetime 형식이어야 함
 resultCount는 integer이어야 함
 results는 array이어야 함
 resultCount는 results 길이와 같아야 함
+results 안의 findingId는 중복되지 않아야 함
 ```
 
 ## 5. result 단위 필드
@@ -111,7 +114,29 @@ recommendedActions는 2~5개의 string 배열이어야 함
 cautions는 1~3개의 string 배열이어야 함
 ```
 
-## 7. 검증 확인
+## 7. findingId 매핑 검증
+
+전체 분석 파이프라인은 저장 전에 valid 입력 findings와 출력 results의 `findingId`가 1:1로 일치하는지 확인합니다.
+
+검증 규칙:
+
+```text
+입력 finding id는 중복되지 않아야 함
+출력 result findingId는 중복되지 않아야 함
+입력 finding id마다 출력 result findingId가 존재해야 함
+입력에 없는 findingId가 출력에 추가되면 안 됨
+invalid finding은 분석 대상에서 제외되므로 매핑 검증 대상도 아님
+```
+
+오류 예시:
+
+```text
+analysis_result findingId mapping must match input findings: missing output findingId: FND-0002
+analysis_result findingId mapping must match input findings: unexpected output findingId: FND-9999
+Duplicate findingId in analysis_result: FND-0001
+```
+
+## 8. 검증 확인
 
 아래 명령어로 기존 `analysis_result.json`이 출력 스키마를 만족하는지 확인할 수 있습니다.
 
