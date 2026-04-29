@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 import pytest
 
+from security_samples import scan_payload_with_trivy_secret, sanitized_scan_payload_with_trivy_secret
 from ssafer.core import upload
 
 
@@ -264,3 +265,41 @@ def test_find_unmasked_secret_paths_ignores_placeholder_secret_values():
     }
 
     assert upload.find_unmasked_secret_paths(payload) == []
+
+
+def test_upload_guard_validates_raw_and_sanitized_scan_payload_pair():
+    raw_payload = scan_payload_with_trivy_secret()
+    sanitized_payload = sanitized_scan_payload_with_trivy_secret()
+
+    assert upload.find_unmasked_secret_paths(raw_payload) == [
+        "$.findings[0].maskedEvidence",
+        "$.artifacts[0].content.Results[0].Secrets[0].Match",
+    ]
+    assert upload.find_unmasked_secret_paths(sanitized_payload) == []
+
+
+def test_upload_last_scan_allows_sanitized_scan_payload(tmp_path: Path, monkeypatch):
+    scan = sanitized_scan_payload_with_trivy_secret()
+    _write_scan(tmp_path, scan)
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            calls.append((url, json))
+            request = httpx.Request("POST", url)
+            return httpx.Response(200, json={"scanId": "remote-scan-1"}, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    upload.upload_last_scan(tmp_path, api_url="http://backend.test")
+
+    assert calls == [("http://backend.test/api/scans", scan)]

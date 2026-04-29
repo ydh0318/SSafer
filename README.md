@@ -8,28 +8,30 @@
 
 ## 프로젝트 구조
 
-```
+```text
 S14P31B105/
-├── AI/          # LLM 어댑터, 보안 분석 AI 모듈
-├── Backend/     # FastAPI 기반 REST API 서버
+├── CLI/         # Typer 기반 SSAfer CLI
+├── AI/          # LLM 분석 파이프라인
+├── Backend/     # FastAPI 기반 API 서버
 ├── Frontend/    # React + TypeScript 대시보드
 ├── Infra/       # Docker, EC2, 배포 설정
-└── docs/        # 기획서, 와이어프레임 등 문서
+└── docs/        # 기획서, 컨벤션, 프로젝트 문서
 ```
 
 ## 기술 스택
 
 | 영역 | 기술 |
-|------|------|
-| Frontend | React, TypeScript |
+| --- | --- |
+| CLI | Python, Typer, Rich, Trivy |
 | Backend | FastAPI, PostgreSQL |
-| AI | LLM Adapter, Trivy |
+| Frontend | React, TypeScript |
+| AI | LangChain, Ollama, Trivy result analysis |
 | Infra | EC2, Docker, Nginx |
 
 ## 주요 기능
 
-- EC2 + Docker 환경 보안 점검 (포트, 이미지, 설정, Secret)
-- Trivy 기반 취약점 분석
+- EC2 + Docker 환경 보안 점검 (포트, 이미지, 설정, Secret 등)
+- Custom Rule과 Trivy 결과를 공통 `findings[]` 스키마로 정규화
 - AI 기반 위험 원인 및 해결 방법 자연어 설명
 - 수정 제안 및 승인 기반 자동 적용
 - 보안 상태 이력 관리 및 대시보드 시각화
