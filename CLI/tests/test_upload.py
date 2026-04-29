@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,7 @@ def _write_scan(project_root: Path, scan: dict[str, Any]) -> None:
     results_dir = project_root / ".ssafer" / "results"
     results_dir.mkdir(parents=True)
     scan_path = results_dir / "local-scan-test.json"
-    scan_path.write_text('{"scanId": "local-scan-test", "artifacts": []}', encoding="utf-8")
+    scan_path.write_text(json.dumps(scan), encoding="utf-8")
     (results_dir / "last_scan.txt").write_text(scan_path.name, encoding="utf-8")
 
 
@@ -111,3 +112,80 @@ upload:
 def test_upload_last_scan_requires_existing_scan(tmp_path: Path):
     with pytest.raises(RuntimeError, match="No local scan package found"):
         upload.upload_last_scan(tmp_path)
+
+
+def test_upload_last_scan_blocks_unmasked_secret_before_post(tmp_path: Path, monkeypatch):
+    scan = {
+        "scanId": "local-scan-test",
+        "artifacts": [
+            {
+                "type": "trivy-json",
+                "content": {
+                    "Results": [
+                        {
+                            "Secrets": [
+                                {
+                                    "RuleID": "aws-access-key-id",
+                                    "Match": "AKIAIOSFODNN7EXAMPLE",
+                                }
+                            ]
+                        }
+                    ]
+                },
+            }
+        ],
+    }
+    _write_scan(tmp_path, scan)
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            raise AssertionError("upload request should be blocked before HTTP post")
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    with pytest.raises(RuntimeError, match="Upload blocked"):
+        upload.upload_last_scan(tmp_path)
+
+
+def test_find_unmasked_secret_paths_ignores_masked_values_and_metadata():
+    payload = {
+        "scanId": "local-scan-test",
+        "hash": "sha256:abc123",
+        "findings": [
+            {
+                "ruleId": "AWS_ACCESS_KEY",
+                "title": "AWS Access Key",
+                "maskedEvidence": "***MASKED***",
+            }
+        ],
+        "artifacts": [{"content": {"PASSWORD": "***MASKED***"}}],
+    }
+
+    assert upload.find_unmasked_secret_paths(payload) == []
+
+
+def test_find_unmasked_secret_paths_reports_secret_key_values():
+    payload = {
+        "artifacts": [
+            {
+                "content": {
+                    "database": {
+                        "password": "plain-db-password",
+                    }
+                }
+            }
+        ]
+    }
+
+    assert upload.find_unmasked_secret_paths(payload) == [
+        "$.artifacts[0].content.database.password"
+    ]
