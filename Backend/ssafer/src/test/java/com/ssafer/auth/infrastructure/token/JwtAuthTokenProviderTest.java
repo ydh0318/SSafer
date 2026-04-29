@@ -2,10 +2,13 @@ package com.ssafer.auth.infrastructure.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
 import com.ssafer.auth.application.service.AuthTokenResult;
 import com.ssafer.auth.domain.repository.RefreshTokenStore;
+import com.ssafer.global.error.BusinessException;
+import com.ssafer.global.error.ErrorCode;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -69,5 +72,46 @@ class JwtAuthTokenProviderTest {
     assertThatThrownBy(() -> provider.issueTokens(0L))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("userId must be a positive number");
+  }
+
+  @Test
+  void reissueTokensRotatesTokensWhenStoredRefreshTokenMatches() {
+    RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
+        SECRET,
+        "ssafer",
+        7200,
+        1209600,
+        refreshTokenStore
+    );
+    AuthTokenResult firstIssue = provider.issueTokens(1L);
+    given(refreshTokenStore.findByUserId(1L)).willReturn(java.util.Optional.of(firstIssue.refreshToken()));
+
+    AuthTokenResult reissued = provider.reissueTokens(firstIssue.refreshToken());
+
+    assertThat(reissued.accessToken()).isNotBlank();
+    assertThat(reissued.refreshToken()).isNotBlank();
+    assertThat(reissued.refreshToken()).isNotEqualTo(firstIssue.refreshToken());
+    then(refreshTokenStore).should().findByUserId(1L);
+    then(refreshTokenStore).should().save(1L, reissued.refreshToken(), Duration.ofDays(14));
+  }
+
+  @Test
+  void reissueTokensThrowsUnauthorizedWhenStoredRefreshTokenDoesNotMatch() {
+    RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
+        SECRET,
+        "ssafer",
+        7200,
+        1209600,
+        refreshTokenStore
+    );
+    AuthTokenResult firstIssue = provider.issueTokens(1L);
+    given(refreshTokenStore.findByUserId(1L)).willReturn(java.util.Optional.of("another-refresh-token"));
+
+    assertThatThrownBy(() -> provider.reissueTokens(firstIssue.refreshToken()))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.UNAUTHORIZED);
   }
 }

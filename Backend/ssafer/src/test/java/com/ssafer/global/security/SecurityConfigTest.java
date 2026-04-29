@@ -62,6 +62,9 @@ class SecurityConfigTest {
     mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isOk());
 
+    mockMvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isOk());
+
     mockMvc.perform(post("/api/v1/auth/email/send-code").contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isOk());
 
@@ -181,6 +184,11 @@ class SecurityConfigTest {
 
     @PostMapping("/api/v1/auth/login")
     String login() {
+      return "ok";
+    }
+
+    @PostMapping("/api/v1/auth/refresh")
+    String refresh() {
       return "ok";
     }
 
