@@ -1,5 +1,8 @@
 package com.ssafer.user.application.service;
 
+import com.ssafer.auth.application.service.AuthTokenResult;
+import com.ssafer.auth.domain.repository.AuthTokenProvider;
+import com.ssafer.auth.domain.repository.RefreshTokenStore;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
@@ -17,17 +20,23 @@ public class UserPasswordService {
 
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
+  private final RefreshTokenStore refreshTokenStore;
+  private final AuthTokenProvider authTokenProvider;
 
   public UserPasswordService(
       UserRepository userRepository,
-      PasswordEncoder passwordEncoder
+      PasswordEncoder passwordEncoder,
+      RefreshTokenStore refreshTokenStore,
+      AuthTokenProvider authTokenProvider
   ) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
+    this.refreshTokenStore = refreshTokenStore;
+    this.authTokenProvider = authTokenProvider;
   }
 
   @Transactional
-  public void changePassword(AuthenticatedActor actor, String rawCurrentPassword, String rawNewPassword) {
+  public AuthTokenResult changePassword(AuthenticatedActor actor, String rawCurrentPassword, String rawNewPassword) {
     User user = loadCurrentMemberOrThrow(actor);
     String currentPassword = normalizePasswordOrThrow(rawCurrentPassword);
     String newPassword = normalizePasswordOrThrow(rawNewPassword);
@@ -38,7 +47,16 @@ public class UserPasswordService {
       throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
     }
 
+    // 현재 비밀번호와 동일한 값으로는 변경하지 않도록 막는다.
+    if (passwordEncoder.matches(newPassword, passwordHash)) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
     user.updatePasswordHash(passwordEncoder.encode(newPassword));
+    // 비밀번호가 바뀌면 기존 refresh token은 더 이상 신뢰하지 않고 모두 무효화한다.
+    refreshTokenStore.delete(user.getId());
+    // 현재 비밀번호를 이미 검증했으므로, 새 토큰 세트를 바로 내려 사용자 경험을 끊지 않는다.
+    return authTokenProvider.issueTokens(user.getId());
   }
 
   private User loadCurrentMemberOrThrow(AuthenticatedActor actor) {

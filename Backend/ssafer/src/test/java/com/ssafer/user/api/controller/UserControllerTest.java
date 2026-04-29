@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ssafer.auth.application.service.AuthTokenResult;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
@@ -18,6 +19,7 @@ import com.ssafer.user.application.service.UserPasswordService;
 import com.ssafer.user.application.service.UserProfileResult;
 import com.ssafer.user.application.service.UserProfileService;
 import com.ssafer.user.application.service.UserRegistrationService;
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -231,6 +233,13 @@ class UserControllerTest {
   void updateCurrentUserPasswordReturnsSuccess() throws Exception {
     AuthenticatedActor actor = AuthenticatedActor.member(1L);
     given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(userPasswordService.changePassword(actor, "password123", "new-password123"))
+        .willReturn(new AuthTokenResult(
+            "new-access-token",
+            Instant.parse("2026-04-29T07:00:00Z"),
+            "new-refresh-token",
+            Instant.parse("2026-05-13T07:00:00Z")
+        ));
 
     mockMvc.perform(patch("/api/v1/users/me/password")
             .contentType(APPLICATION_JSON)
@@ -242,7 +251,8 @@ class UserControllerTest {
                 """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.message").value("Password change succeeded"))
-        .andExpect(jsonPath("$.data").isEmpty());
+        .andExpect(jsonPath("$.data.accessToken").value("new-access-token"))
+        .andExpect(jsonPath("$.data.refreshToken").value("new-refresh-token"));
 
     then(userPasswordService).should().changePassword(actor, "password123", "new-password123");
   }
@@ -251,6 +261,96 @@ class UserControllerTest {
   void updateCurrentUserPasswordWithoutBodyReturnsInvalidParameter() throws Exception {
     mockMvc.perform(patch("/api/v1/users/me/password")
             .contentType(APPLICATION_JSON))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+  }
+
+  @Test
+  void updateCurrentUserPasswordWithBlankCurrentPasswordReturnsFieldErrors() throws Exception {
+    mockMvc.perform(patch("/api/v1/users/me/password")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "currentPassword": " ",
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.currentPassword").exists());
+  }
+
+  @Test
+  void updateCurrentUserPasswordWithShortNewPasswordReturnsFieldErrors() throws Exception {
+    mockMvc.perform(patch("/api/v1/users/me/password")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "currentPassword": "password123",
+                  "newPassword": "short"
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.newPassword").exists());
+  }
+
+  @Test
+  void updateCurrentUserPasswordReturnsUnauthorizedWhenCurrentPasswordIsWrong() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    Mockito.doThrow(new BusinessException(ErrorCode.INVALID_CREDENTIALS))
+        .when(userPasswordService)
+        .changePassword(actor, "wrong-password123", "new-password123");
+
+    mockMvc.perform(patch("/api/v1/users/me/password")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "currentPassword": "wrong-password123",
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+  }
+
+  @Test
+  void updateCurrentUserPasswordReturnsForbiddenForGuest() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.guest("guest-hash");
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    Mockito.doThrow(new BusinessException(ErrorCode.FORBIDDEN))
+        .when(userPasswordService)
+        .changePassword(actor, "password123", "new-password123");
+
+    mockMvc.perform(patch("/api/v1/users/me/password")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "currentPassword": "password123",
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+  }
+
+  @Test
+  void updateCurrentUserPasswordReturnsBadRequestWhenNewPasswordMatchesCurrentPassword() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    Mockito.doThrow(new BusinessException(ErrorCode.INVALID_PARAMETER))
+        .when(userPasswordService)
+        .changePassword(actor, "password123", "password123");
+
+    mockMvc.perform(patch("/api/v1/users/me/password")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "currentPassword": "password123",
+                  "newPassword": "password123"
+                }
+                """))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
   }

@@ -1,5 +1,7 @@
 package com.ssafer.user.api.controller;
 
+import com.ssafer.auth.api.dto.LoginResponseData;
+import com.ssafer.auth.application.service.AuthTokenResult;
 import com.ssafer.global.api.ApiResponse;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
@@ -205,7 +207,8 @@ public class UserController {
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "비밀번호 변경 성공"
+          description = "비밀번호 변경 성공",
+          content = @Content(schema = @Schema(implementation = LoginResponseData.class))
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
@@ -224,8 +227,8 @@ public class UserController {
           description = "사용자 정보를 찾을 수 없음"
       )
   })
-  public ResponseEntity<ApiResponse<Void>> updateCurrentUserPassword(
-      @RequestBody(required = false) UpdatePasswordRequest request
+  public ResponseEntity<ApiResponse<LoginResponseData>> updateCurrentUserPassword(
+      @Valid @RequestBody(required = false) UpdatePasswordRequest request
   ) {
     // 본문이나 필수 값이 없으면 비밀번호 변경 요청으로 해석할 수 없어 400으로 처리한다.
     if (request == null || request.currentPassword() == null || request.newPassword() == null) {
@@ -233,7 +236,19 @@ public class UserController {
     }
 
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
-    userPasswordService.changePassword(actor, request.currentPassword(), request.newPassword());
-    return ResponseEntity.ok(ApiResponse.success(PASSWORD_CHANGE_SUCCESS_MESSAGE, null));
+    AuthTokenResult tokenResult = userPasswordService.changePassword(
+        actor,
+        request.currentPassword(),
+        request.newPassword()
+    );
+    return ResponseEntity.ok(ApiResponse.success(
+        PASSWORD_CHANGE_SUCCESS_MESSAGE,
+        new LoginResponseData(
+            tokenResult.accessToken(),
+            tokenResult.accessTokenExpiresAt(),
+            tokenResult.refreshToken(),
+            tokenResult.refreshTokenExpiresAt()
+        )
+    ));
   }
 }
