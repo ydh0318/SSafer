@@ -57,7 +57,7 @@ public class User {
 
   @PrePersist
   void onCreate() {
-    // 생성 시각과 수정 시각은 최초 저장 시점에 동일한 값으로 맞춘다.
+    // 생성 시각과 수정 시각은 최초 저장 시점에 같은 값으로 맞춘다.
     Instant now = Instant.now();
     this.createdAt = now;
     this.updatedAt = now;
@@ -84,6 +84,11 @@ public class User {
   public void updateDisplayName(String displayName) {
     // 사용자 설정 수정에서는 비밀번호와 분리해서 displayName만 변경한다.
     this.displayName = displayName;
+  }
+
+  public void updatePasswordHash(String passwordHash) {
+    // 비밀번호 변경 API에서는 해시 완료된 값만 엔티티에 반영한다.
+    this.passwordHash = passwordHash;
   }
 
   public String getPasswordHash() {
