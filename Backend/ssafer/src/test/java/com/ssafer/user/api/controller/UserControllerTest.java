@@ -1,8 +1,10 @@
 package com.ssafer.user.api.controller;
 
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,23 +12,35 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
+import com.ssafer.global.security.AuthenticatedActor;
+import com.ssafer.global.security.CurrentActorProvider;
+import com.ssafer.user.application.service.UserProfileResult;
+import com.ssafer.user.application.service.UserProfileService;
 import com.ssafer.user.application.service.UserRegistrationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 class UserControllerTest {
 
   private MockMvc mockMvc;
+  private CurrentActorProvider currentActorProvider;
   private UserRegistrationService userRegistrationService;
+  private UserProfileService userProfileService;
 
   @BeforeEach
   void setUp() {
+    currentActorProvider = Mockito.mock(CurrentActorProvider.class);
     userRegistrationService = Mockito.mock(UserRegistrationService.class);
-    UserController controller = new UserController(userRegistrationService);
+    userProfileService = Mockito.mock(UserProfileService.class);
+    UserController controller = new UserController(
+        currentActorProvider,
+        userRegistrationService,
+        userProfileService
+    );
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
     validator.afterPropertiesSet();
     mockMvc = MockMvcBuilders.standaloneSetup(controller)
@@ -124,5 +138,88 @@ class UserControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
         .andExpect(jsonPath("$.data.fieldErrors.email").value("이메일은 필수입니다."));
+  }
+
+  @Test
+  void getCurrentUserProfileReturnsProfileForAuthenticatedMember() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(userProfileService.getCurrentUserProfile(actor))
+        .willReturn(new UserProfileResult("user@ssafer.co.kr", "Alice"));
+
+    mockMvc.perform(get("/api/v1/users/me"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("User profile retrieval succeeded"))
+        .andExpect(jsonPath("$.data.email").value("user@ssafer.co.kr"))
+        .andExpect(jsonPath("$.data.displayName").value("Alice"));
+  }
+
+  @Test
+  void updateCurrentUserProfileReturnsUpdatedProfile() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(userProfileService.updateCurrentUserProfile(actor, "Alice Updated"))
+        .willReturn(new UserProfileResult("user@ssafer.co.kr", "Alice Updated"));
+
+    mockMvc.perform(patch("/api/v1/users/me/profile")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "displayName": "Alice Updated"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("User profile update succeeded"))
+        .andExpect(jsonPath("$.data.email").value("user@ssafer.co.kr"))
+        .andExpect(jsonPath("$.data.displayName").value("Alice Updated"));
+  }
+
+  @Test
+  void updateCurrentUserProfileWithoutBodyReturnsInvalidParameter() throws Exception {
+    mockMvc.perform(patch("/api/v1/users/me/profile")
+            .contentType(APPLICATION_JSON))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+  }
+
+  @Test
+  void updateCurrentUserProfileWithBlankDisplayNameReturnsFieldErrors() throws Exception {
+    mockMvc.perform(patch("/api/v1/users/me/profile")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "displayName": " "
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.displayName").value("사용자명은 필수입니다."));
+  }
+
+  @Test
+  void updateCurrentUserProfileWithTooLongDisplayNameReturnsFieldErrors() throws Exception {
+    mockMvc.perform(patch("/api/v1/users/me/profile")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "displayName": "%s"
+                }
+                """.formatted("a".repeat(101))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.displayName").value("사용자명은 100자 이하여야 합니다."));
+  }
+
+  @Test
+  void getCurrentUserProfileReturnsForbiddenForGuest() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.guest("guest-hash");
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(userProfileService.getCurrentUserProfile(actor))
+        .willThrow(new BusinessException(ErrorCode.FORBIDDEN));
+
+    mockMvc.perform(get("/api/v1/users/me"))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    then(userProfileService).should().getCurrentUserProfile(actor);
   }
 }
