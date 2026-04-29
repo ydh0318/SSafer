@@ -338,7 +338,7 @@ def test_env_plain_secret_ignores_comment(tmp_path: Path):
     assert findings == []
 
 
-def test_env_plain_secret_git_ignored_file_is_low(tmp_path: Path, monkeypatch):
+def test_env_plain_secret_git_ignored_file_is_not_reported(tmp_path: Path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text("DB_PASSWORD=supersecret123\n", encoding="utf-8")
     calls: list[list[str]] = []
@@ -357,9 +357,7 @@ def test_env_plain_secret_git_ignored_file_is_low(tmp_path: Path, monkeypatch):
 
     findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
 
-    assert len(findings) == 1
-    assert findings[0].severity == "LOW"
-    assert "Git ignore" in findings[0].title
+    assert findings == []
     assert any("check-ignore" in command for command in calls)
 
 

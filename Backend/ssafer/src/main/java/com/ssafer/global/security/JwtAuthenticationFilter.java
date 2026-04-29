@@ -46,25 +46,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     String token = authorization.substring(BEARER_PREFIX.length()).trim();
     if (token.isBlank()) {
+      SecurityContextHolder.clearContext();
       throw new BadCredentialsException(ErrorCode.UNAUTHORIZED.message());
     }
 
     try {
       AuthenticatedActor actor = tokenParser.parse(token);
       // Spring Security 권한 체계와 맞추기 위해 ROLE_MEMBER / ROLE_GUEST를 부여한다.
-      List<SimpleGrantedAuthority> authorities = List.of(
-          new SimpleGrantedAuthority(actor.isGuest() ? "ROLE_GUEST" : "ROLE_MEMBER")
-      );
-      UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-          actor,
-          null,
-          authorities
-      );
-      SecurityContextHolder.getContext().setAuthentication(authentication);
+      SecurityContextHolder.getContext().setAuthentication(createAuthentication(actor));
     } catch (BusinessException ex) {
+      SecurityContextHolder.clearContext();
       throw new BadCredentialsException(ex.getMessage(), ex);
     }
 
     filterChain.doFilter(request, response);
+  }
+
+  private UsernamePasswordAuthenticationToken createAuthentication(AuthenticatedActor actor) {
+    List<SimpleGrantedAuthority> authorities = List.of(
+        new SimpleGrantedAuthority(actor.isGuest() ? "ROLE_GUEST" : "ROLE_MEMBER")
+    );
+    return new UsernamePasswordAuthenticationToken(actor, null, authorities);
   }
 }

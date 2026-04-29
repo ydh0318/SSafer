@@ -6,6 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
@@ -30,7 +31,9 @@ public class ApiAuthenticationEntryPoint implements AuthenticationEntryPoint {
   ) throws IOException, ServletException {
     ErrorCode code = ErrorCode.UNAUTHORIZED;
     response.setStatus(code.status().value());
+    // Security 예외 응답도 일반 API 에러와 같은 JSON/UTF-8 포맷으로 고정한다.
     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+    response.setCharacterEncoding(StandardCharsets.UTF_8.name());
     objectMapper.writeValue(response.getWriter(), ApiErrorResponse.of(code.code(), code.message()));
   }
 }
