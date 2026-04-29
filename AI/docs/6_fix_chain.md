@@ -10,7 +10,7 @@ JSON 출력 형식 고정
 LangChain Fix Chain 구현
 finding 기반 수정 제안 생성 로직 구현
 JSON 응답 파싱 및 스키마 검증
-파싱 또는 스키마 실패 시 재시도 지시문 적용
+파싱 또는 스키마 실패 시 실패 사유를 포함한 재시도 지시문 적용
 ```
 
 ## 2. 프롬프트 파일
@@ -109,6 +109,7 @@ app/services/fix_service.py
 generate_finding_fix(finding: dict) -> dict
 generate_finding_fixes(findings: list[dict]) -> list[dict]
 parse_fix_response(response: str) -> dict
+build_fix_retry_prompt(finding_input: str, error_message: str) -> str
 ```
 
 처리 흐름:
@@ -121,9 +122,27 @@ finding dict
 → JSON 문자열 정규화
 → JSON 파싱
 → 필수 필드 및 타입 검증
-→ 필요 시 제약 조건을 강화해 재시도
+→ 실패 시 실패 사유를 저장
+→ 실패 사유와 제약 조건을 포함해 재시도
 → fix dict 반환
 ```
+
+재시도는 최대 2회 수행합니다.
+
+재시도 프롬프트에는 아래 내용이 포함됩니다.
+
+```text
+이전 실패 사유
+JSON 객체 하나만 반환
+JSON 객체 밖 문자 금지
+6개 key 고정
+priority 허용값
+recommendedActions, cautions 배열 길이
+한국어 자연어 작성
+금지 문자 사용 금지
+```
+
+모든 재시도가 실패하면 마지막 실패 사유를 포함한 `ValueError`를 발생시킵니다.
 
 ## 8. 검증 확인
 

@@ -83,6 +83,33 @@ def parse_fix_response(response: str) -> dict[str, Any]:
     return parsed
 
 
+def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
+    return "\n".join(
+        [
+            finding_input,
+            "",
+            "중요:",
+            "이전 답변이 요구 조건을 지키지 못했습니다.",
+            f"실패 사유: {error_message}",
+            "응답은 반드시 유효한 JSON 객체 하나만 반환하세요.",
+            "JSON 객체 밖에 어떤 문자도 쓰지 마세요.",
+            "마크다운 코드 블록, 설명 문장, 주석은 포함하지 마세요.",
+            "아래 6개 key만 정확히 사용하세요.",
+            "summary, priority, recommendedActions, codeGuidance, verification, cautions",
+            "priority는 high, medium, low 중 하나만 사용하세요.",
+            "recommendedActions는 2~5개의 문자열 배열로 작성하세요.",
+            "cautions는 1~3개의 문자열 배열로 작성하세요.",
+            "답변의 자연어 문장은 한국어로만 작성하세요.",
+            "일본어, 중국어, 한자, 깨진 문자를 절대 사용하지 마세요.",
+            "일반 영어 단어를 섞지 말고 쉬운 한국어로 바꾸세요.",
+            "finding에 없는 파일 구조, 패키지명, 함수명, 설정 키, 배포 환경을 단정하지 마세요.",
+            "비밀 값이나 민감한 값을 추측하거나 복원하지 마세요.",
+            "실행 명령어, 공격 절차, 악용 코드는 작성하지 마세요.",
+            "파일명, 규칙 ID, 탐지 ID, 근거 값만 원문 그대로 유지할 수 있습니다.",
+        ]
+    )
+
+
 def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
     chain = create_fix_chain()
     finding_input = format_finding_for_llm(finding)
@@ -90,29 +117,10 @@ def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
 
     for attempt in range(MAX_FIX_RETRIES + 1):
         prompt_input = finding_input
-        if attempt > 0:
-            prompt_input = "\n".join(
-                [
-                    finding_input,
-                    "",
-                    "중요:",
-                    "이전 답변이 요구 조건을 지키지 못했습니다.",
-                    "응답은 반드시 유효한 JSON 객체 하나만 반환하세요.",
-                    "JSON 객체 밖에 어떤 문자도 쓰지 마세요.",
-                    "마크다운 코드 블록, 설명 문장, 주석은 포함하지 마세요.",
-                    "아래 6개 key만 정확히 사용하세요.",
-                    "summary, priority, recommendedActions, codeGuidance, verification, cautions",
-                    "priority는 high, medium, low 중 하나만 사용하세요.",
-                    "recommendedActions는 2~5개의 문자열 배열로 작성하세요.",
-                    "cautions는 1~3개의 문자열 배열로 작성하세요.",
-                    "답변의 자연어 문장은 한국어로만 작성하세요.",
-                    "일본어, 중국어, 한자, 깨진 문자를 절대 사용하지 마세요.",
-                    "일반 영어 단어를 섞지 말고 쉬운 한국어로 바꾸세요.",
-                    "finding에 없는 파일 구조, 패키지명, 함수명, 설정 키, 배포 환경을 단정하지 마세요.",
-                    "비밀 값이나 민감한 값을 추측하거나 복원하지 마세요.",
-                    "실행 명령어, 공격 절차, 악용 코드는 작성하지 마세요.",
-                    "파일명, 규칙 ID, 탐지 ID, 근거 값만 원문 그대로 유지할 수 있습니다.",
-                ]
+        if attempt > 0 and last_error is not None:
+            prompt_input = build_fix_retry_prompt(
+                finding_input=finding_input,
+                error_message=str(last_error),
             )
 
         raw_fix = chain.invoke({"finding_input": prompt_input})
@@ -127,7 +135,10 @@ def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
         except ValueError as exc:
             last_error = exc
 
-    raise ValueError("Fix Chain output could not be parsed.") from last_error
+    message = "Fix Chain output could not be parsed."
+    if last_error is not None:
+        message = f"{message} Last error: {last_error}"
+    raise ValueError(message) from last_error
 
 
 def generate_finding_fixes(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
