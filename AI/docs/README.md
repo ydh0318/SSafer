@@ -10,6 +10,7 @@
 2_langchain_setup.md
 3_scan_result_input.md
 4_explain_chain.md
+5_analysis_result_output.md
 ```
 
 ## 문서 설명
@@ -21,3 +22,4 @@
 | `2_langchain_setup.md` | LangChain과 Ollama 연동 설정 |
 | `3_scan_result_input.md` | scan_result.json 입력 처리 |
 | `4_explain_chain.md` | Explain Chain 구축 |
+| `5_analysis_result_output.md` | analysis_result.json 출력 검증 |

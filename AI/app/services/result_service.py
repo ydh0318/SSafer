@@ -6,6 +6,59 @@ from typing import Any
 
 ANALYSIS_RESULT_SCHEMA_VERSION = "0.1"
 DEFAULT_ANALYSIS_RESULT_PATH = "data/analysis_result.json"
+REQUIRED_ANALYSIS_RESULT_FIELDS = (
+    "schemaVersion",
+    "scanId",
+    "source",
+    "scannedAt",
+    "generatedAt",
+    "resultCount",
+    "results",
+)
+REQUIRED_ANALYSIS_RESULT_STRING_FIELDS = (
+    "schemaVersion",
+    "scanId",
+    "source",
+    "scannedAt",
+    "generatedAt",
+)
+REQUIRED_RESULT_FIELDS = (
+    "findingId",
+    "ruleId",
+    "source",
+    "severity",
+    "file",
+    "line",
+    "title",
+    "maskedEvidence",
+    "explanation",
+    "fix",
+)
+REQUIRED_RESULT_STRING_FIELDS = (
+    "findingId",
+    "ruleId",
+    "source",
+    "severity",
+    "file",
+    "title",
+    "maskedEvidence",
+    "explanation",
+)
+REQUIRED_FIX_FIELDS = (
+    "summary",
+    "priority",
+    "recommendedActions",
+    "codeGuidance",
+    "verification",
+    "cautions",
+)
+REQUIRED_FIX_STRING_FIELDS = (
+    "summary",
+    "priority",
+    "codeGuidance",
+    "verification",
+)
+ALLOWED_FIX_PRIORITIES = ("high", "medium", "low")
 
 
 def _resolve_path(path: str) -> Path:
@@ -13,6 +66,18 @@ def _resolve_path(path: str) -> Path:
     if not resolved_path.is_absolute():
         resolved_path = Path.cwd() / resolved_path
     return resolved_path
+
+
+def _is_iso8601_datetime(value: str) -> bool:
+    if "T" not in value:
+        return False
+
+    normalized = value.replace("Z", "+00:00")
+    try:
+        datetime.fromisoformat(normalized)
+    except ValueError:
+        return False
+    return True
 
 
 def _map_ai_results_by_finding_id(
@@ -142,18 +207,96 @@ def build_analysis_result_from_results(
     }
 
 
-def validate_analysis_result(analysis_result: dict[str, Any]) -> None:
-    if not isinstance(analysis_result.get("schemaVersion"), str):
-        raise ValueError("analysis_result.schemaVersion must be a string.")
+def _collect_unique_ids(
+    items: list[dict[str, Any]],
+    key: str,
+    path: str,
+) -> list[str]:
+    ids: list[str] = []
+    seen_ids: set[str] = set()
 
-    if not isinstance(analysis_result.get("generatedAt"), str):
-        raise ValueError("analysis_result.generatedAt must be a string.")
+    for index, item in enumerate(items):
+        value = item.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{path}[{index}].{key} must be a non-empty string.")
+
+        if value in seen_ids:
+            raise ValueError(f"Duplicate {key}: {value}")
+
+        seen_ids.add(value)
+        ids.append(value)
+
+    return ids
+
+
+def validate_finding_id_mapping(
+    findings: list[dict[str, Any]],
+    analysis_result: dict[str, Any],
+) -> None:
+    validate_analysis_result(analysis_result)
+
+    input_finding_ids = _collect_unique_ids(findings, "id", "findings")
+    output_finding_ids = _collect_unique_ids(
+        analysis_result["results"],
+        "findingId",
+        "analysis_result.results",
+    )
+
+    input_finding_id_set = set(input_finding_ids)
+    output_finding_id_set = set(output_finding_ids)
+    missing_ids = sorted(input_finding_id_set - output_finding_id_set)
+    extra_ids = sorted(output_finding_id_set - input_finding_id_set)
+
+    if missing_ids or extra_ids:
+        details: list[str] = []
+        if missing_ids:
+            details.append(f"missing output findingId: {', '.join(missing_ids)}")
+        if extra_ids:
+            details.append(f"unexpected output findingId: {', '.join(extra_ids)}")
+        raise ValueError(
+            "analysis_result findingId mapping must match input findings: "
+            + "; ".join(details)
+        )
+
+
+def validate_analysis_result(analysis_result: dict[str, Any]) -> None:
+    missing_fields = [
+        field
+        for field in REQUIRED_ANALYSIS_RESULT_FIELDS
+        if field not in analysis_result
+    ]
+    if missing_fields:
+        raise ValueError(
+            "analysis_result.json missing required fields: "
+            f"{', '.join(missing_fields)}"
+        )
+
+    for field in REQUIRED_ANALYSIS_RESULT_STRING_FIELDS:
+        value = analysis_result[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                f"analysis_result.{field} must be a non-empty string."
+            )
+
+    if analysis_result["schemaVersion"] != ANALYSIS_RESULT_SCHEMA_VERSION:
+        raise ValueError(
+            "analysis_result.schemaVersion must be "
+            f"{ANALYSIS_RESULT_SCHEMA_VERSION}."
+        )
+
+    for field in ("scannedAt", "generatedAt"):
+        if not _is_iso8601_datetime(analysis_result[field]):
+            raise ValueError(
+                f"analysis_result.{field} must be an ISO 8601 datetime."
+            )
 
     result_count = analysis_result.get("resultCount")
     results = analysis_result.get("results")
 
-    if not isinstance(result_count, int):
+    if type(result_count) is not int:
         raise ValueError("analysis_result.resultCount must be an integer.")
+    if result_count < 0:
+        raise ValueError("analysis_result.resultCount must be greater than or equal to 0.")
 
     if not isinstance(results, list):
         raise ValueError("analysis_result.results must be an array.")
@@ -161,24 +304,84 @@ def validate_analysis_result(analysis_result: dict[str, Any]) -> None:
     if result_count != len(results):
         raise ValueError("analysis_result.resultCount must match results length.")
 
+    seen_finding_ids: set[str] = set()
     for index, result in enumerate(results):
-        if not isinstance(result, dict):
-            raise ValueError(f"analysis_result.results[{index}] must be an object.")
+        validate_analysis_result_item(result, index)
+        finding_id = result["findingId"]
+        if finding_id in seen_finding_ids:
+            raise ValueError(f"Duplicate findingId in analysis_result: {finding_id}")
+        seen_finding_ids.add(finding_id)
 
-        finding_id = result.get("findingId")
-        if not isinstance(finding_id, str) or not finding_id.strip():
+
+def validate_analysis_result_item(result: Any, index: int) -> None:
+    result_path = f"analysis_result.results[{index}]"
+
+    if not isinstance(result, dict):
+        raise ValueError(f"{result_path} must be an object.")
+
+    missing_fields = [field for field in REQUIRED_RESULT_FIELDS if field not in result]
+    if missing_fields:
+        raise ValueError(
+            f"{result_path} missing required fields: {', '.join(missing_fields)}"
+        )
+
+    for field in REQUIRED_RESULT_STRING_FIELDS:
+        value = result[field]
+        if not isinstance(value, str) or not value.strip():
             raise ValueError(
-                f"analysis_result.results[{index}].findingId must be a string."
+                f"{result_path}.{field} must be a non-empty string."
             )
 
-        explanation = result.get("explanation")
-        if not isinstance(explanation, str) or not explanation.strip():
-            raise ValueError(
-                f"analysis_result.results[{index}].explanation must be a string."
-            )
+    line = result["line"]
+    if line is not None and type(line) is not int:
+        raise ValueError(f"{result_path}.line must be an integer or null.")
 
-        if not isinstance(result.get("fix"), dict):
-            raise ValueError(f"analysis_result.results[{index}].fix must be an object.")
+    validate_fix_schema(result["fix"], f"{result_path}.fix")
+
+
+def validate_fix_schema(fix: Any, path: str = "fix") -> None:
+    if not isinstance(fix, dict):
+        raise ValueError(f"{path} must be an object.")
+
+    missing_fields = [field for field in REQUIRED_FIX_FIELDS if field not in fix]
+    if missing_fields:
+        raise ValueError(
+            f"{path} missing required fields: {', '.join(missing_fields)}"
+        )
+
+    for field in REQUIRED_FIX_STRING_FIELDS:
+        value = fix[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{path}.{field} must be a non-empty string.")
+
+    priority = fix["priority"]
+    if priority not in ALLOWED_FIX_PRIORITIES:
+        raise ValueError(
+            f"{path}.priority must be one of: "
+            f"{', '.join(ALLOWED_FIX_PRIORITIES)}."
+        )
+
+    recommended_actions = fix["recommendedActions"]
+    if not isinstance(recommended_actions, list):
+        raise ValueError(f"{path}.recommendedActions must be an array.")
+    if not 2 <= len(recommended_actions) <= 5:
+        raise ValueError(f"{path}.recommendedActions must contain 2 to 5 items.")
+
+    cautions = fix["cautions"]
+    if not isinstance(cautions, list):
+        raise ValueError(f"{path}.cautions must be an array.")
+    if not 1 <= len(cautions) <= 3:
+        raise ValueError(f"{path}.cautions must contain 1 to 3 items.")
+
+    for field, values in (
+        ("recommendedActions", recommended_actions),
+        ("cautions", cautions),
+    ):
+        for item_index, value in enumerate(values):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"{path}.{field}[{item_index}] must be a non-empty string."
+                )
 
 
 def save_analysis_result(
