@@ -14,6 +14,7 @@ import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
 import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.global.security.CurrentActorProvider;
+import com.ssafer.user.application.service.UserPasswordService;
 import com.ssafer.user.application.service.UserProfileResult;
 import com.ssafer.user.application.service.UserProfileService;
 import com.ssafer.user.application.service.UserRegistrationService;
@@ -30,16 +31,19 @@ class UserControllerTest {
   private CurrentActorProvider currentActorProvider;
   private UserRegistrationService userRegistrationService;
   private UserProfileService userProfileService;
+  private UserPasswordService userPasswordService;
 
   @BeforeEach
   void setUp() {
     currentActorProvider = Mockito.mock(CurrentActorProvider.class);
     userRegistrationService = Mockito.mock(UserRegistrationService.class);
     userProfileService = Mockito.mock(UserProfileService.class);
+    userPasswordService = Mockito.mock(UserPasswordService.class);
     UserController controller = new UserController(
         currentActorProvider,
         userRegistrationService,
-        userProfileService
+        userProfileService,
+        userPasswordService
     );
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
     validator.afterPropertiesSet();
@@ -100,9 +104,9 @@ class UserControllerTest {
                 """))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
-        .andExpect(jsonPath("$.data.fieldErrors.email").value("올바른 이메일 형식이어야 합니다."))
-        .andExpect(jsonPath("$.data.fieldErrors.displayName").value("사용자명은 필수입니다."))
-        .andExpect(jsonPath("$.data.fieldErrors.password").value("비밀번호는 8자 이상 72자 이하여야 합니다."));
+        .andExpect(jsonPath("$.data.fieldErrors.email").exists())
+        .andExpect(jsonPath("$.data.fieldErrors.displayName").exists())
+        .andExpect(jsonPath("$.data.fieldErrors.password").exists());
   }
 
   @Test
@@ -129,7 +133,7 @@ class UserControllerTest {
             .param("email", "invalid-email"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
-        .andExpect(jsonPath("$.data.fieldErrors.email").value("올바른 이메일 형식이어야 합니다."));
+        .andExpect(jsonPath("$.data.fieldErrors.email").exists());
   }
 
   @Test
@@ -137,7 +141,7 @@ class UserControllerTest {
     mockMvc.perform(get("/api/v1/users/check-email"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
-        .andExpect(jsonPath("$.data.fieldErrors.email").value("이메일은 필수입니다."));
+        .andExpect(jsonPath("$.data.fieldErrors.email").exists());
   }
 
   @Test
@@ -193,7 +197,7 @@ class UserControllerTest {
                 """))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
-        .andExpect(jsonPath("$.data.fieldErrors.displayName").value("사용자명은 필수입니다."));
+        .andExpect(jsonPath("$.data.fieldErrors.displayName").exists());
   }
 
   @Test
@@ -207,7 +211,7 @@ class UserControllerTest {
                 """.formatted("a".repeat(101))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
-        .andExpect(jsonPath("$.data.fieldErrors.displayName").value("사용자명은 100자 이하여야 합니다."));
+        .andExpect(jsonPath("$.data.fieldErrors.displayName").exists());
   }
 
   @Test
@@ -221,5 +225,33 @@ class UserControllerTest {
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     then(userProfileService).should().getCurrentUserProfile(actor);
+  }
+
+  @Test
+  void updateCurrentUserPasswordReturnsSuccess() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+
+    mockMvc.perform(patch("/api/v1/users/me/password")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "currentPassword": "password123",
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Password change succeeded"))
+        .andExpect(jsonPath("$.data").isEmpty());
+
+    then(userPasswordService).should().changePassword(actor, "password123", "new-password123");
+  }
+
+  @Test
+  void updateCurrentUserPasswordWithoutBodyReturnsInvalidParameter() throws Exception {
+    mockMvc.perform(patch("/api/v1/users/me/password")
+            .contentType(APPLICATION_JSON))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
   }
 }

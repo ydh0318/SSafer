@@ -5,12 +5,14 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.global.security.CurrentActorProvider;
-import com.ssafer.user.api.dto.CheckEmailResponseData;
 import com.ssafer.user.api.dto.CheckEmailRequest;
+import com.ssafer.user.api.dto.CheckEmailResponseData;
 import com.ssafer.user.api.dto.RegisterUserRequest;
 import com.ssafer.user.api.dto.RegisterUserResponseData;
+import com.ssafer.user.api.dto.UpdatePasswordRequest;
 import com.ssafer.user.api.dto.UpdateUserProfileRequest;
 import com.ssafer.user.api.dto.UserProfileResponseData;
+import com.ssafer.user.application.service.UserPasswordService;
 import com.ssafer.user.application.service.UserProfileResult;
 import com.ssafer.user.application.service.UserProfileService;
 import com.ssafer.user.application.service.UserRegistrationService;
@@ -32,26 +34,30 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/users")
-@Tag(name = "회원", description = "회원가입 및 이메일 중복 확인 API")
+@Tag(name = "회원", description = "회원가입 및 사용자 설정 관련 API")
 public class UserController {
 
   private static final String REGISTER_SUCCESS_MESSAGE = "User registration succeeded";
   private static final String CHECK_EMAIL_SUCCESS_MESSAGE = "Email availability check succeeded";
   private static final String PROFILE_RETRIEVE_SUCCESS_MESSAGE = "User profile retrieval succeeded";
   private static final String PROFILE_UPDATE_SUCCESS_MESSAGE = "User profile update succeeded";
+  private static final String PASSWORD_CHANGE_SUCCESS_MESSAGE = "Password change succeeded";
 
   private final CurrentActorProvider currentActorProvider;
   private final UserRegistrationService userRegistrationService;
   private final UserProfileService userProfileService;
+  private final UserPasswordService userPasswordService;
 
   public UserController(
       CurrentActorProvider currentActorProvider,
       UserRegistrationService userRegistrationService,
-      UserProfileService userProfileService
+      UserProfileService userProfileService,
+      UserPasswordService userPasswordService
   ) {
     this.currentActorProvider = currentActorProvider;
     this.userRegistrationService = userRegistrationService;
     this.userProfileService = userProfileService;
+    this.userPasswordService = userPasswordService;
   }
 
   @PostMapping
@@ -77,7 +83,7 @@ public class UserController {
   public ResponseEntity<ApiResponse<RegisterUserResponseData>> register(
       @Valid @RequestBody RegisterUserRequest request
   ) {
-    // 실제 정규화, 중복 확인, 비밀번호 해시는 서비스 계층에서 수행한다.
+    // 실제 중복 확인, 비밀번호 해시 등은 서비스 계층에서 수행한다.
     Long userId = userRegistrationService.register(
         request.email(),
         request.displayName(),
@@ -107,7 +113,7 @@ public class UserController {
   public ResponseEntity<ApiResponse<CheckEmailResponseData>> checkEmail(
       @Valid @ModelAttribute CheckEmailRequest request
   ) {
-    // 이메일 중복 확인은 회원가입과 같은 정규화 규칙을 재사용한다.
+    // 이메일 중복 확인도 회원가입과 같은 정규화 규칙을 사용한다.
     boolean available = userRegistrationService.isEmailAvailable(request.getEmail());
     return ResponseEntity.ok(
         ApiResponse.success(CHECK_EMAIL_SUCCESS_MESSAGE, new CheckEmailResponseData(available))
@@ -189,5 +195,45 @@ public class UserController {
         PROFILE_UPDATE_SUCCESS_MESSAGE,
         new UserProfileResponseData(profile.email(), profile.displayName())
     ));
+  }
+
+  @PatchMapping("/me/password")
+  @Operation(
+      summary = "비밀번호 변경",
+      description = "현재 로그인한 회원의 비밀번호를 변경합니다."
+  )
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "비밀번호 변경 성공"
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "400",
+          description = "요청 본문이 비어 있거나 필수 값이 누락됨"
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "401",
+          description = "인증이 필요하거나 토큰이 유효하지 않음"
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "403",
+          description = "회원 전용 기능에 게스트가 접근함"
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "404",
+          description = "사용자 정보를 찾을 수 없음"
+      )
+  })
+  public ResponseEntity<ApiResponse<Void>> updateCurrentUserPassword(
+      @RequestBody(required = false) UpdatePasswordRequest request
+  ) {
+    // 본문이나 필수 값이 없으면 비밀번호 변경 요청으로 해석할 수 없어 400으로 처리한다.
+    if (request == null || request.currentPassword() == null || request.newPassword() == null) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
+    AuthenticatedActor actor = currentActorProvider.getCurrentActor();
+    userPasswordService.changePassword(actor, request.currentPassword(), request.newPassword());
+    return ResponseEntity.ok(ApiResponse.success(PASSWORD_CHANGE_SUCCESS_MESSAGE, null));
   }
 }
