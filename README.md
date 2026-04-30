@@ -23,7 +23,7 @@ S14P31B105/
 | 영역 | 기술 |
 | --- | --- |
 | CLI | Python, Typer, Rich, Trivy |
-| Backend | FastAPI, PostgreSQL |
+| Backend | Spring Boot, PostgreSQL, S3 presigned upload |
 | Frontend | React, TypeScript |
 | AI | LangChain, Ollama, Trivy result analysis |
 | Infra | EC2, Docker, Nginx |
@@ -32,6 +32,7 @@ S14P31B105/
 
 - EC2 + Docker 환경 보안 점검 (포트, 이미지, 설정, Secret 등)
 - Custom Rule과 Trivy 결과를 공통 `findings[]` 스키마로 정규화
+- CLI scan JSON을 백엔드 등록 후 S3 presigned URL로 업로드
 - AI 기반 위험 원인 및 해결 방법 자연어 설명
 - 수정 제안 및 승인 기반 자동 적용
 - 보안 상태 이력 관리 및 대시보드 시각화

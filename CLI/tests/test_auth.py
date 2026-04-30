@@ -142,12 +142,31 @@ def test_upload_includes_bearer_token_header(tmp_path, monkeypatch):
         def post(self, url: str, json: dict, headers: dict | None = None):
             captured.append({"url": url, "headers": headers or {}})
             request = httpx.Request("POST", url)
-            return httpx.Response(200, json={"scanId": "ok"}, request=request)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(200, json={"scanId": 1001}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            captured.append({"url": url, "headers": headers or {}})
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
 
     monkeypatch.setattr(upload_module.httpx, "Client", lambda **_: FakeClient())
     upload_last_scan(tmp_path, token="my-bearer-token")
-    assert len(captured) == 1
+    assert len(captured) == 3
     assert captured[0]["headers"].get("Authorization") == "Bearer my-bearer-token"
+    assert captured[1]["headers"] == {"Content-Type": "application/json"}
+    assert captured[2]["headers"].get("Authorization") == "Bearer my-bearer-token"
 
 
 def test_upload_no_auth_header_when_no_token(tmp_path, monkeypatch):
@@ -164,12 +183,30 @@ def test_upload_no_auth_header_when_no_token(tmp_path, monkeypatch):
         def post(self, url: str, json: dict, headers: dict | None = None):
             captured.append({"url": url, "headers": headers or {}})
             request = httpx.Request("POST", url)
-            return httpx.Response(200, json={"scanId": "ok"}, request=request)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(200, json={"scanId": 1001}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            captured.append({"url": url, "headers": headers or {}})
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
 
     monkeypatch.setattr(upload_module.httpx, "Client", lambda **_: FakeClient())
     upload_last_scan(tmp_path, token=None)
-    assert len(captured) == 1
+    assert len(captured) == 3
     assert "Authorization" not in captured[0]["headers"]
+    assert "Authorization" not in captured[2]["headers"]
 
 
 def test_cli_upload_uses_project_config_endpoint_and_token_env(tmp_path, monkeypatch):
