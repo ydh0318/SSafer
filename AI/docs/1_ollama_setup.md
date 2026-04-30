@@ -1,6 +1,6 @@
 # Ollama 설치 및 실행 가이드
 
-이 문서는 Ollama가 전혀 설치되어 있지 않은 컴퓨터에서 시작해 `llama3.2:3b` 모델 설치와 실행 확인까지 완료하는 방법을 정리한 가이드입니다.
+이 문서는 Ollama가 전혀 설치되어 있지 않은 컴퓨터에서 시작해 `qwen2.5:3b` 모델 설치와 실행 확인까지 완료하는 방법을 정리한 가이드입니다.
 
 우리 AI 서버는 이후 LangChain을 통해 로컬 Ollama 모델을 호출할 예정입니다.
 
@@ -11,7 +11,7 @@ Ollama는 LLM을 로컬 컴퓨터에서 실행할 수 있게 해주는 도구입
 이 프로젝트에서는 아래 모델을 기준으로 진행합니다.
 
 ```text
-llama3.2:3b
+qwen2.5:3b
 ```
 
 ## 2. Ollama CLI 설치
@@ -99,10 +99,10 @@ http://127.0.0.1:11434
 ollama list
 ```
 
-`llama3.2:3b`가 없다면 아래 명령어로 모델을 설치합니다.
+`qwen2.5:3b`가 없다면 아래 명령어로 모델을 설치합니다.
 
 ```bash
-ollama pull llama3.2:3b
+ollama pull qwen2.5:3b
 ```
 
 모델 다운로드는 네트워크와 컴퓨터 성능에 따라 시간이 걸릴 수 있습니다.
@@ -117,7 +117,7 @@ ollama list
 
 ```text
 NAME           ID              SIZE      MODIFIED
-llama3.2:3b    ...             ...       ...
+qwen2.5:3b     ...             ...       ...
 ```
 
 ## 6. 모델 실행 확인
@@ -125,7 +125,7 @@ llama3.2:3b    ...             ...       ...
 아래 명령어로 모델이 실제 응답하는지 확인합니다.
 
 ```bash
-ollama run llama3.2:3b "Say OK"
+ollama run qwen2.5:3b "Say OK"
 ```
 
 정상이라면 아래처럼 응답합니다.
@@ -144,13 +144,13 @@ OK
 ollama ps
 ```
 
-모델이 실행 중이면 `llama3.2:3b`가 표시됩니다.
+모델이 실행 중이면 `qwen2.5:3b`가 표시됩니다.
 
 예시:
 
 ```text
 NAME           ID              SIZE      PROCESSOR    CONTEXT    UNTIL
-llama3.2:3b    ...             ...       ...          ...        ...
+qwen2.5:3b     ...             ...       ...          ...        ...
 ```
 
 ## 8. 매번 개발할 때 실행 순서
@@ -174,7 +174,7 @@ uvicorn app.main:app --reload
 모델 동작 확인이 필요할 때:
 
 ```bash
-ollama run llama3.2:3b "Say OK"
+ollama run qwen2.5:3b "Say OK"
 ```
 
 ## 9. 자주 발생하는 문제
@@ -216,13 +216,13 @@ ollama list
 모델이 아직 설치되지 않은 상태입니다.
 
 ```bash
-ollama pull llama3.2:3b
+ollama pull qwen2.5:3b
 ```
 
 설치 후 다시 실행합니다.
 
 ```bash
-ollama run llama3.2:3b "Say OK"
+ollama run qwen2.5:3b "Say OK"
 ```
 
 ## 10. 공식 문서
