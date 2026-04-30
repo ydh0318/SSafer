@@ -15,5 +15,7 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
 
   Optional<Agent> findFirstByProjectId(Long projectId);
 
+  Optional<Agent> findByAuthTokenHash(String authTokenHash);
+
   List<Agent> findByStatusAndLastSeenAtBefore(AgentStatus status, Instant before);
 }

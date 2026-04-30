@@ -34,7 +34,7 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class AgentWebSocketIntegrationTest {
 
-  private static final String TEST_WORKER_SECRET = "test-worker-secret";
+  private static final String TEST_AGENT_TOKEN = "test-agent-token";
 
   @LocalServerPort
   private int port;
@@ -47,6 +47,9 @@ class AgentWebSocketIntegrationTest {
 
   @Autowired
   private ObjectMapper objectMapper;
+
+  @Autowired
+  private com.ssafer.global.security.AgentTokenRegistry agentTokenRegistry;
 
   @AfterEach
   void cleanup() {
@@ -132,7 +135,7 @@ class AgentWebSocketIntegrationTest {
 
   private WebSocketSession connect(TestSocketHandler handler) throws Exception {
     WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
-    headers.add(HttpHeaders.AUTHORIZATION, "Bearer " + TEST_WORKER_SECRET);
+    headers.add(HttpHeaders.AUTHORIZATION, "Bearer " + TEST_AGENT_TOKEN);
     URI uri = URI.create("ws://localhost:" + port + "/ws/v1/internal/agents/connect");
     return new StandardWebSocketClient().execute(handler, headers, uri).get(3, TimeUnit.SECONDS);
   }
@@ -140,7 +143,9 @@ class AgentWebSocketIntegrationTest {
   private Agent persistAgent() {
     Project project = new Project(1L, null, "ws-agent-project", null, ScanMode.AGENT, false);
     Project savedProject = projectRepository.save(project);
-    return agentRepository.save(new Agent(savedProject, AgentStatus.OFFLINE));
+    Agent agent = new Agent(savedProject, AgentStatus.OFFLINE);
+    agent.updateAuthTokenHash(agentTokenRegistry.hashToken(TEST_AGENT_TOKEN));
+    return agentRepository.save(agent);
   }
 
   private Agent loadAgent(Long agentId) {
