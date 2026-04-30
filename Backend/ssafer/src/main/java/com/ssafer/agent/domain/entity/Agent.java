@@ -93,4 +93,20 @@ public class Agent {
   public Instant getDisconnectedAt() {
     return disconnectedAt;
   }
+
+  public void markOnline(Instant now) {
+    status = AgentStatus.ONLINE;
+    connectedAt = now;
+    lastSeenAt = now;
+    disconnectedAt = null;
+  }
+
+  public void markOffline(Instant now) {
+    status = AgentStatus.OFFLINE;
+    disconnectedAt = now;
+  }
+
+  public void touchLastSeen(Instant now) {
+    lastSeenAt = now;
+  }
 }
