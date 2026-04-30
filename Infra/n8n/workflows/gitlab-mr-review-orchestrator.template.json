@@ -1,0 +1,231 @@
+{
+  "name": "GitLab MR Review Orchestrator",
+  "nodes": [
+    {
+      "name": "GitLab MR Review Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gitlab-mr-review",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "notes": "Production URL: https://k14b105.p.ssafy.io/n8n/webhook/gitlab-mr-review. Configure GitLab Webhook Secret validation with a credential or environment-backed gate before enabling production use."
+    },
+    {
+      "name": "Build Event Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "parameters": {
+        "jsCode": "const body = $json.body || {};\nconst attrs = body.object_attributes || {};\nconst headers = $json.headers || {};\n\nconst token = headers['x-gitlab-token'] || headers['X-Gitlab-Token'];\nconst expectedToken = $json.expected_gitlab_webhook_token || '<SET_FROM_CREDENTIAL_OR_ENV>';\n\nconst action = attrs.action;\nconst isMergeRequest = body.object_kind === 'merge_request';\nconst isTokenValid = expectedToken !== '<SET_FROM_CREDENTIAL_OR_ENV>' && token === expectedToken;\nconst isOpened = attrs.state === 'opened';\nconst isReviewAction = ['open', 'reopen', 'update'].includes(action);\nconst isCodeUpdate = action !== 'update' || Boolean(attrs.oldrev);\n\nreturn [{\n  json: {\n    ...$json,\n    event_gate: {\n      should_review: isMergeRequest && isTokenValid && isOpened && isReviewAction && isCodeUpdate,\n      reason: {\n        isMergeRequest,\n        isTokenValid,\n        isOpened,\n        action,\n        isReviewAction,\n        oldrev: attrs.oldrev || null,\n        isCodeUpdate,\n      },\n    },\n  },\n}];"
+      },
+      "notes": "Do not commit a real GitLab Webhook Secret here. Replace the placeholder after import using n8n credential/env-backed configuration."
+    },
+    {
+      "name": "Should Review?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.event_gate.should_review }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Build MR Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [660, 0],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "name": "event_type", "value": "={{ $json.body.object_kind }}", "type": "string" },
+            { "name": "project_id", "value": "={{ $json.body.project.id }}", "type": "string" },
+            { "name": "project_path", "value": "={{ $json.body.project.path_with_namespace }}", "type": "string" },
+            { "name": "mr_iid", "value": "={{ $json.body.object_attributes.iid }}", "type": "string" },
+            { "name": "mr_title", "value": "={{ $json.body.object_attributes.title }}", "type": "string" },
+            { "name": "mr_url", "value": "={{ $json.body.object_attributes.url }}", "type": "string" },
+            { "name": "source_branch", "value": "={{ $json.body.object_attributes.source_branch }}", "type": "string" },
+            { "name": "target_branch", "value": "={{ $json.body.object_attributes.target_branch }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Get MR Changes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [880, 0],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://lab.ssafy.com/api/v4/projects/{{ $json.project_id }}/merge_requests/{{ $json.mr_iid }}/changes",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gitlabApi",
+        "options": {}
+      },
+      "credentials": {
+        "gitlabApi": {
+          "id": "<GITLAB_API_CREDENTIAL_ID>",
+          "name": "GitLab account"
+        }
+      },
+      "notes": "After import, select the real n8n GitLab API credential. Do not store GitLab PAT in this workflow JSON."
+    },
+    {
+      "name": "Build Review Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0],
+      "parameters": {
+        "jsCode": "const changes = $json.changes || [];\nconst processedChanges = [];\nconst skippedFiles = [];\n\nconst skipExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.ico', '.webp', '.bmp', '.mp3', '.wav', '.ogg', '.flac', '.mp4', '.webm', '.avi', '.mov', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.rar', '.tar', '.gz', '.7z', '.bin', '.exe', '.dll', '.so', '.dylib', '.ttf', '.otf', '.woff', '.woff2'];\nconst skipDirs = ['node_modules/', 'dist/', 'build/', '.gradle/', '.next/', 'coverage/'];\nconst lockFiles = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'gradle.lockfile', 'poetry.lock'];\n\nfunction shouldSkipPath(path = '') {\n  const lower = path.toLowerCase();\n  return skipExtensions.some(ext => lower.endsWith(ext)) || skipDirs.some(dir => lower.includes(dir));\n}\nfunction isLockFile(path = '') { return lockFiles.some(name => path.endsWith(name)); }\nfunction isBinaryDiff(diff = '') { return diff.includes('Binary files') || diff.includes('\\0'); }\nfunction getChangeType(change) {\n  if (change.deleted_file) return 'delete';\n  if (change.renamed_file && !change.diff) return 'rename';\n  if (change.renamed_file) return 'rename+modify';\n  if (change.new_file) return 'add';\n  return 'modify';\n}\nfunction trimDiff(diff = '', limit = 2000) {\n  if (diff.length <= limit) return diff;\n  const half = Math.floor(limit / 2);\n  return `${diff.slice(0, half)}\\n... diff truncated ...\\n${diff.slice(-half)}`;\n}\n\nlet totalChars = 0;\nconst totalLimit = 9000;\nconst fileLimit = 8;\n\nfor (const change of changes) {\n  const path = change.new_path || change.old_path || '';\n  const type = getChangeType(change);\n  const diff = change.diff || '';\n\n  if (processedChanges.length >= fileLimit) {\n    skippedFiles.push({ path, reason: 'review file budget exceeded' });\n    continue;\n  }\n  if (['delete', 'rename'].includes(type)) {\n    skippedFiles.push({ path, reason: type });\n    continue;\n  }\n  if (shouldSkipPath(path) || isBinaryDiff(diff)) {\n    skippedFiles.push({ path, reason: 'binary/generated/media' });\n    continue;\n  }\n  if (isLockFile(path)) {\n    processedChanges.push({ file_path: path, old_path: change.old_path !== change.new_path ? change.old_path : null, change_type: type, diff: '[lockfile changed: diff omitted; check dependency/security impact if relevant]', is_summarized: true });\n    continue;\n  }\n  if (totalChars >= totalLimit) {\n    skippedFiles.push({ path, reason: 'total diff budget exceeded' });\n    continue;\n  }\n\n  const trimmed = trimDiff(diff);\n  totalChars += trimmed.length;\n  processedChanges.push({ file_path: path, old_path: change.old_path !== change.new_path ? change.old_path : null, change_type: type, diff: trimmed, is_summarized: diff.length !== trimmed.length });\n}\n\nreturn [{\n  json: {\n    project_id: $json.project_id,\n    mr_iid: $json.iid,\n    title: $json.title,\n    description: $json.description || '',\n    source_branch: $json.source_branch,\n    target_branch: $json.target_branch,\n    changed_file_count: changes.length,\n    reviewed_file_count: processedChanges.length,\n    skipped_file_count: skippedFiles.length,\n    skipped_files: skippedFiles,\n    files: processedChanges,\n  },\n}];"
+      }
+    },
+    {
+      "name": "Build AI Review Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 0],
+      "parameters": {
+        "jsCode": "const files = $json.files || [];\nconst skipped = $json.skipped_files || [];\nconst compactDiffs = files.map((file) => [\n  `File: ${file.file_path}`,\n  `Status: ${file.change_type || 'modified'}`,\n  file.is_summarized ? 'Note: diff was summarized.' : '',\n  'Diff:',\n  file.diff || '',\n].filter(Boolean).join('\\n')).join('\\n\\n---\\n\\n');\n\nconst prompt = `\nYou are an experienced Korean senior engineer leaving a GitLab MR review comment.\n\nYour goal is not to produce a checklist.\nYour goal is to sound like a thoughtful teammate who actually read the diff and is trying to help the author make the change safer.\n\nWrite in Korean.\nDo not use a report title.\nDo not use markdown headings like \"## 전체 의견\".\nStart directly with a natural sentence, optionally with one light emoji.\n\nReview style:\n- First, infer the author's intent from the diff and mention it briefly.\n- Acknowledge the direction if it is reasonable, but do not overpraise.\n- Then discuss the most important risks or questions.\n- Prefer 2-4 thoughtful paragraphs or bullets, not a rigid template.\n- Use concrete code/file references when useful.\n- Use collaborative wording.\n- Avoid sounding like a scanner.\n- Do not mention skipped files unless it affects review confidence.\n- If no meaningful issues exist, still give a useful review.\n- You may use at most one light emoji in the whole comment, preferably in the first or last sentence.\n\nWhat to look for:\n- correctness bugs\n- missing validation or edge cases\n- transaction/session/token consistency\n- auth/security regressions\n- API response contract changes\n- runtime/deployment risks\n- tests that should exist because the diff changed behavior\n\nSSAfer context:\n- Backend: Spring Boot / Java 21\n- AI server: FastAPI worker\n- Frontend: React/Vite\n- Infra: Docker Compose, NGINX, Jenkins, n8n, EC2 split deployment\n- Public traffic enters through NGINX 443\n- Jenkins runs under /jenkins/\n- n8n runs under /n8n/\n- n8n /n8n/ proxy must strip prefix to upstream /rest/...\n- Spring 8080 and FastAPI 8000 must be restricted by private network/UFW/SG\n- .env.example must never contain real secrets\n\nImportant constraints:\n- Only make comments supported by the provided diff.\n- If intent is unclear, ask a specific question instead of assuming a bug.\n- Do not repeat the MR description.\n- Do not invent line numbers.\n- Keep the final comment concise enough for a GitLab MR discussion, but not shallow.\n\nMR:\n- Title: ${$json.title}\n- Description: ${$json.description || '(none)'}\n- Source: ${$json.source_branch}\n- Target: ${$json.target_branch}\n- Changed files: ${$json.changed_file_count}\n- Reviewed files: ${$json.reviewed_file_count}\n- Skipped files: ${skipped.map(file => `${file.path} (${file.reason})`).join(', ') || '(none)'}\n\nDiffs:\n${compactDiffs || '(No reviewable diff after filtering.)'}\n`;\n\nreturn [{ json: { ...$json, review_prompt: prompt } }];"
+      }
+    },
+    {
+      "name": "Build LLM Request Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 0],
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    ...$json,\n    llm_body: {\n      model: 'gpt-4o-mini',\n      temperature: 0.2,\n      max_tokens: 1800,\n      messages: [\n        {\n          role: 'developer',\n          content: 'You are a thoughtful senior engineer writing a natural Korean GitLab MR review comment. Be concrete, collaborative, and grounded in the diff. Avoid generic checklists and robotic report formatting.',\n        },\n        {\n          role: 'user',\n          content: $json.review_prompt,\n        },\n      ],\n    },\n  },\n}];"
+      }
+    },
+    {
+      "name": "Call Review LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1760, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.llm_body }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<GMS_HEADER_AUTH_CREDENTIAL_ID>",
+          "name": "GMS OpenAI Header"
+        }
+      },
+      "notes": "After import, select the real Header Auth credential. The credential must set Authorization: Bearer <GMS_KEY>."
+    },
+    {
+      "name": "Build GitLab Review Comment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 0],
+      "parameters": {
+        "jsCode": "const aiText = $json.choices?.[0]?.message?.content || '리뷰 결과를 생성하지 못했습니다.';\nconst context = $('Build Review Summary').item.json;\n\nreturn [{\n  json: {\n    project_id: context.project_id,\n    mr_iid: context.mr_iid,\n    body: aiText,\n  },\n}];"
+      }
+    },
+    {
+      "name": "Post MR Review Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [2200, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://lab.ssafy.com/api/v4/projects/{{ $json.project_id }}/merge_requests/{{ $json.mr_iid }}/notes",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gitlabApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "body", "value": "={{ $json.body }}" }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "gitlabApi": {
+          "id": "<GITLAB_API_CREDENTIAL_ID>",
+          "name": "GitLab account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "GitLab MR Review Webhook": {
+      "main": [[{ "node": "Build Event Gate", "type": "main", "index": 0 }]]
+    },
+    "Build Event Gate": {
+      "main": [[{ "node": "Should Review?", "type": "main", "index": 0 }]]
+    },
+    "Should Review?": {
+      "main": [[{ "node": "Build MR Context", "type": "main", "index": 0 }]]
+    },
+    "Build MR Context": {
+      "main": [[{ "node": "Get MR Changes", "type": "main", "index": 0 }]]
+    },
+    "Get MR Changes": {
+      "main": [[{ "node": "Build Review Summary", "type": "main", "index": 0 }]]
+    },
+    "Build Review Summary": {
+      "main": [[{ "node": "Build AI Review Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build AI Review Prompt": {
+      "main": [[{ "node": "Build LLM Request Body", "type": "main", "index": 0 }]]
+    },
+    "Build LLM Request Body": {
+      "main": [[{ "node": "Call Review LLM", "type": "main", "index": 0 }]]
+    },
+    "Call Review LLM": {
+      "main": [[{ "node": "Build GitLab Review Comment", "type": "main", "index": 0 }]]
+    },
+    "Build GitLab Review Comment": {
+      "main": [[{ "node": "Post MR Review Comment", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul"
+  },
+  "pinData": {},
+  "meta": {
+    "template": true,
+    "sanitized": true,
+    "task": "S14P31B105-273"
+  }
+}
