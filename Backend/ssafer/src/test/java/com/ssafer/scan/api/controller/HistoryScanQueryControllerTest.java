@@ -36,7 +36,7 @@ class HistoryScanQueryControllerTest {
   @Test
   void getCurrentUserScanHistoryReturnsOk() throws Exception {
     MockMvc mockMvc = buildMockMvc();
-    when(historyScanQueryService.getCurrentUserScanHistory())
+    when(historyScanQueryService.getCurrentUserScanHistory(0, 20, 101L, ScanStatus.DONE, ScanMode.AGENT))
         .thenReturn(new HistoryScanListResponse(
             new HistoryScanSummaryCountResponse(
                 1L,
@@ -60,12 +60,25 @@ class HistoryScanQueryControllerTest {
                 1L,
                 LocalDateTime.of(2026, 4, 27, 9, 0),
                 LocalDateTime.of(2026, 4, 27, 9, 10)
-            ))
+            )),
+            0,
+            20,
+            1L,
+            1
         ));
 
-    mockMvc.perform(get("/api/v1/history/scans"))
+    mockMvc.perform(get("/api/v1/history/scans")
+            .param("page", "0")
+            .param("size", "20")
+            .param("projectId", "101")
+            .param("status", "DONE")
+            .param("scanMode", "AGENT"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.message").value("전체 스캔 히스토리 조회 성공"))
+        .andExpect(jsonPath("$.data.page").value(0))
+        .andExpect(jsonPath("$.data.size").value(20))
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.totalPages").value(1))
         .andExpect(jsonPath("$.data.summary.totalScanCount").value(1))
         .andExpect(jsonPath("$.data.summary.totalFindingCount").value(12))
         .andExpect(jsonPath("$.data.summary.criticalCount").value(1))
@@ -82,12 +95,23 @@ class HistoryScanQueryControllerTest {
   @Test
   void getCurrentUserScanHistoryReturnsForbiddenForGuest() throws Exception {
     MockMvc mockMvc = buildMockMvc();
-    when(historyScanQueryService.getCurrentUserScanHistory())
+    when(historyScanQueryService.getCurrentUserScanHistory(0, 20, null, null, null))
         .thenThrow(new BusinessException(ErrorCode.FORBIDDEN));
 
     mockMvc.perform(get("/api/v1/history/scans"))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+  }
+
+  @Test
+  void getCurrentUserScanHistoryWhenPageInvalidReturnsBadRequest() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(historyScanQueryService.getCurrentUserScanHistory(-1, 20, null, null, null))
+        .thenThrow(new BusinessException(ErrorCode.INVALID_PARAMETER));
+
+    mockMvc.perform(get("/api/v1/history/scans").param("page", "-1"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
   }
 
   private MockMvc buildMockMvc() {

@@ -4,18 +4,29 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.global.security.CurrentActorProvider;
+import com.ssafer.project.application.service.ProjectAuthorizationService;
+import com.ssafer.project.domain.entity.Project;
 import com.ssafer.scan.api.dto.HistoryScanListItemResponse;
 import com.ssafer.scan.api.dto.HistoryScanListResponse;
 import com.ssafer.scan.api.dto.HistoryScanSummaryCountResponse;
 import com.ssafer.scan.domain.entity.Scan;
+import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.enums.Severity;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
+import jakarta.persistence.criteria.Predicate;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,36 +34,118 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class HistoryScanQueryService {
 
+  private static final int DEFAULT_PAGE = 0;
+  private static final int DEFAULT_SIZE = 20;
+  private static final int MAX_SIZE = 100;
+
   private final ScanRepository scanRepository;
   private final ScanFindingRepository scanFindingRepository;
   private final CurrentActorProvider currentActorProvider;
+  private final ProjectAuthorizationService projectAuthorizationService;
 
   @Transactional(readOnly = true)
-  public HistoryScanListResponse getCurrentUserScanHistory() {
+  public HistoryScanListResponse getCurrentUserScanHistory(
+      Integer page,
+      Integer size,
+      Long projectId,
+      ScanStatus status,
+      ScanMode scanMode
+  ) {
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
 
-    // 전체 히스토리 조회는 로그인한 회원 본인의 스캔 이력만 제공한다.
-    // 게스트는 회원 히스토리를 볼 수 없으므로 명시적으로 차단한다.
+    // 전체 히스토리는 회원 전용으로 제한한다.
+    // 현재 구조상 게스트는 회원 히스토리 화면을 사용할 수 없으므로 초기에 차단한다.
     if (!actor.isMember()) {
       throw new BusinessException(ErrorCode.FORBIDDEN);
     }
 
-    // 현재 회원이 직접 요청한 스캔을 최신순으로 조회한다.
-    // 페이지네이션과 필터는 다음 태스크에서 붙더라도 기본 조회 축은 그대로 유지된다.
-    List<Scan> scans = scanRepository.findByRequestedByUserIdOrderByRequestedAtDescIdDesc(actor.userId());
+    Pageable pageable = buildPageable(page, size);
+    List<Long> authorizedProjectIds = resolveAuthorizedProjectIds(actor, projectId);
+    if (authorizedProjectIds.isEmpty()) {
+      return new HistoryScanListResponse(
+          new HistoryScanSummaryCountResponse(0L, 0L, 0L, 0L, 0L, 0L, 0L),
+          List.of(),
+          pageable.getPageNumber(),
+          pageable.getPageSize(),
+          0L,
+          0
+      );
+    }
 
-    // 히스토리 화면에서는 "스캔이 몇 개 있었는가"보다 "어떤 위험도가 얼마나 있었는가"가 더 중요하다.
-    // 그래서 스캔별 severity 집계를 먼저 만든 뒤, 이 값을 summary와 item 응답에서 함께 사용한다.
-    Map<Long, Map<Severity, Long>> severityCountsByScanId = loadSeverityCounts(scans);
+    Specification<Scan> specification = buildSpecification(authorizedProjectIds, status, scanMode);
+    Page<Scan> scanPage = scanRepository.findAll(specification, pageable);
 
-    List<HistoryScanListItemResponse> items = scans.stream()
-        .map(scan -> toHistoryItem(scan, severityCountsByScanId))
+    // item용 집계는 현재 페이지의 scanIds만 대상으로 제한한다.
+    // 이전처럼 필터 전체 scan을 전부 읽고 그 scanIds로 집계하지 않아서 page size와 비용이 더 잘 맞는다.
+    Map<Long, Map<Severity, Long>> pageSeverityCountsByScanId = loadSeverityCounts(scanPage.getContent());
+
+    List<HistoryScanListItemResponse> items = scanPage.getContent().stream()
+        .map(scan -> toHistoryItem(scan, pageSeverityCountsByScanId))
         .toList();
 
-    return new HistoryScanListResponse(
-        buildSummary(scans, severityCountsByScanId),
-        items
+    // summary는 현재 페이지가 아니라 "현재 필터 전체 결과"를 기준으로 계산해야 의미가 맞는다.
+    // 다만 이때 전체 Scan 엔티티를 로딩하지 않고 DB aggregate 결과만 받아서 summary를 만든다.
+    HistoryScanSummaryCountResponse summary = buildSummary(
+        scanPage.getTotalElements(),
+        authorizedProjectIds,
+        status,
+        scanMode
     );
+
+    return new HistoryScanListResponse(
+        summary,
+        items,
+        scanPage.getNumber(),
+        scanPage.getSize(),
+        scanPage.getTotalElements(),
+        scanPage.getTotalPages()
+    );
+  }
+
+  private Pageable buildPageable(Integer page, Integer size) {
+    int normalizedPage = page == null ? DEFAULT_PAGE : page;
+    int normalizedSize = size == null ? DEFAULT_SIZE : Math.min(size, MAX_SIZE);
+    if (normalizedPage < 0 || normalizedSize < 1) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
+    // 히스토리 목록은 최신 요청이 먼저 오도록 requestedAt DESC, id DESC를 고정한다.
+    return PageRequest.of(
+        normalizedPage,
+        normalizedSize,
+        Sort.by(Sort.Order.desc("requestedAt"), Sort.Order.desc("id"))
+    );
+  }
+
+  private List<Long> resolveAuthorizedProjectIds(AuthenticatedActor actor, Long projectId) {
+    if (projectId != null) {
+      // 특정 프로젝트로 필터링하는 경우에는 존재 여부와 소유 권한을 즉시 검증한다.
+      Project project = projectAuthorizationService.loadAuthorizedProjectOrThrow(projectId, actor);
+      return List.of(project.getId());
+    }
+
+    // 프로젝트 필터가 없으면 회원이 접근 가능한 프로젝트 전체 범위를 히스토리 조회 대상으로 삼는다.
+    return projectAuthorizationService.loadAuthorizedProjects(actor).stream()
+        .map(Project::getId)
+        .toList();
+  }
+
+  private Specification<Scan> buildSpecification(
+      List<Long> authorizedProjectIds,
+      ScanStatus status,
+      ScanMode scanMode
+  ) {
+    return (root, query, criteriaBuilder) -> {
+      List<Predicate> predicates = new ArrayList<>();
+      predicates.add(root.get("projectId").in(authorizedProjectIds));
+      if (status != null) {
+        predicates.add(criteriaBuilder.equal(root.get("status"), status));
+      }
+      if (scanMode != null) {
+        predicates.add(criteriaBuilder.equal(root.get("scanMode"), scanMode));
+      }
+      return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
+    };
   }
 
   private Map<Long, Map<Severity, Long>> loadSeverityCounts(List<Scan> scans) {
@@ -64,8 +157,7 @@ public class HistoryScanQueryService {
         .map(Scan::getId)
         .toList();
 
-    // {scanId, severity, count} 묶음 결과를 한 번에 가져와서
-    // item별 위험도 분포와 summary 전체 위험도 분포를 중복 쿼리 없이 만들 수 있게 한다.
+    // 현재 페이지에 실제로 표시할 scanIds만 대상으로 severity 분포를 묶음 조회한다.
     Map<Long, Map<Severity, Long>> severityCountsByScanId = new HashMap<>();
 
     for (Object[] row : scanFindingRepository.countSeverityByScanIds(scanIds)) {
@@ -82,24 +174,33 @@ public class HistoryScanQueryService {
   }
 
   private HistoryScanSummaryCountResponse buildSummary(
-      List<Scan> scans,
-      Map<Long, Map<Severity, Long>> severityCountsByScanId
+      long totalScanCount,
+      List<Long> authorizedProjectIds,
+      ScanStatus status,
+      ScanMode scanMode
   ) {
+    if (totalScanCount == 0L) {
+      return new HistoryScanSummaryCountResponse(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+    }
+
     long totalFindingCount = 0L;
     Map<Severity, Long> severityTotals = new EnumMap<>(Severity.class);
 
-    // 스캔별로 모아 둔 severity count를 다시 합산해서
-    // 현재 히스토리 응답 범위 전체의 위험도 분포 summary를 만든다.
-    for (Scan scan : scans) {
-      Map<Severity, Long> severityCounts = severityCountsByScanId.getOrDefault(scan.getId(), Map.of());
-      for (Map.Entry<Severity, Long> entry : severityCounts.entrySet()) {
-        severityTotals.merge(entry.getKey(), entry.getValue(), Long::sum);
-        totalFindingCount += entry.getValue();
-      }
+    // summary는 필터 전체 결과 기준이어야 하지만, 그 때문에 전체 Scan 엔티티를 읽을 필요는 없다.
+    // DB aggregate 결과만 받아 severity별 합계와 totalFindingCount를 만든다.
+    for (Object[] row : scanFindingRepository.countSeveritySummaryForHistory(
+        authorizedProjectIds,
+        status,
+        scanMode
+    )) {
+      Severity severity = (Severity) row[0];
+      Long count = ((Number) row[1]).longValue();
+      severityTotals.put(severity, count);
+      totalFindingCount += count;
     }
 
     return new HistoryScanSummaryCountResponse(
-        scans.size(),
+        totalScanCount,
         totalFindingCount,
         severityTotals.getOrDefault(Severity.CRITICAL, 0L),
         severityTotals.getOrDefault(Severity.HIGH, 0L),
@@ -113,8 +214,8 @@ public class HistoryScanQueryService {
       Scan scan,
       Map<Long, Map<Severity, Long>> severityCountsByScanId
   ) {
-    // 각 스캔 row는 "총 몇 개가 나왔는지"와 "무슨 위험도가 많았는지"를 바로 보여줘야 한다.
-    // 그래서 목록 item에도 위험도별 개수를 펼쳐서 담는다.
+    // 각 스캔 row는 총 몇 개가 나왔는지와 어떤 위험도가 많았는지를 바로 보여줘야 한다.
+    // 그래서 목록 item에도 위험도별 count를 펼쳐서 담는다.
     Map<Severity, Long> severityCounts = severityCountsByScanId.getOrDefault(scan.getId(), Map.of());
     long criticalCount = severityCounts.getOrDefault(Severity.CRITICAL, 0L);
     long highCount = severityCounts.getOrDefault(Severity.HIGH, 0L);
