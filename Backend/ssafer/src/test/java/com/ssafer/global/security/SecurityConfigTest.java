@@ -34,6 +34,7 @@ import tools.jackson.databind.ObjectMapper;
 class SecurityConfigTest {
 
   private static final String WORKER_SECRET = "worker-secret-2026";
+  private static final String AGENT_TOKENS = "1:agent-token-1";
 
   private AnnotationConfigWebApplicationContext context;
   private MockMvc mockMvc;
@@ -136,6 +137,20 @@ class SecurityConfigTest {
   }
 
   @Test
+  void internalAgentApisRequireBearerToken() throws Exception {
+    mockMvc.perform(get("/api/v1/internal/agents/1/tasks"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+  }
+
+  @Test
+  void internalAgentApisAcceptValidBearerToken() throws Exception {
+    mockMvc.perform(get("/api/v1/internal/agents/1/tasks")
+            .header("Authorization", "Bearer agent-token-1"))
+        .andExpect(status().isOk());
+  }
+
+  @Test
   void authenticatedMemberWithoutRequiredRoleGetsForbiddenResponse() throws Exception {
     UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
         AuthenticatedActor.member(1L),
@@ -164,6 +179,11 @@ class SecurityConfigTest {
     @Bean
     WorkerSecretAuthenticationFilter workerSecretAuthenticationFilter() {
       return new WorkerSecretAuthenticationFilter(WORKER_SECRET);
+    }
+
+    @Bean
+    AgentTokenAuthenticationFilter agentTokenAuthenticationFilter() {
+      return new AgentTokenAuthenticationFilter(AGENT_TOKENS);
     }
 
     @Bean
@@ -238,6 +258,11 @@ class SecurityConfigTest {
 
     @PostMapping("/api/v1/internal/scans/1/raw-results")
     String rawResults() {
+      return "ok";
+    }
+
+    @GetMapping("/api/v1/internal/agents/1/tasks")
+    String agentTasks() {
       return "ok";
     }
 
