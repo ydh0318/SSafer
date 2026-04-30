@@ -42,7 +42,7 @@ def build_compose_sets(compose_files: list[Path], warnings: list[str]) -> list[C
                 )
         else:
             for env_name, env_compose in env_files:
-                warnings.append(f"Base compose file not found for {env_compose}; created independent set '{env_name}'.")
+                warnings.append(f"{env_compose}을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다.")
                 sets.append(
                     ComposeSet(env_name, directory, [env_compose], _matching_env_files(directory, env_name), True)
                 )
