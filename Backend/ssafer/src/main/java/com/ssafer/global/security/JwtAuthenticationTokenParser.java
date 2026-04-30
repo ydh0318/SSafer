@@ -2,6 +2,8 @@ package com.ssafer.global.security;
 
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.user.domain.enums.AccountStatus;
+import com.ssafer.user.domain.repository.UserRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -22,13 +24,16 @@ public class JwtAuthenticationTokenParser {
 
   private final SecretKey secretKey;
   private final String issuer;
+  private final UserRepository userRepository;
 
   public JwtAuthenticationTokenParser(
       @Value("${JWT_SECRET}") String jwtSecret,
-      @Value("${JWT_ISSUER:ssafer}") String issuer
+      @Value("${JWT_ISSUER:ssafer}") String issuer,
+      UserRepository userRepository
   ) {
     this.secretKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
     this.issuer = issuer;
+    this.userRepository = userRepository;
   }
 
   public AuthenticatedActor parse(String token) {
@@ -39,13 +44,11 @@ public class JwtAuthenticationTokenParser {
           .parseSignedClaims(token)
           .getPayload();
 
-      // 우리 서버가 발급한 토큰인지 issuer로 먼저 검증한다.
       if (!issuer.equals(claims.getIssuer())) {
         throw unauthorized();
       }
 
       String role = claims.get(ROLE_CLAIM_KEY, String.class);
-      // guest 토큰은 guestOwnerKeyHash를 기준으로 권한 주체를 복원한다.
       if (GUEST_ROLE.equals(role)) {
         String guestOwnerKeyHash = claims.get(GUEST_OWNER_KEY_HASH_CLAIM_KEY, String.class);
         if (guestOwnerKeyHash == null || guestOwnerKeyHash.isBlank()) {
@@ -54,7 +57,6 @@ public class JwtAuthenticationTokenParser {
         return AuthenticatedActor.guest(guestOwnerKeyHash);
       }
 
-      // 회원 보호 API에는 access token만 허용해서 refresh token 오용을 막는다.
       String tokenType = claims.get(TOKEN_TYPE_CLAIM_KEY, String.class);
       if (!ACCESS_TOKEN_TYPE.equals(tokenType)) {
         throw unauthorized();
@@ -64,7 +66,14 @@ public class JwtAuthenticationTokenParser {
       if (subject == null || subject.isBlank()) {
         throw unauthorized();
       }
-      return AuthenticatedActor.member(Long.parseLong(subject));
+
+      Long userId = Long.parseLong(subject);
+      // access token이 살아 있어도 탈퇴/정지된 계정이면 보호 API 접근을 막는다.
+      if (!userRepository.existsByIdAndAccountStatus(userId, AccountStatus.ACTIVE)) {
+        throw unauthorized();
+      }
+
+      return AuthenticatedActor.member(userId);
     } catch (JwtException | IllegalArgumentException ex) {
       throw unauthorized();
     }

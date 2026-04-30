@@ -7,6 +7,7 @@ import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
 import java.util.Locale;
+import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -35,18 +36,26 @@ public class UserRegistrationService {
 
   @Transactional
   public Long register(String rawEmail, String rawDisplayName, String rawPassword) {
-    // 저장 전에 입력값을 먼저 정규화해서 공백, 대소문자 차이로 인한 중복을 줄인다.
+    // 가입/재가입 모두 동일한 정규화 규칙을 사용해야 이메일 중복 판단이 일관된다.
     String email = normalizeEmailOrThrow(rawEmail);
     String displayName = normalizeDisplayNameOrThrow(rawDisplayName);
     String password = normalizePasswordOrThrow(rawPassword);
 
-    // 회원가입은 이메일 인증이 끝난 주소에만 허용한다.
+    // 이메일 인증이 끝난 주소만 회원가입이나 재가입을 허용한다.
     if (!emailVerificationService.isVerifiedEmail(email)) {
       throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_REQUIRED);
     }
 
-    // 사전 중복 확인으로 빠르게 실패시키고, 아래 save 구간에서 한 번 더 DB 제약을 방어한다.
-    if (userRepository.existsByEmail(email)) {
+    Optional<User> existingUser = userRepository.findByEmail(email);
+    if (existingUser.isPresent()) {
+      User user = existingUser.get();
+      if (user.getAccountStatus() == AccountStatus.INACTIVE) {
+        // 탈퇴로 비활성화된 동일 이메일 계정은 새 row를 만들지 않고 기존 계정을 되살린다.
+        user.reactivate(displayName, passwordEncoder.encode(password));
+        emailVerificationService.clearVerifiedEmail(email);
+        return user.getId();
+      }
+      // 활성/정지 계정이 이미 있으면 같은 이메일로는 새 가입을 막는다.
       throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
     }
 
@@ -59,12 +68,14 @@ public class UserRegistrationService {
 
     try {
       User saved = userRepository.save(user);
-      // 회원가입이 끝나면 verified 상태는 재사용되지 않도록 제거한다.
+      // 인증 완료 상태는 1회성으로 사용하고 가입이 끝나면 정리한다.
       emailVerificationService.clearVerifiedEmail(email);
       return saved.getId();
     } catch (DataIntegrityViolationException ex) {
-      // 동시 가입 경쟁 상황으로 save 시점에만 중복이 드러날 수 있어서 한 번 더 확인한다.
-      if (userRepository.existsByEmail(email)) {
+      // 동시 요청으로 save 시점에 충돌한 경우만 중복 이메일로 변환한다.
+      if (userRepository.findByEmail(email)
+          .filter(foundUser -> foundUser.getAccountStatus() != AccountStatus.INACTIVE)
+          .isPresent()) {
         throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
       }
       throw ex;
@@ -73,9 +84,11 @@ public class UserRegistrationService {
 
   @Transactional(readOnly = true)
   public boolean isEmailAvailable(String rawEmail) {
-    // 중복 확인 API도 회원가입과 같은 이메일 정규화 규칙을 사용해야 결과가 일관된다.
     String email = normalizeEmailOrThrow(rawEmail);
-    return !userRepository.existsByEmail(email);
+    // 비활성 계정은 재가입 시 재활성화 대상이므로 사용 가능한 이메일로 본다.
+    return userRepository.findByEmail(email)
+        .map(user -> user.getAccountStatus() == AccountStatus.INACTIVE)
+        .orElse(true);
   }
 
   private String normalizeEmailOrThrow(String rawEmail) {
@@ -84,7 +97,6 @@ public class UserRegistrationService {
     }
 
     String normalized = rawEmail.trim().toLowerCase(Locale.ROOT);
-    // 현재 단계에서는 간단한 형식 검증만 적용하고, 상세 정책은 다음 태스크에서 확장한다.
     if (normalized.isEmpty() || normalized.length() > MAX_EMAIL_LENGTH || !normalized.contains("@")) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -97,7 +109,6 @@ public class UserRegistrationService {
     }
 
     String normalized = rawDisplayName.trim();
-    // display_name 컬럼 길이에 맞춰 기본 길이 검증만 수행한다.
     if (normalized.isEmpty() || normalized.length() > MAX_DISPLAY_NAME_LENGTH) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -109,8 +120,6 @@ public class UserRegistrationService {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
 
-    // 비밀번호는 사용자가 입력한 원문 자체를 인증값으로 사용하므로 trim 하지 않는다.
-    // 다만 공백만 있는 값은 유효한 비밀번호로 보지 않는다.
     if (rawPassword.isBlank() || rawPassword.length() > MAX_PASSWORD_LENGTH) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }

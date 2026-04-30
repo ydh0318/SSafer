@@ -10,8 +10,11 @@ import com.ssafer.auth.domain.repository.RefreshTokenStore;
 import com.ssafer.auth.infrastructure.token.JwtAuthTokenProvider;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.user.application.service.UserRegistrationService;
+import com.ssafer.user.application.service.UserWithdrawalService;
 import com.ssafer.user.domain.entity.User;
+import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
 import java.time.Duration;
 import java.util.HashMap;
@@ -35,6 +38,7 @@ class AuthenticationFlowTest {
   private UserRepository userRepository;
   private InMemoryRefreshTokenStore refreshTokenStore;
   private UserRegistrationService userRegistrationService;
+  private UserWithdrawalService userWithdrawalService;
   private AuthLoginService authLoginService;
   private AuthTokenRefreshService authTokenRefreshService;
   private AuthLogoutService authLogoutService;
@@ -51,7 +55,8 @@ class AuthenticationFlowTest {
         "ssafer",
         ACCESS_TOKEN_EXPIRES_SECONDS,
         REFRESH_TOKEN_EXPIRES_SECONDS,
-        refreshTokenStore
+        refreshTokenStore,
+        userRepository
     );
 
     userRegistrationService = new UserRegistrationService(
@@ -59,6 +64,7 @@ class AuthenticationFlowTest {
         userRepository,
         passwordEncoder
     );
+    userWithdrawalService = new UserWithdrawalService(userRepository, refreshTokenStore);
     authLoginService = new AuthLoginService(userRepository, passwordEncoder, authTokenProvider);
     authTokenRefreshService = new AuthTokenRefreshService(authTokenProvider);
     authLogoutService = new AuthLogoutService(authTokenProvider);
@@ -85,7 +91,6 @@ class AuthenticationFlowTest {
     assertThat(refreshResult.accessToken()).isNotBlank();
     assertThat(refreshResult.refreshToken()).isNotBlank();
     assertThat(refreshResult.refreshToken()).isNotEqualTo(loginResult.refreshToken());
-    // The logout step must remove the latest refresh token so the session cannot be extended again.
     assertThat(refreshTokenStore.findByUserId(userId)).isEmpty();
     then(emailVerificationService).should().clearVerifiedEmail("user@ssafer.co.kr");
   }
@@ -109,20 +114,76 @@ class AuthenticationFlowTest {
     assertThat(refreshTokenStore.findByUserId(userId)).isEmpty();
   }
 
+  @Test
+  void memberLifecycleFlowWithdrawsAndReactivatesSameAccountOnReregistration() {
+    given(emailVerificationService.isVerifiedEmail("user@ssafer.co.kr")).willReturn(true);
+
+    Long firstUserId = userRegistrationService.register(
+        "user@ssafer.co.kr",
+        "Alice",
+        "password123!"
+    );
+    AuthTokenResult firstLoginResult = authLoginService.login("user@ssafer.co.kr", "password123!");
+
+    userWithdrawalService.withdrawCurrentUser(AuthenticatedActor.member(firstUserId));
+
+    assertThatThrownBy(() -> authLoginService.login("user@ssafer.co.kr", "password123!"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.INVALID_CREDENTIALS);
+    assertThat(refreshTokenStore.findByUserId(firstUserId)).isEmpty();
+
+    Long reactivatedUserId = userRegistrationService.register(
+        "user@ssafer.co.kr",
+        "Alice Rejoined",
+        "new-password123!"
+    );
+    AuthTokenResult secondLoginResult = authLoginService.login("user@ssafer.co.kr", "new-password123!");
+
+    assertThat(reactivatedUserId).isEqualTo(firstUserId);
+    assertThat(secondLoginResult.accessToken()).isNotBlank();
+    assertThat(secondLoginResult.refreshToken()).isNotBlank();
+    assertThat(secondLoginResult.refreshToken()).isNotEqualTo(firstLoginResult.refreshToken());
+
+    assertThatThrownBy(() -> authLoginService.login("user@ssafer.co.kr", "password123!"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.INVALID_CREDENTIALS);
+  }
+
   private void configureStatefulUserRepositoryMock() {
     Map<String, User> usersByEmail = new HashMap<>();
+    Map<Long, User> usersById = new HashMap<>();
     AtomicLong sequence = new AtomicLong(1L);
 
-    // The flow test needs repository behavior close to persistence so registration and login share state.
     given(userRepository.existsByEmail(any(String.class)))
         .willAnswer(invocation -> usersByEmail.containsKey(invocation.getArgument(0)));
     given(userRepository.findByEmail(any(String.class)))
         .willAnswer(invocation -> Optional.ofNullable(usersByEmail.get(invocation.getArgument(0))));
+    given(userRepository.findByIdAndAccountStatus(any(Long.class), any(AccountStatus.class)))
+        .willAnswer(invocation -> {
+          Long userId = invocation.getArgument(0);
+          AccountStatus status = invocation.getArgument(1);
+          User user = usersById.get(userId);
+          if (user == null || user.getAccountStatus() != status) {
+            return Optional.empty();
+          }
+          return Optional.of(user);
+        });
+    given(userRepository.existsByIdAndAccountStatus(any(Long.class), any(AccountStatus.class)))
+        .willAnswer(invocation -> {
+          Long userId = invocation.getArgument(0);
+          AccountStatus status = invocation.getArgument(1);
+          User user = usersById.get(userId);
+          return user != null && user.getAccountStatus() == status;
+        });
     given(userRepository.save(any(User.class)))
         .willAnswer(invocation -> {
           User user = invocation.getArgument(0);
-          ReflectionTestUtils.setField(user, "id", sequence.getAndIncrement());
+          Long userId = sequence.getAndIncrement();
+          ReflectionTestUtils.setField(user, "id", userId);
           usersByEmail.put(user.getEmail(), user);
+          usersById.put(userId, user);
           return user;
         });
   }
