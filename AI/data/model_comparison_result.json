@@ -1,0 +1,475 @@
+{
+  "scanResultPath": "data/scan_result.json",
+  "evaluatedFindingCount": 3,
+  "models": [
+    {
+      "model": "llama3.2:3b",
+      "summary": {
+        "findingCount": 3,
+        "explanationSuccessCount": 2,
+        "fixSuccessCount": 3,
+        "explanationDisallowedScriptCount": 1,
+        "totalElapsedMs": 85924,
+        "averageElapsedMsPerFinding": 28641
+      },
+      "findings": [
+        {
+          "findingId": "FND-0001",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 49206,
+            "containsDisallowedScript": false,
+            "charCount": 1915,
+            "preview": "1. 취약점 요약\n finding은 환경변수 파일(.env)에서 시크릿이 하드코딩되어 있는 것을 발견했습니다. 이는 보안상 문제가 있습니다.\n environment variable file (.env)에서 secret value가 hard-codedly exists하여 보안 위험이 있습니다.\n\n2. 위험한 이유\n environment variable file (.env)에서 secret value가 hard-codedly exists하여 보안 위험이 있습니다. 이 경우, attacker가 environment variable fil"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 6453,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"환경변수 파일에 시크릿이 하드코딩되어 있으므로 비밀 관리를 위한 설정을 추가해야 합니다.\", \"priority\": \"high\", \"recommendedActions\": [\"개발자가 환경변수 파일(.env)에서 DB_PASSWORD를 environment variable로 변경합니다.\", \"개발자가 secrets manager와 integration을 위해 environment variable를 사용하도록 설정합니다.\"], \"codeGuidance\": \"environment variable를 사용하여 시크릿을 "
+          }
+        },
+        {
+          "findingId": "FND-0002",
+          "explanation": {
+            "success": false,
+            "elapsedMs": 6081,
+            "containsDisallowedScript": true,
+            "charCount": 698,
+            "preview": "1. 취약점 요약\n finding은 Dockerfile에서 'root' 사용이 허용되지 않는다는 것을 확인하는 것입니다.\n 이 finding은 Docker image의 보안을 위한 기본적인 규칙입니다.\n\n2. 위험한 이유\n 'root' 사용이 허용되면, Docker image에 대한 접근 권한이 높아져서 보안 위협에 취약할 수 있습니다.\n 또한, 'root' 사용이 허용되면, Docker image의 수정이 더 쉽게 가능해지며, 보안을 유지하는 것이 어려워질 수 있습니다.\n\n3. 악용 가능 시나리오\n 'root' 사용이 허용된 경우"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 7944,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"Dockerfile에서 USER 명령이 'root'가 아닌 다른 사용자로 설정되어야 합니다.\", \"priority\": \"high\", \"recommendedActions\": [\"Dockerfile에서 USER 명령을 수정하여 'non-root' 사용자를 사용합니다. 예를 들어, `USER non-root` 명령을 추가합니다.\", \"Dockerfile에서 USER 명령이 'root'가 아닌 다른 사용자로 설정되어 있는지 확인하고 수정합니다.\"], \"codeGuidance\": \"Dockerfile의 USER 명령을"
+          }
+        },
+        {
+          "findingId": "FND-0003",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 7912,
+            "containsDisallowedScript": false,
+            "charCount": 1105,
+            "preview": "1. 취약점 요약\n이 finding은 Dockerfile에 HEALTHCHECK instruction가 absence를 의미합니다. HEALTHCHECK instruction는 Docker container의 상태를 확인하는 데 사용됩니다. 이 finding은 Docker container의 상태를 확인하지 못하여 container의 상태가 변경되는 경우 container가 종료되지 않게 된다는 취약성을 나타냅니다.\n\n2. 위험한 이유\nDocker container의 상태를 확인하지 못하면, container가 종료되지 않게 된다는"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 8328,
+            "priority": "low",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"Dockerfile에 HEALTHCHECK 명령이 없는 경우 수정해야 합니다.\", \"priority\": \"low\", \"recommendedActions\": [\"Dockerfile에 HEALTHCHECK 명령을 추가합니다. 예를 들어, `HEALTHCHECK --interval=1m --timeout=2s --retries=3`를 사용합니다.\", \"Dockerfile에서 HEALTHCHECK 명령이 없는 경우, Docker image의health check status를 확인하고, 필요하면 HEALTHCHECK"
+          }
+        }
+      ]
+    },
+    {
+      "model": "qwen2.5:3b",
+      "summary": {
+        "findingCount": 3,
+        "explanationSuccessCount": 3,
+        "fixSuccessCount": 3,
+        "explanationDisallowedScriptCount": 0,
+        "totalElapsedMs": 41045,
+        "averageElapsedMsPerFinding": 13681
+      },
+      "findings": [
+        {
+          "findingId": "FND-0001",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 12035,
+            "containsDisallowedScript": false,
+            "charCount": 245,
+            "preview": "1. 취약점 요약: 환경변수 파일에 비밀 정보가 하드코딩되어 있습니다.\n2. 위험한 이유: 비밀 정보가 노출되면 악용될 수 있어 보안이 위 peril에 있습니다.\n3. 악용 가능 시나리오: 다른 사용자가 이 파일을 읽거나 수정하면 비밀 정보가 공개될 수 있습니다.\n4. 예상 영향: 서비스의 신뢰성이 손실되고, 데이터 유출로 인한 법적 문제 발생할 수 있습니다.\n5. 심각도 해석: 매우 높음으로 보안 위협이 크고 즉시 수정이 필요합니다."
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 7031,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"환경변수 파일에서 DB_PASSWORD 시크릿 하드코딩 제거\", \"priority\": \"high\", \"recommendedActions\": [\"환경변수 파일에 DB_PASSWORD를 환경 변수로 설정합니다.\", \"DB_PASSWORD 값을 앱 실행 전에 환경 변수로 주입합니다.\"], \"codeGuidance\": \"현재 .env 파일에서 DB_PASSWORD 시크릿을 직접 작성한 줄을 삭제하고, 해당 시크릿은 환경 변수로 변경하여 관리하세요.\", \"verification\": \"변경된 .env 파일이 정상적으로 "
+          }
+        },
+        {
+          "findingId": "FND-0002",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 4142,
+            "containsDisallowedScript": false,
+            "charCount": 316,
+            "preview": "1. 취약점 요약: Dockerfile에서 USER 명령어가 'root'로 설정되어 있어 위험합니다.\n2. 위험한 이유: 이미지를 런타임에 'root' 권한을 사용하도록 만들면, 보안이 취약해집니다.\n3. 악용 가능 시나리오: 다른 개발자가 이 Dockerfile을 수정하여 이미지에서 'root'를 사용하게 하면 위험합니다.\n4. 예상 영향: 서비스의 보안성이 떨어지고, 권한 관리를 제대로 하지 않아 데이터 유출이 발생할 수 있습니다.\n5. 심각도 해석: HIGH로 설정된 이유는 이미지를 런타임에 'root'를 사용하도록 만들면, "
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 8181,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"Dockerfile에서 USER 명령어를 root에서 제거\", \"priority\": \"high\", \"recommendedActions\": [\"USER 명령어를 제거하고, 이미지의 기본 사용자 설정을 변경합니다.\", \"IMAGE RUN 옵션으로 USER 명령어를 대체합니다.\"], \"codeGuidance\": \"Dockerfile에서 LAST USER 명령어를 제거하거나, IMAGE RUN 옵션으로 USER 명령어를 대체하세요. 이는 이미지의 기본 사용자 설정을 변경하여 root 권한이 아닌 다른 사용자가 실행될"
+          }
+        },
+        {
+          "findingId": "FND-0003",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 3830,
+            "containsDisallowedScript": false,
+            "charCount": 389,
+            "preview": "1. 취약점 요약: Dockerfile에 HEALTHCHECK 명령어가 정의되지 않았습니다.\n2. 위험한 이유: HEALTHCHECK는 서비스 상태를 확인하는 데 사용되므로 미정의 상태로 유지하면 서비스 상태 모니터링이 불가능합니다.\n3. 악용 가능 시나리오: 다른 개발자가 Dockerfile을 수정하여 HEALTHCHECK 명령어를 추가하지 않으면 서비스 상태 모니터링이 제대로 작동하지 않을 수 있습니다.\n4. 예상 영향: 운영자에게는 서비스 상태 모니터링의 정확성에 대한 불안감이 생길 수 있고, 사용자에게는 서비스가 정상적으로 "
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 5826,
+            "priority": "low",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"Dockerfile에 HEALTHCHECK 명령어 추가\", \"priority\": \"low\", \"recommendedActions\": [\"Dockerfile에서 ADD HEALTHCHECK instruction 작성\", \"IMAGE, CMD 또는 ENTRYPOINT 설정 후 Docker 이미지 빌드\"], \"codeGuidance\": \"Dockerfile 내부에 HEALTHCHECK 명령어 추가하여 이미지를 실행할 때 정기적으로 상태를 확인하도록 합니다.\", \"verification\": \"빌드된 Docker 이미"
+          }
+        }
+      ]
+    },
+    {
+      "model": "qwen2.5:7b",
+      "summary": {
+        "findingCount": 3,
+        "explanationSuccessCount": 3,
+        "fixSuccessCount": 3,
+        "explanationDisallowedScriptCount": 0,
+        "totalElapsedMs": 71694,
+        "averageElapsedMsPerFinding": 23898
+      },
+      "findings": [
+        {
+          "findingId": "FND-0001",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 15271,
+            "containsDisallowedScript": false,
+            "charCount": 360,
+            "preview": "1. 취약점 요약\n.env 파일에 DB_PASSWORD라는 시크릿이 하드코딩되어 있습니다.\n\n2. 위험한 이유\n.env 파일은 일반적인 텍스트 파일로, 이 파일을 열어보면 비밀번호가 노출될 수 있어 보안상 문제가 됩니다.\n\n3. 악용 가능 시나리오\n공격자는 .env 파일을 접근하여 DB_PASSWORD를 얻고, 이를 이용해 데이터베이스에 로그인할 수 있습니다.\n\n4. 예상 영향\n데이터베이스의 민감한 정보가 노출되면 서비스 운영에 문제가 생길 수 있고, 고객 정보 보호에도 위협이 됩니다.\n\n5. 심각도 해석\n심각도가 높은 이유는 DB"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 10794,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 2,
+            "preview": "{\"summary\": \"DB_PASSWORD를 환경 변수로 옮겨 비밀 관리 시스템에 저장\", \"priority\": \"high\", \"recommendedActions\": [\"새 .env 파일에서 DB_PASSWORD를 제거하고 환경 변수로 설정\", \"AWS Secrets Manager나 Azure Key Vault 같은 서비스에 비밀 값을 등록\"], \"codeGuidance\": \"현재 .env 파일의 줄을 삭제하고, 환경 변수를 다음과 같이 설정하세요: export DB_PASSWORD='비밀값'\", \"verification\": \"변"
+          }
+        },
+        {
+          "findingId": "FND-0002",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 8146,
+            "containsDisallowedScript": false,
+            "charCount": 413,
+            "preview": "1. 취약점 요약\nDockerfile에서 마지막 USER 명령어가 root로 설정되어 있어 보안 위험이 있습니다.\n\n2. 위험한 이유\nroot 권한으로 실행되면, 악용자가 시스템에 심각한 손상을 입힐 수 있습니다. 예를 들어, 파일을 무단 수정하거나 삭제할 수 있습니다.\n\n3. 악용 가능 시나리오\n공격자는 root 권한을 이용해 Docker 이미지를 통해 서버에 접근하여 데이터를 유출하거나 서비스를 중지시킬 수 있습니다.\n\n4. 예상 영향\n이 문제는 서비스의 안정성과 보안성을 크게 떨어뜨릴 수 있습니다. 특히 민감한 정보가 있는 환"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 10485,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"Dockerfile에서 root 사용 제거\", \"priority\": \"high\", \"recommendedActions\": [\"Dockerfile에 USER 명령어 추가하여 root 사용 제거\", \"새로운 USER 명령어 위치는 마지막 RUN 명령어 직전으로 설정\"], \"codeGuidance\": \"Dockerfile의 마지막 RUN 명령어 바로 앞에 USER 명령어를 추가합니다. 예: FROM ubuntu\\nRUN apt-get update && apt-get install -y <패키지명>\\nUSER myu"
+          }
+        },
+        {
+          "findingId": "FND-0003",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 9004,
+            "containsDisallowedScript": false,
+            "charCount": 471,
+            "preview": "1. 취약점 요약:\nDockerfile에 HEALTHCHECK 명령어가 정의되어 있지 않습니다.\n\n2. 위험한 이유:\nHEALTHCHECK 명령어가 없으면, Docker 컨테이너의 상태를 자동으로 확인하는 기능이 없습니다. 이로 인해 서비스가 문제를 가진 상태에서 계속 실행될 수 있습니다.\n\n3. 악용 가능 시나리오:\n컨테이너 내부에 문제가 발생했음에도 불구하고, HEALTHCHECK 없이 서비스가 계속 실행되면 공격자가 이를 이용해 취약점을 노출시키거나 서비스를 장기간 동안 무시할 수 있습니다.\n\n4. 예상 영향:\n서비스의 안정성"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 17994,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 2,
+            "preview": "{\"summary\": \"HEALTHCHECK 명령어를 Dockerfile에 추가해야 합니다.\", \"priority\": \"high\", \"recommendedActions\": [\"Dockerfile에 HEALTHCHECK CMD [\\\"/bin/bash\\\", \\\"/healthcheck.sh\\\"] 추가\", \"healthcheck.sh 스크립트 작성 및 권한 설정\"], \"codeGuidance\": \"HEALTHCHECK 명령어를 Dockerfile의 마지막 부분에 추가하고, healthcheck.sh 스크립트를 작성해주세요. healthch"
+          }
+        }
+      ]
+    },
+    {
+      "model": "qwen2.5-coder:3b",
+      "summary": {
+        "findingCount": 3,
+        "explanationSuccessCount": 3,
+        "fixSuccessCount": 3,
+        "explanationDisallowedScriptCount": 0,
+        "totalElapsedMs": 47270,
+        "averageElapsedMsPerFinding": 15756
+      },
+      "findings": [
+        {
+          "findingId": "FND-0001",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 9170,
+            "containsDisallowedScript": false,
+            "charCount": 459,
+            "preview": "1. 취약점 요약:\n   .env 파일에 DB_PASSWORD가 하드코딩되어 있습니다.\n\n2. 위험한 이유:\n   환경변수 파일에서 민감한 정보를 직접 작성하면 보안이 취약해집니다.\n   이는 악의적인 사용자가 접근하여 데이터를 유출할 수 있는 위험이 있습니다.\n\n3. 악용 가능 시나리오:\n   악의적인 사용자는 DB_PASSWORD를 추측하거나 복원하여 데이터베이스에 접근할 수 있습니다.\n   이를 통해 중요한 정보를 취득하거나 변경할 수 있습니다.\n\n4. 예상 영향:\n   서비스가 정지하거나 데이터가 유출될 수 있습니다.\n   "
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 6359,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"환경변수 파일에 시크릿이 하드코딩되어 있으므로 수정해야 합니다.\", \"priority\": \"high\", \"recommendedActions\": [\"새로운 환경 변수 파일(.env) 생성\", \"기존 .env 파일에서 비밀 값을 추출하고 새로운 파일에 저장\"], \"codeGuidance\": \"기존 .env 파일을 새 파일로 복사한 후, 비밀 값을 수정하거나 삭제합니다.\", \"verification\": \"수정된 .env 파일이 생성되었는지 확인하세요.\", \"cautions\": [\"변경된 .env 파일을 배포 전에 "
+          }
+        },
+        {
+          "findingId": "FND-0002",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 6402,
+            "containsDisallowedScript": false,
+            "charCount": 659,
+            "preview": "1. 취약점 요약:\nDockerfile에서 사용자 명이 'root'인 부분이 있습니다.\n\n2. 위험한 이유:\n'root' 사용자는 보안상 매우 위험합니다. 일반적으로 필요한 권한을 최소화해야 하며, 'root' 계정은 모든 파일에 대한 완전한 접근 권한을 가지고 있습니다. 이는 시스템의 안전성을 떨어뜨리고, 악의적인 행위를 수행할 수 있는 위험이 있습니다.\n\n3. 악용 가능 시나리오:\n이 finding으로 인해 'root' 사용자가 Dockerfile에서 사용될 경우, 악의적인 개발자나 운영자들은 이 계정을 통해 시스템에 접근하여 "
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 11338,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"Dockerfile에서 USER 명령어를 root로 설정하지 않도록 수정\", \"priority\": \"high\", \"recommendedActions\": [\"USER 명령어를 'daemon' 또는 'root' 대신 다른 사용자로 변경하세요.\", \"개발자가 Dockerfile을 열고 USER 명령어를 찾아 수정합니다.\"], \"codeGuidance\": \"Dockerfile에서 USER 명령어를 'daemon' 또는 'root' 대신 다른 사용자로 변경하세요. 예를 들어, USER myuser로 설정하면 myuse"
+          }
+        },
+        {
+          "findingId": "FND-0003",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 5001,
+            "containsDisallowedScript": false,
+            "charCount": 486,
+            "preview": "1. 취약점 요약:\n   Dockerfile에서 HEALTHCHECK 명령어가 정의되지 않았습니다.\n\n2. 위험한 이유:\n   HEALTHCHECK는 컨테이너의 상태를 확인하고, 문제가 발생하면 자동으로 재시작하도록 도와줍니다. 이는 서비스의 안정성과 유지보수성을 높일 수 있습니다.\n\n3. 악용 가능 시나리오:\n   만약 HEALTHCHECK가 정의되지 않으면, 컨테이너가 오류로 종료될 경우 관리자가 확인하기 어렵고, 서비스가 일시적으로 중단할 수 있습니다.\n\n4. 예상 영향:\n   서비스의 안정성 저하: 컨테이너가 오류로 종료되면"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 9000,
+            "priority": "low",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"Dockerfile에 HEALTHCHECK 명령어 추가\", \"priority\": \"low\", \"recommendedActions\": [\"Dockerfile 파일에 HEALTHCHECK 명령어를 추가하세요.\", \"예시로 'HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD [\\\"curl\\\", \\\"-f\\\", \\\"http://localhost\\\"]'을 사용할 수 있습니다.\"], \"codeGuidance\": \"Dockerfile의 HEALTHCHECK 명령어를 추가하"
+          }
+        }
+      ]
+    },
+    {
+      "model": "qwen2.5-coder:7b",
+      "summary": {
+        "findingCount": 3,
+        "explanationSuccessCount": 3,
+        "fixSuccessCount": 3,
+        "explanationDisallowedScriptCount": 0,
+        "totalElapsedMs": 61954,
+        "averageElapsedMsPerFinding": 20651
+      },
+      "findings": [
+        {
+          "findingId": "FND-0001",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 12588,
+            "containsDisallowedScript": false,
+            "charCount": 217,
+            "preview": "1. 취약점 요약: 환경변수 파일에 비밀번호가 직접 적혀 있습니다.\n\n2. 위험한 이유: 비밀번호가 코드에 하드코딩되어 있어 보안이 취약해집니다.\n\n3. 악용 가능 시나리오: 공격자가 이 파일을 얻으면 데이터베이스에 액세스할 수 있습니다.\n\n4. 예상 영향: 서비스에 노출되거나, 민감한 정보가 유출될 수 있습니다.\n\n5. 심각도 해석: 중요한 비밀번호가 보안되지 않아서 높은 위험입니다."
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 11741,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"환경 변수 파일에서 비밀 값을 제거하고, 배포 환경에 비밀 관리 기능 사용\", \"priority\": \"high\", \"recommendedActions\": [\"파일 .env에서 DB_PASSWORD를 삭제합니다.\", \"배포 환경의 비밀 관리 기능(예: AWS Secrets Manager, Azure Key Vault)을 사용하여 비밀 값을 저장합니다.\"], \"codeGuidance\": \"환경 변수 파일(.env)에서 비밀 값을 제거하고, 배포 환경의 비밀 관리 서비스를 통해 비밀 값을 가져옵니다.\", \"veri"
+          }
+        },
+        {
+          "findingId": "FND-0002",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 6233,
+            "containsDisallowedScript": false,
+            "charCount": 314,
+            "preview": "1. 취약점 요약: Dockerfile에서 마지막 USER 명령어가 'root'이 아닌 것을 권장합니다.\n\n2. 위험한 이유: root 사용자는 모든 파일에 대한 최고 권한을 가집니다. 이로 인해 보안상의 위험이 있습니다.\n\n3. 악용 가능 시나리오: 공격자가 root 권한으로 실행되는 컨테이너를 통해 민감한 데이터에 접근하거나 변경할 수 있습니다.\n\n4. 예상 영향: 서비스가 취약해질 수 있으며, 데이터 손실이나 노출될 위험이 있습니다.\n\n5. 심각도 해석: HIGH로 지정된 이유는 root 권한이 필요한 경우가 많지만, 보안상의"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 12577,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"Dockerfile에서 마지막 USER 명령어를 'root'에서 다른 사용자로 변경하세요.\", \"priority\": \"high\", \"recommendedActions\": [\"Dockerfile에서 마지막 USER 명령어를 찾아서 'root'에서 다른 사용자를 지정하세요.\", \"새로운 사용자 계정을 생성하거나 기존의 사용자 계정을 사용하세요.\"], \"codeGuidance\": \"예를 들어, USER myuser와 같이 새로운 사용자 계정을 지정하세요. 이미 사용자 계정이 있다면 해당 사용자를 사용하세요.\", \""
+          }
+        },
+        {
+          "findingId": "FND-0003",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 6280,
+            "containsDisallowedScript": false,
+            "charCount": 298,
+            "preview": "1. 취약점 요약: Dockerfile에 HEALTHCHECK 명령어가 정의되어 있지 않습니다.\n\n2. 위험한 이유: 서비스의 상태를 체크하지 않으므로, 서비스가 정상적으로 작동 중인지 알 수 없습니다.\n\n3. 악용 가능 시나리오: 서비스가 비정상적으로 종료되거나 느려지더라도 이를 인식할 수 없어 문제 해결이 늦어질 수 있습니다.\n\n4. 예상 영향: 서비스의 안정성과 신뢰성이 떨어지고, 고객 만족도가 감소할 수 있습니다.\n\n5. 심각도 해석: LOW로 평가되지만, 서비스의 중요한 부분에 영향을 미칠 수 있으므로 주의해야 합니다."
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 12535,
+            "priority": "low",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"Dockerfile에 HEALTHCHECK 명령어 추가\", \"priority\": \"low\", \"recommendedActions\": [\"Dockerfile에 HEALTHCHECK 명령어를 추가합니다.\", \"HEALTHCHECK --interval=30s --timeout=10s CMD curl -f http://localhost:80 || exit 1\"], \"codeGuidance\": \"HEALTHCHECK 명령어는 컨테이너의 건강 상태를 확인하는 데 사용됩니다. 위 예시에서는 HTTP 요청을 통해 컨테이너가"
+          }
+        }
+      ]
+    },
+    {
+      "model": "gemma3:4b",
+      "summary": {
+        "findingCount": 3,
+        "explanationSuccessCount": 3,
+        "fixSuccessCount": 3,
+        "explanationDisallowedScriptCount": 0,
+        "totalElapsedMs": 60485,
+        "averageElapsedMsPerFinding": 20161
+      },
+      "findings": [
+        {
+          "findingId": "FND-0001",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 23364,
+            "containsDisallowedScript": false,
+            "charCount": 603,
+            "preview": "1. 취약점 요약\n환경변수 파일에 중요한 비밀 정보가 직접 입력되어 있습니다. 특히 데이터베이스 비밀번호인 DB_PASSWORD가 하드코딩되어 있어 보안 위험을 초래합니다.\n\n2. 위험한 이유\n비밀 정보가 코드에 직접 포함되면, 소스 코드 공개 시 악의적인 공격자에게 노출될 수 있습니다. 또한, 개발 환경이나 테스트 환경에 저장된 경우에도 동일한 위험에 노출됩니다.\n\n3. 악용 가능 시나리오\n공격자는 이 파일을 탈취하여 데이터베이스에 접근할 수 있습니다. DB_PASSWORD를 이용하여 데이터베이스에 무단으로 로그인하고, 중요한 데"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 8549,
+            "priority": "high",
+            "recommendedActionCount": 5,
+            "cautionCount": 3,
+            "preview": "{\"summary\": \"환경변수 파일에 민감한 정보(DB_PASSWORD)가 하드코딩되어 있어 보안 위험을 초래하므로, 안전한 방법으로 비밀 정보를 관리해야 합니다.\", \"priority\": \"high\", \"recommendedActions\": [\"DB_PASSWORD 환경변수의 값을 삭제합니다.\", \"비밀 정보를 안전하게 저장하고 관리할 수 있는 시스템(예: 비밀 관리 서비스)을 도입합니다.\", \"환경변수 파일에 민감한 정보를 저장하는 것을 금지하는 정책을 설정합니다.\", \"코드 저장소에서 환경변수 파일의 내용을 공개되지 않도록 "
+          }
+        },
+        {
+          "findingId": "FND-0002",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 6164,
+            "containsDisallowedScript": false,
+            "charCount": 529,
+            "preview": "1. 취약점 요약\nDockerfile 파일의 마지막 사용자 명령어가 ‘root’인 경우를 의미합니다. 이는 컨테이너 실행 시 권한 상승의 가능성을 높입니다.\n\n2. 위험한 이유\n컨테이너 이미지가 ‘root’ 사용자로 실행되면, 컨테이너 내부에서 발생하는 모든 작업에 관리자 권한이 부여됩니다. 이는 보안 취약점을 악용하여 시스템 전체를 제어할 수 있는 위험을 초래합니다.\n\n3. 악용 가능 시나리오\n공격자는 컨테이너 내부에서 민감한 파일이나 데이터를 탈취하거나, 다른 컨테이너에 접근하는 등의 악의적인 행위를 수행할 수 있습니다. ‘ro"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 7718,
+            "priority": "high",
+            "recommendedActionCount": 5,
+            "cautionCount": 3,
+            "preview": "{\"summary\": \"이미지 실행 사용자 권한을 root에서 다른 사용자로 변경해야 합니다.\", \"priority\": \"high\", \"recommendedActions\": [\"Dockerfile에서 이미지 실행 사용자(USER) 지시어를 찾아 수정합니다.\", \"root 사용자로 설정된 USER 지시어를 다른 사용자로 변경합니다.\", \"변경 사항을 반영하여 Docker 이미지를 다시 빌드합니다.\", \"새로운 이미지를 배포 환경에 적용합니다.\", \"변경된 사용자 권한이 이미지 실행에 영향을 미치는지 확인합니다.\"], \"codeGuid"
+          }
+        },
+        {
+          "findingId": "FND-0003",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 6653,
+            "containsDisallowedScript": false,
+            "charCount": 595,
+            "preview": "1. 취약점 요약\nDockerfile에 HEALTHCHECK 지시문이 정의되어 있지 않습니다. HEALTHCHECK는 컨테이너의 건강 상태를 주기적으로 확인하는 명령어입니다.\n\n2. 위험한 이유\nHEALTHCHECK가 없으면 컨테이너가 예상대로 작동하지 않을 때 자동으로 감지되지 않습니다. 이는 서비스가 정상적으로 작동하지 않더라도 사용자가 인지하지 못하게 할 수 있습니다.\n\n3. 악용 가능 시나리오\n컨테이너가 예상치 못한 상태로 멈추거나 오류를 발생시킬 수 있습니다. 공격자는 이를 이용하여 서비스 중단을 유도하거나, 시스템에 대한"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 8037,
+            "priority": "medium",
+            "recommendedActionCount": 4,
+            "cautionCount": 2,
+            "preview": "{\"summary\": \"컨테이너 이미지의 건강 상태를 확인하기 위한 HEALTHCHECK 지시어를 Dockerfile에 추가해야 합니다.\", \"priority\": \"medium\", \"recommendedActions\": [\"Dockerfile을 열어 HEALTHCHECK 지시어가 있는지 확인합니다.\", \"HEALTHCHECK 지시어가 없다면 Dockerfile에 추가합니다.\", \"HEALTHCHECK 지시어의 조건을 설정하여 컨테이너의 정상 작동 여부를 확인합니다.\", \"변경된 Dockerfile을 사용하여 컨테이너 이미지를 다시 "
+          }
+        }
+      ]
+    },
+    {
+      "model": "mistral:7b",
+      "summary": {
+        "findingCount": 3,
+        "explanationSuccessCount": 3,
+        "fixSuccessCount": 3,
+        "explanationDisallowedScriptCount": 0,
+        "totalElapsedMs": 103938,
+        "averageElapsedMsPerFinding": 34646
+      },
+      "findings": [
+        {
+          "findingId": "FND-0001",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 32984,
+            "containsDisallowedScript": false,
+            "charCount": 360,
+            "preview": " 1. 취약점 요약: 환경변수 파일에서 민감한 비밀번호가 직접 입력되어 있음\n2. 위험한 이유: 환경변수 파일은 소스 코드와 같이 버전 관리 시스템에 저장될 수 있으므로, 민감한 정보가 노출되는 위험이 있음\n3. 악용 가능 시나리오: 공격자는 소스 코드를 탈취하여 데이터베이스에 접근할 수 있고, 민감한 정보를 악의적으로 사용할 수 있음\n4. 예상 영향: 서비스 및 데이터 안전성이 걸리며, 민감한 정보가 노출되어 악의적인 행위를 할 수 있는 기회가 생길 수 있음\n5. 심각도 해석: 입력된 심각도(HIGH)는 이 finding이 긴급한"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 13779,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 1,
+            "preview": "{\"summary\": \"환경변수 파일에서 비밀 값을 보호하기 위해 운영 환경 변수나 비밀 관리 도구로 이동시키는 것이 중요합니다.\", \"priority\": \"high\", \"recommendedActions\": [\"DB_PASSWORD 값을 운영 환경 변수에 설정하거나, 비밀 관리 도구로 관리하세요.\", \"`.env` 파일에서 DB_PASSWORD를 제거하세요.\"], \"codeGuidance\": \"운영 환경 변수나 비밀 관리 도구를 사용하여 비밀 값을 관리합니다. `DB_PASSWORD` 키와 함께 해당 값을 설정합니다.\", \"ver"
+          }
+        },
+        {
+          "findingId": "FND-0002",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 14105,
+            "containsDisallowedScript": false,
+            "charCount": 393,
+            "preview": " 1. 취약점 요약: Dockerfile에서 'root' 사용자로 이미지를 생성하는 것은 안전하지 않습니다.\n2. 위험한 이유: 'root' 사용자는 최고 권한을 가지므로, 악의적인 행동에 노출되며, 데이터베이스나 민감한 정보에 대한 쉽게 접근할 수 있습니다.\n3. 악용 가능 시나리오: 공격자는 'root' 사용자로 생성된 이미지를 통해 서비스에 쉽게 액세스하고, 데이터베이스나 민감한 정보에 대한 악의적인 행위를 할 수 있습니다.\n4. 예상 영향: 서비스 안정성과 데이터 보호가 걸리고, 민감한 정보에 대한 노출로 인해 데이터 유출이"
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 17457,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 2,
+            "preview": "{\"summary\": \"이미지에서 'root' 사용자가 아닌 사용자로 설정하라\", \"priority\": \"high\", \"recommendedActions\": [\"Dockerfile의 USER 명령어를 수정하여 이미지에서 'root' 사용자가 아닌 다른 사용자로 설정\", \"Dockerfile에서 RUN command를 사용하여 이미지에서 sudo 권한을 부여받는 사용자를 만들어 명령어 실행 시 루트 권한으로 동작하지 않도록 함\"], \"codeGuidance\": \"Dockerfile의 USER 명령어에서 'root'를 제거하고, 이미지"
+          }
+        },
+        {
+          "findingId": "FND-0003",
+          "explanation": {
+            "success": true,
+            "elapsedMs": 12231,
+            "containsDisallowedScript": false,
+            "charCount": 343,
+            "preview": " 1. 취약점 요약: Dockerfile에 HEALTHCHECK 명령이 없다는 것을 의미합니다.\n2. 위험한 이유: 서비스가 정상적으로 작동하고 있는지 확인할 수 없어서 문제가 됩니다.\n3. 악용 가능 시나리오: 서비스가 중단되거나 장애가 발생한 경우, 이를 감지하고 자동으로 복구할 수 없어서 문제가 됩니다.\n4. 예상 영향: 서비스의 안정성과 가용성에 영향을 미칠 수 있습니다. 장애 발생 시, 사용자 경험이 저하되고 데이터 유실 등의 문제가 발생할 수 있습니다.\n5. 심각도 해석: LOW 심각도는 즉시 해결하지 않아도 큰 문제는 "
+          },
+          "fix": {
+            "success": true,
+            "elapsedMs": 13382,
+            "priority": "high",
+            "recommendedActionCount": 2,
+            "cautionCount": 2,
+            "preview": "{\"summary\": \"Dockerfile에 HEALTHCHECK 명령어를 추가하세요\", \"priority\": \"high\", \"recommendedActions\": [\"Dockerfile에 HEALTHCHECK 명령어를 추가합니다.\", \"Docker 컨테이너의 상태를 확인하기 위한 체크 명령을 정의하세요\"], \"codeGuidance\": \"Dockerfile에서 HEALTHCHECK 명령어를 추가하여 컨테이너의 상태를 지속적으로 모니터링할 수 있도록 합니다.\", \"verification\": \"Docker 컨테이너를 실행한 후, `d"
+          }
+        }
+      ]
+    }
+  ]
+}

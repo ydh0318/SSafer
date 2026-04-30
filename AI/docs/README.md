@@ -12,6 +12,7 @@
 4_explain_chain.md
 5_analysis_result_output.md
 6_fix_chain.md
+7_local_model_comparison.md
 ```
 
 ## 문서 설명
@@ -25,3 +26,4 @@
 | `4_explain_chain.md` | Explain Chain 구축 |
 | `5_analysis_result_output.md` | analysis_result.json 출력 검증 |
 | `6_fix_chain.md` | Fix Chain 구축 |
+| `7_local_model_comparison.md` | 로컬 모델 성능 비교 |

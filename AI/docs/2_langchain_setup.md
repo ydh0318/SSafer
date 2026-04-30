@@ -19,13 +19,13 @@ ollama list
 이 프로젝트의 기본 모델은 아래 모델입니다.
 
 ```text
-llama3.2:3b
+qwen2.5:3b
 ```
 
 모델이 없다면 설치합니다.
 
 ```bash
-ollama pull llama3.2:3b
+ollama pull qwen2.5:3b
 ```
 
 Ollama 설치 방법은 [1_ollama_setup.md](1_ollama_setup.md)를 참고합니다.
@@ -59,14 +59,14 @@ app/core/config.py
 
 ```python
 OLLAMA_BASE_URL = "http://127.0.0.1:11434"
-OLLAMA_MODEL = "llama3.2:3b"
+OLLAMA_MODEL = "qwen2.5:3b"
 ```
 
 환경변수로 값을 바꿀 수도 있습니다.
 
 ```bash
 export OLLAMA_BASE_URL="http://127.0.0.1:11434"
-export OLLAMA_MODEL="llama3.2:3b"
+export OLLAMA_MODEL="qwen2.5:3b"
 ```
 
 환경변수를 지정하지 않으면 기본값을 사용합니다.
@@ -109,7 +109,7 @@ python -c "from app.core.llm import get_ollama_llm; llm = get_ollama_llm(); prin
 정상이라면 아래처럼 출력됩니다.
 
 ```text
-ChatOllama llama3.2:3b http://127.0.0.1:11434
+ChatOllama qwen2.5:3b http://127.0.0.1:11434
 ```
 
 이 단계는 LLM 객체 생성 확인입니다.
