@@ -168,3 +168,19 @@ If `prompt_tokens` is extremely low, the review prompt or diff did not reach the
 Check field names between `Build Review Summary`, `Build AI Review Prompt`, and `Build LLM Request Body`.
 
 Do not run `Call Review LLM` in isolation unless a valid `review_prompt` input is pinned or provided.
+
+## Recovery Template
+
+The sanitized workflow template is stored at:
+
+```text
+Infra/n8n/workflows/gitlab-mr-review-orchestrator.template.json
+```
+
+Import and secret handling details are documented in:
+
+```text
+Infra/docs/n8n-workflow-export.md
+```
+
+The template intentionally uses placeholder credential IDs and must be reconnected to real n8n credentials after import.
