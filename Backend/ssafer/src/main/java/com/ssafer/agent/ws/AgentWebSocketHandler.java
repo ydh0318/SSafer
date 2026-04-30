@@ -2,12 +2,10 @@ package com.ssafer.agent.ws;
 
 import com.ssafer.agent.application.service.AgentConnectionService;
 import com.ssafer.agent.domain.entity.Agent;
+import com.ssafer.global.security.AgentTokenRegistry;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -22,27 +20,23 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
   private static final String TYPE_CONNECTED = "CONNECTED";
   private static final String TYPE_PING = "PING";
   private static final String TYPE_PONG = "PONG";
+  private static final String BEARER_PREFIX = "Bearer ";
 
   private final ObjectMapper objectMapper;
   private final AgentConnectionService agentConnectionService;
   private final AgentSessionRegistry sessionRegistry;
-  private final AgentAuthenticationProperties authenticationProperties;
-  private final byte[] workerSecretBytes;
+  private final AgentTokenRegistry agentTokenRegistry;
 
   public AgentWebSocketHandler(
       ObjectMapper objectMapper,
       AgentConnectionService agentConnectionService,
       AgentSessionRegistry sessionRegistry,
-      AgentAuthenticationProperties authenticationProperties,
-      @Value("${WORKER_API_SECRET:}") String workerApiSecret
+      AgentTokenRegistry agentTokenRegistry
   ) {
     this.objectMapper = objectMapper;
     this.agentConnectionService = agentConnectionService;
     this.sessionRegistry = sessionRegistry;
-    this.authenticationProperties = authenticationProperties;
-    this.workerSecretBytes = workerApiSecret == null
-        ? new byte[0]
-        : workerApiSecret.getBytes(StandardCharsets.UTF_8);
+    this.agentTokenRegistry = agentTokenRegistry;
   }
 
   @Override
@@ -75,7 +69,9 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
   private void handleConnect(WebSocketSession session, AgentIncomingMessage incoming) throws IOException {
     // CONNECT는 agentId/projectId + 인증 토큰이 모두 유효해야만 수락한다.
-    if (incoming.agentId() == null || incoming.projectId() == null || !isAuthorized(session)) {
+    if (incoming.agentId() == null
+        || incoming.projectId() == null
+        || !isAuthorized(session, incoming.agentId())) {
       session.close(CloseStatus.NOT_ACCEPTABLE.withReason("Invalid connect request"));
       return;
     }
@@ -121,31 +117,19 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     }
   }
 
-  private boolean isAuthorized(WebSocketSession session) {
+  private boolean isAuthorized(WebSocketSession session, Long agentId) {
+    // handshake 단계에서 저장한 Authorization 헤더를 사용해 검증한다.
     Object authAttr = session.getAttributes().get(AgentHandshakeInterceptor.AUTHORIZATION_ATTR);
     String authorization = authAttr instanceof String value ? value : null;
-    if (authorization == null || !authorization.startsWith("Bearer ")) {
+    if (authorization == null || !authorization.startsWith(BEARER_PREFIX)) {
       return false;
     }
-    String token = authorization.substring(7).trim();
+    String token = authorization.substring(BEARER_PREFIX.length()).trim();
     if (token.isEmpty()) {
       return false;
     }
-
-    // agent 전용 토큰이 설정되어 있으면 우선 검증한다.
-    String configuredAgentToken = authenticationProperties.getToken();
-    if (configuredAgentToken != null && !configuredAgentToken.isBlank()) {
-      byte[] agentTokenBytes = configuredAgentToken.getBytes(StandardCharsets.UTF_8);
-      if (MessageDigest.isEqual(agentTokenBytes, token.getBytes(StandardCharsets.UTF_8))) {
-        return true;
-      }
-    }
-
-    // agent 토큰이 없거나 불일치하면 internal worker secret도 허용한다.
-    if (workerSecretBytes.length == 0) {
-      return false;
-    }
-    return MessageDigest.isEqual(workerSecretBytes, token.getBytes(StandardCharsets.UTF_8));
+    // WS도 내부 Agent API와 동일하게 agentId:token 매핑으로 인증한다.
+    return agentTokenRegistry.isAuthorizedForAgent(agentId, token);
   }
 
   private record AgentIncomingMessage(

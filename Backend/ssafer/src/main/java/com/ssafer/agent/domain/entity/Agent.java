@@ -47,6 +47,9 @@ public class Agent {
   @Column(name = "disconnected_at")
   private Instant disconnectedAt;
 
+  @Column(name = "auth_token_hash", length = 64)
+  private String authTokenHash;
+
   protected Agent() {
   }
 
@@ -94,6 +97,10 @@ public class Agent {
     return disconnectedAt;
   }
 
+  public String getAuthTokenHash() {
+    return authTokenHash;
+  }
+
   public void markOnline(Instant now) {
     status = AgentStatus.ONLINE;
     connectedAt = now;
@@ -108,5 +115,9 @@ public class Agent {
 
   public void touchLastSeen(Instant now) {
     lastSeenAt = now;
+  }
+
+  public void updateAuthTokenHash(String authTokenHash) {
+    this.authTokenHash = authTokenHash;
   }
 }

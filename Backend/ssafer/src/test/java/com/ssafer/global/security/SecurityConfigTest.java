@@ -34,7 +34,7 @@ import tools.jackson.databind.ObjectMapper;
 class SecurityConfigTest {
 
   private static final String WORKER_SECRET = "worker-secret-2026";
-  private static final String AGENT_TOKENS = "1:agent-token-1";
+  private static final String AGENT_TOKEN = "agent-token-1";
 
   private AnnotationConfigWebApplicationContext context;
   private MockMvc mockMvc;
@@ -183,7 +183,14 @@ class SecurityConfigTest {
 
     @Bean
     AgentTokenAuthenticationFilter agentTokenAuthenticationFilter() {
-      return new AgentTokenAuthenticationFilter(AGENT_TOKENS);
+      return new AgentTokenAuthenticationFilter(agentTokenRegistry());
+    }
+
+    @Bean
+    AgentTokenRegistry agentTokenRegistry() {
+      AgentTokenRegistry registry = Mockito.mock(AgentTokenRegistry.class);
+      Mockito.when(registry.findMatchedAgentId(AGENT_TOKEN)).thenReturn(1L);
+      return registry;
     }
 
     @Bean
