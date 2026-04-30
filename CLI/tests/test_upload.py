@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 import pytest
 
+from security_samples import scan_payload_with_trivy_secret, sanitized_scan_payload_with_trivy_secret
 from ssafer.core import upload
 
 
@@ -16,10 +17,10 @@ def _write_scan(project_root: Path, scan: dict[str, Any]) -> None:
     (results_dir / "last_scan.txt").write_text(scan_path.name, encoding="utf-8")
 
 
-def test_upload_last_scan_posts_latest_scan(tmp_path: Path, monkeypatch):
-    scan = {"scanId": "local-scan-test", "artifacts": []}
+def test_upload_last_scan_registers_uploads_to_s3_and_reports_completion(tmp_path: Path, monkeypatch):
+    scan = {"scanId": "local-scan-test", "projectName": "sample-app", "artifacts": []}
     _write_scan(tmp_path, scan)
-    calls: list[tuple[str, dict[str, Any]]] = []
+    calls: list[tuple[str, str, Any]] = []
 
     class FakeClient:
         def __init__(self, timeout: int):
@@ -32,20 +33,72 @@ def test_upload_last_scan_posts_latest_scan(tmp_path: Path, monkeypatch):
             return None
 
         def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
-            calls.append((url, json))
+            calls.append(("POST", url, json))
             request = httpx.Request("POST", url)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "message": "created",
+                        "data": {
+                            "scanId": 1001,
+                            "projectId": 2001,
+                            "status": "REQUESTED",
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        },
+                    },
+                    request=request,
+                )
             return httpx.Response(
                 200,
-                json={"scanId": "remote-scan-1", "viewUrl": "http://example.test/scans/1"},
+                json={
+                    "scanId": 1001,
+                    "projectId": 2001,
+                    "status": "RAW_UPLOADED",
+                    "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                },
                 request=request,
             )
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            calls.append(("PUT", url, json.loads(content.decode("utf-8"))))
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
 
     monkeypatch.setattr(upload.httpx, "Client", FakeClient)
 
     response = upload.upload_last_scan(tmp_path, api_url="http://backend.test/")
 
-    assert response == {"scanId": "remote-scan-1", "viewUrl": "http://example.test/scans/1"}
-    assert calls == [("http://backend.test/api/scans", scan)]
+    assert response == {
+        "scanId": 1001,
+        "projectId": 2001,
+        "status": "RAW_UPLOADED",
+        "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+    }
+    assert calls == [
+        (
+            "POST",
+            "http://backend.test/api/v1/scans",
+            {
+                "projectName": "sample-app",
+                "source": "CLI",
+                "scanName": "local-scan-test",
+                "targetPath": str(tmp_path),
+                "includeLogs": False,
+            },
+        ),
+        ("PUT", "https://s3.example.com/upload", scan),
+        (
+            "POST",
+            "http://backend.test/api/v1/internal/scans/1001/raw-results",
+            {
+                "status": "RAW_UPLOADED",
+                "progressStep": "uploaded",
+                "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+            },
+        ),
+    ]
 
 
 def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
@@ -66,13 +119,32 @@ def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
         def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
             posted_urls.append(url)
             request = httpx.Request("POST", url)
-            return httpx.Response(200, json={"scanId": "remote-scan-1"}, request=request)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(200, json={"scanId": 1001}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
 
     monkeypatch.setattr(upload.httpx, "Client", FakeClient)
 
     upload.upload_last_scan(tmp_path)
 
-    assert posted_urls == ["http://localhost:8080/api/scans"]
+    assert posted_urls == [
+        "http://localhost:8080/api/v1/scans",
+        "http://localhost:8080/api/v1/internal/scans/1001/raw-results",
+    ]
 
 
 def test_upload_last_scan_uses_project_config_endpoint(tmp_path: Path, monkeypatch):
@@ -100,13 +172,32 @@ upload:
         def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
             posted_urls.append(url)
             request = httpx.Request("POST", url)
-            return httpx.Response(200, json={"scanId": "remote-scan-1"}, request=request)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(200, json={"scanId": 1001}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
 
     monkeypatch.setattr(upload.httpx, "Client", FakeClient)
 
     upload.upload_last_scan(tmp_path)
 
-    assert posted_urls == ["https://api.ssafer.dev/api/scans"]
+    assert posted_urls == [
+        "https://api.ssafer.dev/api/v1/scans",
+        "https://api.ssafer.dev/api/v1/internal/scans/1001/raw-results",
+    ]
 
 
 def test_upload_last_scan_requires_existing_scan(tmp_path: Path):
@@ -114,7 +205,7 @@ def test_upload_last_scan_requires_existing_scan(tmp_path: Path):
         upload.upload_last_scan(tmp_path)
 
 
-def test_upload_last_scan_blocks_unmasked_secret_before_post(tmp_path: Path, monkeypatch):
+def test_upload_last_scan_blocks_unmasked_secret_before_backend_or_s3_requests(tmp_path: Path, monkeypatch):
     scan = {
         "scanId": "local-scan-test",
         "artifacts": [
@@ -149,6 +240,9 @@ def test_upload_last_scan_blocks_unmasked_secret_before_post(tmp_path: Path, mon
 
         def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
             raise AssertionError("upload request should be blocked before HTTP post")
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            raise AssertionError("S3 upload should be blocked before HTTP put")
 
     monkeypatch.setattr(upload.httpx, "Client", FakeClient)
 
@@ -264,3 +358,80 @@ def test_find_unmasked_secret_paths_ignores_placeholder_secret_values():
     }
 
     assert upload.find_unmasked_secret_paths(payload) == []
+
+
+def test_upload_guard_validates_raw_and_sanitized_scan_payload_pair():
+    raw_payload = scan_payload_with_trivy_secret()
+    sanitized_payload = sanitized_scan_payload_with_trivy_secret()
+
+    assert upload.find_unmasked_secret_paths(raw_payload) == [
+        "$.findings[0].maskedEvidence",
+        "$.artifacts[0].content.Results[0].Secrets[0].Match",
+    ]
+    assert upload.find_unmasked_secret_paths(sanitized_payload) == []
+
+
+def test_upload_last_scan_allows_sanitized_scan_payload(tmp_path: Path, monkeypatch):
+    scan = sanitized_scan_payload_with_trivy_secret()
+    _write_scan(tmp_path, scan)
+    calls: list[tuple[str, str, Any]] = []
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            calls.append(("POST", url, json))
+            request = httpx.Request("POST", url)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(200, json={"scanId": 1001}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            calls.append(("PUT", url, json.loads(content.decode("utf-8"))))
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    upload.upload_last_scan(tmp_path, api_url="http://backend.test")
+
+    assert calls == [
+        (
+            "POST",
+            "http://backend.test/api/v1/scans",
+            {
+                "projectName": tmp_path.name,
+                "source": "CLI",
+                "scanName": "local-scan-test",
+                "targetPath": str(tmp_path),
+                "includeLogs": False,
+            },
+        ),
+        ("PUT", "https://s3.example.com/upload", scan),
+        (
+            "POST",
+            "http://backend.test/api/v1/internal/scans/1001/raw-results",
+            {
+                "status": "RAW_UPLOADED",
+                "progressStep": "uploaded",
+                "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+            },
+        ),
+    ]

@@ -9,6 +9,9 @@ type ProjectCreateFormProps = {
   onCancel: () => void;
   isSubmitting?: boolean;
   errorMessage?: string | null;
+  title?: string;
+  description?: string;
+  submitLabel?: string;
 };
 
 const scanModeOptions: Array<{ value: ScanMode; label: string; helper: string }> = [
@@ -23,6 +26,9 @@ function ProjectCreateForm({
   onCancel,
   isSubmitting = false,
   errorMessage,
+  title = '새 프로젝트 생성',
+  description = '프로젝트 API 스펙에 맞춰 입력값을 정리한 뒤 저장합니다.',
+  submitLabel = '프로젝트 생성',
 }: ProjectCreateFormProps) {
   const setField = <K extends keyof CreateProjectFormValues>(field: K, nextValue: CreateProjectFormValues[K]) => {
     onChange({
@@ -37,10 +43,8 @@ function ProjectCreateForm({
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-lg font-black text-slate-950">새 프로젝트 생성</h3>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            프로젝트 생성 API 스펙에 맞춰 입력값을 정리한 뒤 바로 상세 화면으로 이동합니다.
-          </p>
+          <h3 className="text-lg font-black text-slate-950">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
         </div>
       </div>
 
@@ -123,7 +127,7 @@ function ProjectCreateForm({
           type="button"
         >
           {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-          프로젝트 생성
+          {submitLabel}
         </button>
       </div>
     </div>

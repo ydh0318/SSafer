@@ -9,6 +9,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -72,6 +73,8 @@ public class SecurityConfig {
                 "/actuator/health"
             ).permitAll()
             .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+            .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
+            .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
             .requestMatchers(HttpMethod.POST, "/api/v1/auth/email/send-code").permitAll()
             .requestMatchers(HttpMethod.POST, "/api/v1/auth/email/verify-code").permitAll()
             .requestMatchers(HttpMethod.POST, "/api/v1/users").permitAll()
@@ -88,5 +91,26 @@ public class SecurityConfig {
   @Bean
   public PasswordEncoder passwordEncoder() {
     return new BCryptPasswordEncoder();
+  }
+
+  @Bean
+  public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthenticationFilterRegistration(
+      JwtAuthenticationFilter jwtAuthenticationFilter
+  ) {
+    FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(jwtAuthenticationFilter);
+    // JWT 필터는 SecurityFilterChain 내부에서만 동작해야 하므로 서블릿 필터 자동 등록은 끈다.
+    registration.setEnabled(false);
+    return registration;
+  }
+
+  @Bean
+  public FilterRegistrationBean<WorkerSecretAuthenticationFilter> workerSecretAuthenticationFilterRegistration(
+      WorkerSecretAuthenticationFilter workerSecretAuthenticationFilter
+  ) {
+    FilterRegistrationBean<WorkerSecretAuthenticationFilter> registration =
+        new FilterRegistrationBean<>(workerSecretAuthenticationFilter);
+    // 워커 시크릿 필터도 내부 API 보안 체인에서만 실행되도록 자동 등록을 끈다.
+    registration.setEnabled(false);
+    return registration;
   }
 }

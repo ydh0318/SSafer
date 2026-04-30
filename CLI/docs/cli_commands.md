@@ -8,7 +8,7 @@
 | `ssafer run --path <dir>` | 지정한 프로젝트를 스캔하고 `.ssafer/results`에 결과 JSON을 저장한다. |
 | `ssafer report --path <dir>` | 마지막 스캔 결과 요약을 출력한다. |
 | `ssafer report --path <dir> --details` | 마지막 스캔 결과의 상세 정보, 스캔 대상, findings, artifacts를 출력한다. |
-| `ssafer upload --path <dir>` | 마지막 스캔 패키지를 백엔드 API로 전송한다. |
+| `ssafer upload --path <dir>` | 마지막 스캔 패키지를 백엔드 등록 후 S3 presigned URL로 업로드한다. |
 | `ssafer login` | 업로드에 사용할 인증 토큰을 저장하고, 업로드 시 Bearer 헤더에 포함되도록 설정한다. |
 | `ssafer logout` | 저장된 인증 토큰을 삭제한다. |
 | `ssafer install-tools` | Trivy 설치를 안내하거나 Windows 환경에서 winget 기반 설치를 시도한다. |
@@ -35,5 +35,12 @@
 1. 환경변수 `SSAFER_TOKEN`
 2. `ssafer login`으로 저장한 `~/.ssafer/config.yml`의 토큰
 
-토큰이 있으면 업로드 요청에 `Authorization: Bearer <token>` 헤더가 포함된다.
+토큰이 있으면 백엔드 scan 등록 요청과 업로드 완료 알림 요청에 `Authorization: Bearer <token>` 헤더가 포함된다.
+S3 presigned URL `PUT` 요청에는 별도 Authorization 헤더를 붙이지 않는다.
+
+업로드 흐름:
+
+1. `POST /api/v1/scans`로 scan 등록
+2. 응답의 `rawUploadUrl`로 scan JSON을 S3에 `PUT`
+3. `POST /api/v1/internal/scans/{scanId}/raw-results`로 업로드 완료 알림
 

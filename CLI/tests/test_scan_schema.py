@@ -9,7 +9,9 @@ from typing import Any
 import pytest
 
 import ssafer.core.result_store as result_store
+from security_samples import AWS_ACCESS_KEY, MASKED_VALUE, trivy_secret_result
 from ssafer.core.result_store import _normalize_trivy_findings, backend_finding_source_type, load_last_scan
+from ssafer.core.trivy import sanitize_trivy_json
 
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
@@ -461,6 +463,25 @@ def test_trivy_secret_finding_uses_sanitized_match():
     assert finding["source"] == "trivy"
     assert finding["line"] == 4
     assert finding["maskedEvidence"] == "***MASKED***"
+
+
+def test_trivy_secret_scan_shape_does_not_keep_raw_secret():
+    content = sanitize_trivy_json(trivy_secret_result(AWS_ACCESS_KEY))
+    artifacts = [
+        {
+            "type": "trivy-json",
+            "target": "Dockerfile",
+            "hash": "sha256:abc",
+            "content": content,
+        }
+    ]
+    findings = _normalize_trivy_findings(artifacts, 0)
+    scan = _minimal_scan(findings=findings, artifacts=artifacts)
+    serialized = json.dumps(scan, ensure_ascii=False)
+
+    assert AWS_ACCESS_KEY not in serialized
+    assert scan["artifacts"][0]["content"]["Results"][0]["Secrets"][0]["Match"] == MASKED_VALUE
+    assert scan["findings"][0]["maskedEvidence"] == MASKED_VALUE
 
 
 def test_non_trivy_artifacts_ignored():

@@ -2,9 +2,12 @@ package com.ssafer.global.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
 
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.user.domain.enums.AccountStatus;
+import com.ssafer.user.domain.repository.UserRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +15,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 class JwtAuthenticationTokenParserTest {
 
@@ -19,7 +23,9 @@ class JwtAuthenticationTokenParserTest {
 
   @Test
   void parseMemberTokenFromSubClaim() {
-    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(SECRET, "ssafer");
+    UserRepository userRepository = Mockito.mock(UserRepository.class);
+    given(userRepository.existsByIdAndAccountStatus(123L, AccountStatus.ACTIVE)).willReturn(true);
+    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(SECRET, "ssafer", userRepository);
     String token = Jwts.builder()
         .subject("123")
         .issuer("ssafer")
@@ -38,7 +44,11 @@ class JwtAuthenticationTokenParserTest {
 
   @Test
   void parseGuestTokenFromGuestOwnerKeyHashClaim() {
-    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(SECRET, "ssafer");
+    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(
+        SECRET,
+        "ssafer",
+        Mockito.mock(UserRepository.class)
+    );
     String token = Jwts.builder()
         .subject("guest:test")
         .issuer("ssafer")
@@ -58,7 +68,11 @@ class JwtAuthenticationTokenParserTest {
 
   @Test
   void invalidTokenThrowsUnauthorized() {
-    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(SECRET, "ssafer");
+    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(
+        SECRET,
+        "ssafer",
+        Mockito.mock(UserRepository.class)
+    );
 
     assertThatThrownBy(() -> parser.parse("invalid-token"))
         .isInstanceOf(BusinessException.class)
@@ -68,13 +82,37 @@ class JwtAuthenticationTokenParserTest {
 
   @Test
   void refreshTokenCannotAuthenticateProtectedApi() {
-    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(SECRET, "ssafer");
+    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(
+        SECRET,
+        "ssafer",
+        Mockito.mock(UserRepository.class)
+    );
     String token = Jwts.builder()
         .subject("123")
         .issuer("ssafer")
         .issuedAt(Date.from(Instant.now().truncatedTo(ChronoUnit.SECONDS)))
         .expiration(Date.from(Instant.now().plusSeconds(60)))
         .claim("tokenType", "REFRESH")
+        .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
+        .compact();
+
+    assertThatThrownBy(() -> parser.parse(token))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.UNAUTHORIZED);
+  }
+
+  @Test
+  void inactiveMemberTokenThrowsUnauthorized() {
+    UserRepository userRepository = Mockito.mock(UserRepository.class);
+    given(userRepository.existsByIdAndAccountStatus(123L, AccountStatus.ACTIVE)).willReturn(false);
+    JwtAuthenticationTokenParser parser = new JwtAuthenticationTokenParser(SECRET, "ssafer", userRepository);
+    String token = Jwts.builder()
+        .subject("123")
+        .issuer("ssafer")
+        .issuedAt(Date.from(Instant.now().truncatedTo(ChronoUnit.SECONDS)))
+        .expiration(Date.from(Instant.now().plusSeconds(60)))
+        .claim("tokenType", "ACCESS")
         .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
         .compact();
 

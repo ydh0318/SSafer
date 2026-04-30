@@ -5,8 +5,8 @@ from typing import Any
 
 import yaml
 
-from ssafer.core.constants import DB_PORTS, MASK
-from ssafer.core.sanitize import is_safe_key, is_secret_key, make_masked_evidence
+from ssafer.core.constants import DB_PORTS
+from ssafer.core.sanitize import is_placeholder, is_safe_key, is_secret_key, make_masked_evidence
 from ssafer.rules.base import BaseRule, Finding
 from ssafer.rules.engine import ScanContext
 
@@ -38,7 +38,10 @@ class ComposeExposedDbPortRule(BaseRule):
             doc = _parse_effective_yaml(raw_yaml)
             for svc_name, svc in _services(doc).items():
                 for port_entry in svc.get("ports") or []:
-                    host_port = self._extract_host_port(port_entry)
+                    port_mapping = self._extract_port_mapping(port_entry)
+                    if port_mapping is None:
+                        continue
+                    host_port, container_port = port_mapping
                     if host_port and host_port in DB_PORTS:
                         findings.append(Finding(
                             rule_id=self.rule_id,
@@ -48,24 +51,27 @@ class ComposeExposedDbPortRule(BaseRule):
                             line=None,
                             title=f"DB 포트({host_port})가 호스트에 노출됨",
                             masked_evidence=make_masked_evidence(
-                                f"services.{svc_name}.ports", f"{MASK}:{host_port}"
+                                f"services.{svc_name}.ports", f"{host_port}:{container_port}"
                             ),
                         ))
         return findings
 
-    def _extract_host_port(self, port_entry: Any) -> int | None:
+    def _extract_port_mapping(self, port_entry: Any) -> tuple[int, int] | None:
         if isinstance(port_entry, int):
-            return port_entry if port_entry in DB_PORTS else None
+            return (port_entry, port_entry) if port_entry in DB_PORTS else None
         if isinstance(port_entry, str):
             parts = port_entry.split(":")
             try:
-                return int(parts[0]) if len(parts) >= 2 else int(parts[0])
+                if len(parts) >= 2:
+                    return int(parts[-2]), int(parts[-1])
+                return int(parts[0]), int(parts[0])
             except (ValueError, IndexError):
                 return None
         if isinstance(port_entry, dict):
             published = port_entry.get("published")
+            target = port_entry.get("target") or published
             try:
-                return int(published) if published is not None else None
+                return (int(published), int(target)) if published is not None else None
             except (ValueError, TypeError):
                 return None
         return None
@@ -144,6 +150,7 @@ class ComposeHardcodedSecretRule(BaseRule):
                         and not is_safe_key(key)
                         and value
                         and not _is_env_ref(value)
+                        and not is_placeholder(value)
                     ):
                         findings.append(Finding(
                             rule_id=self.rule_id,
@@ -151,7 +158,7 @@ class ComposeHardcodedSecretRule(BaseRule):
                             severity=self.severity,
                             file=f"docker-compose ({set_name})",
                             line=None,
-                            title=f"서비스 '{svc_name}'의 환경변수에 시크릿이 하드코딩됨",
+                            title=f"서비스 '{svc_name}'에 민감한 환경변수가 설정됨",
                             masked_evidence=make_masked_evidence(
                                 f"services.{svc_name}.environment.{key}"
                             ),

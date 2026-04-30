@@ -62,6 +62,13 @@ class SecurityConfigTest {
     mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isOk());
 
+    mockMvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isOk());
+
+    // 로그아웃은 access token 만료 상황도 고려해서 refresh token body만으로 진입 가능해야 한다.
+    mockMvc.perform(post("/api/v1/auth/logout").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isOk());
+
     mockMvc.perform(post("/api/v1/auth/email/send-code").contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isOk());
 
@@ -181,6 +188,16 @@ class SecurityConfigTest {
 
     @PostMapping("/api/v1/auth/login")
     String login() {
+      return "ok";
+    }
+
+    @PostMapping("/api/v1/auth/refresh")
+    String refresh() {
+      return "ok";
+    }
+
+    @PostMapping("/api/v1/auth/logout")
+    String logout() {
       return "ok";
     }
 

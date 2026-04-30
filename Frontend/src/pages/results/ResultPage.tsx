@@ -4,7 +4,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SeverityBadge, StatusPill } from '../../components/common/Badge';
 import SectionPanel from '../../components/common/SectionPanel';
 import { ROUTES } from '../../constants/routes';
-import ApiEndpointList from '../../features/api-specs/components/ApiEndpointList';
 import FindingList from '../../features/results/components/FindingList';
 import FindingSummary from '../../features/results/components/FindingSummary';
 import { findings, formatFindingLocation } from '../../mocks/ssaferMockData';
@@ -17,7 +16,7 @@ function ResultPage() {
   const selected = findings.find((item) => item.id === selectedId) ?? findings[0];
 
   return (
-    <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_420px]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-6">
         <FindingSummary findings={findings} />
 
@@ -32,7 +31,7 @@ function ResultPage() {
               </button>
             </div>
           }
-          description={`${scanId} 결과의 기본 조회, 요약 조회, Finding 리스트, 노드 기준 조회가 한 화면에서 분기됩니다.`}
+          description="선택한 스캔의 주요 결과를 목록 또는 노드 형태로 확인할 수 있습니다."
           eyebrow="Result workbench"
           title="결과 워크벤치"
         >
@@ -52,16 +51,15 @@ function ResultPage() {
         </SectionPanel>
       </div>
 
-      <div className="space-y-6">
-        <SelectedFinding findingId={selected.id} scanId={scanId} />
-        <ApiEndpointList compact screenId="result" />
-      </div>
+      <SelectedFinding findingId={selected.id} scanId={scanId} />
     </div>
   );
 }
 
 function tabClass(active: boolean) {
-  return `rounded-md px-3 py-2 text-sm font-bold transition ${active ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-white'}`;
+  return `rounded-md px-3 py-2 text-sm font-bold transition ${
+    active ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-white'
+  }`;
 }
 
 function FilterBar() {
@@ -71,9 +69,9 @@ function FilterBar() {
       <SeverityBadge value="HIGH" />
       <SeverityBadge value="MEDIUM" />
       <SeverityBadge value="LOW" />
-      <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">category=secret</span>
-      <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">status=OPEN</span>
-      <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">page=1&size=20</span>
+      <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">secret</span>
+      <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">open</span>
+      <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">최근 20건</span>
     </div>
   );
 }
@@ -116,26 +114,28 @@ function SelectedFinding({ findingId, scanId }: { findingId: string; scanId: str
 
   return (
     <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Selected Finding</p>
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Selected finding</p>
       <div className="mt-4 flex flex-wrap gap-2">
         <SeverityBadge value={finding.severity} />
         <StatusPill value={finding.status} />
       </div>
       <h3 className="mt-4 text-xl font-black leading-tight text-slate-950">{finding.title}</h3>
-      <p className="mt-3 rounded-lg bg-slate-50 p-4 font-mono text-sm leading-6 text-slate-700">{finding.evidence}</p>
+      <p className="mt-3 rounded-lg bg-slate-50 p-4 font-mono text-sm leading-6 text-slate-700">
+        {finding.evidence}
+      </p>
       <div className="mt-4 space-y-3 text-sm text-slate-600">
         <p>
-          <b>위치</b> · {formatFindingLocation(finding)}
+          <b>위치</b> / {formatFindingLocation(finding)}
         </p>
         <p>
-          <b>노드</b> · {finding.nodeId}
+          <b>노드</b> / {finding.nodeId}
         </p>
       </div>
       <Link
         className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800"
         to={ROUTES.findingDetail.replace(':scanId', scanId).replace(':findingId', finding.id)}
       >
-        Finding 상세 열기
+        상세 보기
       </Link>
     </aside>
   );

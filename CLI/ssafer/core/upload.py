@@ -56,10 +56,58 @@ def upload_last_scan(
     if token:
         headers["Authorization"] = f"Bearer {token}"
     with httpx.Client(timeout=30) as client:
-        response = client.post(f"{base_url}/api/scans", json=scan, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-    return data
+        create_response = client.post(
+            f"{base_url}/api/v1/scans",
+            json=_build_create_scan_payload(project_root, scan),
+            headers=headers,
+        )
+        create_response.raise_for_status()
+        create_data = _response_data(create_response.json())
+        raw_upload_url = create_data.get("rawUploadUrl")
+        raw_result_path = create_data.get("rawResultPath")
+        remote_scan_id = create_data.get("scanId")
+        if not raw_upload_url or not raw_result_path or remote_scan_id is None:
+            raise RuntimeError("Backend scan registration response is missing raw upload information.")
+
+        upload_response = client.put(
+            raw_upload_url,
+            content=_scan_json_bytes(scan),
+            headers={"Content-Type": "application/json"},
+        )
+        upload_response.raise_for_status()
+
+        callback_response = client.post(
+            f"{base_url}/api/v1/internal/scans/{remote_scan_id}/raw-results",
+            json={
+                "status": "RAW_UPLOADED",
+                "progressStep": "uploaded",
+                "rawResultPath": raw_result_path,
+            },
+            headers=headers,
+        )
+        callback_response.raise_for_status()
+        return callback_response.json()
+
+
+def _build_create_scan_payload(project_root: Path, scan: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "projectName": scan.get("projectName") or project_root.name,
+        "source": "CLI",
+        "scanName": scan.get("scanId"),
+        "targetPath": str(project_root),
+        "includeLogs": False,
+    }
+
+
+def _response_data(payload: dict[str, Any]) -> dict[str, Any]:
+    data = payload.get("data")
+    return data if isinstance(data, dict) else payload
+
+
+def _scan_json_bytes(scan: dict[str, Any]) -> bytes:
+    import json
+
+    return json.dumps(scan, ensure_ascii=False).encode("utf-8")
 
 
 def find_unmasked_secret_paths(payload: Any) -> list[str]:

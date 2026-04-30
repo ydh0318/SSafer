@@ -51,6 +51,7 @@ services:
 """
     findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}))
     assert len(findings) == 1
+    assert findings[0].masked_evidence == "services.db.ports=5432:5432"
 
 
 def test_compose_exposed_db_port_ignores_non_db_port():
@@ -136,6 +137,8 @@ services:
 """
     findings = ComposeHardcodedSecretRule().check(_ctx({"default": yaml}))
     assert len(findings) == 1
+    assert "민감한 환경변수" in findings[0].title
+    assert "하드코딩" not in findings[0].title
 
 
 def test_compose_hardcoded_secret_ignores_env_ref():
@@ -145,6 +148,18 @@ services:
     image: myapp:1.0
     environment:
       DB_PASSWORD: ${DB_PASSWORD}
+"""
+    findings = ComposeHardcodedSecretRule().check(_ctx({"default": yaml}))
+    assert findings == []
+
+
+def test_compose_hardcoded_secret_ignores_placeholder_value():
+    yaml = """
+services:
+  kafka:
+    image: myapp:1.0
+    environment:
+      GMS_API_KEY: your_gms_api_key_here
 """
     findings = ComposeHardcodedSecretRule().check(_ctx({"default": yaml}))
     assert findings == []

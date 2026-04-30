@@ -57,7 +57,6 @@ public class User {
 
   @PrePersist
   void onCreate() {
-    // 생성 시각과 수정 시각은 최초 저장 시점에 동일한 값으로 맞춘다.
     Instant now = Instant.now();
     this.createdAt = now;
     this.updatedAt = now;
@@ -65,7 +64,6 @@ public class User {
 
   @PreUpdate
   void onUpdate() {
-    // 엔티티 변경이 발생하면 수정 시각만 갱신한다.
     this.updatedAt = Instant.now();
   }
 
@@ -81,12 +79,37 @@ public class User {
     return displayName;
   }
 
+  public void updateDisplayName(String displayName) {
+    this.displayName = displayName;
+  }
+
+  public void updatePasswordHash(String passwordHash) {
+    this.passwordHash = passwordHash;
+  }
+
+  public void deactivate() {
+    // 탈퇴한 계정은 비활성화하고, 재활성화 전까지 기존 비밀번호는 사용할 수 없게 한다.
+    this.accountStatus = AccountStatus.INACTIVE;
+    this.passwordHash = null;
+  }
+
+  public void reactivate(String displayName, String passwordHash) {
+    // 같은 이메일로 다시 가입하면 기존 계정을 활성화하고 새 비밀번호를 저장한다.
+    this.displayName = displayName;
+    this.passwordHash = passwordHash;
+    this.accountStatus = AccountStatus.ACTIVE;
+  }
+
   public String getPasswordHash() {
     return passwordHash;
   }
 
   public AccountStatus getAccountStatus() {
     return accountStatus;
+  }
+
+  public boolean isActive() {
+    return accountStatus == AccountStatus.ACTIVE;
   }
 
   public Instant getCreatedAt() {
