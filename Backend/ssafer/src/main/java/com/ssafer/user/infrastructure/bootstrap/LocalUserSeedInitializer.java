@@ -8,11 +8,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
 @Profile("local")
+@Order(1)
 public class LocalUserSeedInitializer implements ApplicationRunner {
 
   private static final Logger log = LoggerFactory.getLogger(LocalUserSeedInitializer.class);
@@ -33,8 +35,10 @@ public class LocalUserSeedInitializer implements ApplicationRunner {
 
   @Override
   public void run(ApplicationArguments args) {
-    // local 프로필에서는 테스트 계정을 자동 생성해서 반복 회원가입 없이 바로 로그인 테스트할 수 있게 한다.
+    // local 프로필에서는 테스트 계정을 자동 생성해서
+    // 매번 회원가입 절차 없이 바로 로그인과 API 확인을 할 수 있게 한다.
     if (userRepository.existsByEmail(TEST_USER_EMAIL)) {
+      log.info("Local test user already exists. email={}", TEST_USER_EMAIL);
       return;
     }
 

@@ -5,13 +5,14 @@ import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.project.domain.entity.Project;
 import com.ssafer.project.domain.repository.ProjectRepository;
+import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
 
 @Service
 /**
- * 프로젝트 리소스 접근 권한을 공통으로 처리하는 서비스.
- * 삭제된 리소스는 NOT_FOUND, 소유자가 아니면 FORBIDDEN을 던진다.
+ * 프로젝트 리소스 접근 권한을 공통으로 처리하는 서비스다.
+ * 존재하지 않는 리소스는 NOT_FOUND, 소유자가 아니면 FORBIDDEN으로 구분한다.
  */
 public class ProjectAuthorizationService {
 
@@ -22,7 +23,7 @@ public class ProjectAuthorizationService {
   }
 
   public Project loadActiveProjectOrThrow(Long projectId) {
-    // soft delete된 데이터는 조회 대상에서 제외한다.
+    // soft delete된 프로젝트는 조회 대상에서 제외한다.
     return projectRepository.findByIdAndDeletedAtIsNull(projectId)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
   }
@@ -31,6 +32,13 @@ public class ProjectAuthorizationService {
     Project project = loadActiveProjectOrThrow(projectId);
     assertOwner(project, actor);
     return project;
+  }
+
+  public List<Project> loadAuthorizedProjects(AuthenticatedActor actor) {
+    // 히스토리나 프로젝트 목록처럼 "내가 접근 가능한 프로젝트 전체"가 필요한 곳에서 재사용한다.
+    return actor.isMember()
+        ? projectRepository.findByUserIdAndDeletedAtIsNull(actor.userId())
+        : projectRepository.findByGuestOwnerKeyHashAndDeletedAtIsNull(actor.guestOwnerKeyHash());
   }
 
   public void assertOwner(Project project, AuthenticatedActor actor) {
