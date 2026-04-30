@@ -26,7 +26,7 @@ pip install --no-cache-dir --force-reinstall "git+https://lab.ssafy.com/s14-fina
 특정 브랜치를 설치할 때는 `@develop` 대신 브랜치명을 넣습니다.
 
 ```powershell
-pip install --no-cache-dir --force-reinstall "git+https://lab.ssafy.com/s14-final/S14P31B105.git@CLI/feat/S14P31B105-170/upload-security-validation#subdirectory=CLI"
+pip install --no-cache-dir --force-reinstall "git+https://lab.ssafy.com/s14-final/S14P31B105.git@CLI/feat/S14P31B105-187/cli-docs-upload-alignment#subdirectory=CLI"
 ```
 
 로컬 소스에서 개발 모드로 설치하려면:
@@ -203,6 +203,7 @@ ssafer report --path .\my-project --details
 - 수집된 artifact 목록
 
 Findings 테이블은 터미널에서 읽기 쉽도록 같은 문제를 묶어 보여줍니다.
+긴 제목이나 evidence가 이어져 보이지 않도록 행 사이에 구분선을 넣어 출력합니다.
 
 | 컬럼 | 설명 |
 | --- | --- |

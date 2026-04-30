@@ -330,7 +330,7 @@ def _print_artifacts(scan: dict) -> None:
 def _print_findings(scan: dict) -> None:
     findings = scan.get("findings", [])
     finding_groups = _group_report_findings(findings)
-    finding_table = Table(title="Findings")
+    finding_table = Table(title="Findings", show_lines=True)
     finding_table.add_column("IDs", overflow="fold")
     finding_table.add_column("Count", justify="right")
     finding_table.add_column("Severity")

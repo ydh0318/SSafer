@@ -1,3 +1,6 @@
+from rich.console import Console
+
+import ssafer.main as main
 from ssafer.main import _format_report_evidence, _group_report_findings, _join_compact
 
 
@@ -90,3 +93,37 @@ def test_group_report_findings_keeps_different_evidence_separate():
 
 def test_join_compact_shows_remaining_count():
     assert _join_compact(["a", "b", "c", "d"], max_items=2) == "a, b +2"
+
+
+def test_print_findings_separates_rows_for_readability(monkeypatch):
+    record_console = Console(record=True, width=100)
+    monkeypatch.setattr(main, "console", record_console)
+
+    main._print_findings(
+        {
+            "findings": [
+                {
+                    "id": "FND-0001",
+                    "ruleId": "RULE_A",
+                    "severity": "HIGH",
+                    "file": "docker-compose (dev)",
+                    "title": "first finding",
+                    "maskedEvidence": "a=***MASKED***",
+                },
+                {
+                    "id": "FND-0002",
+                    "ruleId": "RULE_B",
+                    "severity": "MEDIUM",
+                    "file": "Dockerfile",
+                    "title": "second finding",
+                    "maskedEvidence": "b=latest",
+                },
+            ]
+        }
+    )
+
+    output = record_console.export_text()
+
+    assert "FND-0001" in output
+    assert "FND-0002" in output
+    assert "├" in output

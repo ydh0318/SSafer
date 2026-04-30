@@ -30,4 +30,4 @@ def test_independent_set_without_base(tmp_path: Path):
 
     assert sets[0].name == "dev"
     assert sets[0].independent is True
-    assert warnings
+    assert warnings == [f"{dev}을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다."]
