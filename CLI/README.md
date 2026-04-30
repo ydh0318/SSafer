@@ -56,7 +56,7 @@ ssafer version
 | `ssafer report --path <dir> --details` | 스캔 대상, 생성 파일, findings, artifacts 상세 출력 |
 | `ssafer login` | 업로드에 사용할 인증 토큰 저장 |
 | `ssafer logout` | 저장된 인증 토큰 삭제 |
-| `ssafer upload --path <dir>` | 마지막 scan JSON을 백엔드로 업로드 |
+| `ssafer upload --path <dir>` | 마지막 scan JSON을 백엔드 계약에 맞춰 S3에 업로드 |
 
 ---
 
@@ -225,6 +225,17 @@ scan JSON의 `findings[]`에는 개별 finding이 그대로 유지됩니다. rep
 ssafer upload --path .\my-project --api-url http://your-backend:8080
 ```
 
+`ssafer upload`는 scan JSON을 백엔드 API body로 바로 보내지 않습니다.
+현재 백엔드 계약에 맞춰 아래 순서로 동작합니다.
+
+1. `POST /api/v1/scans`로 scan을 등록합니다.
+2. 백엔드 응답에서 `scanId`, `rawResultPath`, `rawUploadUrl`을 받습니다.
+3. `rawUploadUrl`로 최종 scan JSON을 S3에 `PUT` 업로드합니다.
+4. `POST /api/v1/internal/scans/{scanId}/raw-results`로 업로드 완료를 알립니다.
+
+S3 업로드에는 백엔드가 발급한 presigned URL을 사용하므로, 사용자 PC에 AWS credential을 둘 필요는 없습니다.
+Bearer token은 백엔드 요청에만 사용하고, S3 presigned URL 요청에는 별도 인증 헤더를 붙이지 않습니다.
+
 업로드 URL 우선순위:
 
 1. CLI 옵션 `--api-url`
@@ -238,7 +249,8 @@ ssafer upload --path .\my-project --api-url http://your-backend:8080
 2. 기본 환경변수 `SSAFER_TOKEN`
 3. `ssafer login`으로 저장한 토큰
 
-현재 CLI upload payload 계약은 백엔드 API 변경에 맞춰 계속 조정 중입니다. 실제 서버 연동 전에는 Backend의 scan/upload DTO와 endpoint를 다시 확인해야 합니다.
+업로드 직전에는 preflight guard가 최종 scan JSON 전체를 다시 검사합니다.
+원문 secret 의심값이 남아 있으면 백엔드 등록이나 S3 업로드 전에 차단됩니다.
 
 ---
 
