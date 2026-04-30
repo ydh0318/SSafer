@@ -30,7 +30,7 @@ class UserProfileServiceTest {
   @Test
   void getCurrentUserProfileReturnsMemberProfile() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice");
-    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
 
     UserProfileResult result = userProfileService.getCurrentUserProfile(AuthenticatedActor.member(1L));
 
@@ -41,7 +41,7 @@ class UserProfileServiceTest {
   @Test
   void updateCurrentUserProfileChangesDisplayName() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice");
-    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
 
     UserProfileResult result = userProfileService.updateCurrentUserProfile(
         AuthenticatedActor.member(1L),
@@ -63,7 +63,7 @@ class UserProfileServiceTest {
 
   @Test
   void updateCurrentUserProfileThrowsNotFoundWhenUserDoesNotExist() {
-    given(userRepository.findById(1L)).willReturn(Optional.empty());
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.empty());
 
     assertThatThrownBy(() -> userProfileService.updateCurrentUserProfile(
         AuthenticatedActor.member(1L),
@@ -77,7 +77,7 @@ class UserProfileServiceTest {
   @Test
   void updateCurrentUserProfileThrowsInvalidParameterWhenDisplayNameIsBlank() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice");
-    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
 
     assertThatThrownBy(() -> userProfileService.updateCurrentUserProfile(
         AuthenticatedActor.member(1L),

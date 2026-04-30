@@ -47,7 +47,7 @@ class UserPasswordServiceTest {
   @Test
   void changePasswordUpdatesPasswordHashForMember() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice", "encoded-old-password");
-    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
     given(passwordEncoder.matches("password123", "encoded-old-password")).willReturn(true);
     given(passwordEncoder.encode("new-password123")).willReturn("encoded-new-password");
     AuthTokenResult tokenResult = new AuthTokenResult(
@@ -85,7 +85,7 @@ class UserPasswordServiceTest {
   @Test
   void changePasswordThrowsInvalidCredentialsWhenCurrentPasswordDoesNotMatch() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice", "encoded-old-password");
-    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
     given(passwordEncoder.matches("wrong-password123", "encoded-old-password")).willReturn(false);
 
     assertThatThrownBy(() -> userPasswordService.changePassword(
@@ -101,7 +101,8 @@ class UserPasswordServiceTest {
   @Test
   void changePasswordThrowsInvalidParameterWhenNewPasswordMatchesCurrentPassword() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice", "encoded-old-password");
-    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
+    given(passwordEncoder.matches("password123", "encoded-old-password")).willReturn(true);
     given(passwordEncoder.matches("password123", "encoded-old-password")).willReturn(true);
 
     assertThatThrownBy(() -> userPasswordService.changePassword(
@@ -117,7 +118,7 @@ class UserPasswordServiceTest {
   @Test
   void changePasswordThrowsInvalidParameterWhenNewPasswordIsBlank() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice", "encoded-old-password");
-    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
 
     assertThatThrownBy(() -> userPasswordService.changePassword(
         AuthenticatedActor.member(1L),
@@ -132,7 +133,7 @@ class UserPasswordServiceTest {
   @Test
   void changePasswordThrowsInvalidParameterWhenNewPasswordIsTooShort() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice", "encoded-old-password");
-    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
 
     assertThatThrownBy(() -> userPasswordService.changePassword(
         AuthenticatedActor.member(1L),
@@ -146,7 +147,7 @@ class UserPasswordServiceTest {
 
   @Test
   void changePasswordThrowsNotFoundWhenUserDoesNotExist() {
-    given(userRepository.findById(1L)).willReturn(Optional.empty());
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.empty());
 
     assertThatThrownBy(() -> userPasswordService.changePassword(
         AuthenticatedActor.member(1L),
@@ -161,7 +162,7 @@ class UserPasswordServiceTest {
   @Test
   void changePasswordThrowsInvalidCredentialsWhenPasswordHashIsMissing() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice", null);
-    given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
 
     assertThatThrownBy(() -> userPasswordService.changePassword(
         AuthenticatedActor.member(1L),

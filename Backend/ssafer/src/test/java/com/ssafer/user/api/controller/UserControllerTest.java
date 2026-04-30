@@ -3,6 +3,7 @@ package com.ssafer.user.api.controller;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -19,6 +20,7 @@ import com.ssafer.user.application.service.UserPasswordService;
 import com.ssafer.user.application.service.UserProfileResult;
 import com.ssafer.user.application.service.UserProfileService;
 import com.ssafer.user.application.service.UserRegistrationService;
+import com.ssafer.user.application.service.UserWithdrawalService;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +36,7 @@ class UserControllerTest {
   private UserRegistrationService userRegistrationService;
   private UserProfileService userProfileService;
   private UserPasswordService userPasswordService;
+  private UserWithdrawalService userWithdrawalService;
 
   @BeforeEach
   void setUp() {
@@ -41,11 +44,13 @@ class UserControllerTest {
     userRegistrationService = Mockito.mock(UserRegistrationService.class);
     userProfileService = Mockito.mock(UserProfileService.class);
     userPasswordService = Mockito.mock(UserPasswordService.class);
+    userWithdrawalService = Mockito.mock(UserWithdrawalService.class);
     UserController controller = new UserController(
         currentActorProvider,
         userRegistrationService,
         userProfileService,
-        userPasswordService
+        userPasswordService,
+        userWithdrawalService
     );
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
     validator.afterPropertiesSet();
@@ -353,5 +358,30 @@ class UserControllerTest {
                 """))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+  }
+
+  @Test
+  void withdrawCurrentUserReturnsSuccess() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+
+    mockMvc.perform(delete("/api/v1/users"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("User withdrawal succeeded"));
+
+    then(userWithdrawalService).should().withdrawCurrentUser(actor);
+  }
+
+  @Test
+  void withdrawCurrentUserReturnsForbiddenForGuest() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.guest("guest-hash");
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    Mockito.doThrow(new BusinessException(ErrorCode.FORBIDDEN))
+        .when(userWithdrawalService)
+        .withdrawCurrentUser(actor);
+
+    mockMvc.perform(delete("/api/v1/users"))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
   }
 }

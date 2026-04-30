@@ -9,6 +9,8 @@ import com.ssafer.auth.application.service.AuthTokenResult;
 import com.ssafer.auth.domain.repository.RefreshTokenStore;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.user.domain.enums.AccountStatus;
+import com.ssafer.user.domain.repository.UserRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -26,12 +28,14 @@ class JwtAuthTokenProviderTest {
   @Test
   void issueTokensContainsExpectedClaimsAndExpiration() {
     RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    UserRepository userRepository = activeUserRepository(1L);
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
         ACCESS_TOKEN_EXPIRES_SECONDS,
         REFRESH_TOKEN_EXPIRES_SECONDS,
-        refreshTokenStore
+        refreshTokenStore,
+        userRepository
     );
 
     AuthTokenResult result = provider.issueTokens(1L);
@@ -68,7 +72,8 @@ class JwtAuthTokenProviderTest {
         "ssafer",
         ACCESS_TOKEN_EXPIRES_SECONDS,
         REFRESH_TOKEN_EXPIRES_SECONDS,
-        Mockito.mock(RefreshTokenStore.class)
+        Mockito.mock(RefreshTokenStore.class),
+        Mockito.mock(UserRepository.class)
     );
 
     assertThatThrownBy(() -> provider.issueTokens(0L))
@@ -77,14 +82,36 @@ class JwtAuthTokenProviderTest {
   }
 
   @Test
-  void reissueTokensRotatesTokensWhenStoredRefreshTokenMatches() {
+  void issueTokensThrowsUnauthorizedWhenUserIsInactive() {
     RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    UserRepository userRepository = Mockito.mock(UserRepository.class);
+    given(userRepository.existsByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(false);
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
         ACCESS_TOKEN_EXPIRES_SECONDS,
         REFRESH_TOKEN_EXPIRES_SECONDS,
-        refreshTokenStore
+        refreshTokenStore,
+        userRepository
+    );
+
+    assertThatThrownBy(() -> provider.issueTokens(1L))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.UNAUTHORIZED);
+  }
+
+  @Test
+  void reissueTokensRotatesTokensWhenStoredRefreshTokenMatches() {
+    RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    UserRepository userRepository = activeUserRepository(1L);
+    JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
+        SECRET,
+        "ssafer",
+        ACCESS_TOKEN_EXPIRES_SECONDS,
+        REFRESH_TOKEN_EXPIRES_SECONDS,
+        refreshTokenStore,
+        userRepository
     );
     AuthTokenResult firstIssue = provider.issueTokens(1L);
     given(refreshTokenStore.findByUserId(1L)).willReturn(java.util.Optional.of(firstIssue.refreshToken()));
@@ -101,12 +128,14 @@ class JwtAuthTokenProviderTest {
   @Test
   void reissueTokensThrowsUnauthorizedWhenStoredRefreshTokenDoesNotMatch() {
     RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    UserRepository userRepository = activeUserRepository(1L);
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
         ACCESS_TOKEN_EXPIRES_SECONDS,
         REFRESH_TOKEN_EXPIRES_SECONDS,
-        refreshTokenStore
+        refreshTokenStore,
+        userRepository
     );
     AuthTokenResult firstIssue = provider.issueTokens(1L);
     given(refreshTokenStore.findByUserId(1L)).willReturn(java.util.Optional.of("another-refresh-token"));
@@ -120,12 +149,14 @@ class JwtAuthTokenProviderTest {
   @Test
   void revokeRefreshTokenDeletesStoredRefreshTokenWhenItMatches() {
     RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    UserRepository userRepository = activeUserRepository(1L);
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
         ACCESS_TOKEN_EXPIRES_SECONDS,
         REFRESH_TOKEN_EXPIRES_SECONDS,
-        refreshTokenStore
+        refreshTokenStore,
+        userRepository
     );
     AuthTokenResult issued = provider.issueTokens(1L);
     given(refreshTokenStore.findByUserId(1L)).willReturn(java.util.Optional.of(issued.refreshToken()));
@@ -138,12 +169,14 @@ class JwtAuthTokenProviderTest {
   @Test
   void revokeRefreshTokenThrowsUnauthorizedWhenStoredRefreshTokenDoesNotMatch() {
     RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    UserRepository userRepository = activeUserRepository(1L);
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
         ACCESS_TOKEN_EXPIRES_SECONDS,
         REFRESH_TOKEN_EXPIRES_SECONDS,
-        refreshTokenStore
+        refreshTokenStore,
+        userRepository
     );
     AuthTokenResult issued = provider.issueTokens(1L);
     given(refreshTokenStore.findByUserId(1L)).willReturn(java.util.Optional.of("another-refresh-token"));
@@ -157,18 +190,18 @@ class JwtAuthTokenProviderTest {
   @Test
   void reissueTokensThrowsUnauthorizedAfterLogoutRevokesStoredRefreshToken() {
     RefreshTokenStore refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
+    UserRepository userRepository = activeUserRepository(1L);
     JwtAuthTokenProvider provider = new JwtAuthTokenProvider(
         SECRET,
         "ssafer",
         ACCESS_TOKEN_EXPIRES_SECONDS,
         REFRESH_TOKEN_EXPIRES_SECONDS,
-        refreshTokenStore
+        refreshTokenStore,
+        userRepository
     );
     AuthTokenResult issued = provider.issueTokens(1L);
     given(refreshTokenStore.findByUserId(1L))
-        // 로그아웃 시점에는 현재 refresh token이 살아 있고,
         .willReturn(java.util.Optional.of(issued.refreshToken()))
-        // 로그아웃 이후 재발급 시도 시점에는 저장값이 사라진 상태를 표현한다.
         .willReturn(java.util.Optional.empty());
 
     provider.revokeRefreshToken(issued.refreshToken());
@@ -178,5 +211,11 @@ class JwtAuthTokenProviderTest {
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.UNAUTHORIZED);
     then(refreshTokenStore).should().delete(1L);
+  }
+
+  private UserRepository activeUserRepository(Long userId) {
+    UserRepository userRepository = Mockito.mock(UserRepository.class);
+    given(userRepository.existsByIdAndAccountStatus(userId, AccountStatus.ACTIVE)).willReturn(true);
+    return userRepository;
   }
 }

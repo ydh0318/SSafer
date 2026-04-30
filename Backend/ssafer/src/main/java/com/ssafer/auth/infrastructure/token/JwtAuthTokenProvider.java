@@ -5,6 +5,8 @@ import com.ssafer.auth.domain.repository.AuthTokenProvider;
 import com.ssafer.auth.domain.repository.RefreshTokenStore;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.user.domain.enums.AccountStatus;
+import com.ssafer.user.domain.repository.UserRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -32,19 +34,22 @@ public class JwtAuthTokenProvider implements AuthTokenProvider {
   private final Duration accessTokenTtl;
   private final Duration refreshTokenTtl;
   private final RefreshTokenStore refreshTokenStore;
+  private final UserRepository userRepository;
 
   public JwtAuthTokenProvider(
       @Value("${JWT_SECRET}") String jwtSecret,
       @Value("${JWT_ISSUER:ssafer}") String issuer,
       @Value("${JWT_ACCESS_TOKEN_EXPIRES_SECONDS:7200}") long accessTokenExpiresSeconds,
       @Value("${JWT_REFRESH_TOKEN_EXPIRES_SECONDS:1209600}") long refreshTokenExpiresSeconds,
-      RefreshTokenStore refreshTokenStore
+      RefreshTokenStore refreshTokenStore,
+      UserRepository userRepository
   ) {
     this.secretKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
     this.issuer = issuer;
     this.accessTokenTtl = Duration.ofSeconds(accessTokenExpiresSeconds);
     this.refreshTokenTtl = Duration.ofSeconds(refreshTokenExpiresSeconds);
     this.refreshTokenStore = refreshTokenStore;
+    this.userRepository = userRepository;
   }
 
   @Override
@@ -53,7 +58,9 @@ public class JwtAuthTokenProvider implements AuthTokenProvider {
       throw new IllegalArgumentException("userId must be a positive number");
     }
 
-    // access/refresh token 기준 시각을 맞추면 응답과 테스트가 단순해진다.
+    // 활성 회원에게만 새 토큰을 발급해서 탈퇴/정지 계정의 재사용을 막는다.
+    validateActiveMember(userId);
+
     Instant issuedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
     Instant accessTokenExpiresAt = issuedAt.plus(accessTokenTtl);
     Instant refreshTokenExpiresAt = issuedAt.plus(refreshTokenTtl);
@@ -61,7 +68,6 @@ public class JwtAuthTokenProvider implements AuthTokenProvider {
 
     String accessToken = buildToken(subject, issuedAt, accessTokenExpiresAt, ACCESS_TOKEN_TYPE);
     String refreshToken = buildToken(subject, issuedAt, refreshTokenExpiresAt, REFRESH_TOKEN_TYPE);
-    // 로그인과 재발급 시점마다 마지막 refresh token만 유효하도록 Redis 값을 갱신한다.
     refreshTokenStore.save(userId, refreshToken, refreshTokenTtl);
 
     return new AuthTokenResult(
@@ -105,7 +111,7 @@ public class JwtAuthTokenProvider implements AuthTokenProvider {
     String savedRefreshToken = refreshTokenStore.findByUserId(userId)
         .orElseThrow(this::unauthorized);
 
-    // 재발급과 로그아웃 모두 현재 Redis에 저장된 활성 refresh token에 대해서만 허용한다.
+    // 서버에 저장된 최신 refresh token과 완전히 일치할 때만 재발급/로그아웃을 허용한다.
     if (!MessageDigest.isEqual(
         savedRefreshToken.getBytes(StandardCharsets.UTF_8),
         refreshToken.getBytes(StandardCharsets.UTF_8)
@@ -116,9 +122,7 @@ public class JwtAuthTokenProvider implements AuthTokenProvider {
   }
 
   private String buildToken(String subject, Instant issuedAt, Instant expiresAt, String tokenType) {
-    // 로그인 후 access/refresh를 명확히 구분할 수 있도록 tokenType claim을 함께 넣는다.
     return Jwts.builder()
-        // 같은 초에 재발급이 일어나도 새 토큰 문자열이 되도록 고유 ID를 넣는다.
         .id(UUID.randomUUID().toString())
         .subject(subject)
         .issuer(issuer)
@@ -153,6 +157,13 @@ public class JwtAuthTokenProvider implements AuthTokenProvider {
       throw unauthorized();
     }
     return userId;
+  }
+
+  private void validateActiveMember(Long userId) {
+    // 토큰 발급 시점에도 계정 상태를 다시 확인해서 비활성 계정 발급을 막는다.
+    if (!userRepository.existsByIdAndAccountStatus(userId, AccountStatus.ACTIVE)) {
+      throw unauthorized();
+    }
   }
 
   private BusinessException unauthorized() {
