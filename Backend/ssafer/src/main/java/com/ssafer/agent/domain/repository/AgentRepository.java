@@ -13,5 +13,7 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
 
   Optional<Agent> findByIdAndProjectId(Long id, Long projectId);
 
+  Optional<Agent> findFirstByProjectId(Long projectId);
+
   List<Agent> findByStatusAndLastSeenAtBefore(AgentStatus status, Instant before);
 }
