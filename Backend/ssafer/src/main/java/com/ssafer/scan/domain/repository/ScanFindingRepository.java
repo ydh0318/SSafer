@@ -18,7 +18,17 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
 
   long countByScanIdAndSeverity(Long scanId, Severity severity);
 
-  // severity 분포는 요약 카드에서 자주 쓰이므로 한 번의 group by 결과로 모은다.
+  // 히스토리 목록에서는 여러 스캔의 위험도 분포를 한 번에 내려줘야 하므로
+  // {scanId, severity, count} 형태의 group by 결과를 묶어서 조회한다.
+  @Query("""
+      select f.scanId, f.severity, count(f)
+      from ScanFinding f
+      where f.scanId in :scanIds
+      group by f.scanId, f.severity
+      """)
+  List<Object[]> countSeverityByScanIds(@Param("scanIds") List<Long> scanIds);
+
+  // severity 분포는 요약 카드에서 자주 쓰이므로 DB의 group by 결과로 모은다.
   @Query("""
       select f.severity, count(f)
       from ScanFinding f
@@ -40,7 +50,7 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
       """)
   List<Object[]> countCategoryByScanId(@Param("scanId") Long scanId);
 
-  // sourceType별 분포는 요약 카드에서 바로 보여주기 위한 집계다.
+  // sourceType별 분포를 요약 카드에서 바로 보여주기 위한 집계다.
   @Query("""
       select f.sourceType, count(f)
       from ScanFinding f
@@ -49,7 +59,7 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
       """)
   List<Object[]> countSourceTypeByScanId(@Param("scanId") Long scanId);
 
-  // 처리 상태별 개수는 후속 조치 현황을 보여주는데 사용한다.
+  // 처리 상태별 개수는 후속 조치 현황을 보여주는 데 사용한다.
   @Query("""
       select f.resolutionStatus, count(f)
       from ScanFinding f

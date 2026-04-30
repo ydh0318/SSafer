@@ -10,6 +10,7 @@ import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
 import com.ssafer.scan.api.dto.HistoryScanListItemResponse;
 import com.ssafer.scan.api.dto.HistoryScanListResponse;
+import com.ssafer.scan.api.dto.HistoryScanSummaryCountResponse;
 import com.ssafer.scan.application.service.HistoryScanQueryService;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
@@ -37,11 +38,26 @@ class HistoryScanQueryControllerTest {
     MockMvc mockMvc = buildMockMvc();
     when(historyScanQueryService.getCurrentUserScanHistory())
         .thenReturn(new HistoryScanListResponse(
+            new HistoryScanSummaryCountResponse(
+                1L,
+                12L,
+                1L,
+                3L,
+                5L,
+                2L,
+                1L
+            ),
             List.of(new HistoryScanListItemResponse(
                 1001L,
                 101L,
                 ScanStatus.DONE,
                 ScanMode.AGENT,
+                12L,
+                1L,
+                3L,
+                5L,
+                2L,
+                1L,
                 LocalDateTime.of(2026, 4, 27, 9, 0),
                 LocalDateTime.of(2026, 4, 27, 9, 10)
             ))
@@ -50,10 +66,17 @@ class HistoryScanQueryControllerTest {
     mockMvc.perform(get("/api/v1/history/scans"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.message").value("전체 스캔 히스토리 조회 성공"))
+        .andExpect(jsonPath("$.data.summary.totalScanCount").value(1))
+        .andExpect(jsonPath("$.data.summary.totalFindingCount").value(12))
+        .andExpect(jsonPath("$.data.summary.criticalCount").value(1))
+        .andExpect(jsonPath("$.data.summary.highCount").value(3))
         .andExpect(jsonPath("$.data.items[0].scanId").value(1001))
         .andExpect(jsonPath("$.data.items[0].projectId").value(101))
         .andExpect(jsonPath("$.data.items[0].status").value("DONE"))
-        .andExpect(jsonPath("$.data.items[0].scanMode").value("AGENT"));
+        .andExpect(jsonPath("$.data.items[0].scanMode").value("AGENT"))
+        .andExpect(jsonPath("$.data.items[0].totalFindingCount").value(12))
+        .andExpect(jsonPath("$.data.items[0].criticalCount").value(1))
+        .andExpect(jsonPath("$.data.items[0].mediumCount").value(5));
   }
 
   @Test

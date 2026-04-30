@@ -25,7 +25,7 @@ public class HistoryScanQueryController {
   @GetMapping("/scans")
   @Operation(
       summary = "전체 스캔 히스토리 조회",
-      description = "현재 로그인한 회원이 요청한 전체 스캔 히스토리 목록을 조회합니다."
+      description = "현재 로그인한 회원이 요청한 전체 스캔 히스토리 목록과 위험도 요약 정보를 조회합니다."
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -42,7 +42,8 @@ public class HistoryScanQueryController {
       )
   })
   public ResponseEntity<ApiResponse<HistoryScanListResponse>> getCurrentUserScanHistory() {
-    // 컨트롤러는 요청을 서비스로 위임하고, 서비스가 인증 주체와 조회 대상을 결정한다.
+    // 컨트롤러는 HTTP 요청과 응답만 담당하고,
+    // 실제 조회 대상 결정과 권한 판단은 서비스에 위임한다.
     HistoryScanListResponse data = historyScanQueryService.getCurrentUserScanHistory();
     return ResponseEntity.ok(ApiResponse.success(GET_HISTORY_SCANS_SUCCESS_MESSAGE, data));
   }
