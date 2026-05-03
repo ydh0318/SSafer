@@ -3,6 +3,8 @@ export interface ApiSuccessResponse<T> {
   data: T;
 }
 
+export type ApiFieldErrors = Record<string, string>;
+
 export interface ApiErrorResponse<T = Record<string, never>> {
   code: string;
   message: string;
@@ -11,5 +13,7 @@ export interface ApiErrorResponse<T = Record<string, never>> {
 
 export interface TokenReissueData {
   accessToken: string;
-  timeout: number;
+  accessTokenExpiresAt: string;
+  refreshToken: string;
+  refreshTokenExpiresAt: string;
 }

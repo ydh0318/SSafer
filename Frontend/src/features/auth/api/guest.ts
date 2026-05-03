@@ -1,8 +1,8 @@
-import { getApiErrorMessage } from '../../../api/error';
 import { apiClient } from '../../../api/client';
-import { getGuestDeviceId } from '../../../utils/deviceId';
-import type { GuestEnterData, GuestEnterRequest } from '../../../types/auth';
+import { getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
+import type { GuestEnterData, GuestEnterRequest } from '../../../types/auth';
+import { getGuestDeviceId } from '../../../utils/deviceId';
 
 export async function enterGuestMode() {
   try {
@@ -10,9 +10,12 @@ export async function enterGuestMode() {
       deviceId: getGuestDeviceId(),
     };
 
-    const response = await apiClient.post<ApiSuccessResponse<GuestEnterData>>('/guests/enter', payload);
+    const response = await apiClient.post<ApiSuccessResponse<GuestEnterData>>(
+      '/guests/enter',
+      payload,
+    );
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '게스트 세션 발급에 실패했습니다.'));
+    throw new Error(getApiErrorMessage(error, '게스트 모드로 진입하지 못했습니다.'));
   }
 }

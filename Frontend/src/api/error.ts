@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-import type { ApiErrorResponse } from '../types/api';
+import type { ApiErrorResponse, ApiFieldErrors } from '../types/api';
 
-const DEFAULT_MESSAGE = '요청 처리 중 오류가 발생했습니다.';
+const DEFAULT_MESSAGE = 'Something went wrong while communicating with the server.';
 
 export function getApiErrorMessage(error: unknown, fallbackMessage = DEFAULT_MESSAGE) {
   if (axios.isAxiosError<ApiErrorResponse>(error)) {
@@ -14,4 +14,12 @@ export function getApiErrorMessage(error: unknown, fallbackMessage = DEFAULT_MES
   }
 
   return fallbackMessage;
+}
+
+export function getApiFieldErrors(error: unknown) {
+  if (!axios.isAxiosError<ApiErrorResponse<{ fieldErrors?: ApiFieldErrors }>>(error)) {
+    return {};
+  }
+
+  return error.response?.data?.data?.fieldErrors ?? {};
 }

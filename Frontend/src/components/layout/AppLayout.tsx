@@ -1,18 +1,29 @@
 import { LogOut, Shield } from 'lucide-react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { getScreenByPathname, SCREEN_SPECS } from '../../constants/apiSpecs';
 import { ROUTES } from '../../constants/routes';
+import { logoutCurrentUser } from '../../features/auth/api/member';
 import { useAuthStore } from '../../store/authStore';
 import { useProjectStore } from '../../store/projectStore';
 
 function AppLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const currentScreen = getScreenByPathname(location.pathname);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const logout = useAuthStore((state) => state.logout);
   const projects = useProjectStore((state) => state.projects);
   const firstProjectId = projects[0]?.id;
+
+  const handleLogout = async () => {
+    try {
+      await logoutCurrentUser();
+    } finally {
+      logout();
+      navigate(ROUTES.root);
+    }
+  };
 
   const routeByScreen = {
     entry: ROUTES.root,
@@ -89,16 +100,16 @@ function AppLayout() {
 
               <div className="flex flex-wrap items-center gap-2">
                 <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                  {isAuthenticated ? '로그인 상태' : '게스트 모드'}
+                  {isAuthenticated ? 'Logged in' : 'Guest mode'}
                 </div>
                 {isAuthenticated ? (
                   <button
                     className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-400"
-                    onClick={logout}
+                    onClick={() => void handleLogout()}
                     type="button"
                   >
                     <LogOut className="h-4 w-4" />
-                    로그아웃
+                    Logout
                   </button>
                 ) : null}
               </div>
