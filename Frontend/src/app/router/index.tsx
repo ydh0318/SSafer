@@ -19,9 +19,10 @@ function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route element={<EntryPage />} path={ROUTES.root} />
+        <Route element={<LoginPage />} path={ROUTES.login} />
+
         <Route element={<AppLayout />}>
-          <Route element={<EntryPage />} path={ROUTES.root} />
-          <Route element={<LoginPage />} path={ROUTES.login} />
           <Route element={<ProjectListPage />} path={ROUTES.projects} />
           <Route element={<ProjectDetailPage />} path={ROUTES.projectDetail} />
           <Route element={<ScanRequestPage />} path={ROUTES.scanRequest} />
