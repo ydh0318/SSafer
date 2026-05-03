@@ -59,6 +59,11 @@ export interface LogoutRequest {
   refreshToken: string;
 }
 
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface LoginFormValues {
   email: string;
   password: string;

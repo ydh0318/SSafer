@@ -3,6 +3,7 @@ import { tokenStorage } from '../../../api/tokenStorage';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
   AuthTokenData,
+  ChangePasswordRequest,
   CheckEmailAvailabilityData,
   LoginRequest,
   LogoutRequest,
@@ -55,6 +56,14 @@ export async function verifyEmailCode(payload: VerifyEmailCodeRequest) {
 
 export async function registerUser(payload: RegisterUserRequest) {
   const response = await apiClient.post<ApiSuccessResponse<RegisterUserData>>('/users', payload);
+  return response.data.data;
+}
+
+export async function changeCurrentUserPassword(payload: ChangePasswordRequest) {
+  const response = await apiClient.patch<ApiSuccessResponse<AuthTokenData>>(
+    '/users/me/password',
+    payload,
+  );
   return response.data.data;
 }
 
