@@ -74,4 +74,5 @@ export interface SignupFormValues {
   code: string;
   displayName: string;
   password: string;
+  confirmPassword: string;
 }
