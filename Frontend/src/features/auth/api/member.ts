@@ -1,4 +1,4 @@
-import { apiClient } from '../../../api/client';
+import { apiClient, publicApiClient } from '../../../api/client';
 import { tokenStorage } from '../../../api/tokenStorage';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
@@ -7,6 +7,10 @@ import type {
   CheckEmailAvailabilityData,
   LoginRequest,
   LogoutRequest,
+  PasswordResetCompleteRequest,
+  PasswordResetSendCodeRequest,
+  PasswordResetVerifyCodeData,
+  PasswordResetVerifyCodeRequest,
   RefreshTokenRequest,
   RegisterUserData,
   RegisterUserRequest,
@@ -65,6 +69,22 @@ export async function changeCurrentUserPassword(payload: ChangePasswordRequest) 
     payload,
   );
   return response.data.data;
+}
+
+export async function sendPasswordResetCode(payload: PasswordResetSendCodeRequest) {
+  await publicApiClient.post<ApiSuccessResponse<null>>('/auth/password-reset/send-code', payload);
+}
+
+export async function verifyPasswordResetCode(payload: PasswordResetVerifyCodeRequest) {
+  const response = await publicApiClient.post<ApiSuccessResponse<PasswordResetVerifyCodeData>>(
+    '/auth/password-reset/verify-code',
+    payload,
+  );
+  return response.data.data;
+}
+
+export async function completePasswordReset(payload: PasswordResetCompleteRequest) {
+  await publicApiClient.post<ApiSuccessResponse<null>>('/auth/password-reset/complete', payload);
 }
 
 export async function withdrawCurrentUser() {

@@ -1,7 +1,9 @@
 import { Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 
+import { getApiErrorMessage, getApiFieldErrors } from '../../../api/error';
 import type { SignupFormValues } from '../../../types/auth';
+import { registerUser } from '../api/member';
 import {
   validateDisplayName,
   validatePassword,
@@ -9,6 +11,7 @@ import {
 } from '../utils/signup';
 import AuthButton from './AuthButton';
 import AuthField from './AuthField';
+import AuthMessage from './AuthMessage';
 
 type FieldErrors = Partial<Record<keyof SignupFormValues, string>>;
 
@@ -21,6 +24,10 @@ type SignupProfilePanelProps = {
 
 function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupProfilePanelProps) {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [message, setMessage] = useState<{
+    tone: 'error' | 'success';
+    text: string;
+  } | null>(null);
   const [displayNameCheckMessage, setDisplayNameCheckMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
@@ -72,9 +79,31 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
     }
 
     setIsSubmitting(true);
-    await Promise.resolve();
-    setIsSubmitting(false);
-    onCompleted();
+    setMessage(null);
+
+    try {
+      await registerUser({
+        email: values.email.trim(),
+        displayName: values.displayName.trim(),
+        password: values.password,
+        code: values.code.trim(),
+      });
+      onCompleted();
+    } catch (error) {
+      setFieldErrors((current) => ({
+        ...current,
+        ...getApiFieldErrors(error),
+      }));
+      setMessage({
+        tone: 'error',
+        text: getApiErrorMessage(
+          error,
+          '회원가입을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        ),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -85,7 +114,11 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
         void handleSubmit();
       }}
     >
-      <button className="mb-[clamp(0.875rem,1.8vh,1.25rem)] auth-back-button" onClick={onBack} type="button">
+      <button
+        className="mb-[clamp(0.875rem,1.8vh,1.25rem)] auth-back-button"
+        onClick={onBack}
+        type="button"
+      >
         &lt; BACK
       </button>
 
@@ -115,6 +148,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
                   setFieldErrors((current) => ({ ...current, displayName: undefined }));
                   setDisplayNameCheckMessage(null);
                   setIsDisplayNameConfirmed(false);
+                  setMessage(null);
                 }}
                 placeholder="Username"
                 value={values.displayName}
@@ -135,9 +169,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
             ) : null}
 
             <div className="space-y-1 text-[0.98rem] leading-7 text-black">
-              <p>- 프로필에 표시되는 닉네임으로 사용됩니다.</p>
               <p>- 닉네임은 3자 이상 입력해 주세요.</p>
-              <p>- 닉네임은 영문, 숫자, 하이픈(-), 언더스코어(_)를 권장합니다.</p>
             </div>
           </div>
 
@@ -154,6 +186,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
                     password: undefined,
                     confirmPassword: undefined,
                   }));
+                  setMessage(null);
                 }}
                 placeholder="Password"
                 trailing={
@@ -176,6 +209,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
                 onChange={(event) => {
                   onChange('confirmPassword', event.target.value);
                   setFieldErrors((current) => ({ ...current, confirmPassword: undefined }));
+                  setMessage(null);
                 }}
                 placeholder="Confirm Password"
                 trailing={
@@ -202,6 +236,8 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
             </div>
           </div>
         </div>
+
+        {message ? <AuthMessage message={message.text} tone={message.tone} /> : null}
 
         <div className="space-y-3 border-t border-dashed border-[#cfcfcf] pt-4">
           <p className="auth-body-text text-black">

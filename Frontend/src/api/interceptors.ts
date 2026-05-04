@@ -11,9 +11,12 @@ import { tokenStorage } from './tokenStorage';
 
 type RetryableRequestConfig = AxiosRequestConfig & {
   _retry?: boolean;
+  skipAuth?: boolean;
 };
 
 const REISSUE_PATH = '/auth/reissue';
+const REISSUE_TOKEN_MISSING_MESSAGE =
+  'Reissue API completed but did not return an access token in the response body or Authorization header.';
 
 const getAuthorizationHeader = (accessToken: string) => `Bearer ${accessToken}`;
 
@@ -31,7 +34,27 @@ const extractAccessToken = (response: ApiSuccessResponse<TokenReissueData>, head
   return null;
 };
 
+const requestTokenReissue = async (refreshClient: AxiosInstance) => {
+  const reissueResponse =
+    await refreshClient.post<ApiSuccessResponse<TokenReissueData>>(REISSUE_PATH);
+  const nextAccessToken = extractAccessToken(
+    reissueResponse.data,
+    reissueResponse.headers.authorization,
+  );
+
+  if (!nextAccessToken) {
+    throw new Error(REISSUE_TOKEN_MISSING_MESSAGE);
+  }
+
+  return nextAccessToken;
+};
+
 const attachAccessToken = (config: InternalAxiosRequestConfig) => {
+  if ((config as RetryableRequestConfig).skipAuth) {
+    config.headers.delete('Authorization');
+    return config;
+  }
+
   const accessToken = tokenStorage.getAccessToken();
 
   if (!accessToken) {
@@ -57,25 +80,23 @@ export const setupInterceptors = (client: AxiosInstance) => {
       const status = error.response?.status;
       const requestUrl = originalRequest?.url ?? '';
       const isReissueRequest = requestUrl.includes(REISSUE_PATH);
+      const refreshToken = tokenStorage.getRefreshToken();
 
-      if (!originalRequest || status !== 401 || originalRequest._retry || isReissueRequest) {
+      if (
+        !originalRequest ||
+        status !== 401 ||
+        originalRequest._retry ||
+        originalRequest.skipAuth ||
+        isReissueRequest ||
+        !refreshToken
+      ) {
         return Promise.reject(error);
       }
 
       originalRequest._retry = true;
 
       try {
-        const reissueResponse =
-          await refreshClient.post<ApiSuccessResponse<TokenReissueData>>(REISSUE_PATH);
-        const nextAccessToken = extractAccessToken(
-          reissueResponse.data,
-          reissueResponse.headers.authorization,
-        );
-
-        if (!nextAccessToken) {
-          throw new Error('Access token was not returned from reissue API.');
-        }
-
+        const nextAccessToken = await requestTokenReissue(refreshClient);
         useAuthStore.getState().setAccessToken(nextAccessToken);
         originalRequest.headers = originalRequest.headers ?? {};
         originalRequest.headers.Authorization = getAuthorizationHeader(nextAccessToken);

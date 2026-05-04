@@ -33,11 +33,11 @@ export function validateCode(code: string) {
   const normalizedCode = code.trim();
 
   if (!normalizedCode) {
-    return '인증 코드를 입력해 주세요.';
+    return '인증번호를 입력해 주세요.';
   }
 
   if (!/^\d{6}$/.test(normalizedCode)) {
-    return '인증 코드는 6자리 숫자로 입력해 주세요.';
+    return '인증번호는 6자리 숫자로 입력해 주세요.';
   }
 
   return '';
@@ -79,7 +79,7 @@ export function validatePasswordConfirmation(password: string, confirmPassword: 
   }
 
   if (password !== confirmPassword) {
-    return '비밀번호가 일치하지 않습니다.';
+    return '비밀번호가 서로 일치하지 않습니다.';
   }
 
   return '';

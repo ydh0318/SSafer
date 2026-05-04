@@ -73,4 +73,25 @@ export const tokenStorage = {
 
     window.localStorage.removeItem(STORAGE_KEYS.refreshToken);
   },
+
+  setTokens({
+    accessToken,
+    refreshToken,
+  }: {
+    accessToken: string;
+    refreshToken?: string | null;
+  }) {
+    this.setAccessToken(accessToken);
+
+    if (refreshToken) {
+      this.setRefreshToken(refreshToken);
+    } else if (refreshToken === null) {
+      this.clearRefreshToken();
+    }
+  },
+
+  clearTokens() {
+    this.clearAccessToken();
+    this.clearRefreshToken();
+  },
 };

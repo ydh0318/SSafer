@@ -1,7 +1,23 @@
 import { Eye, EyeOff, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { validateCode, validateEmail, validatePassword } from '../utils/signup';
+import { getApiFieldErrors } from '../../../api/error';
+import {
+  completePasswordReset,
+  sendPasswordResetCode,
+  verifyPasswordResetCode,
+} from '../api/member';
+import {
+  getPasswordResetCompleteErrorMessage,
+  getPasswordResetVerifyErrorMessage,
+  getTooManyRequestsMessage,
+} from '../utils/authError';
+import {
+  validateCode,
+  validateEmail,
+  validatePassword,
+  validatePasswordConfirmation,
+} from '../utils/signup';
 import AuthButton from './AuthButton';
 import AuthField from './AuthField';
 import AuthMessage from './AuthMessage';
@@ -11,7 +27,7 @@ type ForgotPasswordModalProps = {
   onClose: () => void;
 };
 
-type ModalStep = 'email' | 'change';
+type ModalStep = 'email' | 'verify' | 'reset' | 'success';
 
 type ModalFieldErrors = Partial<{
   email: string;
@@ -26,12 +42,12 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [fieldErrors, setFieldErrors] = useState<ModalFieldErrors>({});
   const [message, setMessage] = useState<{
     tone: 'error' | 'success' | 'info';
     text: string;
   } | null>(null);
-  const [isCodeVerified, setIsCodeVerified] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
   const [pendingAction, setPendingAction] = useState<'send' | 'verify' | 'change' | null>(null);
@@ -42,10 +58,6 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
       [field]: undefined,
     }));
     setMessage(null);
-
-    if (field === 'code') {
-      setIsCodeVerified(false);
-    }
   };
 
   const handleSendCode = async () => {
@@ -59,8 +71,36 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
     setPendingAction('send');
     setMessage(null);
 
-    setStep('change');
-    setPendingAction(null);
+    try {
+      await sendPasswordResetCode({ email: email.trim() });
+      setStep('verify');
+      setCode('');
+      setResetToken('');
+      setFieldErrors({});
+      setMessage({
+        tone: 'success',
+        text: '입력한 이메일로 비밀번호 재설정 인증번호를 보냈습니다.',
+      });
+    } catch (error) {
+      const serverFieldErrors = getApiFieldErrors(error);
+
+      if (serverFieldErrors.email) {
+        setFieldErrors((current) => ({
+          ...current,
+          email: serverFieldErrors.email,
+        }));
+      } else {
+        setFieldErrors((current) => ({
+          ...current,
+          email: getTooManyRequestsMessage(
+            error,
+            '인증번호 전송에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+          ),
+        }));
+      }
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const handleVerifyCode = async () => {
@@ -74,19 +114,45 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
     setPendingAction('verify');
     setMessage(null);
 
-    setIsCodeVerified(true);
-    setMessage({
-      tone: 'info',
-      text: '비밀번호 찾기용 코드 확인 API가 준비되면 실제 인증으로 연결할 수 있습니다.',
-    });
-    setPendingAction(null);
+    try {
+      const data = await verifyPasswordResetCode({
+        email: email.trim(),
+        code: code.trim(),
+      });
+
+      setResetToken(data.resetToken);
+      setStep('reset');
+      setFieldErrors({});
+      setMessage({
+        tone: 'success',
+        text: '인증이 완료되었습니다. 새 비밀번호를 설정해 주세요.',
+      });
+    } catch (error) {
+      const serverFieldErrors = getApiFieldErrors(error);
+
+      if (serverFieldErrors.code) {
+        setFieldErrors((current) => ({
+          ...current,
+          code: serverFieldErrors.code,
+        }));
+      } else {
+        setFieldErrors((current) => ({
+          ...current,
+          code: getPasswordResetVerifyErrorMessage(
+            error,
+            '인증번호 확인에 실패했습니다. 다시 시도해 주세요.',
+          ),
+        }));
+      }
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const validatePasswordForm = () => {
     const nextFieldErrors: ModalFieldErrors = {
       newPassword: validatePassword(newPassword),
-      confirmPassword:
-        newPassword === confirmPassword ? '' : '비밀번호가 서로 일치하지 않습니다.',
+      confirmPassword: validatePasswordConfirmation(newPassword, confirmPassword),
     };
 
     if (Object.values(nextFieldErrors).some(Boolean)) {
@@ -101,10 +167,10 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
   };
 
   const handleChangePassword = async () => {
-    if (!isCodeVerified) {
+    if (!resetToken) {
       setMessage({
-        tone: 'info',
-        text: '먼저 인증 코드를 확인해 주세요.',
+        tone: 'error',
+        text: '비밀번호 재설정 세션이 만료되었습니다. 처음부터 다시 진행해 주세요.',
       });
       return;
     }
@@ -114,11 +180,39 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
     }
 
     setPendingAction('change');
-    setMessage({
-      tone: 'info',
-      text: '현재 제공된 API는 로그인된 사용자의 현재 비밀번호 변경용입니다. 이메일 코드 기반 재설정 API가 추가되면 이 버튼에 바로 연결할 수 있습니다.',
-    });
-    setPendingAction(null);
+    setMessage(null);
+
+    try {
+      await completePasswordReset({
+        resetToken,
+        newPassword,
+      });
+
+      setStep('success');
+      setMessage({
+        tone: 'success',
+        text: '비밀번호가 변경되었습니다. 새 비밀번호로 다시 로그인해 주세요.',
+      });
+    } catch (error) {
+      const serverFieldErrors = getApiFieldErrors(error);
+
+      if (serverFieldErrors.newPassword) {
+        setFieldErrors((current) => ({
+          ...current,
+          newPassword: serverFieldErrors.newPassword,
+        }));
+      } else {
+        setMessage({
+          tone: 'error',
+          text: getPasswordResetCompleteErrorMessage(
+            error,
+            '비밀번호 변경에 실패했습니다. 처음부터 다시 시도해 주세요.',
+          ),
+        });
+      }
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   return (
@@ -150,7 +244,7 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
               Your Password?
             </h2>
             <p className="mt-6 text-base font-medium text-black">
-              Enter your account email to reset your password
+              가입한 이메일을 입력하면 비밀번호 재설정 인증번호를 보내드립니다.
             </p>
 
             <div className="mt-7">
@@ -179,25 +273,25 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
               </AuthButton>
             </div>
           </form>
-        ) : (
+        ) : step === 'verify' ? (
           <form
             className="mx-auto mt-14 w-[min(74%,430px)]"
             onSubmit={(event) => {
               event.preventDefault();
-              void handleChangePassword();
+              void handleVerifyCode();
             }}
           >
             <h2 className="text-[32px] font-black uppercase leading-none tracking-[0.02em]">
-              Change Password
+              Verify Code
             </h2>
             <p className="mt-7 text-lg font-medium leading-7 text-black">
-              We just send a code to your email.
+              입력한 이메일로 보낸 6자리 인증번호를 입력해 주세요.
               <br />
-              Please verify the code number.
+              인증이 완료되면 새 비밀번호를 설정할 수 있습니다.
             </p>
 
             <div className="mt-5">
-              <div className="grid grid-cols-[1fr_104px]">
+              <div className="grid grid-cols-[1fr_104px] gap-0">
                 <AuthField
                   errorMessage={fieldErrors.code}
                   inputMode="numeric"
@@ -223,13 +317,40 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
               </div>
             </div>
 
-            <hr className="my-8 border-[#d9d9d9]" />
+            {message ? (
+              <div className="mt-5">
+                <AuthMessage message={message.text} tone={message.tone} />
+              </div>
+            ) : null}
 
-            <p className="text-lg font-medium leading-7 text-black">
-              Please set it to a different password than before.
+            <div className="mt-6">
+              <button
+                className="auth-body-text text-left text-black transition hover:text-[#757579]"
+                onClick={() => void handleSendCode()}
+                type="button"
+              >
+                인증번호 다시 보내기
+              </button>
+            </div>
+          </form>
+        ) : step === 'reset' ? (
+          <form
+            className="mx-auto mt-14 w-[min(74%,430px)]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleChangePassword();
+            }}
+          >
+            <h2 className="text-[32px] font-black uppercase leading-none tracking-[0.02em]">
+              Change Password
+            </h2>
+            <p className="mt-7 text-lg font-medium leading-7 text-black">
+              이전 비밀번호와 다른 새 비밀번호를 설정해 주세요.
               <br />
-              Mix letters, numbers, and symbols to make them at least 8 characters.
+              영문, 숫자, 특수문자를 조합해 8자 이상으로 입력해 주세요.
             </p>
+
+            <hr className="my-8 border-[#d9d9d9]" />
 
             <div className="mt-6 space-y-5">
               <AuthField
@@ -298,6 +419,31 @@ function ForgotPasswordModal({ initialEmail = '', onClose }: ForgotPasswordModal
               </AuthButton>
             </div>
           </form>
+        ) : (
+          <div className="mx-auto mt-20 flex w-[min(74%,430px)] flex-col items-start">
+            <h2 className="text-[32px] font-black uppercase leading-none tracking-[0.02em]">
+              Password
+              <br />
+              Updated
+            </h2>
+            <p className="mt-6 text-lg font-medium leading-7 text-black">
+              비밀번호가 성공적으로 변경되었습니다.
+              <br />
+              새 비밀번호로 다시 로그인해 주세요.
+            </p>
+
+            {message ? (
+              <div className="mt-6 w-full">
+                <AuthMessage message={message.text} tone={message.tone} />
+              </div>
+            ) : null}
+
+            <div className="mt-8 w-full">
+              <AuthButton onClick={onClose} type="button">
+                Back To Login
+              </AuthButton>
+            </div>
+          </div>
         )}
       </section>
     </div>
