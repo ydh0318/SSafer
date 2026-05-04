@@ -5,18 +5,27 @@ import type { AuthUser } from '../types/auth';
 
 interface AuthState {
   accessToken: string | null;
+  refreshToken: string | null;
   user: AuthUser | null;
   isAuthenticated: boolean;
   setAccessToken: (accessToken: string | null) => void;
+  setRefreshToken: (refreshToken: string | null) => void;
+  setTokens: (params: { accessToken: string; refreshToken?: string | null }) => void;
   setUser: (user: AuthUser | null) => void;
-  login: (params: { accessToken: string; user: AuthUser | null }) => void;
+  login: (params: {
+    accessToken: string;
+    refreshToken?: string | null;
+    user: AuthUser | null;
+  }) => void;
   logout: () => void;
 }
 
 const initialAccessToken = tokenStorage.getAccessToken();
+const initialRefreshToken = tokenStorage.getRefreshToken();
 
 export const useAuthStore = create<AuthState>((set) => ({
   accessToken: initialAccessToken,
+  refreshToken: initialRefreshToken,
   user: null,
   isAuthenticated: Boolean(initialAccessToken),
   setAccessToken: (accessToken) => {
@@ -31,25 +40,43 @@ export const useAuthStore = create<AuthState>((set) => ({
       isAuthenticated: Boolean(accessToken),
     });
   },
-  setUser: (user) => {
-    set({
-      user,
-    });
+  setRefreshToken: (refreshToken) => {
+    if (refreshToken) {
+      tokenStorage.setRefreshToken(refreshToken);
+    } else {
+      tokenStorage.clearRefreshToken();
+    }
+
+    set({ refreshToken });
   },
-  login: ({ accessToken, user }) => {
-    tokenStorage.setAccessToken(accessToken);
+  setTokens: ({ accessToken, refreshToken }) => {
+    tokenStorage.setTokens({ accessToken, refreshToken });
 
     set({
       accessToken,
+      refreshToken: refreshToken === undefined ? tokenStorage.getRefreshToken() : refreshToken,
+      isAuthenticated: true,
+    });
+  },
+  setUser: (user) => {
+    set({ user });
+  },
+  login: ({ accessToken, refreshToken, user }) => {
+    tokenStorage.setTokens({ accessToken, refreshToken });
+
+    set({
+      accessToken,
+      refreshToken: refreshToken ?? null,
       user,
       isAuthenticated: true,
     });
   },
   logout: () => {
-    tokenStorage.clearAccessToken();
+    tokenStorage.clearTokens();
 
     set({
       accessToken: null,
+      refreshToken: null,
       user: null,
       isAuthenticated: false,
     });

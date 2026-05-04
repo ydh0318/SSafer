@@ -7,37 +7,13 @@ export interface AuthUser {
   role?: AuthRole | string;
 }
 
-export interface LoginFormValues {
-  email: string;
-  password: string;
+export interface GuestEnterRequest {
+  deviceId?: string;
 }
 
-export interface SignupFormValues {
-  email: string;
-  code: string;
-  displayName: string;
-  password: string;
-  confirmPassword: string;
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface AuthTokenData {
-  accessToken: string;
-  refreshToken?: string;
-  expiresIn?: number;
-  user?: AuthUser | null;
-}
-
-export interface RefreshTokenRequest {
-  refreshToken: string;
-}
-
-export interface LogoutRequest {
-  refreshToken: string;
+export interface GuestEnterData {
+  guestAccessToken: string;
+  expiresAt: string;
 }
 
 export interface CheckEmailAvailabilityData {
@@ -55,15 +31,35 @@ export interface VerifyEmailCodeRequest {
 
 export interface RegisterUserRequest {
   email: string;
-  code: string;
-  displayName: string;
   password: string;
+  displayName: string;
+  code?: string;
 }
 
 export interface RegisterUserData {
-  userId?: string;
+  userId?: number | string;
+  email?: string;
+  displayName?: string;
+}
+
+export interface LoginRequest {
   email: string;
-  displayName: string;
+  password: string;
+}
+
+export interface AuthTokenData {
+  accessToken: string;
+  accessTokenExpiresAt?: string;
+  refreshToken?: string;
+  refreshTokenExpiresAt?: string;
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string;
+}
+
+export interface LogoutRequest {
+  refreshToken: string;
 }
 
 export interface ChangePasswordRequest {
@@ -71,11 +67,33 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
-export interface GuestEnterRequest {
-  deviceId: string;
+export interface PasswordResetSendCodeRequest {
+  email: string;
 }
 
-export interface GuestEnterData {
-  accessToken: string;
-  role: 'GUEST';
+export interface PasswordResetVerifyCodeRequest {
+  email: string;
+  code: string;
+}
+
+export interface PasswordResetVerifyCodeData {
+  resetToken: string;
+}
+
+export interface PasswordResetCompleteRequest {
+  resetToken: string;
+  newPassword: string;
+}
+
+export interface LoginFormValues {
+  email: string;
+  password: string;
+}
+
+export interface SignupFormValues {
+  email: string;
+  code: string;
+  displayName: string;
+  password: string;
+  confirmPassword: string;
 }
