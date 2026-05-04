@@ -105,11 +105,11 @@ pipeline {
         success {
             withCredentials([string(credentialsId: 'mattermost-webhook-url', variable: 'MM_WEBHOOK')]) {
                 script {
-                    def commitHash = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'unknown'
+                    def commitMsg = sh(script: 'git log -1 --format=%s', returnStdout: true).trim()
                     def duration = currentBuild.durationString.replace(' and counting', '')
                     def msg = "✅ **[SSafer] 배포 성공**\n" +
                               "> **브랜치:** `${env.GIT_BRANCH}`\n" +
-                              "> **커밋:** `${commitHash}`\n" +
+                              "> **커밋:** ${commitMsg}\n" +
                               "> **이미지 태그:** `${env.IMAGE_TAG}`\n" +
                               "> **소요 시간:** ${duration}\n" +
                               "> **빌드:** [#${env.BUILD_NUMBER} 바로가기](${env.BUILD_URL})"
@@ -122,11 +122,11 @@ pipeline {
         failure {
             withCredentials([string(credentialsId: 'mattermost-webhook-url', variable: 'MM_WEBHOOK')]) {
                 script {
-                    def commitHash = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'unknown'
+                    def commitMsg = sh(script: 'git log -1 --format=%s', returnStdout: true).trim()
                     def duration = currentBuild.durationString.replace(' and counting', '')
                     def msg = "❌ **[SSafer] 배포 실패**\n" +
                               "> **브랜치:** `${env.GIT_BRANCH}`\n" +
-                              "> **커밋:** `${commitHash}`\n" +
+                              "> **커밋:** ${commitMsg}\n" +
                               "> **소요 시간:** ${duration}\n" +
                               "> **실패 Stage:** `${FAILED_STAGE}`\n" +
                               "> **빌드:** [#${env.BUILD_NUMBER} 바로가기](${env.BUILD_URL})\n" +
