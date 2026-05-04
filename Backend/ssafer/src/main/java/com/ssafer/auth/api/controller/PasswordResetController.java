@@ -3,9 +3,12 @@ package com.ssafer.auth.api.controller;
 import com.ssafer.auth.api.dto.CompletePasswordResetRequest;
 import com.ssafer.auth.api.dto.SendPasswordResetCodeRequest;
 import com.ssafer.auth.api.dto.VerifyPasswordResetCodeRequest;
+import com.ssafer.auth.api.dto.VerifyPasswordResetCodeResponseData;
 import com.ssafer.auth.application.service.PasswordResetCodeService;
 import com.ssafer.global.api.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -51,34 +54,41 @@ public class PasswordResetController {
   @PostMapping("/verify-code")
   @Operation(
       summary = "비밀번호 재설정 코드 검증",
-      description = "이메일로 전송된 비밀번호 재설정 코드를 확인합니다."
+      description = "이메일로 전송된 비밀번호 재설정 코드를 확인하고 재설정 토큰을 발급합니다."
   )
   @ApiResponses({
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "비밀번호 재설정 코드 검증 성공"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "비밀번호 재설정 코드 검증 성공",
+          content = @Content(schema = @Schema(implementation = VerifyPasswordResetCodeResponseData.class))
+      ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 형식 오류 또는 코드 불일치")
   })
-  public ResponseEntity<ApiResponse<Void>> verifyCode(
+  public ResponseEntity<ApiResponse<VerifyPasswordResetCodeResponseData>> verifyCode(
       @Valid @RequestBody VerifyPasswordResetCodeRequest request
   ) {
-    // 코드 검증이 끝나면 재설정 완료 API에서 사용할 verified 상태를 저장한다.
-    passwordResetCodeService.verifyCode(request.email(), request.code());
-    return ResponseEntity.ok(ApiResponse.success(VERIFY_CODE_SUCCESS_MESSAGE, null));
+    // 코드 검증이 끝나면 만료 시간을 가진 재설정 토큰을 내려준다.
+    String resetToken = passwordResetCodeService.verifyCode(request.email(), request.code());
+    return ResponseEntity.ok(ApiResponse.success(
+        VERIFY_CODE_SUCCESS_MESSAGE,
+        new VerifyPasswordResetCodeResponseData(resetToken)
+    ));
   }
 
   @PostMapping("/complete")
   @Operation(
       summary = "비밀번호 재설정 완료",
-      description = "코드 검증이 끝난 계정에 한해 새 비밀번호로 재설정합니다."
+      description = "유효한 재설정 토큰을 사용해 새 비밀번호로 재설정합니다."
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "비밀번호 재설정 완료"),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 형식 오류 또는 검증 미완료")
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 형식 오류 또는 토큰 만료")
   })
   public ResponseEntity<ApiResponse<Void>> completeReset(
       @Valid @RequestBody CompletePasswordResetRequest request
   ) {
-    // 재설정이 끝나면 기존 refresh token도 함께 정리한다.
-    passwordResetCodeService.completeReset(request.email(), request.newPassword());
+    // 재설정이 끝나면 사용한 토큰은 즉시 폐기한다.
+    passwordResetCodeService.completeReset(request.resetToken(), request.newPassword());
     return ResponseEntity.ok(ApiResponse.success(COMPLETE_RESET_SUCCESS_MESSAGE, null));
   }
 }

@@ -68,23 +68,36 @@ class RedisPasswordResetCodeStoreTest {
   }
 
   @Test
-  void markVerifiedStoresVerifiedKeyWithTtl() {
-    passwordResetCodeStore.markVerified("user@ssafer.co.kr", Duration.ofMinutes(30));
+  void saveResetTokenStoresForwardAndReverseKeys() {
+    given(valueOperations.get("password-reset:email-token:user@ssafer.co.kr")).willReturn(null);
 
-    then(valueOperations).should().set("password-reset:verified:user@ssafer.co.kr", "true", Duration.ofMinutes(30));
+    passwordResetCodeStore.saveResetToken("user@ssafer.co.kr", "reset-token-123", Duration.ofMinutes(30));
+
+    then(valueOperations).should().set("password-reset:token:reset-token-123", "user@ssafer.co.kr", Duration.ofMinutes(30));
+    then(valueOperations).should().set("password-reset:email-token:user@ssafer.co.kr", "reset-token-123", Duration.ofMinutes(30));
   }
 
   @Test
-  void isVerifiedReturnsTrueWhenVerifiedKeyExists() {
-    given(stringRedisTemplate.hasKey("password-reset:verified:user@ssafer.co.kr")).willReturn(true);
+  void saveResetTokenDeletesPreviousTokenWhenItExists() {
+    given(valueOperations.get("password-reset:email-token:user@ssafer.co.kr")).willReturn("old-token");
 
-    assertThat(passwordResetCodeStore.isVerified("user@ssafer.co.kr")).isTrue();
+    passwordResetCodeStore.saveResetToken("user@ssafer.co.kr", "new-token", Duration.ofMinutes(30));
+
+    then(stringRedisTemplate).should().delete("password-reset:token:old-token");
   }
 
   @Test
-  void clearVerifiedRemovesVerifiedKey() {
-    passwordResetCodeStore.clearVerified("user@ssafer.co.kr");
+  void consumeResetTokenReturnsStoredEmailAndDeletesReverseKey() {
+    given(valueOperations.getAndDelete("password-reset:token:reset-token-123")).willReturn("user@ssafer.co.kr");
 
-    then(stringRedisTemplate).should().delete("password-reset:verified:user@ssafer.co.kr");
+    assertThat(passwordResetCodeStore.consumeResetToken("reset-token-123")).contains("user@ssafer.co.kr");
+    then(stringRedisTemplate).should().delete("password-reset:email-token:user@ssafer.co.kr");
+  }
+
+  @Test
+  void consumeResetTokenReturnsEmptyWhenTokenDoesNotExist() {
+    given(valueOperations.getAndDelete("password-reset:token:reset-token-123")).willReturn(null);
+
+    assertThat(passwordResetCodeStore.consumeResetToken("reset-token-123")).isEmpty();
   }
 }

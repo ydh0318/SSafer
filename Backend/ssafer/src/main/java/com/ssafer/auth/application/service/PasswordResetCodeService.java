@@ -10,6 +10,7 @@ import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.repository.UserRepository;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,7 +29,7 @@ public class PasswordResetCodeService {
   private final UserPasswordService userPasswordService;
   private final Duration codeTtl;
   private final Duration cooldownTtl;
-  private final Duration verifiedTtl;
+  private final Duration resetTokenTtl;
 
   public PasswordResetCodeService(
       PasswordResetCodeStore passwordResetCodeStore,
@@ -38,7 +39,7 @@ public class PasswordResetCodeService {
       UserPasswordService userPasswordService,
       @Value("${PASSWORD_RESET_CODE_TTL_SECONDS:300}") long codeTtlSeconds,
       @Value("${PASSWORD_RESET_COOLDOWN_SECONDS:60}") long cooldownTtlSeconds,
-      @Value("${PASSWORD_RESET_VERIFIED_TTL_SECONDS:1800}") long verifiedTtlSeconds
+      @Value("${PASSWORD_RESET_TOKEN_TTL_SECONDS:1800}") long resetTokenTtlSeconds
   ) {
     this.passwordResetCodeStore = passwordResetCodeStore;
     this.verificationCodeGenerator = verificationCodeGenerator;
@@ -47,7 +48,7 @@ public class PasswordResetCodeService {
     this.userPasswordService = userPasswordService;
     this.codeTtl = Duration.ofSeconds(codeTtlSeconds);
     this.cooldownTtl = Duration.ofSeconds(cooldownTtlSeconds);
-    this.verifiedTtl = Duration.ofSeconds(verifiedTtlSeconds);
+    this.resetTokenTtl = Duration.ofSeconds(resetTokenTtlSeconds);
   }
 
   public void sendResetCode(String rawEmail) {
@@ -78,7 +79,7 @@ public class PasswordResetCodeService {
     }
   }
 
-  public void verifyCode(String rawEmail, String rawCode) {
+  public String verifyCode(String rawEmail, String rawCode) {
     String email = normalizeEmailOrThrow(rawEmail);
     String code = normalizeCodeOrThrow(rawCode);
 
@@ -89,20 +90,20 @@ public class PasswordResetCodeService {
       throw new BusinessException(ErrorCode.PASSWORD_RESET_CODE_INVALID);
     }
 
-    // 코드 검증이 끝나면 코드는 지우고, 재설정 완료 API에서 확인할 검증 상태를 남긴다.
+    String resetToken = UUID.randomUUID().toString();
+
+    // 코드 검증이 끝난 시점에만 이전 토큰을 대체해 이미 진행 중인 재설정 흐름을 불필요하게 깨지 않게 한다.
     passwordResetCodeStore.deleteCode(email);
-    passwordResetCodeStore.markVerified(email, verifiedTtl);
+    passwordResetCodeStore.saveResetToken(email, resetToken, resetTokenTtl);
+    return resetToken;
   }
 
-  public void completeReset(String rawEmail, String rawNewPassword) {
-    String email = normalizeEmailOrThrow(rawEmail);
-
-    if (!passwordResetCodeStore.isVerified(email)) {
-      throw new BusinessException(ErrorCode.PASSWORD_RESET_VERIFICATION_REQUIRED);
-    }
+  public void completeReset(String rawResetToken, String rawNewPassword) {
+    String resetToken = normalizeResetTokenOrThrow(rawResetToken);
+    String email = passwordResetCodeStore.consumeResetToken(resetToken)
+        .orElseThrow(() -> new BusinessException(ErrorCode.PASSWORD_RESET_TOKEN_INVALID));
 
     userPasswordService.resetPassword(email, rawNewPassword);
-    passwordResetCodeStore.clearVerified(email);
   }
 
   private boolean isEligibleForPasswordReset(User user) {
@@ -128,6 +129,18 @@ public class PasswordResetCodeService {
 
     String normalized = rawCode.trim();
     if (!normalized.matches("\\d{6}")) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+    return normalized;
+  }
+
+  private String normalizeResetTokenOrThrow(String rawResetToken) {
+    if (rawResetToken == null) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
+    String normalized = rawResetToken.trim();
+    if (normalized.isEmpty() || normalized.length() > 100) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
     return normalized;

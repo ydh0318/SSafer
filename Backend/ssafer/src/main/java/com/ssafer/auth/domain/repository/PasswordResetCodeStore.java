@@ -13,9 +13,7 @@ public interface PasswordResetCodeStore {
 
   void deleteCodeAndCooldown(String email);
 
-  void markVerified(String email, Duration verifiedTtl);
+  void saveResetToken(String email, String resetToken, Duration resetTokenTtl);
 
-  boolean isVerified(String email);
-
-  void clearVerified(String email);
+  Optional<String> consumeResetToken(String resetToken);
 }

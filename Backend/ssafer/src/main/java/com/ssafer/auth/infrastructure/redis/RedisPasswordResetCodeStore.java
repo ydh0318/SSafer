@@ -12,7 +12,8 @@ public class RedisPasswordResetCodeStore implements PasswordResetCodeStore {
 
   private static final String CODE_KEY_PREFIX = "password-reset:code:";
   private static final String COOLDOWN_KEY_PREFIX = "password-reset:cooldown:";
-  private static final String VERIFIED_KEY_PREFIX = "password-reset:verified:";
+  private static final String TOKEN_KEY_PREFIX = "password-reset:token:";
+  private static final String EMAIL_TOKEN_KEY_PREFIX = "password-reset:email-token:";
 
   private final StringRedisTemplate stringRedisTemplate;
 
@@ -51,20 +52,28 @@ public class RedisPasswordResetCodeStore implements PasswordResetCodeStore {
   }
 
   @Override
-  public void markVerified(String email, Duration verifiedTtl) {
-    // 인증코드 검증이 끝난 이메일만 재설정 완료 API를 호출할 수 있도록 verified 상태를 저장한다.
-    stringRedisTemplate.opsForValue().set(buildVerifiedKey(email), "true", verifiedTtl);
+  public void saveResetToken(String email, String resetToken, Duration resetTokenTtl) {
+    // 같은 이메일의 이전 재설정 토큰이 남아 있으면 새 토큰 발급 전에 함께 정리한다.
+    String previousToken = stringRedisTemplate.opsForValue().get(buildEmailTokenKey(email));
+    if (previousToken != null && !previousToken.isBlank()) {
+      stringRedisTemplate.delete(buildTokenKey(previousToken));
+    }
+
+    stringRedisTemplate.opsForValue().set(buildTokenKey(resetToken), email, resetTokenTtl);
+    stringRedisTemplate.opsForValue().set(buildEmailTokenKey(email), resetToken, resetTokenTtl);
   }
 
   @Override
-  public boolean isVerified(String email) {
-    return Boolean.TRUE.equals(stringRedisTemplate.hasKey(buildVerifiedKey(email)));
-  }
+  public Optional<String> consumeResetToken(String resetToken) {
+    // 재설정 토큰은 한 번만 사용할 수 있도록 token 키를 원자적으로 꺼내면서 삭제한다.
+    String email = stringRedisTemplate.opsForValue().getAndDelete(buildTokenKey(resetToken));
+    if (email == null || email.isBlank()) {
+      return Optional.empty();
+    }
 
-  @Override
-  public void clearVerified(String email) {
-    // 비밀번호 재설정이 끝나면 verified 상태를 즉시 제거한다.
-    stringRedisTemplate.delete(buildVerifiedKey(email));
+    // 역방향 이메일 인덱스는 후속 정리 대상이라 원자성보다 일관성 유지에 집중한다.
+    stringRedisTemplate.delete(buildEmailTokenKey(email));
+    return Optional.of(email);
   }
 
   private String buildCodeKey(String email) {
@@ -75,7 +84,11 @@ public class RedisPasswordResetCodeStore implements PasswordResetCodeStore {
     return COOLDOWN_KEY_PREFIX + email;
   }
 
-  private String buildVerifiedKey(String email) {
-    return VERIFIED_KEY_PREFIX + email;
+  private String buildTokenKey(String resetToken) {
+    return TOKEN_KEY_PREFIX + resetToken;
+  }
+
+  private String buildEmailTokenKey(String email) {
+    return EMAIL_TOKEN_KEY_PREFIX + email;
   }
 }

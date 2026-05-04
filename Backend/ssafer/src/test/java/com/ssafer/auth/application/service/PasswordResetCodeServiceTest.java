@@ -1,5 +1,6 @@
 package com.ssafer.auth.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -159,13 +160,14 @@ class PasswordResetCodeServiceTest {
   }
 
   @Test
-  void verifyCodeMarksEmailAsVerifiedWhenCodeMatches() {
+  void verifyCodeReturnsResetTokenWhenCodeMatches() {
     given(passwordResetCodeStore.findCode("user@ssafer.co.kr")).willReturn(Optional.of("123456"));
 
-    passwordResetCodeService.verifyCode("USER@SSAFER.CO.KR", "123456");
+    String resetToken = passwordResetCodeService.verifyCode("USER@SSAFER.CO.KR", "123456");
 
+    assertThat(resetToken).isNotBlank();
     then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
-    then(passwordResetCodeStore).should().markVerified(Mockito.eq("user@ssafer.co.kr"), Mockito.any());
+    then(passwordResetCodeStore).should().saveResetToken(Mockito.eq("user@ssafer.co.kr"), Mockito.eq(resetToken), Mockito.any());
   }
 
   @Test
@@ -179,37 +181,36 @@ class PasswordResetCodeServiceTest {
   }
 
   @Test
-  void completeResetDelegatesToUserPasswordServiceWhenVerified() {
-    given(passwordResetCodeStore.isVerified("user@ssafer.co.kr")).willReturn(true);
+  void completeResetDelegatesToUserPasswordServiceWhenTokenIsConsumed() {
+    given(passwordResetCodeStore.consumeResetToken("reset-token-123"))
+        .willReturn(Optional.of("user@ssafer.co.kr"));
 
-    passwordResetCodeService.completeReset("USER@SSAFER.CO.KR", "new-password123");
+    passwordResetCodeService.completeReset(" reset-token-123 ", "new-password123");
 
     then(userPasswordService).should().resetPassword("user@ssafer.co.kr", "new-password123");
-    then(passwordResetCodeStore).should().clearVerified("user@ssafer.co.kr");
   }
 
   @Test
-  void completeResetThrowsWhenVerificationIsMissing() {
-    given(passwordResetCodeStore.isVerified("user@ssafer.co.kr")).willReturn(false);
+  void completeResetThrowsWhenTokenIsMissing() {
+    given(passwordResetCodeStore.consumeResetToken("reset-token-123")).willReturn(Optional.empty());
 
-    assertThatThrownBy(() -> passwordResetCodeService.completeReset("user@ssafer.co.kr", "new-password123"))
+    assertThatThrownBy(() -> passwordResetCodeService.completeReset("reset-token-123", "new-password123"))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
-        .isEqualTo(ErrorCode.PASSWORD_RESET_VERIFICATION_REQUIRED);
+        .isEqualTo(ErrorCode.PASSWORD_RESET_TOKEN_INVALID);
   }
 
   @Test
-  void completeResetKeepsVerifiedStateWhenPasswordUpdateFails() {
-    given(passwordResetCodeStore.isVerified("user@ssafer.co.kr")).willReturn(true);
+  void completeResetKeepsFailureFromPasswordUpdate() {
+    given(passwordResetCodeStore.consumeResetToken("reset-token-123"))
+        .willReturn(Optional.of("user@ssafer.co.kr"));
     Mockito.doThrow(new BusinessException(ErrorCode.INVALID_PARAMETER))
         .when(userPasswordService)
         .resetPassword("user@ssafer.co.kr", "new-password123");
 
-    assertThatThrownBy(() -> passwordResetCodeService.completeReset("user@ssafer.co.kr", "new-password123"))
+    assertThatThrownBy(() -> passwordResetCodeService.completeReset("reset-token-123", "new-password123"))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.INVALID_PARAMETER);
-
-    then(passwordResetCodeStore).should(Mockito.never()).clearVerified("user@ssafer.co.kr");
   }
 }

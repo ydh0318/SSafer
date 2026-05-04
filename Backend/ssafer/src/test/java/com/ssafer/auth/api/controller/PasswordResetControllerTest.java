@@ -1,5 +1,6 @@
 package com.ssafer.auth.api.controller;
 
+import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -82,7 +83,10 @@ class PasswordResetControllerTest {
   }
 
   @Test
-  void verifyCodeReturnsOk() throws Exception {
+  void verifyCodeReturnsResetToken() throws Exception {
+    given(passwordResetCodeService.verifyCode("user@ssafer.co.kr", "123456"))
+        .willReturn("reset-token-123");
+
     mockMvc.perform(post("/api/v1/auth/password-reset/verify-code")
             .contentType(APPLICATION_JSON)
             .content("""
@@ -93,7 +97,7 @@ class PasswordResetControllerTest {
                 """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.message").value("Password reset verification succeeded"))
-        .andExpect(jsonPath("$.data").doesNotExist());
+        .andExpect(jsonPath("$.data.resetToken").value("reset-token-123"));
 
     then(passwordResetCodeService).should().verifyCode("user@ssafer.co.kr", "123456");
   }
@@ -137,7 +141,7 @@ class PasswordResetControllerTest {
             .contentType(APPLICATION_JSON)
             .content("""
                 {
-                  "email": "user@ssafer.co.kr",
+                  "resetToken": "reset-token-123",
                   "newPassword": "new-password123"
                 }
                 """))
@@ -145,7 +149,22 @@ class PasswordResetControllerTest {
         .andExpect(jsonPath("$.message").value("Password reset completed"))
         .andExpect(jsonPath("$.data").doesNotExist());
 
-    then(passwordResetCodeService).should().completeReset("user@ssafer.co.kr", "new-password123");
+    then(passwordResetCodeService).should().completeReset("reset-token-123", "new-password123");
+  }
+
+  @Test
+  void completeResetWithBlankTokenReturnsFieldErrors() throws Exception {
+    mockMvc.perform(post("/api/v1/auth/password-reset/complete")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "resetToken": " ",
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.resetToken").exists());
   }
 
   @Test
@@ -154,7 +173,7 @@ class PasswordResetControllerTest {
             .contentType(APPLICATION_JSON)
             .content("""
                 {
-                  "email": "user@ssafer.co.kr",
+                  "resetToken": "reset-token-123",
                   "newPassword": "short"
                 }
                 """))
@@ -164,20 +183,20 @@ class PasswordResetControllerTest {
   }
 
   @Test
-  void completeResetWhenVerificationIsMissingReturnsBadRequest() throws Exception {
-    Mockito.doThrow(new BusinessException(ErrorCode.PASSWORD_RESET_VERIFICATION_REQUIRED))
+  void completeResetWhenTokenIsInvalidReturnsBadRequest() throws Exception {
+    Mockito.doThrow(new BusinessException(ErrorCode.PASSWORD_RESET_TOKEN_INVALID))
         .when(passwordResetCodeService)
-        .completeReset("user@ssafer.co.kr", "new-password123");
+        .completeReset("reset-token-123", "new-password123");
 
     mockMvc.perform(post("/api/v1/auth/password-reset/complete")
             .contentType(APPLICATION_JSON)
             .content("""
                 {
-                  "email": "user@ssafer.co.kr",
+                  "resetToken": "reset-token-123",
                   "newPassword": "new-password123"
                 }
                 """))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.code").value("PASSWORD_RESET_VERIFICATION_REQUIRED"));
+        .andExpect(jsonPath("$.code").value("PASSWORD_RESET_TOKEN_INVALID"));
   }
 }
