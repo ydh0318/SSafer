@@ -2,7 +2,6 @@ package com.ssafer.agent.application.service;
 
 import com.ssafer.agent.api.dto.PendingAgentTaskResponseData;
 import com.ssafer.agent.domain.entity.Agent;
-import com.ssafer.agent.domain.entity.AgentTask;
 import com.ssafer.agent.domain.enums.AgentTaskStatus;
 import com.ssafer.agent.domain.repository.AgentRepository;
 import com.ssafer.agent.domain.repository.AgentTaskRepository;
@@ -19,7 +18,9 @@ public class PendingAgentTaskQueryService {
 
   private static final List<AgentTaskStatus> PENDING_STATUSES = List.of(
       AgentTaskStatus.PENDING,
-      AgentTaskStatus.SENT
+      AgentTaskStatus.SENT,
+      AgentTaskStatus.ACKED,
+      AgentTaskStatus.RUNNING
   );
 
   private final AgentRepository agentRepository;
@@ -73,4 +74,3 @@ public class PendingAgentTaskQueryService {
     }
   }
 }
-
