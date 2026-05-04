@@ -17,12 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AgentStatusQueryService {
 
-  private static final List<AgentTaskStatus> INCOMPLETE_STATUSES = List.of(
-      AgentTaskStatus.PENDING,
-      AgentTaskStatus.SENT,
-      AgentTaskStatus.ACKED,
-      AgentTaskStatus.RUNNING
-  );
+  private static final List<AgentTaskStatus> INCOMPLETE_STATUSES = AgentTaskStatus.resendTargetStatuses();
 
   private final ProjectAuthorizationService projectAuthorizationService;
   private final AgentRepository agentRepository;
@@ -40,7 +35,7 @@ public class AgentStatusQueryService {
 
   @Transactional(readOnly = true)
   public AgentStatusResponseData getAgentStatus(Long projectId, AuthenticatedActor actor) {
-    // 프로젝트 존재/권한을 먼저 검증하고 해당 프로젝트 단일 agent 상태를 조회한다.
+    // 프로젝트 존재/권한을 먼저 검증하고 해당 프로젝트의 agent 상태를 조회한다.
     projectAuthorizationService.loadAuthorizedProjectOrThrow(projectId, actor);
 
     Agent agent = agentRepository.findFirstByProjectId(projectId)
@@ -59,4 +54,3 @@ public class AgentStatusQueryService {
     );
   }
 }
-

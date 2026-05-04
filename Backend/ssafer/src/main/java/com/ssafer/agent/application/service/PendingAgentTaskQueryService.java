@@ -2,7 +2,6 @@ package com.ssafer.agent.application.service;
 
 import com.ssafer.agent.api.dto.PendingAgentTaskResponseData;
 import com.ssafer.agent.domain.entity.Agent;
-import com.ssafer.agent.domain.entity.AgentTask;
 import com.ssafer.agent.domain.enums.AgentTaskStatus;
 import com.ssafer.agent.domain.repository.AgentRepository;
 import com.ssafer.agent.domain.repository.AgentTaskRepository;
@@ -17,10 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class PendingAgentTaskQueryService {
 
-  private static final List<AgentTaskStatus> PENDING_STATUSES = List.of(
-      AgentTaskStatus.PENDING,
-      AgentTaskStatus.SENT
-  );
+  private static final List<AgentTaskStatus> PENDING_STATUSES = AgentTaskStatus.resendTargetStatuses();
 
   private final AgentRepository agentRepository;
   private final AgentTaskRepository agentTaskRepository;
@@ -73,4 +69,3 @@ public class PendingAgentTaskQueryService {
     }
   }
 }
-

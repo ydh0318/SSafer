@@ -26,6 +26,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.ObjectMapper;
 
@@ -43,26 +44,44 @@ class PendingAgentTaskQueryServiceTest {
   }
 
   @Test
-  void getPendingTasksReturnsPendingAndSentTasks() {
+  void getPendingTasksReturnsIncompleteTasks() {
     Agent agent = buildAgent(1L, 10L);
     AgentTask first = buildTask(101L, agent, AgentTaskStatus.PENDING, "{\"action\":\"A\"}",
         Instant.parse("2026-04-23T09:00:00Z"));
     AgentTask second = buildTask(102L, agent, AgentTaskStatus.SENT, "{\"action\":\"B\"}",
         Instant.parse("2026-04-23T09:03:00Z"));
+    AgentTask third = buildTask(103L, agent, AgentTaskStatus.ACKED, "{\"action\":\"C\"}",
+        Instant.parse("2026-04-23T09:06:00Z"));
+    AgentTask fourth = buildTask(104L, agent, AgentTaskStatus.RUNNING, "{\"action\":\"D\"}",
+        Instant.parse("2026-04-23T09:09:00Z"));
 
     given(agentRepository.findById(1L)).willReturn(Optional.of(agent));
     given(agentTaskRepository.findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(
         Mockito.eq(1L),
         Mockito.anyCollection()
-    )).willReturn(List.of(first, second));
+    )).willReturn(List.of(first, second, third, fourth));
 
     List<PendingAgentTaskResponseData> result = service.getPendingTasks(1L, 1L);
 
-    assertThat(result).hasSize(2);
+    ArgumentCaptor<java.util.Collection<AgentTaskStatus>> statusCaptor = ArgumentCaptor.forClass(java.util.Collection.class);
+    Mockito.verify(agentTaskRepository).findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(Mockito.eq(1L), statusCaptor.capture());
+
+    assertThat(statusCaptor.getValue()).containsExactlyInAnyOrder(
+        AgentTaskStatus.PENDING,
+        AgentTaskStatus.SENT,
+        AgentTaskStatus.ACKED,
+        AgentTaskStatus.RUNNING
+    );
+
+    assertThat(result).hasSize(4);
     assertThat(result.get(0).taskId()).isEqualTo(101L);
     assertThat(result.get(0).taskStatus()).isEqualTo(AgentTaskStatus.PENDING);
     assertThat(result.get(1).taskId()).isEqualTo(102L);
     assertThat(result.get(1).taskStatus()).isEqualTo(AgentTaskStatus.SENT);
+    assertThat(result.get(2).taskId()).isEqualTo(103L);
+    assertThat(result.get(2).taskStatus()).isEqualTo(AgentTaskStatus.ACKED);
+    assertThat(result.get(3).taskId()).isEqualTo(104L);
+    assertThat(result.get(3).taskStatus()).isEqualTo(AgentTaskStatus.RUNNING);
   }
 
   @Test

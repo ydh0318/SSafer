@@ -20,7 +20,7 @@ public class AgentHandshakeInterceptor implements HandshakeInterceptor {
       WebSocketHandler wsHandler,
       Map<String, Object> attributes
   ) {
-    // Tomcat에서 request 재사용 이슈를 피하기 위해 인증 헤더를 세션 attribute로 복사해 둔다.
+    // Tomcat 환경에서 request 객체 재사용 이슈를 피하기 위해 인증 헤더를 세션 attribute로 복사한다.
     String authorization = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
     if (authorization != null) {
       attributes.put(AUTHORIZATION_ATTR, authorization);
