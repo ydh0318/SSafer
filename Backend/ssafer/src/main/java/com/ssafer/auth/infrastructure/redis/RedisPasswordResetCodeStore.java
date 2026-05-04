@@ -12,6 +12,7 @@ public class RedisPasswordResetCodeStore implements PasswordResetCodeStore {
 
   private static final String CODE_KEY_PREFIX = "password-reset:code:";
   private static final String COOLDOWN_KEY_PREFIX = "password-reset:cooldown:";
+  private static final String VERIFIED_KEY_PREFIX = "password-reset:verified:";
 
   private final StringRedisTemplate stringRedisTemplate;
 
@@ -45,8 +46,25 @@ public class RedisPasswordResetCodeStore implements PasswordResetCodeStore {
 
   @Override
   public void deleteCodeAndCooldown(String email) {
-    // 발송 실패 같은 롤백 상황에서는 코드와 cooldown을 함께 비운다.
+    // 발송 실패와 같은 롤백 상황에서는 코드와 cooldown을 함께 비운다.
     stringRedisTemplate.delete(List.of(buildCodeKey(email), buildCooldownKey(email)));
+  }
+
+  @Override
+  public void markVerified(String email, Duration verifiedTtl) {
+    // 인증코드 검증이 끝난 이메일만 재설정 완료 API를 호출할 수 있도록 verified 상태를 저장한다.
+    stringRedisTemplate.opsForValue().set(buildVerifiedKey(email), "true", verifiedTtl);
+  }
+
+  @Override
+  public boolean isVerified(String email) {
+    return Boolean.TRUE.equals(stringRedisTemplate.hasKey(buildVerifiedKey(email)));
+  }
+
+  @Override
+  public void clearVerified(String email) {
+    // 비밀번호 재설정이 끝나면 verified 상태를 즉시 제거한다.
+    stringRedisTemplate.delete(buildVerifiedKey(email));
   }
 
   private String buildCodeKey(String email) {
@@ -55,5 +73,9 @@ public class RedisPasswordResetCodeStore implements PasswordResetCodeStore {
 
   private String buildCooldownKey(String email) {
     return COOLDOWN_KEY_PREFIX + email;
+  }
+
+  private String buildVerifiedKey(String email) {
+    return VERIFIED_KEY_PREFIX + email;
   }
 }

@@ -12,4 +12,10 @@ public interface PasswordResetCodeStore {
   void deleteCode(String email);
 
   void deleteCodeAndCooldown(String email);
+
+  void markVerified(String email, Duration verifiedTtl);
+
+  boolean isVerified(String email);
+
+  void clearVerified(String email);
 }

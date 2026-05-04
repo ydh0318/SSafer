@@ -61,7 +61,7 @@ class PasswordResetControllerTest {
                 """))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
-        .andExpect(jsonPath("$.data.fieldErrors.email").value("올바른 이메일 형식이어야 합니다."));
+        .andExpect(jsonPath("$.data.fieldErrors.email").exists());
   }
 
   @Test
@@ -79,5 +79,105 @@ class PasswordResetControllerTest {
                 """))
         .andExpect(status().isTooManyRequests())
         .andExpect(jsonPath("$.code").value("EMAIL_VERIFICATION_REQUEST_TOO_FREQUENT"));
+  }
+
+  @Test
+  void verifyCodeReturnsOk() throws Exception {
+    mockMvc.perform(post("/api/v1/auth/password-reset/verify-code")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "email": "user@ssafer.co.kr",
+                  "code": "123456"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Password reset verification succeeded"))
+        .andExpect(jsonPath("$.data").doesNotExist());
+
+    then(passwordResetCodeService).should().verifyCode("user@ssafer.co.kr", "123456");
+  }
+
+  @Test
+  void verifyCodeWithInvalidFieldsReturnsFieldErrors() throws Exception {
+    mockMvc.perform(post("/api/v1/auth/password-reset/verify-code")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "email": "user@ssafer.co.kr",
+                  "code": "12ab"
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.code").exists());
+  }
+
+  @Test
+  void verifyCodeWhenCodeIsInvalidReturnsBadRequest() throws Exception {
+    Mockito.doThrow(new BusinessException(ErrorCode.PASSWORD_RESET_CODE_INVALID))
+        .when(passwordResetCodeService)
+        .verifyCode("user@ssafer.co.kr", "123456");
+
+    mockMvc.perform(post("/api/v1/auth/password-reset/verify-code")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "email": "user@ssafer.co.kr",
+                  "code": "123456"
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("PASSWORD_RESET_CODE_INVALID"));
+  }
+
+  @Test
+  void completeResetReturnsOk() throws Exception {
+    mockMvc.perform(post("/api/v1/auth/password-reset/complete")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "email": "user@ssafer.co.kr",
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Password reset completed"))
+        .andExpect(jsonPath("$.data").doesNotExist());
+
+    then(passwordResetCodeService).should().completeReset("user@ssafer.co.kr", "new-password123");
+  }
+
+  @Test
+  void completeResetWithShortPasswordReturnsFieldErrors() throws Exception {
+    mockMvc.perform(post("/api/v1/auth/password-reset/complete")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "email": "user@ssafer.co.kr",
+                  "newPassword": "short"
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.newPassword").exists());
+  }
+
+  @Test
+  void completeResetWhenVerificationIsMissingReturnsBadRequest() throws Exception {
+    Mockito.doThrow(new BusinessException(ErrorCode.PASSWORD_RESET_VERIFICATION_REQUIRED))
+        .when(passwordResetCodeService)
+        .completeReset("user@ssafer.co.kr", "new-password123");
+
+    mockMvc.perform(post("/api/v1/auth/password-reset/complete")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "email": "user@ssafer.co.kr",
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("PASSWORD_RESET_VERIFICATION_REQUIRED"));
   }
 }

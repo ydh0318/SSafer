@@ -5,6 +5,7 @@ import com.ssafer.auth.domain.repository.PasswordResetCodeStore;
 import com.ssafer.auth.domain.repository.VerificationCodeGenerator;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.user.application.service.UserPasswordService;
 import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.repository.UserRepository;
 import java.time.Duration;
@@ -24,23 +25,29 @@ public class PasswordResetCodeService {
   private final VerificationCodeGenerator verificationCodeGenerator;
   private final PasswordResetCodeEmailSender passwordResetCodeEmailSender;
   private final UserRepository userRepository;
+  private final UserPasswordService userPasswordService;
   private final Duration codeTtl;
   private final Duration cooldownTtl;
+  private final Duration verifiedTtl;
 
   public PasswordResetCodeService(
       PasswordResetCodeStore passwordResetCodeStore,
       VerificationCodeGenerator verificationCodeGenerator,
       PasswordResetCodeEmailSender passwordResetCodeEmailSender,
       UserRepository userRepository,
+      UserPasswordService userPasswordService,
       @Value("${PASSWORD_RESET_CODE_TTL_SECONDS:300}") long codeTtlSeconds,
-      @Value("${PASSWORD_RESET_COOLDOWN_SECONDS:60}") long cooldownTtlSeconds
+      @Value("${PASSWORD_RESET_COOLDOWN_SECONDS:60}") long cooldownTtlSeconds,
+      @Value("${PASSWORD_RESET_VERIFIED_TTL_SECONDS:1800}") long verifiedTtlSeconds
   ) {
     this.passwordResetCodeStore = passwordResetCodeStore;
     this.verificationCodeGenerator = verificationCodeGenerator;
     this.passwordResetCodeEmailSender = passwordResetCodeEmailSender;
     this.userRepository = userRepository;
+    this.userPasswordService = userPasswordService;
     this.codeTtl = Duration.ofSeconds(codeTtlSeconds);
     this.cooldownTtl = Duration.ofSeconds(cooldownTtlSeconds);
+    this.verifiedTtl = Duration.ofSeconds(verifiedTtlSeconds);
   }
 
   public void sendResetCode(String rawEmail) {
@@ -71,6 +78,33 @@ public class PasswordResetCodeService {
     }
   }
 
+  public void verifyCode(String rawEmail, String rawCode) {
+    String email = normalizeEmailOrThrow(rawEmail);
+    String code = normalizeCodeOrThrow(rawCode);
+
+    String savedCode = passwordResetCodeStore.findCode(email)
+        .orElseThrow(() -> new BusinessException(ErrorCode.PASSWORD_RESET_CODE_INVALID));
+
+    if (!savedCode.equals(code)) {
+      throw new BusinessException(ErrorCode.PASSWORD_RESET_CODE_INVALID);
+    }
+
+    // 코드 검증이 끝나면 코드는 지우고, 재설정 완료 API에서 확인할 검증 상태를 남긴다.
+    passwordResetCodeStore.deleteCode(email);
+    passwordResetCodeStore.markVerified(email, verifiedTtl);
+  }
+
+  public void completeReset(String rawEmail, String rawNewPassword) {
+    String email = normalizeEmailOrThrow(rawEmail);
+
+    if (!passwordResetCodeStore.isVerified(email)) {
+      throw new BusinessException(ErrorCode.PASSWORD_RESET_VERIFICATION_REQUIRED);
+    }
+
+    userPasswordService.resetPassword(email, rawNewPassword);
+    passwordResetCodeStore.clearVerified(email);
+  }
+
   private boolean isEligibleForPasswordReset(User user) {
     return user.isActive() && user.getPasswordHash() != null && !user.getPasswordHash().isBlank();
   }
@@ -82,6 +116,18 @@ public class PasswordResetCodeService {
 
     String normalized = rawEmail.trim().toLowerCase(Locale.ROOT);
     if (normalized.isEmpty() || normalized.length() > MAX_EMAIL_LENGTH || !normalized.contains("@")) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+    return normalized;
+  }
+
+  private String normalizeCodeOrThrow(String rawCode) {
+    if (rawCode == null) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
+    String normalized = rawCode.trim();
+    if (!normalized.matches("\\d{6}")) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
     return normalized;

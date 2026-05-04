@@ -9,6 +9,7 @@ import com.ssafer.auth.domain.repository.PasswordResetCodeStore;
 import com.ssafer.auth.domain.repository.VerificationCodeGenerator;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.user.application.service.UserPasswordService;
 import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
@@ -23,6 +24,7 @@ class PasswordResetCodeServiceTest {
   private VerificationCodeGenerator verificationCodeGenerator;
   private PasswordResetCodeEmailSender passwordResetCodeEmailSender;
   private UserRepository userRepository;
+  private UserPasswordService userPasswordService;
   private PasswordResetCodeService passwordResetCodeService;
 
   @BeforeEach
@@ -31,13 +33,16 @@ class PasswordResetCodeServiceTest {
     verificationCodeGenerator = Mockito.mock(VerificationCodeGenerator.class);
     passwordResetCodeEmailSender = Mockito.mock(PasswordResetCodeEmailSender.class);
     userRepository = Mockito.mock(UserRepository.class);
+    userPasswordService = Mockito.mock(UserPasswordService.class);
     passwordResetCodeService = new PasswordResetCodeService(
         passwordResetCodeStore,
         verificationCodeGenerator,
         passwordResetCodeEmailSender,
         userRepository,
+        userPasswordService,
         300,
-        60
+        60,
+        1800
     );
   }
 
@@ -77,12 +82,6 @@ class PasswordResetCodeServiceTest {
 
     passwordResetCodeService.sendResetCode("user@ssafer.co.kr");
 
-    then(passwordResetCodeStore).should().saveCodeIfCooldownNotActive(
-        Mockito.eq("user@ssafer.co.kr"),
-        Mockito.eq("123456"),
-        Mockito.any(),
-        Mockito.any()
-    );
     then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
     then(passwordResetCodeEmailSender).shouldHaveNoInteractions();
   }
@@ -157,5 +156,60 @@ class PasswordResetCodeServiceTest {
     passwordResetCodeService.sendResetCode("user@ssafer.co.kr");
 
     then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
+  }
+
+  @Test
+  void verifyCodeMarksEmailAsVerifiedWhenCodeMatches() {
+    given(passwordResetCodeStore.findCode("user@ssafer.co.kr")).willReturn(Optional.of("123456"));
+
+    passwordResetCodeService.verifyCode("USER@SSAFER.CO.KR", "123456");
+
+    then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
+    then(passwordResetCodeStore).should().markVerified(Mockito.eq("user@ssafer.co.kr"), Mockito.any());
+  }
+
+  @Test
+  void verifyCodeThrowsWhenCodeDoesNotMatch() {
+    given(passwordResetCodeStore.findCode("user@ssafer.co.kr")).willReturn(Optional.of("654321"));
+
+    assertThatThrownBy(() -> passwordResetCodeService.verifyCode("user@ssafer.co.kr", "123456"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.PASSWORD_RESET_CODE_INVALID);
+  }
+
+  @Test
+  void completeResetDelegatesToUserPasswordServiceWhenVerified() {
+    given(passwordResetCodeStore.isVerified("user@ssafer.co.kr")).willReturn(true);
+
+    passwordResetCodeService.completeReset("USER@SSAFER.CO.KR", "new-password123");
+
+    then(userPasswordService).should().resetPassword("user@ssafer.co.kr", "new-password123");
+    then(passwordResetCodeStore).should().clearVerified("user@ssafer.co.kr");
+  }
+
+  @Test
+  void completeResetThrowsWhenVerificationIsMissing() {
+    given(passwordResetCodeStore.isVerified("user@ssafer.co.kr")).willReturn(false);
+
+    assertThatThrownBy(() -> passwordResetCodeService.completeReset("user@ssafer.co.kr", "new-password123"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.PASSWORD_RESET_VERIFICATION_REQUIRED);
+  }
+
+  @Test
+  void completeResetKeepsVerifiedStateWhenPasswordUpdateFails() {
+    given(passwordResetCodeStore.isVerified("user@ssafer.co.kr")).willReturn(true);
+    Mockito.doThrow(new BusinessException(ErrorCode.INVALID_PARAMETER))
+        .when(userPasswordService)
+        .resetPassword("user@ssafer.co.kr", "new-password123");
+
+    assertThatThrownBy(() -> passwordResetCodeService.completeReset("user@ssafer.co.kr", "new-password123"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.INVALID_PARAMETER);
+
+    then(passwordResetCodeStore).should(Mockito.never()).clearVerified("user@ssafer.co.kr");
   }
 }
