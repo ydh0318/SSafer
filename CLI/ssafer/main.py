@@ -171,19 +171,104 @@ def login(
     logout: bool = typer.Option(False, "--logout", help="저장된 토큰 삭제"),
 ) -> None:
     """SSAfer 서버에 로그인합니다."""
-    from ssafer.core.auth import clear_token, save_token
+    from ssafer.core.auth import clear_token, load_endpoint, login_with_credentials, save_auth_tokens
 
     if logout:
         clear_token()
         console.print("[green]로그아웃 완료. 저장된 토큰이 삭제되었습니다.[/green]")
         return
 
-    token = typer.prompt("API 토큰을 입력하세요", hide_input=True)
-    if not token.strip():
-        console.print("[red]토큰이 비어 있습니다.[/red]")
+    effective_endpoint = endpoint or load_endpoint()
+    email = typer.prompt("Email")
+    password = typer.prompt("Password", hide_input=True)
+    if not email.strip() or not password.strip():
+        console.print("[red]Email and password are required.[/red]")
         raise typer.Exit(code=1)
-    save_token(token.strip(), endpoint)
-    console.print("[green]로그인 완료. 토큰이 ~/.ssafer/config.yml에 저장되었습니다.[/green]")
+    try:
+        auth_data = login_with_credentials(effective_endpoint, email.strip(), password)
+        save_auth_tokens(auth_data, effective_endpoint)
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]Login failed:[/red] {_format_http_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Login failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    except ValueError as exc:
+        console.print(f"[red]Login failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print("[green]Login succeeded. Tokens saved to ~/.ssafer/config.yml.[/green]")
+
+
+@app.command()
+def signup(
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
+) -> None:
+    """Create a SSAfer backend user account."""
+    from ssafer.core.auth import load_endpoint, register_user
+
+    effective_endpoint = endpoint or load_endpoint()
+    email = typer.prompt("Email")
+    display_name = typer.prompt("Display name")
+    password = typer.prompt("Password", hide_input=True)
+    if not email.strip() or not display_name.strip() or not password.strip():
+        console.print("[red]Email, display name, and password are required.[/red]")
+        raise typer.Exit(code=1)
+    try:
+        register_user(effective_endpoint, email.strip(), display_name.strip(), password)
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]Signup failed:[/red] {_format_http_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Signup failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print("[green]Signup succeeded. Run 'ssafer login' to save login tokens.[/green]")
+
+
+@app.command("send-email-code")
+def send_email_code(
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
+) -> None:
+    """Send an email verification code for SSAfer signup."""
+    from ssafer.core.auth import load_endpoint, send_email_verification_code
+
+    effective_endpoint = endpoint or load_endpoint()
+    email = typer.prompt("Email")
+    if not email.strip():
+        console.print("[red]Email is required.[/red]")
+        raise typer.Exit(code=1)
+    try:
+        send_email_verification_code(effective_endpoint, email.strip())
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]Email code request failed:[/red] {_format_http_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Email code request failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print("[green]Verification code sent. Check your email.[/green]")
+
+
+@app.command("verify-email")
+def verify_email(
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
+) -> None:
+    """Verify the email code before SSAfer signup."""
+    from ssafer.core.auth import load_endpoint, verify_email_code
+
+    effective_endpoint = endpoint or load_endpoint()
+    email = typer.prompt("Email")
+    code = typer.prompt("Verification code")
+    if not email.strip() or not code.strip():
+        console.print("[red]Email and verification code are required.[/red]")
+        raise typer.Exit(code=1)
+    try:
+        verify_email_code(effective_endpoint, email.strip(), code.strip())
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]Email verification failed:[/red] {_format_http_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Email verification failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print("[green]Email verified. Run 'ssafer signup' to create your account.[/green]")
 
 
 @app.command()
@@ -209,6 +294,21 @@ def report(
     _print_scan_summary(scan)
     if details:
         _print_scan_details(scan, project_root)
+
+
+def _format_http_error(exc: httpx.HTTPStatusError) -> str:
+    status_code = exc.response.status_code
+    try:
+        payload = exc.response.json()
+    except ValueError:
+        return f"backend returned {status_code}."
+    code = payload.get("code")
+    message = payload.get("message")
+    if code and message:
+        return f"backend returned {status_code} ({code}: {message})."
+    if message:
+        return f"backend returned {status_code} ({message})."
+    return f"backend returned {status_code}."
 
 
 def _print_scan_summary(scan: dict) -> None:
@@ -479,11 +579,12 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
     try:
         return upload_last_scan(path, api_url=effective_url, token=token)
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]업로드 실패:[/red] 서버가 {exc.response.status_code} 오류를 반환했습니다.")
+        console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[dim]Request URL: {exc.request.url}[/dim]")
     except httpx.HTTPError as exc:
-        console.print(f"[red]업로드 실패:[/red] {exc}")
+        console.print(f"[red]Upload failed:[/red] {exc}")
     except RuntimeError as exc:
-        console.print(f"[red]업로드 실패:[/red] {exc}")
+        console.print(f"[red]Upload failed:[/red] {exc}")
     raise typer.Exit(code=1)
 
 

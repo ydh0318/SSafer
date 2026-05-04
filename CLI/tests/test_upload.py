@@ -18,7 +18,12 @@ def _write_scan(project_root: Path, scan: dict[str, Any]) -> None:
 
 
 def test_upload_last_scan_registers_uploads_to_s3_and_reports_completion(tmp_path: Path, monkeypatch):
-    scan = {"scanId": "local-scan-test", "projectName": "sample-app", "artifacts": []}
+    scan = {
+        "scanId": "local-scan-test",
+        "projectName": "sample-app",
+        "artifacts": [],
+        "findings": [{"id": "FND-0001"}, {"id": "FND-0002"}],
+    }
     _write_scan(tmp_path, scan)
     calls: list[tuple[str, str, Any]] = []
 
@@ -83,7 +88,7 @@ def test_upload_last_scan_registers_uploads_to_s3_and_reports_completion(tmp_pat
             {
                 "projectName": "sample-app",
                 "source": "CLI",
-                "scanName": "local-scan-test",
+                "scanName": "SSAfer CLI scan local-scan-test",
                 "targetPath": str(tmp_path),
                 "includeLogs": False,
             },
@@ -91,11 +96,12 @@ def test_upload_last_scan_registers_uploads_to_s3_and_reports_completion(tmp_pat
         ("PUT", "https://s3.example.com/upload", scan),
         (
             "POST",
-            "http://backend.test/api/v1/internal/scans/1001/raw-results",
+            "http://backend.test/api/v1/scans/1001/raw-results",
             {
-                "status": "RAW_UPLOADED",
-                "progressStep": "uploaded",
-                "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                "tool": "ssafer-cli",
+                "toolVersion": upload.__version__,
+                "resultCount": 2,
+                "payloadHash": upload._payload_hash(upload._scan_json_bytes(scan)),
             },
         ),
     ]
@@ -143,7 +149,7 @@ def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
 
     assert posted_urls == [
         "http://localhost:8080/api/v1/scans",
-        "http://localhost:8080/api/v1/internal/scans/1001/raw-results",
+        "http://localhost:8080/api/v1/scans/1001/raw-results",
     ]
 
 
@@ -196,7 +202,7 @@ upload:
 
     assert posted_urls == [
         "https://api.ssafer.dev/api/v1/scans",
-        "https://api.ssafer.dev/api/v1/internal/scans/1001/raw-results",
+        "https://api.ssafer.dev/api/v1/scans/1001/raw-results",
     ]
 
 
@@ -419,7 +425,7 @@ def test_upload_last_scan_allows_sanitized_scan_payload(tmp_path: Path, monkeypa
             {
                 "projectName": tmp_path.name,
                 "source": "CLI",
-                "scanName": "local-scan-test",
+                "scanName": "SSAfer CLI scan local-scan-test",
                 "targetPath": str(tmp_path),
                 "includeLogs": False,
             },
@@ -427,11 +433,12 @@ def test_upload_last_scan_allows_sanitized_scan_payload(tmp_path: Path, monkeypa
         ("PUT", "https://s3.example.com/upload", scan),
         (
             "POST",
-            "http://backend.test/api/v1/internal/scans/1001/raw-results",
+            "http://backend.test/api/v1/scans/1001/raw-results",
             {
-                "status": "RAW_UPLOADED",
-                "progressStep": "uploaded",
-                "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                "tool": "ssafer-cli",
+                "toolVersion": upload.__version__,
+                "resultCount": len(scan["findings"]),
+                "payloadHash": upload._payload_hash(upload._scan_json_bytes(scan)),
             },
         ),
     ]
