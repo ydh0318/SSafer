@@ -16,12 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class PendingAgentTaskQueryService {
 
-  private static final List<AgentTaskStatus> PENDING_STATUSES = List.of(
-      AgentTaskStatus.PENDING,
-      AgentTaskStatus.SENT,
-      AgentTaskStatus.ACKED,
-      AgentTaskStatus.RUNNING
-  );
+  private static final List<AgentTaskStatus> PENDING_STATUSES = AgentTaskStatus.resendTargetStatuses();
 
   private final AgentRepository agentRepository;
   private final AgentTaskRepository agentTaskRepository;
