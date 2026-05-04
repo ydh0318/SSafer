@@ -34,7 +34,9 @@ function AuthTopNav() {
 
       navigate(ROUTES.projects);
     } catch (error) {
-      setGuestErrorMessage(error instanceof Error ? error.message : '게스트 모드로 진입하지 못했습니다.');
+      setGuestErrorMessage(
+        error instanceof Error ? error.message : '게스트 모드로 진입하지 못했습니다.',
+      );
     } finally {
       setIsGuestPending(false);
     }

@@ -4,7 +4,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name?: string;
-  role?: AuthRole;
+  role?: AuthRole | string;
 }
 
 export interface GuestEnterRequest {
@@ -33,10 +33,13 @@ export interface RegisterUserRequest {
   email: string;
   password: string;
   displayName: string;
+  code?: string;
 }
 
 export interface RegisterUserData {
-  userId: number;
+  userId?: number | string;
+  email?: string;
+  displayName?: string;
 }
 
 export interface LoginRequest {
@@ -46,9 +49,9 @@ export interface LoginRequest {
 
 export interface AuthTokenData {
   accessToken: string;
-  accessTokenExpiresAt: string;
-  refreshToken: string;
-  refreshTokenExpiresAt: string;
+  accessTokenExpiresAt?: string;
+  refreshToken?: string;
+  refreshTokenExpiresAt?: string;
 }
 
 export interface RefreshTokenRequest {

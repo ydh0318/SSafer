@@ -86,6 +86,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
         email: values.email.trim(),
         displayName: values.displayName.trim(),
         password: values.password,
+        code: values.code.trim(),
       });
       onCompleted();
     } catch (error) {
@@ -95,7 +96,10 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
       }));
       setMessage({
         tone: 'error',
-        text: getApiErrorMessage(error, '회원가입을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.'),
+        text: getApiErrorMessage(
+          error,
+          '회원가입을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        ),
       });
     } finally {
       setIsSubmitting(false);
@@ -110,7 +114,11 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
         void handleSubmit();
       }}
     >
-      <button className="mb-[clamp(0.875rem,1.8vh,1.25rem)] auth-back-button" onClick={onBack} type="button">
+      <button
+        className="mb-[clamp(0.875rem,1.8vh,1.25rem)] auth-back-button"
+        onClick={onBack}
+        type="button"
+      >
         &lt; BACK
       </button>
 
@@ -161,9 +169,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
             ) : null}
 
             <div className="space-y-1 text-[0.98rem] leading-7 text-black">
-              {/* <p>- 프로필에 표시되는 닉네임으로 사용됩니다.</p> */}
               <p>- 닉네임은 3자 이상 입력해 주세요.</p>
-              {/* <p>- 닉네임은 영문, 숫자, 하이픈(-), 언더스코어(_)를 권장합니다.</p> */}
             </div>
           </div>
 

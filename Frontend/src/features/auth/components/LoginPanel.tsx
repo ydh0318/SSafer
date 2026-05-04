@@ -66,7 +66,7 @@ function LoginPanel() {
 
       login({
         accessToken: tokenData.accessToken,
-        refreshToken: tokenData.refreshToken,
+        refreshToken: tokenData.refreshToken ?? null,
         user: {
           id: values.email.trim(),
           email: values.email.trim(),
@@ -83,9 +83,8 @@ function LoginPanel() {
           ...serverFieldErrors,
         }));
       } else {
-        const message = getLoginErrorMessage(error);
         setFieldErrors({
-          password: message,
+          password: getLoginErrorMessage(error),
         });
       }
     } finally {

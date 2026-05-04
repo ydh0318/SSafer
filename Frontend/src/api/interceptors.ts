@@ -13,45 +13,42 @@ type RetryableRequestConfig = AxiosRequestConfig & {
   _retry?: boolean;
 };
 
-type PublicRequestRule = {
-  method: string;
-  matcher: (url: string) => boolean;
-};
-
-const REFRESH_PATH = '/auth/refresh';
-
-const PUBLIC_REQUEST_RULES: PublicRequestRule[] = [
-  { method: 'POST', matcher: (url) => url === '/guests/enter' },
-  { method: 'POST', matcher: (url) => url === '/auth/login' },
-  { method: 'POST', matcher: (url) => url === '/auth/refresh' },
-  { method: 'POST', matcher: (url) => url === '/auth/email/send-code' },
-  { method: 'POST', matcher: (url) => url === '/auth/email/verify-code' },
-  { method: 'POST', matcher: (url) => url === '/users' },
-  { method: 'GET', matcher: (url) => url.startsWith('/users/check-email') },
-];
+const REISSUE_PATH = '/auth/reissue';
+const REISSUE_TOKEN_MISSING_MESSAGE =
+  'Reissue API completed but did not return an access token in the response body or Authorization header.';
 
 const getAuthorizationHeader = (accessToken: string) => `Bearer ${accessToken}`;
 
-const normalizeMethod = (method?: string) => method?.toUpperCase() ?? 'GET';
+const extractAccessToken = (response: ApiSuccessResponse<TokenReissueData>, header?: string) => {
+  const tokenFromBody = response.data?.accessToken;
 
-const isPublicRequest = (url?: string, method?: string) => {
-  if (!url) {
-    return false;
+  if (tokenFromBody) {
+    return tokenFromBody;
   }
 
-  const normalizedMethod = normalizeMethod(method);
+  if (header?.startsWith('Bearer ')) {
+    return header.replace('Bearer ', '');
+  }
 
-  return PUBLIC_REQUEST_RULES.some(
-    (rule) => rule.method === normalizedMethod && rule.matcher(url),
+  return null;
+};
+
+const requestTokenReissue = async (refreshClient: AxiosInstance) => {
+  const reissueResponse =
+    await refreshClient.post<ApiSuccessResponse<TokenReissueData>>(REISSUE_PATH);
+  const nextAccessToken = extractAccessToken(
+    reissueResponse.data,
+    reissueResponse.headers.authorization,
   );
+
+  if (!nextAccessToken) {
+    throw new Error(REISSUE_TOKEN_MISSING_MESSAGE);
+  }
+
+  return nextAccessToken;
 };
 
 const attachAccessToken = (config: InternalAxiosRequestConfig) => {
-  if (isPublicRequest(config.url, config.method)) {
-    config.headers.delete('Authorization');
-    return config;
-  }
-
   const accessToken = tokenStorage.getAccessToken();
 
   if (!accessToken) {
@@ -76,42 +73,24 @@ export const setupInterceptors = (client: AxiosInstance) => {
       const originalRequest = error.config as RetryableRequestConfig | undefined;
       const status = error.response?.status;
       const requestUrl = originalRequest?.url ?? '';
-      const requestMethod = originalRequest?.method;
-      const isRefreshRequest = requestUrl.includes(REFRESH_PATH);
-      const requestIsPublic = isPublicRequest(requestUrl, requestMethod);
-      const currentRefreshToken = tokenStorage.getRefreshToken();
+      const isReissueRequest = requestUrl.includes(REISSUE_PATH);
 
-      if (
-        !originalRequest ||
-        status !== 401 ||
-        originalRequest._retry ||
-        isRefreshRequest ||
-        requestIsPublic ||
-        !currentRefreshToken
-      ) {
+      if (!originalRequest || status !== 401 || originalRequest._retry || isReissueRequest) {
         return Promise.reject(error);
       }
 
       originalRequest._retry = true;
 
       try {
-        const refreshResponse = await refreshClient.post<ApiSuccessResponse<TokenReissueData>>(
-          REFRESH_PATH,
-          { refreshToken: currentRefreshToken },
-        );
-        const nextTokens = refreshResponse.data.data;
-
-        useAuthStore.getState().setTokens({
-          accessToken: nextTokens.accessToken,
-          refreshToken: nextTokens.refreshToken,
-        });
+        const nextAccessToken = await requestTokenReissue(refreshClient);
+        useAuthStore.getState().setAccessToken(nextAccessToken);
         originalRequest.headers = originalRequest.headers ?? {};
-        originalRequest.headers.Authorization = getAuthorizationHeader(nextTokens.accessToken);
+        originalRequest.headers.Authorization = getAuthorizationHeader(nextAccessToken);
 
         return client(originalRequest);
-      } catch (refreshError) {
+      } catch (reissueError) {
         useAuthStore.getState().logout();
-        return Promise.reject(refreshError);
+        return Promise.reject(reissueError);
       }
     },
   );

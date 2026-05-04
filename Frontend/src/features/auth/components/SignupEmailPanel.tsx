@@ -43,7 +43,7 @@ function SignupEmailPanel({
 
       if (!emailCheckResult.available) {
         setFieldErrors({
-          email: '이미 가입된 이메일입니다.',
+          email: '이미 가입된 이메일 입니다.',
         });
         return;
       }
@@ -103,7 +103,7 @@ function SignupEmailPanel({
           </AuthButton>
 
           <p className="auth-body-text text-black">
-            회원가입 시 SSAFER의 이용약관 및 데이터 정책에 동의하게 됩니다.
+            가입함으로써 팀 및 데이터 정책에 동의합니다.
           </p>
         </div>
       </div>
