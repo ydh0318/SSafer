@@ -1,4 +1,4 @@
-import { apiClient } from '../../../api/client';
+import { publicApiClient } from '../../../api/client';
 import { getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type { GuestEnterData, GuestEnterRequest } from '../../../types/auth';
@@ -10,10 +10,11 @@ export async function enterGuestMode() {
       deviceId: getGuestDeviceId(),
     };
 
-    const response = await apiClient.post<ApiSuccessResponse<GuestEnterData>>(
+    const response = await publicApiClient.post<ApiSuccessResponse<GuestEnterData>>(
       '/guests/enter',
       payload,
     );
+
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, '게스트 모드로 진입하지 못했습니다.'));

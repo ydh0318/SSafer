@@ -40,7 +40,7 @@ export async function logoutCurrentUser() {
 }
 
 export async function checkEmailAvailability(email: string) {
-  const response = await apiClient.get<ApiSuccessResponse<CheckEmailAvailabilityData>>(
+  const response = await publicApiClient.get<ApiSuccessResponse<CheckEmailAvailabilityData>>(
     '/users/check-email',
     {
       params: { email },
@@ -51,15 +51,18 @@ export async function checkEmailAvailability(email: string) {
 }
 
 export async function sendEmailVerificationCode(payload: SendEmailVerificationCodeRequest) {
-  await apiClient.post<ApiSuccessResponse<null>>('/auth/email/send-code', payload);
+  await publicApiClient.post<ApiSuccessResponse<null>>('/auth/email/send-code', payload);
 }
 
 export async function verifyEmailCode(payload: VerifyEmailCodeRequest) {
-  await apiClient.post<ApiSuccessResponse<null>>('/auth/email/verify-code', payload);
+  await publicApiClient.post<ApiSuccessResponse<null>>('/auth/email/verify-code', payload);
 }
 
 export async function registerUser(payload: RegisterUserRequest) {
-  const response = await apiClient.post<ApiSuccessResponse<RegisterUserData>>('/users', payload);
+  const response = await publicApiClient.post<ApiSuccessResponse<RegisterUserData>>(
+    '/users',
+    payload,
+  );
   return response.data.data;
 }
 
