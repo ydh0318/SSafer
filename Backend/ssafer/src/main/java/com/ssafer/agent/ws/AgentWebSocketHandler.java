@@ -41,7 +41,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
   @Override
   public void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
-    // 현재 스토리 범위 메시지는 CONNECT/PING 두 가지 타입만 처리한다.
+    // 우선 메시지는 CONNECT/PING 두 가지 타입만 처리한다.
     AgentIncomingMessage incoming = objectMapper.readValue(message.getPayload(), AgentIncomingMessage.class);
     if (TYPE_CONNECT.equals(incoming.type())) {
       handleConnect(session, incoming);
@@ -118,7 +118,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
   }
 
   private boolean isAuthorized(WebSocketSession session, Long agentId) {
-    // handshake 단계에서 저장한 Authorization 헤더를 사용해 검증한다.
+    // handshake 단계에서 전달한 Authorization 헤더를 사용해 검증한다.
     Object authAttr = session.getAttributes().get(AgentHandshakeInterceptor.AUTHORIZATION_ATTR);
     String authorization = authAttr instanceof String value ? value : null;
     if (authorization == null || !authorization.startsWith(BEARER_PREFIX)) {

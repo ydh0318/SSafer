@@ -20,7 +20,7 @@ public class AgentSessionRegistry {
     SessionRef previous = agentSessions.put(agentId, next);
     sessionToAgent.put(session.getId(), agentId);
 
-    // 재연결 시 기존 세션이 열려 있으면 종료하고 새 세션을 승격한다.
+    // 재연결로 기존 세션이 열려 있으면 종료하고 새 세션을 승격한다.
     if (previous != null && !previous.sessionId().equals(session.getId()) && previous.session().isOpen()) {
       previous.session().close(CloseStatus.SESSION_NOT_RELIABLE);
     }

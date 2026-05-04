@@ -21,7 +21,7 @@ public class AgentConnectionService {
 
   @Transactional(readOnly = true)
   public Agent loadAgentForConnect(Long agentId, Long projectId) {
-    // CONNECT 시점에는 사전 등록된 agent + project 소속 일치 여부만 허용한다.
+    // CONNECT 시점에는 사전 등록된 agent와 project 소속이 일치하는지 확인한다.
     return agentRepository.findByIdAndProjectId(agentId, projectId)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
   }
@@ -49,7 +49,7 @@ public class AgentConnectionService {
 
   @Transactional
   public int markTimedOutAgentsOffline(Instant cutoff, Instant now) {
-    // heartbeat timeout 기준보다 오래 응답이 없는 ONLINE agent를 OFFLINE으로 전환한다.
+    // heartbeat timeout 기준보다 오래 응답 없는 ONLINE agent를 OFFLINE으로 전환한다.
     List<Agent> agents = agentRepository.findByStatusAndLastSeenAtBefore(AgentStatus.ONLINE, cutoff);
     for (Agent agent : agents) {
       agent.markOffline(now);
