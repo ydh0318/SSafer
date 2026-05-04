@@ -28,10 +28,17 @@ class FindingAnalysisError(RuntimeError):
 
 
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
-    result = run_analysis_pipeline(
-        scan_result_path=request.scan_result_path,
-        output_path=request.analysis_result_path,
-    )
+    if request.scan_result is None:
+        result = run_analysis_pipeline(
+            scan_result_path=request.scan_result_path,
+            output_path=request.analysis_result_path,
+        )
+    else:
+        result = run_analysis_pipeline_from_scan_result(
+            scan_result=request.scan_result.model_dump(by_alias=True),
+            scan_result_path=request.scan_result_path,
+            output_path=request.analysis_result_path,
+        )
     return AnalysisResponse(**result)
 
 
@@ -73,6 +80,28 @@ def run_analysis_pipeline(
 ) -> dict[str, object]:
     try:
         scan_result = load_scan_result(scan_result_path)
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "stage": "input",
+            "scan_result_path": scan_result_path,
+            "analysis_result_path": output_path,
+            "message": str(exc),
+        }
+
+    return run_analysis_pipeline_from_scan_result(
+        scan_result=scan_result,
+        scan_result_path=scan_result_path,
+        output_path=output_path,
+    )
+
+
+def run_analysis_pipeline_from_scan_result(
+    scan_result: dict[str, Any],
+    scan_result_path: str,
+    output_path: str,
+) -> dict[str, object]:
+    try:
         validate_scan_result_required_fields(scan_result)
         raw_findings = extract_findings(scan_result)
         findings, invalid_findings = split_valid_invalid_findings(raw_findings)

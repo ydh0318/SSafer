@@ -55,6 +55,26 @@ Ran 1 test in 0.000s
 OK
 ```
 
+## 3-1. scan_result DTO 파싱 테스트
+
+scan_result.json DTO 파싱과 invalid finding 분리 로직을 확인합니다.
+
+```bash
+cd /home/eunsu/S14P31B105/AI
+source .venv/bin/activate
+python -m unittest tests.test_scan_result_dto
+```
+
+정상 출력:
+
+```text
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.000s
+
+OK
+```
+
 ## 4. Health Check 테스트
 
 서버 실행:

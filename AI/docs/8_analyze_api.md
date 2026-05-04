@@ -47,7 +47,8 @@ Body:
 ```json
 {
   "scan_result_path": "data/scan_result.json",
-  "analysis_result_path": "data/analysis_result.json"
+  "analysis_result_path": "data/analysis_result.json",
+  "scan_result": null
 }
 ```
 
@@ -57,8 +58,67 @@ Body:
 | --- | --- | --- | --- | --- |
 | `scan_result_path` | string | 아니오 | `data/scan_result.json` | 분석할 scan_result.json 경로 |
 | `analysis_result_path` | string | 아니오 | `data/analysis_result.json` | 저장할 analysis_result.json 경로 |
+| `scan_result` | object 또는 null | 아니오 | `null` | 요청 본문에 직접 전달하는 scan_result.json 객체 |
 
 상대 경로는 AI 서버 실행 위치 기준으로 해석됩니다.
+
+`scan_result`가 있으면 파일 경로 대신 요청 본문의 객체를 분석합니다. 이 경우 `scan_result_path`는 응답과 로깅에서 입력 출처를 표시하는 값으로 사용됩니다.
+
+## 3-1. scan_result DTO
+
+`scan_result` 객체는 아래 필드를 필수로 갖습니다.
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `schemaVersion` | string | 현재 지원 버전은 `0.1` |
+| `scanId` | string | UUID v4 |
+| `source` | string | 현재 허용 값은 `cli` |
+| `scannedAt` | string | ISO 8601 datetime |
+| `analysisStatus` | string | `SUCCESS`, `PARTIAL`, `FAILED` |
+| `findings` | array | 분석 대상 finding 배열 |
+
+개별 valid finding은 아래 필드를 필수로 갖습니다.
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `id` | string | finding ID |
+| `ruleId` | string | 탐지 규칙 ID |
+| `source` | string | 탐지 출처 |
+| `severity` | string | 심각도 |
+| `file` | string | 대상 파일 |
+| `line` | integer 또는 null | 라인 번호 |
+| `title` | string | finding 제목 |
+| `maskedEvidence` | string | 마스킹된 근거 |
+
+일부 finding이 DTO 검증에 실패하면 전체 요청을 실패시키지 않고 `invalid_findings`에 기록합니다.
+
+Inline 요청 예시:
+
+```json
+{
+  "scan_result_path": "inline",
+  "analysis_result_path": "data/analysis_result.json",
+  "scan_result": {
+    "schemaVersion": "0.1",
+    "scanId": "a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd",
+    "source": "cli",
+    "scannedAt": "2026-04-27T00:26:05Z",
+    "analysisStatus": "SUCCESS",
+    "findings": [
+      {
+        "id": "FND-0001",
+        "ruleId": "ENV_PLAIN_SECRET",
+        "source": "custom-rule",
+        "severity": "HIGH",
+        "file": ".env",
+        "line": 1,
+        "title": "Plain secret in env file",
+        "maskedEvidence": "DB_PASSWORD=***MASKED***"
+      }
+    ]
+  }
+}
+```
 
 ## 4. Success Response
 

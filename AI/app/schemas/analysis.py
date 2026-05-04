@@ -1,9 +1,12 @@
 from pydantic import BaseModel, Field
 
+from app.schemas.scan_result import ScanResult
+
 
 class AnalysisRequest(BaseModel):
     scan_result_path: str = "data/scan_result.json"
     analysis_result_path: str = "data/analysis_result.json"
+    scan_result: ScanResult | None = None
 
 
 class AnalysisResponse(BaseModel):
