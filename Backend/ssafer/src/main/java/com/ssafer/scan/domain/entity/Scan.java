@@ -117,4 +117,5 @@ public class Scan {
     this.completedAt = completedAt;
     this.lastUpdatedAt = lastUpdatedAt;
   }
+
 }
