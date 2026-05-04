@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import patch
 
@@ -122,6 +123,58 @@ class AnalyzeEndpointTest(unittest.TestCase):
             captured_args["scan_result"]["scanId"],
             "a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd",
         )
+
+    def test_analyze_endpoint_returns_standard_input_error_response(self):
+        with patch(
+            "app.services.analysis_service.run_analysis_pipeline",
+            return_value={
+                "status": "failed",
+                "stage": "input",
+                "message": "scan_result.json file not found: missing.json",
+                "scan_result_path": "missing.json",
+                "analysis_result_path": "data/analysis_result.json",
+            },
+        ):
+            response = analyze(AnalysisRequest(scan_result_path="missing.json"))
+
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["error_code"], "ANALYSIS_INPUT_ERROR")
+        self.assertEqual(payload["stage"], "input")
+        self.assertEqual(
+            payload["message"],
+            "scan_result.json file not found: missing.json",
+        )
+        self.assertEqual(payload["scan_result_path"], "missing.json")
+
+    def test_analyze_endpoint_returns_standard_llm_error_response(self):
+        with patch(
+            "app.services.analysis_service.run_analysis_pipeline",
+            return_value={
+                "status": "failed",
+                "stage": "fix",
+                "finding_id": "FND-0001",
+                "message": "Fix Chain output could not be parsed.",
+                "scan_result_path": "data/scan_result.json",
+                "analysis_result_path": "data/analysis_result.json",
+                "finding_count": 1,
+                "valid_finding_count": 1,
+                "invalid_finding_count": 0,
+                "invalid_findings": [],
+            },
+        ):
+            response = analyze(AnalysisRequest())
+
+        payload = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["error_code"], "ANALYSIS_FIX_ERROR")
+        self.assertEqual(payload["stage"], "fix")
+        self.assertEqual(payload["finding_id"], "FND-0001")
+        self.assertEqual(payload["finding_count"], 1)
 
 
 if __name__ == "__main__":

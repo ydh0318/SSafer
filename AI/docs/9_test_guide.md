@@ -48,9 +48,9 @@ python -m unittest tests.test_analyze_endpoint
 정상 출력:
 
 ```text
-.
+....
 ----------------------------------------------------------------------
-Ran 1 test in 0.000s
+Ran 4 tests in 0.000s
 
 OK
 ```
@@ -154,7 +154,9 @@ curl -X POST http://127.0.0.1:8000/analyze \
 기대 결과:
 
 ```text
+HTTP status: 400
 status: failed
+error_code: ANALYSIS_INPUT_ERROR
 stage: input
 message: scan_result.json file not found ...
 ```
@@ -162,7 +164,6 @@ message: scan_result.json file not found ...
 ## 7. 현재 확인된 한계
 
 ```text
-API 실패도 현재는 HTTP 200 + status=failed 형식으로 반환
 LLM timeout/retry 미구현
 S3 다운로드/업로드 미구현
 scanId 기준 로깅 및 처리 시간 측정 미구현

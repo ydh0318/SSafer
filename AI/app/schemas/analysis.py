@@ -21,3 +21,18 @@ class AnalysisResponse(BaseModel):
     invalid_finding_count: int = 0
     result_count: int = 0
     invalid_findings: list[dict] = Field(default_factory=list)
+
+
+class AnalysisErrorResponse(BaseModel):
+    status: str = "failed"
+    error_code: str
+    message: str
+    stage: str
+    finding_id: str | None = None
+    scan_result_path: str
+    analysis_result_path: str | None = None
+    finding_count: int = 0
+    valid_finding_count: int = 0
+    invalid_finding_count: int = 0
+    result_count: int = 0
+    invalid_findings: list[dict] = Field(default_factory=list)

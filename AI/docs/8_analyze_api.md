@@ -177,13 +177,47 @@ Inline 요청 예시:
 
 ## 5. Failure Response
 
-현재 `/analyze`는 파이프라인 실패도 HTTP 200 응답 안의 `status: failed`로 반환합니다. HTTP 상태 코드 기반 예외 처리는 다음 태스크에서 강화할 예정입니다.
+`/analyze`는 파이프라인 실패 시 HTTP 상태 코드와 표준 에러 바디를 함께 반환합니다.
+
+HTTP 상태 코드 정책:
+
+| HTTP status | stage | 의미 |
+| --- | --- | --- |
+| `400` | `input` | 요청 입력, 파일 로딩, JSON 파싱, scan_result 검증 실패 |
+| `502` | `explain` | explanation 생성 실패 |
+| `502` | `fix` | fix 생성 실패 |
+| `502` | `analysis` | 일반 분석 파이프라인 실패 |
+| `500` | `output` | analysis_result 생성, 검증, 저장 실패 |
+
+에러 응답 공통 필드:
+
+| 필드 | 설명 |
+| --- | --- |
+| `status` | 항상 `failed` |
+| `error_code` | Spring에서 분기 가능한 표준 에러 코드 |
+| `message` | 실패 원인 메시지 |
+| `stage` | 실패 단계 |
+| `finding_id` | 특정 finding 처리 중 실패한 경우 finding ID |
+| `scan_result_path` | 입력 scan_result 경로 또는 출처 |
+| `analysis_result_path` | 결과 저장 경로 |
+| `finding_count` | 전체 finding 수 |
+| `valid_finding_count` | valid finding 수 |
+| `invalid_finding_count` | invalid finding 수 |
+| `result_count` | 생성된 결과 수 |
+| `invalid_findings` | invalid finding 목록 |
 
 입력 파일이 없는 경우:
+
+HTTP status:
+
+```text
+400 Bad Request
+```
 
 ```json
 {
   "status": "failed",
+  "error_code": "ANALYSIS_INPUT_ERROR",
   "message": "scan_result.json file not found: /home/eunsu/S14P31B105/AI/missing.json",
   "stage": "input",
   "finding_id": null,
@@ -199,9 +233,16 @@ Inline 요청 예시:
 
 분석 중 특정 finding의 explanation 또는 fix 생성이 실패한 경우:
 
+HTTP status:
+
+```text
+502 Bad Gateway
+```
+
 ```json
 {
   "status": "failed",
+  "error_code": "ANALYSIS_EXPLAIN_ERROR",
   "message": "error message",
   "stage": "explain",
   "finding_id": "FND-0001",
@@ -224,6 +265,17 @@ Inline 요청 예시:
 | `fix` | fix 생성 실패 |
 | `analysis` | 일반 분석 처리 실패 |
 | `output` | analysis_result.json 생성, 검증, 저장 실패 |
+
+`error_code` 값:
+
+| error_code | 의미 |
+| --- | --- |
+| `ANALYSIS_INPUT_ERROR` | 입력 처리 실패 |
+| `ANALYSIS_EXPLAIN_ERROR` | explanation 생성 실패 |
+| `ANALYSIS_FIX_ERROR` | fix 생성 실패 |
+| `ANALYSIS_PIPELINE_ERROR` | 일반 분석 실패 |
+| `ANALYSIS_OUTPUT_ERROR` | 결과 생성 또는 저장 실패 |
+| `ANALYSIS_ERROR` | 매핑되지 않은 분석 실패 |
 
 ## 6. Curl Example
 
