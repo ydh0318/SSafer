@@ -14,8 +14,6 @@ type RetryableRequestConfig = AxiosRequestConfig & {
 };
 
 const REISSUE_PATH = '/auth/reissue';
-const REISSUE_TOKEN_MISSING_MESSAGE =
-  'Reissue API completed but did not return an access token in the response body or Authorization header.';
 
 const getAuthorizationHeader = (accessToken: string) => `Bearer ${accessToken}`;
 
@@ -31,21 +29,6 @@ const extractAccessToken = (response: ApiSuccessResponse<TokenReissueData>, head
   }
 
   return null;
-};
-
-const requestTokenReissue = async (refreshClient: AxiosInstance) => {
-  const reissueResponse =
-    await refreshClient.post<ApiSuccessResponse<TokenReissueData>>(REISSUE_PATH);
-  const nextAccessToken = extractAccessToken(
-    reissueResponse.data,
-    reissueResponse.headers.authorization,
-  );
-
-  if (!nextAccessToken) {
-    throw new Error(REISSUE_TOKEN_MISSING_MESSAGE);
-  }
-
-  return nextAccessToken;
 };
 
 const attachAccessToken = (config: InternalAxiosRequestConfig) => {
@@ -82,7 +65,17 @@ export const setupInterceptors = (client: AxiosInstance) => {
       originalRequest._retry = true;
 
       try {
-        const nextAccessToken = await requestTokenReissue(refreshClient);
+        const reissueResponse =
+          await refreshClient.post<ApiSuccessResponse<TokenReissueData>>(REISSUE_PATH);
+        const nextAccessToken = extractAccessToken(
+          reissueResponse.data,
+          reissueResponse.headers.authorization,
+        );
+
+        if (!nextAccessToken) {
+          throw new Error('Access token was not returned from reissue API.');
+        }
+
         useAuthStore.getState().setAccessToken(nextAccessToken);
         originalRequest.headers = originalRequest.headers ?? {};
         originalRequest.headers.Authorization = getAuthorizationHeader(nextAccessToken);

@@ -4,8 +4,10 @@ import { ROUTES } from '../../constants/routes';
 import { useAuthStore } from '../../store/authStore';
 
 function AppLayout() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const logout = useAuthStore((state) => state.logout);
+  const { isAuthenticated, logout } = useAuthStore((state) => ({
+    isAuthenticated: state.isAuthenticated,
+    logout: state.logout,
+  }));
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">

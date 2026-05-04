@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import AppLayout from '../../components/layout/AppLayout';
 import { ROUTES } from '../../constants/routes';
-import EntryPage from '../../pages/auth/EntryPage';
+import LoginPage from '../../pages/auth/LoginPage';
 import NotFoundPage from '../../pages/NotFoundPage';
 import ProjectDetailPage from '../../pages/projects/ProjectDetailPage';
 import ProjectListPage from '../../pages/projects/ProjectListPage';
@@ -15,9 +15,10 @@ function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route element={<Navigate replace to={ROUTES.projects} />} path={ROUTES.root} />
+
         <Route element={<PublicOnlyRoute />}>
-          <Route element={<EntryPage />} path={ROUTES.root} />
-          <Route element={<EntryPage />} path={ROUTES.login} />
+          <Route element={<LoginPage />} path={ROUTES.login} />
         </Route>
 
         <Route element={<ProtectedRoute />}>

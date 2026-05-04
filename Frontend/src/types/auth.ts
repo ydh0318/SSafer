@@ -7,13 +7,37 @@ export interface AuthUser {
   role?: AuthRole | string;
 }
 
-export interface GuestEnterRequest {
-  deviceId?: string;
+export interface LoginFormValues {
+  email: string;
+  password: string;
 }
 
-export interface GuestEnterData {
-  guestAccessToken: string;
-  expiresAt: string;
+export interface SignupFormValues {
+  email: string;
+  code: string;
+  displayName: string;
+  password: string;
+  confirmPassword: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthTokenData {
+  accessToken: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  user?: AuthUser | null;
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string;
+}
+
+export interface LogoutRequest {
+  refreshToken: string;
 }
 
 export interface CheckEmailAvailabilityData {
@@ -31,35 +55,15 @@ export interface VerifyEmailCodeRequest {
 
 export interface RegisterUserRequest {
   email: string;
-  password: string;
+  code: string;
   displayName: string;
-  code?: string;
+  password: string;
 }
 
 export interface RegisterUserData {
-  userId?: number | string;
-  email?: string;
-  displayName?: string;
-}
-
-export interface LoginRequest {
+  userId?: string;
   email: string;
-  password: string;
-}
-
-export interface AuthTokenData {
-  accessToken: string;
-  accessTokenExpiresAt?: string;
-  refreshToken?: string;
-  refreshTokenExpiresAt?: string;
-}
-
-export interface RefreshTokenRequest {
-  refreshToken: string;
-}
-
-export interface LogoutRequest {
-  refreshToken: string;
+  displayName: string;
 }
 
 export interface ChangePasswordRequest {
@@ -67,15 +71,11 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
-export interface LoginFormValues {
-  email: string;
-  password: string;
+export interface GuestEnterRequest {
+  deviceId: string;
 }
 
-export interface SignupFormValues {
-  email: string;
-  code: string;
-  displayName: string;
-  password: string;
-  confirmPassword: string;
+export interface GuestEnterData {
+  accessToken: string;
+  role: 'GUEST';
 }
