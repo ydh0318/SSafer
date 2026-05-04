@@ -75,6 +75,26 @@ Ran 3 tests in 0.000s
 OK
 ```
 
+## 3-2. API 파이프라인 통합 테스트
+
+실제 Ollama 호출은 mock으로 대체하고, `/analyze` 서비스 흐름이 입력 준비, 분석 결과 조립, `analysis_result.json` 저장까지 수행하는지 확인합니다.
+
+```bash
+cd /home/eunsu/S14P31B105/AI
+source .venv/bin/activate
+python -m unittest tests.test_analysis_pipeline_api_flow
+```
+
+정상 출력:
+
+```text
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
 ## 4. Health Check 테스트
 
 서버 실행:

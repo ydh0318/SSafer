@@ -26,6 +26,17 @@ API 응답 반환
 
 현재 LLM 호출은 로컬 Ollama를 사용합니다.
 
+서비스 내부에서는 아래 단계로 API 흐름과 분석 파이프라인을 연결합니다.
+
+| 단계 | 함수 | 역할 |
+| --- | --- | --- |
+| API 진입 | `analyze_scan_result()` | `AnalysisRequest`를 받아 파일 기반 또는 inline 기반 분석 흐름 선택 |
+| 파일 로딩 | `run_analysis_pipeline()` | `scan_result_path`에서 JSON 파일 로딩 |
+| 입력 준비 | `prepare_analysis_pipeline_context()` | 최상위 검증, findings 추출, valid/invalid finding 분리 |
+| 분석 실행 | `analyze_findings()` | valid finding별 explanation/fix 생성 |
+| 결과 저장 | `build_analysis_result_from_results()`, `save_analysis_result()` | `analysis_result.json` 생성, 매핑 검증, 파일 저장 |
+| 응답 반환 | `AnalysisResponse` | 처리 상태와 count 정보 반환 |
+
 기본 설정:
 
 ```text

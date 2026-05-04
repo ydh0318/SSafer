@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 from app.loaders.scan_loader import (
@@ -25,6 +26,14 @@ class FindingAnalysisError(RuntimeError):
         self.finding_id = finding_id
         self.stage = stage
         self.message = message
+
+
+@dataclass(frozen=True)
+class AnalysisPipelineContext:
+    scan_result: dict[str, Any]
+    raw_findings: list[Any]
+    valid_findings: list[dict[str, Any]]
+    invalid_findings: list[dict[str, Any]]
 
 
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
@@ -74,6 +83,21 @@ def analyze_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [analyze_finding(finding) for finding in findings]
 
 
+def prepare_analysis_pipeline_context(
+    scan_result: dict[str, Any],
+) -> AnalysisPipelineContext:
+    validate_scan_result_required_fields(scan_result)
+    raw_findings = extract_findings(scan_result)
+    valid_findings, invalid_findings = split_valid_invalid_findings(raw_findings)
+
+    return AnalysisPipelineContext(
+        scan_result=scan_result,
+        raw_findings=raw_findings,
+        valid_findings=valid_findings,
+        invalid_findings=invalid_findings,
+    )
+
+
 def run_analysis_pipeline(
     scan_result_path: str = "data/scan_result.json",
     output_path: str = DEFAULT_ANALYSIS_RESULT_PATH,
@@ -102,9 +126,7 @@ def run_analysis_pipeline_from_scan_result(
     output_path: str,
 ) -> dict[str, object]:
     try:
-        validate_scan_result_required_fields(scan_result)
-        raw_findings = extract_findings(scan_result)
-        findings, invalid_findings = split_valid_invalid_findings(raw_findings)
+        context = prepare_analysis_pipeline_context(scan_result)
     except Exception as exc:
         return {
             "status": "failed",
@@ -115,7 +137,7 @@ def run_analysis_pipeline_from_scan_result(
         }
 
     try:
-        structured_results = analyze_findings(findings)
+        structured_results = analyze_findings(context.valid_findings)
     except FindingAnalysisError as exc:
         return {
             "status": "failed",
@@ -123,10 +145,10 @@ def run_analysis_pipeline_from_scan_result(
             "finding_id": exc.finding_id,
             "scan_result_path": scan_result_path,
             "analysis_result_path": output_path,
-            "finding_count": len(raw_findings),
-            "valid_finding_count": len(findings),
-            "invalid_finding_count": len(invalid_findings),
-            "invalid_findings": invalid_findings,
+            "finding_count": len(context.raw_findings),
+            "valid_finding_count": len(context.valid_findings),
+            "invalid_finding_count": len(context.invalid_findings),
+            "invalid_findings": context.invalid_findings,
             "message": exc.message,
         }
     except Exception as exc:
@@ -135,19 +157,19 @@ def run_analysis_pipeline_from_scan_result(
             "stage": "analysis",
             "scan_result_path": scan_result_path,
             "analysis_result_path": output_path,
-            "finding_count": len(raw_findings),
-            "valid_finding_count": len(findings),
-            "invalid_finding_count": len(invalid_findings),
-            "invalid_findings": invalid_findings,
+            "finding_count": len(context.raw_findings),
+            "valid_finding_count": len(context.valid_findings),
+            "invalid_finding_count": len(context.invalid_findings),
+            "invalid_findings": context.invalid_findings,
             "message": str(exc),
         }
 
     try:
         analysis_result = build_analysis_result_from_results(
-            scan_result=scan_result,
+            scan_result=context.scan_result,
             structured_results=structured_results,
         )
-        validate_finding_id_mapping(findings, analysis_result)
+        validate_finding_id_mapping(context.valid_findings, analysis_result)
         saved_path = save_analysis_result(analysis_result, output_path)
     except Exception as exc:
         return {
@@ -155,25 +177,25 @@ def run_analysis_pipeline_from_scan_result(
             "stage": "output",
             "scan_result_path": scan_result_path,
             "analysis_result_path": output_path,
-            "finding_count": len(raw_findings),
-            "valid_finding_count": len(findings),
-            "invalid_finding_count": len(invalid_findings),
-            "invalid_findings": invalid_findings,
+            "finding_count": len(context.raw_findings),
+            "valid_finding_count": len(context.valid_findings),
+            "invalid_finding_count": len(context.invalid_findings),
+            "invalid_findings": context.invalid_findings,
             "result_count": len(structured_results),
             "message": str(exc),
         }
 
     status = "completed"
-    if invalid_findings:
+    if context.invalid_findings:
         status = "completed_with_invalid_findings"
 
     return {
         "status": status,
         "scan_result_path": scan_result_path,
         "analysis_result_path": str(saved_path),
-        "finding_count": len(raw_findings),
-        "valid_finding_count": len(findings),
-        "invalid_finding_count": len(invalid_findings),
-        "invalid_findings": invalid_findings,
+        "finding_count": len(context.raw_findings),
+        "valid_finding_count": len(context.valid_findings),
+        "invalid_finding_count": len(context.invalid_findings),
+        "invalid_findings": context.invalid_findings,
         "result_count": analysis_result["resultCount"],
     }
