@@ -18,6 +18,21 @@ public enum ErrorCode {
       "EMAIL_VERIFICATION_CODE_INVALID",
       "Email verification code is invalid or expired"
   ),
+  PASSWORD_RESET_CODE_INVALID(
+      HttpStatus.BAD_REQUEST,
+      "PASSWORD_RESET_CODE_INVALID",
+      "Password reset verification code is invalid or expired"
+  ),
+  PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED(
+      HttpStatus.TOO_MANY_REQUESTS,
+      "PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED",
+      "Password reset verification code attempts exceeded"
+  ),
+  PASSWORD_RESET_TOKEN_INVALID(
+      HttpStatus.BAD_REQUEST,
+      "PASSWORD_RESET_TOKEN_INVALID",
+      "Password reset token is invalid or expired"
+  ),
   EMAIL_VERIFICATION_REQUEST_TOO_FREQUENT(
       HttpStatus.TOO_MANY_REQUESTS,
       "EMAIL_VERIFICATION_REQUEST_TOO_FREQUENT",
@@ -25,6 +40,18 @@ public enum ErrorCode {
   ),
   EMAIL_DELIVERY_FAILED(HttpStatus.BAD_GATEWAY, "EMAIL_DELIVERY_FAILED", "Failed to deliver email"),
   INVALID_PARAMETER(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", "Request parameter format is invalid"),
+  INVALID_PAYLOAD_HASH(HttpStatus.BAD_REQUEST, "INVALID_PAYLOAD_HASH", "payloadHash format is invalid"),
+  RAW_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "RAW_RESULT_NOT_FOUND", "Raw result object not found"),
+  SCAN_STATUS_CONFLICT(
+      HttpStatus.CONFLICT,
+      "SCAN_STATUS_CONFLICT",
+      "Raw result upload report is not allowed for current scan status"
+  ),
+  DUPLICATE_RAW_RESULT_UPLOAD(
+      HttpStatus.CONFLICT,
+      "DUPLICATE_RAW_RESULT_UPLOAD",
+      "Raw result upload report was already submitted"
+  ),
   INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "Internal server error");
 
   private final HttpStatus status;

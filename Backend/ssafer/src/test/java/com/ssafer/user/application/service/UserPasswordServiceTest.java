@@ -71,6 +71,41 @@ class UserPasswordServiceTest {
   }
 
   @Test
+  void resetPasswordUpdatesPasswordHashAndDeletesRefreshToken() {
+    User user = createUser(1L, "user@ssafer.co.kr", "Alice", "encoded-old-password");
+    given(userRepository.findByEmail("user@ssafer.co.kr")).willReturn(Optional.of(user));
+    given(passwordEncoder.matches("new-password123", "encoded-old-password")).willReturn(false);
+    given(passwordEncoder.encode("new-password123")).willReturn("encoded-new-password");
+
+    userPasswordService.resetPassword("USER@SSAFER.CO.KR", "new-password123");
+
+    assertThat(user.getPasswordHash()).isEqualTo("encoded-new-password");
+    then(refreshTokenStore).should().delete(1L);
+  }
+
+  @Test
+  void resetPasswordThrowsNotFoundWhenUserDoesNotExist() {
+    given(userRepository.findByEmail("user@ssafer.co.kr")).willReturn(Optional.empty());
+
+    assertThatThrownBy(() -> userPasswordService.resetPassword("user@ssafer.co.kr", "new-password123"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.NOT_FOUND);
+  }
+
+  @Test
+  void resetPasswordThrowsInvalidParameterWhenNewPasswordMatchesCurrentPassword() {
+    User user = createUser(1L, "user@ssafer.co.kr", "Alice", "encoded-old-password");
+    given(userRepository.findByEmail("user@ssafer.co.kr")).willReturn(Optional.of(user));
+    given(passwordEncoder.matches("password123", "encoded-old-password")).willReturn(true);
+
+    assertThatThrownBy(() -> userPasswordService.resetPassword("user@ssafer.co.kr", "password123"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.INVALID_PARAMETER);
+  }
+
+  @Test
   void changePasswordThrowsForbiddenForGuest() {
     assertThatThrownBy(() -> userPasswordService.changePassword(
         AuthenticatedActor.guest("guest-hash"),

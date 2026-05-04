@@ -76,6 +76,15 @@ class SecurityConfigTest {
     mockMvc.perform(post("/api/v1/auth/email/verify-code").contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isOk());
 
+    mockMvc.perform(post("/api/v1/auth/password-reset/send-code").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isOk());
+
+    mockMvc.perform(post("/api/v1/auth/password-reset/verify-code").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isOk());
+
+    mockMvc.perform(post("/api/v1/auth/password-reset/complete").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isOk());
+
     mockMvc.perform(post("/api/v1/users").contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isOk());
 
@@ -235,6 +244,21 @@ class SecurityConfigTest {
 
     @PostMapping("/api/v1/auth/email/verify-code")
     String verifyCode() {
+      return "ok";
+    }
+
+    @PostMapping("/api/v1/auth/password-reset/send-code")
+    String passwordResetSendCode() {
+      return "ok";
+    }
+
+    @PostMapping("/api/v1/auth/password-reset/verify-code")
+    String passwordResetVerifyCode() {
+      return "ok";
+    }
+
+    @PostMapping("/api/v1/auth/password-reset/complete")
+    String passwordResetComplete() {
       return "ok";
     }
 
