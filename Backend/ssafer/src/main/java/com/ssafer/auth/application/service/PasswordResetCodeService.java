@@ -21,6 +21,7 @@ public class PasswordResetCodeService {
 
   private static final Logger log = LoggerFactory.getLogger(PasswordResetCodeService.class);
   private static final int MAX_EMAIL_LENGTH = 255;
+  private static final long MAX_CODE_VERIFICATION_FAILURES = 5L;
 
   private final PasswordResetCodeStore passwordResetCodeStore;
   private final VerificationCodeGenerator verificationCodeGenerator;
@@ -67,15 +68,19 @@ public class PasswordResetCodeService {
         .orElse(null);
     if (user == null) {
       passwordResetCodeStore.deleteCode(email);
+      passwordResetCodeStore.clearCodeVerificationFailures(email);
       return;
     }
 
     try {
       passwordResetCodeEmailSender.sendPasswordResetCode(email, code);
+      // 새 코드가 정상 발급되면 이전 코드 검증 실패 이력은 초기화한다.
+      passwordResetCodeStore.clearCodeVerificationFailures(email);
     } catch (RuntimeException ex) {
       // 공개 API에서는 발송 장애도 계정 존재 여부 단서가 되지 않도록 숨기고 로그만 남긴다.
       log.error("Password reset email delivery failed for email={}", email, ex);
       passwordResetCodeStore.deleteCode(email);
+      passwordResetCodeStore.clearCodeVerificationFailures(email);
     }
   }
 
@@ -87,6 +92,13 @@ public class PasswordResetCodeService {
         .orElseThrow(() -> new BusinessException(ErrorCode.PASSWORD_RESET_CODE_INVALID));
 
     if (!savedCode.equals(code)) {
+      long failures = passwordResetCodeStore.incrementCodeVerificationFailures(email, codeTtl);
+      if (failures >= MAX_CODE_VERIFICATION_FAILURES) {
+        // 반복 추측이 임계치를 넘으면 기존 코드를 폐기해 새 코드 발급부터 다시 시작하게 한다.
+        passwordResetCodeStore.deleteCode(email);
+        passwordResetCodeStore.clearCodeVerificationFailures(email);
+        throw new BusinessException(ErrorCode.PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED);
+      }
       throw new BusinessException(ErrorCode.PASSWORD_RESET_CODE_INVALID);
     }
 
@@ -94,6 +106,7 @@ public class PasswordResetCodeService {
 
     // 코드 검증이 끝난 시점에만 이전 토큰을 대체해 이미 진행 중인 재설정 흐름을 불필요하게 깨지 않게 한다.
     passwordResetCodeStore.deleteCode(email);
+    passwordResetCodeStore.clearCodeVerificationFailures(email);
     passwordResetCodeStore.saveResetToken(email, resetToken, resetTokenTtl);
     return resetToken;
   }

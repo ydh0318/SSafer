@@ -14,6 +14,7 @@ public class RedisPasswordResetCodeStore implements PasswordResetCodeStore {
   private static final String COOLDOWN_KEY_PREFIX = "password-reset:cooldown:";
   private static final String TOKEN_KEY_PREFIX = "password-reset:token:";
   private static final String EMAIL_TOKEN_KEY_PREFIX = "password-reset:email-token:";
+  private static final String VERIFY_FAILURE_KEY_PREFIX = "password-reset:verify-failures:";
 
   private final StringRedisTemplate stringRedisTemplate;
 
@@ -76,6 +77,25 @@ public class RedisPasswordResetCodeStore implements PasswordResetCodeStore {
     return Optional.of(email);
   }
 
+  @Override
+  public long incrementCodeVerificationFailures(String email, Duration failureTtl) {
+    Long failures = stringRedisTemplate.opsForValue().increment(buildVerifyFailureKey(email));
+    if (failures == null) {
+      return 0L;
+    }
+
+    // 첫 실패 시점에만 TTL을 설정해서 일정 시간 뒤 자동으로 시도 횟수가 초기화되게 한다.
+    if (failures == 1L) {
+      stringRedisTemplate.expire(buildVerifyFailureKey(email), failureTtl);
+    }
+    return failures;
+  }
+
+  @Override
+  public void clearCodeVerificationFailures(String email) {
+    stringRedisTemplate.delete(buildVerifyFailureKey(email));
+  }
+
   private String buildCodeKey(String email) {
     return CODE_KEY_PREFIX + email;
   }
@@ -90,5 +110,9 @@ public class RedisPasswordResetCodeStore implements PasswordResetCodeStore {
 
   private String buildEmailTokenKey(String email) {
     return EMAIL_TOKEN_KEY_PREFIX + email;
+  }
+
+  private String buildVerifyFailureKey(String email) {
+    return VERIFY_FAILURE_KEY_PREFIX + email;
   }
 }

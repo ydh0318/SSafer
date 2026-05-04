@@ -68,6 +68,7 @@ class PasswordResetCodeServiceTest {
         Mockito.any()
     );
     then(passwordResetCodeEmailSender).should().sendPasswordResetCode("user@ssafer.co.kr", "123456");
+    then(passwordResetCodeStore).should().clearCodeVerificationFailures("user@ssafer.co.kr");
   }
 
   @Test
@@ -84,6 +85,7 @@ class PasswordResetCodeServiceTest {
     passwordResetCodeService.sendResetCode("user@ssafer.co.kr");
 
     then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
+    then(passwordResetCodeStore).should().clearCodeVerificationFailures("user@ssafer.co.kr");
     then(passwordResetCodeEmailSender).shouldHaveNoInteractions();
   }
 
@@ -102,6 +104,7 @@ class PasswordResetCodeServiceTest {
     passwordResetCodeService.sendResetCode("user@ssafer.co.kr");
 
     then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
+    then(passwordResetCodeStore).should().clearCodeVerificationFailures("user@ssafer.co.kr");
     then(passwordResetCodeEmailSender).shouldHaveNoInteractions();
   }
 
@@ -120,6 +123,7 @@ class PasswordResetCodeServiceTest {
     passwordResetCodeService.sendResetCode("user@ssafer.co.kr");
 
     then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
+    then(passwordResetCodeStore).should().clearCodeVerificationFailures("user@ssafer.co.kr");
     then(passwordResetCodeEmailSender).shouldHaveNoInteractions();
   }
 
@@ -157,6 +161,7 @@ class PasswordResetCodeServiceTest {
     passwordResetCodeService.sendResetCode("user@ssafer.co.kr");
 
     then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
+    then(passwordResetCodeStore).should().clearCodeVerificationFailures("user@ssafer.co.kr");
   }
 
   @Test
@@ -167,17 +172,35 @@ class PasswordResetCodeServiceTest {
 
     assertThat(resetToken).isNotBlank();
     then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
+    then(passwordResetCodeStore).should().clearCodeVerificationFailures("user@ssafer.co.kr");
     then(passwordResetCodeStore).should().saveResetToken(Mockito.eq("user@ssafer.co.kr"), Mockito.eq(resetToken), Mockito.any());
   }
 
   @Test
   void verifyCodeThrowsWhenCodeDoesNotMatch() {
     given(passwordResetCodeStore.findCode("user@ssafer.co.kr")).willReturn(Optional.of("654321"));
+    given(passwordResetCodeStore.incrementCodeVerificationFailures(Mockito.eq("user@ssafer.co.kr"), Mockito.any()))
+        .willReturn(1L);
 
     assertThatThrownBy(() -> passwordResetCodeService.verifyCode("user@ssafer.co.kr", "123456"))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.PASSWORD_RESET_CODE_INVALID);
+  }
+
+  @Test
+  void verifyCodeDeletesCodeWhenFailuresAreExceeded() {
+    given(passwordResetCodeStore.findCode("user@ssafer.co.kr")).willReturn(Optional.of("654321"));
+    given(passwordResetCodeStore.incrementCodeVerificationFailures(Mockito.eq("user@ssafer.co.kr"), Mockito.any()))
+        .willReturn(5L);
+
+    assertThatThrownBy(() -> passwordResetCodeService.verifyCode("user@ssafer.co.kr", "123456"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED);
+
+    then(passwordResetCodeStore).should().deleteCode("user@ssafer.co.kr");
+    then(passwordResetCodeStore).should().clearCodeVerificationFailures("user@ssafer.co.kr");
   }
 
   @Test

@@ -23,6 +23,11 @@ public enum ErrorCode {
       "PASSWORD_RESET_CODE_INVALID",
       "Password reset verification code is invalid or expired"
   ),
+  PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED(
+      HttpStatus.TOO_MANY_REQUESTS,
+      "PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED",
+      "Password reset verification code attempts exceeded"
+  ),
   PASSWORD_RESET_TOKEN_INVALID(
       HttpStatus.BAD_REQUEST,
       "PASSWORD_RESET_TOKEN_INVALID",

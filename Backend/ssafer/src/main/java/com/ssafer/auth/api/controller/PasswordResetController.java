@@ -62,7 +62,8 @@ public class PasswordResetController {
           description = "비밀번호 재설정 코드 검증 성공",
           content = @Content(schema = @Schema(implementation = VerifyPasswordResetCodeResponseData.class))
       ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 형식 오류 또는 코드 불일치")
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 형식 오류 또는 코드 불일치"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "인증코드 검증 시도 횟수 초과")
   })
   public ResponseEntity<ApiResponse<VerifyPasswordResetCodeResponseData>> verifyCode(
       @Valid @RequestBody VerifyPasswordResetCodeRequest request

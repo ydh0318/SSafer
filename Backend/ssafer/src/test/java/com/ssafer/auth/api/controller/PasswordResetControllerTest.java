@@ -136,6 +136,24 @@ class PasswordResetControllerTest {
   }
 
   @Test
+  void verifyCodeWhenAttemptsAreExceededReturnsTooManyRequests() throws Exception {
+    Mockito.doThrow(new BusinessException(ErrorCode.PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED))
+        .when(passwordResetCodeService)
+        .verifyCode("user@ssafer.co.kr", "123456");
+
+    mockMvc.perform(post("/api/v1/auth/password-reset/verify-code")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "email": "user@ssafer.co.kr",
+                  "code": "123456"
+                }
+                """))
+        .andExpect(status().isTooManyRequests())
+        .andExpect(jsonPath("$.code").value("PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED"));
+  }
+
+  @Test
   void completeResetReturnsOk() throws Exception {
     mockMvc.perform(post("/api/v1/auth/password-reset/complete")
             .contentType(APPLICATION_JSON)

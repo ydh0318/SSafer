@@ -16,4 +16,8 @@ public interface PasswordResetCodeStore {
   void saveResetToken(String email, String resetToken, Duration resetTokenTtl);
 
   Optional<String> consumeResetToken(String resetToken);
+
+  long incrementCodeVerificationFailures(String email, Duration failureTtl);
+
+  void clearCodeVerificationFailures(String email);
 }

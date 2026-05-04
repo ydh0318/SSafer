@@ -100,4 +100,26 @@ class RedisPasswordResetCodeStoreTest {
 
     assertThat(passwordResetCodeStore.consumeResetToken("reset-token-123")).isEmpty();
   }
+
+  @Test
+  void incrementCodeVerificationFailuresSetsTtlOnFirstFailure() {
+    given(valueOperations.increment("password-reset:verify-failures:user@ssafer.co.kr")).willReturn(1L);
+    given(stringRedisTemplate.expire("password-reset:verify-failures:user@ssafer.co.kr", Duration.ofMinutes(5)))
+        .willReturn(true);
+
+    long failures = passwordResetCodeStore.incrementCodeVerificationFailures(
+        "user@ssafer.co.kr",
+        Duration.ofMinutes(5)
+    );
+
+    assertThat(failures).isEqualTo(1L);
+    then(stringRedisTemplate).should().expire("password-reset:verify-failures:user@ssafer.co.kr", Duration.ofMinutes(5));
+  }
+
+  @Test
+  void clearCodeVerificationFailuresRemovesFailureKey() {
+    passwordResetCodeStore.clearCodeVerificationFailures("user@ssafer.co.kr");
+
+    then(stringRedisTemplate).should().delete("password-reset:verify-failures:user@ssafer.co.kr");
+  }
 }
