@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
+from botocore.exceptions import ClientError
+
 from app.core.config import S3Settings
 from app.services.s3_service import (
     S3UploadError,
@@ -64,7 +66,7 @@ class S3UploadTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             missing_path = Path(temp_dir) / "missing.json"
 
-            with self.assertRaisesRegex(S3UploadError, "file not found"):
+            with self.assertRaisesRegex(S3UploadError, "file not found") as context:
                 upload_analysis_result_json(
                     str(missing_path),
                     "analysis/1/analysis_result.json",
@@ -72,21 +74,41 @@ class S3UploadTest(unittest.TestCase):
                     s3_client=Mock(),
                 )
 
+        self.assertEqual(context.exception.operation, "upload")
+        self.assertEqual(context.exception.error_code, "LOCAL_FILE_NOT_FOUND")
+        self.assertEqual(
+            context.exception.s3_uri,
+            "s3://analysis-bucket/analysis/1/analysis_result.json",
+        )
+
     def test_upload_analysis_result_json_wraps_s3_error(self):
         client = Mock()
-        client.upload_file.side_effect = RuntimeError("access denied")
+        client.upload_file.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "NoSuchBucket",
+                    "Message": "Bucket does not exist",
+                }
+            },
+            "PutObject",
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             source = Path(temp_dir) / "analysis_result.json"
             source.write_text('{"resultCount": 0}', encoding="utf-8")
 
-            with self.assertRaisesRegex(S3UploadError, "Failed to upload"):
+            with self.assertRaisesRegex(S3UploadError, "NoSuchBucket") as context:
                 upload_analysis_result_json(
                     str(source),
                     "analysis/1/analysis_result.json",
                     settings=build_settings(),
                     s3_client=client,
                 )
+
+        self.assertEqual(context.exception.operation, "upload")
+        self.assertEqual(context.exception.bucket, "analysis-bucket")
+        self.assertEqual(context.exception.key, "analysis/1/analysis_result.json")
+        self.assertEqual(context.exception.error_code, "NoSuchBucket")
 
 
 if __name__ == "__main__":

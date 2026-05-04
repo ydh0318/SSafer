@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
+from botocore.exceptions import ClientError
+
 from app.core.config import S3Settings
 from app.services.s3_service import (
     S3DownloadError,
@@ -77,16 +79,33 @@ class S3DownloadTest(unittest.TestCase):
 
     def test_download_scan_result_json_wraps_s3_error(self):
         client = Mock()
-        client.download_file.side_effect = RuntimeError("access denied")
+        client.download_file.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "Access denied",
+                }
+            },
+            "GetObject",
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaisesRegex(S3DownloadError, "Failed to download"):
+            with self.assertRaisesRegex(S3DownloadError, "AccessDenied") as context:
                 download_scan_result_json(
                     "scans/1/scan_result.json",
                     str(Path(temp_dir) / "scan_result.json"),
                     settings=build_settings(),
                     s3_client=client,
                 )
+
+        self.assertEqual(context.exception.operation, "download")
+        self.assertEqual(context.exception.bucket, "raw-bucket")
+        self.assertEqual(context.exception.key, "scans/1/scan_result.json")
+        self.assertEqual(context.exception.error_code, "AccessDenied")
+        self.assertEqual(
+            context.exception.s3_uri,
+            "s3://raw-bucket/scans/1/scan_result.json",
+        )
 
 
 if __name__ == "__main__":

@@ -7,15 +7,48 @@ from app.core.config import S3Settings, load_s3_settings
 from app.core.s3 import create_s3_client
 
 
+def _extract_s3_error_code(exc: Exception) -> str:
+    response = getattr(exc, "response", None)
+    if isinstance(response, dict):
+        error = response.get("Error")
+        if isinstance(error, dict):
+            code = error.get("Code")
+            if isinstance(code, str) and code.strip():
+                return code
+
+    return exc.__class__.__name__
+
+
 class S3LocationError(ValueError):
     pass
 
 
-class S3DownloadError(RuntimeError):
+class S3OperationError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        message: str,
+        operation: str,
+        bucket: str,
+        key: str,
+        error_code: str,
+    ):
+        super().__init__(message)
+        self.operation = operation
+        self.bucket = bucket
+        self.key = key
+        self.error_code = error_code
+
+    @property
+    def s3_uri(self) -> str:
+        return f"s3://{self.bucket}/{self.key}"
+
+
+class S3DownloadError(S3OperationError):
     pass
 
 
-class S3UploadError(RuntimeError):
+class S3UploadError(S3OperationError):
     pass
 
 
@@ -99,9 +132,16 @@ def download_scan_result_json(
             Filename=str(destination),
         )
     except Exception as exc:
+        error_code = _extract_s3_error_code(exc)
         raise S3DownloadError(
-            "Failed to download scan_result.json from S3: "
-            f"s3://{location.bucket}/{location.key}"
+            message=(
+                "Failed to download scan_result.json from S3: "
+                f"s3://{location.bucket}/{location.key} ({error_code})"
+            ),
+            operation="download",
+            bucket=location.bucket,
+            key=location.key,
+            error_code=error_code,
         ) from exc
 
     return destination
@@ -123,7 +163,13 @@ def upload_analysis_result_json(
         source = Path.cwd() / source
 
     if not source.exists():
-        raise S3UploadError(f"analysis_result.json file not found: {source}")
+        raise S3UploadError(
+            message=f"analysis_result.json file not found: {source}",
+            operation="upload",
+            bucket=location.bucket,
+            key=location.key,
+            error_code="LOCAL_FILE_NOT_FOUND",
+        )
 
     try:
         client.upload_file(
@@ -133,9 +179,16 @@ def upload_analysis_result_json(
             ExtraArgs={"ContentType": "application/json"},
         )
     except Exception as exc:
+        error_code = _extract_s3_error_code(exc)
         raise S3UploadError(
-            "Failed to upload analysis_result.json to S3: "
-            f"s3://{location.bucket}/{location.key}"
+            message=(
+                "Failed to upload analysis_result.json to S3: "
+                f"s3://{location.bucket}/{location.key} ({error_code})"
+            ),
+            operation="upload",
+            bucket=location.bucket,
+            key=location.key,
+            error_code=error_code,
         ) from exc
 
     return f"s3://{location.bucket}/{location.key}"

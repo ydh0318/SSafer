@@ -11,6 +11,8 @@ S3 설정 검증 로직 추가
 S3 client factory 추가
 scan_result.json 다운로드 로직 추가
 analysis_result.json 업로드 로직 추가
+S3 예외 정보 표준화
+S3 실제 연동 smoke test 스크립트 추가
 S3 설정 단위 테스트 추가
 ```
 
@@ -72,6 +74,7 @@ export APP_ANALYSIS_RESULT_S3_BUCKET=ssafer-scan-storage-dev
 app/core/config.py
 app/core/s3.py
 app/services/s3_service.py
+scripts/test_s3_integration.py
 ```
 
 주요 함수:
@@ -94,6 +97,12 @@ source .venv/bin/activate
 python -m unittest tests.test_s3_config
 python -m unittest tests.test_s3_download
 python -m unittest tests.test_s3_upload
+```
+
+전체 S3 단위 테스트:
+
+```bash
+python -m unittest tests.test_s3_config tests.test_s3_download tests.test_s3_upload
 ```
 
 실제 S3 다운로드 연결 확인:
@@ -205,4 +214,67 @@ s3_uri = upload_analysis_result_json(
 
 print(s3_uri)
 PY
+```
+
+## 8. S3 예외 처리
+
+S3 다운로드/업로드 실패는 공통적으로 `S3OperationError` 계열 예외로 감쌉니다.
+
+| 예외 | 발생 상황 |
+| --- | --- |
+| `S3LocationError` | S3 URI 또는 object key 형식 오류 |
+| `S3DownloadError` | scan_result.json 다운로드 실패 |
+| `S3UploadError` | analysis_result.json 업로드 실패 |
+
+`S3DownloadError`, `S3UploadError`는 아래 정보를 포함합니다.
+
+| 필드 | 설명 |
+| --- | --- |
+| `operation` | `download` 또는 `upload` |
+| `bucket` | S3 bucket |
+| `key` | S3 object key |
+| `error_code` | AWS S3 error code 또는 로컬 오류 코드 |
+| `s3_uri` | `s3://bucket/key` |
+
+대표 error code:
+
+| error_code | 의미 |
+| --- | --- |
+| `AccessDenied` | IAM 권한 부족 |
+| `NoSuchBucket` | bucket 없음 또는 이름/계정/리전 불일치 |
+| `NoSuchKey` | object key 없음 |
+| `LOCAL_FILE_NOT_FOUND` | 업로드할 로컬 analysis_result.json 없음 |
+
+## 9. 실제 S3 연동 smoke test
+
+다운로드와 업로드를 한 번에 확인하려면 아래 스크립트를 사용합니다.
+
+```bash
+set -a
+source .env
+set +a
+
+python scripts/test_s3_integration.py --verify-upload
+```
+
+기본 동작:
+
+```text
+ai-test/connection-test.txt 다운로드
+data/analysis_result.json 업로드
+업로드한 analysis_result.json 재다운로드 및 스키마 검증
+```
+
+정상 출력 예시:
+
+```text
+download ok: /home/eunsu/S14P31B105/AI/data/s3_download_test.txt
+upload ok: s3://ssafer-scan-storage-dev/ai-test/analysis_result.integration_test.json
+verify ok: resultCount=3
+```
+
+실패 출력 예시:
+
+```text
+s3 error: operation=download error_code=AccessDenied s3_uri=s3://... message=...
 ```
