@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { getApiErrorMessage, getApiFieldErrors } from '../../../api/error';
 import { sendEmailVerificationCode, verifyEmailCode } from '../api/member';
+import { getTooManyRequestsMessage } from '../utils/authError';
 import { validateCode } from '../utils/signup';
 import AuthButton from './AuthButton';
 import AuthField from './AuthField';
@@ -10,10 +11,16 @@ import AuthMessage from './AuthMessage';
 type EmailVerificationPanelProps = {
   email: string;
   onBack: () => void;
+  onCodeResent: (email: string) => void;
   onVerified: () => void;
 };
 
-function EmailVerificationPanel({ email, onBack, onVerified }: EmailVerificationPanelProps) {
+function EmailVerificationPanel({
+  email,
+  onBack,
+  onCodeResent,
+  onVerified,
+}: EmailVerificationPanelProps) {
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | undefined>();
   const [message, setMessage] = useState<{
@@ -28,11 +35,14 @@ function EmailVerificationPanel({ email, onBack, onVerified }: EmailVerification
 
     try {
       await sendEmailVerificationCode({ email });
-      window.alert(`SSAFER.IO 내용:\n\n"${email}"\n해당 이메일로 인증 코드를 다시 전송했습니다.`);
+      onCodeResent(email);
     } catch (error) {
       setMessage({
         tone: 'error',
-        text: getApiErrorMessage(error, '인증 코드 재전송에 실패했습니다.'),
+        text: getTooManyRequestsMessage(
+          error,
+          '인증 번호 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+        ),
       });
     } finally {
       setPendingAction(null);
@@ -82,18 +92,14 @@ function EmailVerificationPanel({ email, onBack, onVerified }: EmailVerification
       }}
     >
       <div>
-        <button
-          className="auth-back-button"
-          onClick={onBack}
-          type="button"
-        >
+        <button className="auth-back-button" onClick={onBack} type="button">
           &lt; BACK
         </button>
 
         <h2 className="email-verification-title">
-          이메일로 인증 번호를 보냈습니다.
+          이메일로 받은
           <br />
-          코드를 확인해 주세요.
+          인증 코드를 입력해 주세요.
         </h2>
 
         <div className="mt-[clamp(2rem,5.6vh,3.5rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
