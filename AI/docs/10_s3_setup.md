@@ -10,10 +10,11 @@ S3 환경변수 로딩 함수 추가
 S3 설정 검증 로직 추가
 S3 client factory 추가
 scan_result.json 다운로드 로직 추가
+analysis_result.json 업로드 로직 추가
 S3 설정 단위 테스트 추가
 ```
 
-아직 `analysis_result.json` 업로드 로직은 구현하지 않았습니다.
+아직 `/analyze` API와 S3 다운로드/업로드 흐름은 직접 연결하지 않았습니다.
 
 ## 2. 환경변수
 
@@ -80,7 +81,9 @@ load_s3_settings()
 create_s3_client()
 parse_s3_uri()
 resolve_raw_scan_location()
+resolve_analysis_result_location()
 download_scan_result_json()
+upload_analysis_result_json()
 ```
 
 ## 5. 테스트
@@ -90,6 +93,7 @@ cd /home/eunsu/S14P31B105/AI
 source .venv/bin/activate
 python -m unittest tests.test_s3_config
 python -m unittest tests.test_s3_download
+python -m unittest tests.test_s3_upload
 ```
 
 실제 S3 다운로드 연결 확인:
@@ -150,4 +154,55 @@ s3:GetObject
 
 ```text
 /home/eunsu/S14P31B105/AI/data/scan_result.from_s3.json
+```
+
+## 7. analysis_result.json 업로드
+
+객체 key만 전달하면 `APP_ANALYSIS_RESULT_S3_BUCKET` bucket으로 업로드합니다.
+
+```python
+upload_analysis_result_json(
+    source_path="data/analysis_result.json",
+    object_key_or_uri="analysis/1/analysis_result.json",
+)
+```
+
+전체 S3 URI도 사용할 수 있습니다.
+
+```python
+upload_analysis_result_json(
+    source_path="data/analysis_result.json",
+    object_key_or_uri="s3://ssafer-scan-storage-dev/analysis/1/analysis_result.json",
+)
+```
+
+업로드가 성공하면 저장된 S3 URI를 반환합니다.
+
+```text
+s3://ssafer-scan-storage-dev/analysis/1/analysis_result.json
+```
+
+필요 권한:
+
+```text
+s3:PutObject
+```
+
+실제 S3 업로드 연결 확인:
+
+```bash
+set -a
+source .env
+set +a
+
+python - <<'PY'
+from app.services.s3_service import upload_analysis_result_json
+
+s3_uri = upload_analysis_result_json(
+    "data/analysis_result.json",
+    "ai-test/analysis_result.upload_test.json",
+)
+
+print(s3_uri)
+PY
 ```

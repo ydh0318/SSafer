@@ -15,6 +15,10 @@ class S3DownloadError(RuntimeError):
     pass
 
 
+class S3UploadError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class S3Location:
     bucket: str
@@ -55,6 +59,22 @@ def resolve_raw_scan_location(
     return S3Location(bucket=settings.raw_scan_bucket, key=key)
 
 
+def resolve_analysis_result_location(
+    object_key_or_uri: str,
+    settings: S3Settings | None = None,
+) -> S3Location:
+    settings = settings or load_s3_settings()
+
+    if object_key_or_uri.startswith("s3://"):
+        return parse_s3_uri(object_key_or_uri)
+
+    key = object_key_or_uri.lstrip("/")
+    if not key:
+        raise S3LocationError("S3 object key must not be empty.")
+
+    return S3Location(bucket=settings.analysis_result_bucket, key=key)
+
+
 def download_scan_result_json(
     object_key_or_uri: str,
     destination_path: str,
@@ -85,3 +105,37 @@ def download_scan_result_json(
         ) from exc
 
     return destination
+
+
+def upload_analysis_result_json(
+    source_path: str,
+    object_key_or_uri: str,
+    *,
+    settings: S3Settings | None = None,
+    s3_client: Any | None = None,
+) -> str:
+    settings = settings or load_s3_settings()
+    location = resolve_analysis_result_location(object_key_or_uri, settings)
+    client = s3_client or create_s3_client(settings)
+
+    source = Path(source_path)
+    if not source.is_absolute():
+        source = Path.cwd() / source
+
+    if not source.exists():
+        raise S3UploadError(f"analysis_result.json file not found: {source}")
+
+    try:
+        client.upload_file(
+            Filename=str(source),
+            Bucket=location.bucket,
+            Key=location.key,
+            ExtraArgs={"ContentType": "application/json"},
+        )
+    except Exception as exc:
+        raise S3UploadError(
+            "Failed to upload analysis_result.json to S3: "
+            f"s3://{location.bucket}/{location.key}"
+        ) from exc
+
+    return f"s3://{location.bucket}/{location.key}"
