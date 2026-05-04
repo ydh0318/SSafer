@@ -1,3 +1,5 @@
+def FAILED_STAGE = 'N/A'
+
 pipeline {
     agent any
 
@@ -24,12 +26,14 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                script { FAILED_STAGE = 'Checkout' }
                 checkout scm
             }
         }
 
         stage('Build Images') {
             steps {
+                script { FAILED_STAGE = 'Build Images' }
                 sh '''
                     docker build -f Infra/docker/dockerfiles/Dockerfile.spring -t "$SPRING_IMAGE" .
                     docker build -f Infra/docker/dockerfiles/Dockerfile.fastapi -t "$FASTAPI_IMAGE" .
@@ -40,6 +44,7 @@ pipeline {
 
         stage('Push Images') {
             steps {
+                script { FAILED_STAGE = 'Push Images' }
                 withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CREDENTIALS, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASSWORD')]) {
                     sh '''
                         echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin
@@ -54,6 +59,7 @@ pipeline {
 
         stage('Sync EC2 #1 Deploy Files') {
             steps {
+                script { FAILED_STAGE = 'Sync EC2 #1 Deploy Files' }
                 sh '''
                     mkdir -p "$DEPLOY_ROOT/Infra/docker/ec2-1/prod"
                     mkdir -p "$DEPLOY_ROOT/Infra/scripts"
@@ -66,6 +72,7 @@ pipeline {
 
         stage('Deploy EC2 #1') {
             steps {
+                script { FAILED_STAGE = 'Deploy EC2 #1' }
                 sh '''
                     SPRING_IMAGE="$SPRING_IMAGE" NGINX_IMAGE="$NGINX_IMAGE" \
                     bash "$DEPLOY_ROOT/Infra/scripts/deploy-ec2-1.sh"
@@ -78,6 +85,7 @@ pipeline {
                 expression { return params.DEPLOY_EC2_2 }
             }
             steps {
+                script { FAILED_STAGE = 'Deploy EC2 #2' }
                 withCredentials([string(credentialsId: 'ec2-2-host', variable: 'EC2_2_HOST')]) {
                     sshagent(credentials: [env.EC2_2_SSH_CREDENTIALS]) {
                         sh '''
@@ -93,6 +101,41 @@ pipeline {
     post {
         always {
             sh(script: 'docker image prune -f || true', returnStatus: true)
+        }
+        success {
+            withCredentials([string(credentialsId: 'mattermost-webhook-url', variable: 'MM_WEBHOOK')]) {
+                script {
+                    def commitMsg = sh(script: 'git log -1 --format=%s', returnStdout: true).trim()
+                    def duration = currentBuild.durationString.replace(' and counting', '')
+                    def msg = "✅ **[SSafer] 배포 성공**\n" +
+                              "> **브랜치:** `${env.GIT_BRANCH}`\n" +
+                              "> **커밋:** ${commitMsg}\n" +
+                              "> **이미지 태그:** `${env.IMAGE_TAG}`\n" +
+                              "> **소요 시간:** ${duration}\n" +
+                              "> **빌드:** [#${env.BUILD_NUMBER} 바로가기](${env.BUILD_URL})"
+                    def payload = groovy.json.JsonOutput.toJson([username: 'Jenkins Bot', text: msg])
+                    writeFile file: '/tmp/mm_payload.json', text: payload
+                    sh 'curl -s -X POST "$MM_WEBHOOK" -H "Content-Type: application/json" -d @/tmp/mm_payload.json'
+                }
+            }
+        }
+        failure {
+            withCredentials([string(credentialsId: 'mattermost-webhook-url', variable: 'MM_WEBHOOK')]) {
+                script {
+                    def commitMsg = sh(script: 'git log -1 --format=%s', returnStdout: true).trim()
+                    def duration = currentBuild.durationString.replace(' and counting', '')
+                    def msg = "❌ **[SSafer] 배포 실패**\n" +
+                              "> **브랜치:** `${env.GIT_BRANCH}`\n" +
+                              "> **커밋:** ${commitMsg}\n" +
+                              "> **소요 시간:** ${duration}\n" +
+                              "> **실패 Stage:** `${FAILED_STAGE}`\n" +
+                              "> **빌드:** [#${env.BUILD_NUMBER} 바로가기](${env.BUILD_URL})\n" +
+                              "> **콘솔 로그:** [확인하기](${env.BUILD_URL}console)"
+                    def payload = groovy.json.JsonOutput.toJson([username: 'Jenkins Bot', text: msg])
+                    writeFile file: '/tmp/mm_payload.json', text: payload
+                    sh 'curl -s -X POST "$MM_WEBHOOK" -H "Content-Type: application/json" -d @/tmp/mm_payload.json'
+                }
+            }
         }
     }
 }
