@@ -10,7 +10,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 
 @Configuration
-// presigned URL 발급과 별도로 HeadObject 검증에 사용할 S3Client를 등록한다.
+// raw 결과 존재 검증(HeadObject)용 S3Client 빈 설정.
 public class S3ClientConfig {
 
   @Bean
@@ -22,7 +22,7 @@ public class S3ClientConfig {
     S3ClientBuilder builder = S3Client.builder()
         .region(Region.of(region));
 
-    // AWS 자격 증명은 환경변수로만 주입한다.
+    // AWS 자격 증명은 환경변수로 주입한다.
     if (accessKeyId.isBlank() || secretAccessKey.isBlank()) {
       throw new IllegalStateException("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must not be blank");
     }

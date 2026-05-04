@@ -89,6 +89,108 @@ class CliRawResultUploadReportControllerTest {
         .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD_HASH"));
   }
 
+  @Test
+  void reportWhenDuplicateReturnsConflict() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(currentActorProvider.getCurrentActor()).thenReturn(AuthenticatedActor.member(10L));
+    when(cliRawResultUploadReportService.report(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.any(),
+        org.mockito.ArgumentMatchers.any()
+    )).thenThrow(new BusinessException(ErrorCode.DUPLICATE_RAW_RESULT_UPLOAD));
+
+    mockMvc.perform(post("/api/v1/scans/1001/raw-results")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(new CliRawResultUploadReportRequest(null, null, null, null))))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("DUPLICATE_RAW_RESULT_UPLOAD"));
+  }
+
+  @Test
+  void reportWhenScanStatusConflictReturnsConflict() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(currentActorProvider.getCurrentActor()).thenReturn(AuthenticatedActor.member(10L));
+    when(cliRawResultUploadReportService.report(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.any(),
+        org.mockito.ArgumentMatchers.any()
+    )).thenThrow(new BusinessException(ErrorCode.SCAN_STATUS_CONFLICT));
+
+    mockMvc.perform(post("/api/v1/scans/1001/raw-results")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(new CliRawResultUploadReportRequest(null, null, null, null))))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("SCAN_STATUS_CONFLICT"));
+  }
+
+  @Test
+  void reportWhenRawResultNotFoundReturnsNotFound() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(currentActorProvider.getCurrentActor()).thenReturn(AuthenticatedActor.member(10L));
+    when(cliRawResultUploadReportService.report(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.any(),
+        org.mockito.ArgumentMatchers.any()
+    )).thenThrow(new BusinessException(ErrorCode.RAW_RESULT_NOT_FOUND));
+
+    mockMvc.perform(post("/api/v1/scans/1001/raw-results")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(new CliRawResultUploadReportRequest(null, null, null, null))))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("RAW_RESULT_NOT_FOUND"));
+  }
+
+  @Test
+  void reportWhenForbiddenReturnsForbidden() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(currentActorProvider.getCurrentActor()).thenReturn(AuthenticatedActor.member(10L));
+    when(cliRawResultUploadReportService.report(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.any(),
+        org.mockito.ArgumentMatchers.any()
+    )).thenThrow(new BusinessException(ErrorCode.FORBIDDEN));
+
+    mockMvc.perform(post("/api/v1/scans/1001/raw-results")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(new CliRawResultUploadReportRequest(null, null, null, null))))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+  }
+
+  @Test
+  void reportWhenScanMissingReturnsNotFound() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(currentActorProvider.getCurrentActor()).thenReturn(AuthenticatedActor.member(10L));
+    when(cliRawResultUploadReportService.report(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.any(),
+        org.mockito.ArgumentMatchers.any()
+    )).thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
+
+    mockMvc.perform(post("/api/v1/scans/1001/raw-results")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(new CliRawResultUploadReportRequest(null, null, null, null))))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+  }
+
+  @Test
+  void reportWhenUnexpectedFailureReturnsInternalServerError() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(currentActorProvider.getCurrentActor()).thenReturn(AuthenticatedActor.member(10L));
+    when(cliRawResultUploadReportService.report(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.any(),
+        org.mockito.ArgumentMatchers.any()
+    )).thenThrow(new RuntimeException("boom"));
+
+    mockMvc.perform(post("/api/v1/scans/1001/raw-results")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(new CliRawResultUploadReportRequest(null, null, null, null))))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+  }
+
   private MockMvc buildMockMvc() {
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
     validator.afterPropertiesSet();

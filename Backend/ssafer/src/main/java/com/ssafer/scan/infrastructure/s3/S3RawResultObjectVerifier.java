@@ -13,7 +13,7 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 @Component
-// RawResultObjectVerifier의 S3 구현체. HeadObject로 객체 존재만 점검한다.
+// rawResultPath(S3 URI)가 실제로 존재하는지 HeadObject로 확인하는 구현체.
 public class S3RawResultObjectVerifier implements RawResultObjectVerifier {
 
   private final S3Client s3Client;
@@ -34,7 +34,7 @@ public class S3RawResultObjectVerifier implements RawResultObjectVerifier {
     } catch (NoSuchKeyException ex) {
       return false;
     } catch (S3Exception ex) {
-      // S3에서 404는 "객체 없음"으로 처리하고, 그 외는 인프라 오류로 본다.
+      // S3 404는 객체 없음으로 처리, 그 외는 인프라 오류로 처리한다.
       if (ex.statusCode() == 404) {
         return false;
       }
