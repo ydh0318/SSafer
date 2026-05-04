@@ -10,7 +10,6 @@ from app.schemas.analysis import AnalysisRequest, AnalysisResponse
 
 from app.services.explain_service import generate_finding_explanation
 from app.services.fix_service import generate_finding_fix
-from app.services.input_service import format_findings_for_llm
 from app.services.result_service import (
     DEFAULT_ANALYSIS_RESULT_PATH,
     build_analysis_result_from_results,
@@ -29,29 +28,11 @@ class FindingAnalysisError(RuntimeError):
 
 
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
-    scan_result = load_scan_result(request.scan_result_path)
-    validate_scan_result_required_fields(scan_result)
-    raw_findings = extract_findings(scan_result)
-    valid_findings, invalid_findings = split_valid_invalid_findings(raw_findings)
-    llm_inputs = format_findings_for_llm(valid_findings)
-    status = "prepared"
-    if invalid_findings:
-        status = "prepared_with_invalid_findings"
-
-    return AnalysisResponse(
-        status=status,
-        message=(
-            "scan_result.json loaded, validated, and converted. "
-            f"findings={len(raw_findings)}, "
-            f"valid={len(valid_findings)}, invalid={len(invalid_findings)}"
-        ),
+    result = run_analysis_pipeline(
         scan_result_path=request.scan_result_path,
-        finding_count=len(raw_findings),
-        valid_finding_count=len(valid_findings),
-        invalid_finding_count=len(invalid_findings),
-        llm_input_count=len(llm_inputs),
-        invalid_findings=invalid_findings,
+        output_path=request.analysis_result_path,
     )
+    return AnalysisResponse(**result)
 
 
 def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:

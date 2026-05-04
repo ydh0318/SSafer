@@ -183,25 +183,28 @@ Finding ID: FND-0001
 
 ## 9. API 연결 확인
 
-현재 `/analysis`는 `scan_result.json` 파일을 로딩하고 `findings` 배열을 추출한 뒤 valid/invalid finding을 분리하고, valid finding만 LLM 입력 데이터로 변환합니다.
+현재 `/analyze`는 `scan_result.json` 파일을 로딩한 뒤 분석 파이프라인을 실행하고 `analysis_result.json`을 저장합니다.
 
 ```bash
-curl -X POST http://127.0.0.1:8000/analysis \
+curl -X POST http://127.0.0.1:8000/analyze \
   -H "Content-Type: application/json" \
-  -d '{"scan_result_path":"data/scan_result.json"}'
+  -d '{"scan_result_path":"data/scan_result.json","analysis_result_path":"data/analysis_result.json"}'
 ```
 
 정상 응답 예시:
 
 ```json
 {
-  "status": "prepared",
-  "message": "scan_result.json loaded, validated, and converted. findings=3, valid=3, invalid=0",
+  "status": "completed",
+  "message": null,
+  "stage": null,
+  "finding_id": null,
   "scan_result_path": "data/scan_result.json",
+  "analysis_result_path": "data/analysis_result.json",
   "finding_count": 3,
   "valid_finding_count": 3,
   "invalid_finding_count": 0,
-  "llm_input_count": 3,
+  "result_count": 3,
   "invalid_findings": []
 }
 ```

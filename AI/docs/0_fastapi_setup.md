@@ -54,21 +54,29 @@ curl http://127.0.0.1:8000/health
 {"status":"ok"}
 ```
 
-## 7. Analysis 엔드포인트 확인
+## 7. Analyze 엔드포인트 확인
 
 ```bash
-curl -X POST http://127.0.0.1:8000/analysis \
+curl -X POST http://127.0.0.1:8000/analyze \
   -H "Content-Type: application/json" \
-  -d '{"scan_result_path":"data/scan_result.json"}'
+  -d '{"scan_result_path":"data/scan_result.json","analysis_result_path":"data/analysis_result.json"}'
 ```
 
-현재는 실제 분석 로직 연결 전 단계이므로 준비 상태 응답을 반환합니다.
+`/analyze`는 `scan_result.json`을 읽어 분석 파이프라인을 실행하고 `analysis_result.json`을 저장합니다.
 
 ```json
 {
-  "status": "ready",
-  "message": "Analysis endpoint is ready.",
-  "scan_result_path": "data/scan_result.json"
+  "status": "completed",
+  "message": null,
+  "stage": null,
+  "finding_id": null,
+  "scan_result_path": "data/scan_result.json",
+  "analysis_result_path": "data/analysis_result.json",
+  "finding_count": 1,
+  "valid_finding_count": 1,
+  "invalid_finding_count": 0,
+  "result_count": 1,
+  "invalid_findings": []
 }
 ```
 
@@ -76,5 +84,7 @@ curl -X POST http://127.0.0.1:8000/analysis \
 
 ```text
 1_ollama_setup.md
-2_langchain_ollama_setup.md
+2_langchain_setup.md
+8_analyze_api.md
+9_test_guide.md
 ```
