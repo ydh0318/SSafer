@@ -24,7 +24,7 @@ function AuthButton({
       ? 'bg-black text-white hover:bg-zinc-800'
       : variant === 'secondary'
         ? 'border border-slate-300 bg-white text-black hover:border-black'
-        : 'text-slate-600 hover:text-black';
+        : 'bg-transparent text-slate-600 hover:text-black';
 
   return (
     <button
