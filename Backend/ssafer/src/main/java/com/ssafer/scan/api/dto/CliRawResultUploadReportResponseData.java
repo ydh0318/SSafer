@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record CliRawResultUploadReportResponseData(
     @Schema(description = "scan ID", example = "1001")
     Long scanId,
-    @Schema(description = "현재 scan 상태", example = "RAW_UPLOADED")
+    @Schema(description = "현재 scan 상태", example = "QUEUED")
     ScanStatus status,
     @Schema(description = "raw 결과 개수", example = "152")
     Integer resultCount

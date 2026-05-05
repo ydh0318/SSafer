@@ -159,4 +159,16 @@ public class AgentTask {
   public String getFailureReason() {
     return failureReason;
   }
+
+  // 작업 메시지 규격이 확정된 뒤 taskId 포함 payload를 다시 기록할 때 사용한다.
+  public void updatePayloadJson(String payloadJson) {
+    this.payloadJson = payloadJson;
+  }
+
+  // RabbitMQ 발행이 끝난 시점을 작업 이력으로 남긴다.
+  public void markSent(Instant now) {
+    this.taskStatus = AgentTaskStatus.SENT;
+    this.sentAt = now;
+    this.failureReason = null;
+  }
 }

@@ -46,7 +46,7 @@ class CliRawResultUploadReportControllerTest {
         org.mockito.ArgumentMatchers.eq(1001L),
         org.mockito.ArgumentMatchers.any(),
         org.mockito.ArgumentMatchers.any()
-    )).thenReturn(new CliRawResultUploadReportResponseData(1001L, ScanStatus.RAW_UPLOADED, 152));
+    )).thenReturn(new CliRawResultUploadReportResponseData(1001L, ScanStatus.QUEUED, 152));
 
     CliRawResultUploadReportRequest request = new CliRawResultUploadReportRequest(
         "ssafer-cli",
@@ -61,7 +61,7 @@ class CliRawResultUploadReportControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.message").value("CLI 분석 완료 알림 성공"))
         .andExpect(jsonPath("$.data.scanId").value(1001))
-        .andExpect(jsonPath("$.data.status").value("RAW_UPLOADED"))
+        .andExpect(jsonPath("$.data.status").value("QUEUED"))
         .andExpect(jsonPath("$.data.resultCount").value(152));
   }
 
