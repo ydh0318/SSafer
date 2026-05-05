@@ -91,6 +91,17 @@ class UserControllerTest {
   }
 
   @Test
+  void checkNicknameReturnsAvailability() throws Exception {
+    given(userRegistrationService.isDisplayNameAvailable("ssafer-user")).willReturn(true);
+
+    mockMvc.perform(get("/api/v1/users/check-nickname")
+            .param("nickname", "ssafer-user"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Nickname availability check succeeded"))
+        .andExpect(jsonPath("$.data.available").value(true));
+  }
+
+  @Test
   void registerWithoutBodyReturnsInvalidParameter() throws Exception {
     mockMvc.perform(post("/api/v1/users")
             .contentType(APPLICATION_JSON))
@@ -135,6 +146,24 @@ class UserControllerTest {
   }
 
   @Test
+  void duplicateNicknameOnRegisterReturnsConflict() throws Exception {
+    given(userRegistrationService.register("test@example.com", "Alice", "password123"))
+        .willThrow(new BusinessException(ErrorCode.DUPLICATE_DISPLAY_NAME));
+
+    mockMvc.perform(post("/api/v1/users")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "email": "test@example.com",
+                  "displayName": "Alice",
+                  "password": "password123"
+                }
+                """))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("DUPLICATE_DISPLAY_NAME"));
+  }
+
+  @Test
   void checkEmailWithInvalidFormatReturnsFieldErrors() throws Exception {
     mockMvc.perform(get("/api/v1/users/check-email")
             .param("email", "invalid-email"))
@@ -149,6 +178,23 @@ class UserControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
         .andExpect(jsonPath("$.data.fieldErrors.email").exists());
+  }
+
+  @Test
+  void checkNicknameWithBlankNicknameReturnsFieldErrors() throws Exception {
+    mockMvc.perform(get("/api/v1/users/check-nickname")
+            .param("nickname", " "))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.nickname").exists());
+  }
+
+  @Test
+  void checkNicknameWithoutParameterReturnsFieldErrors() throws Exception {
+    mockMvc.perform(get("/api/v1/users/check-nickname"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.nickname").exists());
   }
 
   @Test
@@ -219,6 +265,24 @@ class UserControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
         .andExpect(jsonPath("$.data.fieldErrors.displayName").exists());
+  }
+
+  @Test
+  void updateCurrentUserProfileReturnsConflictWhenNicknameIsDuplicated() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(userProfileService.updateCurrentUserProfile(actor, "Alice Updated"))
+        .willThrow(new BusinessException(ErrorCode.DUPLICATE_DISPLAY_NAME));
+
+    mockMvc.perform(patch("/api/v1/users/me/profile")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "displayName": "Alice Updated"
+                }
+                """))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("DUPLICATE_DISPLAY_NAME"));
   }
 
   @Test

@@ -6,6 +6,7 @@ import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,17 +30,34 @@ public class UserProfileService {
   @Transactional
   public UserProfileResult updateCurrentUserProfile(AuthenticatedActor actor, String displayName) {
     User user = loadCurrentMemberOrThrow(actor);
-    user.updateDisplayName(normalizeDisplayNameOrThrow(displayName));
-    return new UserProfileResult(user.getEmail(), user.getDisplayName());
+    String normalizedDisplayName = normalizeDisplayNameOrThrow(displayName);
+    // 같은 사용자는 제외하고, 다른 활성 사용자가 이미 쓰는 닉네임인지 먼저 확인한다.
+    ensureDisplayNameAvailableForUpdate(normalizedDisplayName, user.getId());
+
+    try {
+      user.updateDisplayName(normalizedDisplayName);
+      userRepository.flush();
+      return new UserProfileResult(user.getEmail(), user.getDisplayName());
+    } catch (DataIntegrityViolationException ex) {
+      // 동시 수정 충돌은 DB 제약 이름을 보고 닉네임 중복으로 변환한다.
+      throw UserConstraintViolationSupport.translateProfileUpdateException(ex);
+    }
   }
 
   private User loadCurrentMemberOrThrow(AuthenticatedActor actor) {
+    // 게스트는 회원 전용 프로필 API에 접근할 수 없다.
     if (actor == null || !actor.isMember()) {
       throw new BusinessException(ErrorCode.FORBIDDEN);
     }
 
     return userRepository.findByIdAndAccountStatus(actor.userId(), AccountStatus.ACTIVE)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+  }
+
+  private void ensureDisplayNameAvailableForUpdate(String displayName, Long userId) {
+    if (userRepository.existsByDisplayNameAndAccountStatusAndIdNot(displayName, AccountStatus.ACTIVE, userId)) {
+      throw new BusinessException(ErrorCode.DUPLICATE_DISPLAY_NAME);
+    }
   }
 
   private String normalizeDisplayNameOrThrow(String rawDisplayName) {

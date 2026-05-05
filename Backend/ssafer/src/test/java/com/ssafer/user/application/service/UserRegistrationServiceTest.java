@@ -41,13 +41,14 @@ class UserRegistrationServiceTest {
   void registerStoresNormalizedValuesAndEncodedPassword() {
     User saved = new User("test@example.com", "Alice", "encoded", AccountStatus.ACTIVE);
     given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(false);
     given(userRepository.findByEmail("test@example.com")).willReturn(Optional.empty());
-    given(userRepository.save(any(User.class))).willReturn(saved);
+    given(userRepository.saveAndFlush(any(User.class))).willReturn(saved);
 
     userRegistrationService.register("  TEST@EXAMPLE.COM  ", "  Alice  ", "  password123  ");
 
     ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-    then(userRepository).should().save(userCaptor.capture());
+    then(userRepository).should().saveAndFlush(userCaptor.capture());
     User captured = userCaptor.getValue();
 
     assertThat(captured.getEmail()).isEqualTo("test@example.com");
@@ -71,6 +72,7 @@ class UserRegistrationServiceTest {
   void registerThrowsDuplicateEmailWhenActiveEmailAlreadyExists() {
     User activeUser = new User("test@example.com", "Alice", "encoded", AccountStatus.ACTIVE);
     given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(false);
     given(userRepository.findByEmail("test@example.com")).willReturn(Optional.of(activeUser));
 
     assertThatThrownBy(() -> userRegistrationService.register("test@example.com", "Alice", "password123"))
@@ -84,6 +86,7 @@ class UserRegistrationServiceTest {
     User inactiveUser = new User("test@example.com", "Old Name", null, AccountStatus.INACTIVE);
     ReflectionTestUtils.setField(inactiveUser, "id", 1L);
     given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(false);
     given(userRepository.findByEmail("test@example.com")).willReturn(Optional.of(inactiveUser));
 
     Long userId = userRegistrationService.register("test@example.com", "Alice", "password123");
@@ -98,12 +101,12 @@ class UserRegistrationServiceTest {
 
   @Test
   void registerTranslatesUniqueConstraintViolationToDuplicateEmail() {
-    User activeUser = new User("test@example.com", "Alice", "encoded", AccountStatus.ACTIVE);
     given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
-    given(userRepository.findByEmail("test@example.com"))
-        .willReturn(Optional.empty())
-        .willReturn(Optional.of(activeUser));
-    given(userRepository.save(any(User.class))).willThrow(new DataIntegrityViolationException("duplicate"));
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(false);
+    given(userRepository.findByEmail("test@example.com")).willReturn(Optional.empty());
+    given(userRepository.saveAndFlush(any(User.class))).willThrow(
+        new DataIntegrityViolationException("duplicate key value violates unique constraint \"uk_users_email\"")
+    );
 
     assertThatThrownBy(() -> userRegistrationService.register("test@example.com", "Alice", "password123"))
         .isInstanceOf(BusinessException.class)
@@ -114,10 +117,11 @@ class UserRegistrationServiceTest {
   @Test
   void registerRethrowsNonDuplicateDataIntegrityViolation() {
     given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(false);
     given(userRepository.findByEmail("test@example.com"))
         .willReturn(Optional.empty())
         .willReturn(Optional.empty());
-    given(userRepository.save(any(User.class))).willThrow(new DataIntegrityViolationException("other constraint"));
+    given(userRepository.saveAndFlush(any(User.class))).willThrow(new DataIntegrityViolationException("other constraint"));
 
     assertThatThrownBy(() -> userRegistrationService.register("test@example.com", "Alice", "password123"))
         .isInstanceOf(DataIntegrityViolationException.class);
@@ -141,5 +145,70 @@ class UserRegistrationServiceTest {
     boolean available = userRegistrationService.isEmailAvailable("TEST@example.com");
 
     assertThat(available).isTrue();
+  }
+
+  @Test
+  void isDisplayNameAvailableReturnsFalseWhenActiveDisplayNameExists() {
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(true);
+
+    boolean available = userRegistrationService.isDisplayNameAvailable("  Alice  ");
+
+    assertThat(available).isFalse();
+  }
+
+  @Test
+  void isDisplayNameAvailableReturnsTrueWhenActiveDisplayNameDoesNotExist() {
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(false);
+
+    boolean available = userRegistrationService.isDisplayNameAvailable("  Alice  ");
+
+    assertThat(available).isTrue();
+  }
+
+  @Test
+  void registerThrowsDuplicateDisplayNameWhenActiveDisplayNameAlreadyExists() {
+    given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(true);
+
+    assertThatThrownBy(() -> userRegistrationService.register("test@example.com", "Alice", "password123"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.DUPLICATE_DISPLAY_NAME);
+  }
+
+  @Test
+  void registerTranslatesUniqueConstraintViolationToDuplicateDisplayName() {
+    given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(false);
+    given(userRepository.findByEmail("test@example.com")).willReturn(Optional.empty());
+    given(userRepository.saveAndFlush(any(User.class))).willThrow(
+        new DataIntegrityViolationException(
+            "duplicate key value violates unique constraint \"uk_users_active_display_name\""
+        )
+    );
+
+    assertThatThrownBy(() -> userRegistrationService.register("test@example.com", "Alice", "password123"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.DUPLICATE_DISPLAY_NAME);
+  }
+
+  @Test
+  void registerReactivationTranslatesUniqueConstraintViolationToDuplicateDisplayName() {
+    User inactiveUser = new User("test@example.com", "Old Name", null, AccountStatus.INACTIVE);
+    ReflectionTestUtils.setField(inactiveUser, "id", 1L);
+    given(emailVerificationService.isVerifiedEmail("test@example.com")).willReturn(true);
+    given(userRepository.existsByDisplayNameAndAccountStatus("Alice", AccountStatus.ACTIVE)).willReturn(false);
+    given(userRepository.findByEmail("test@example.com")).willReturn(Optional.of(inactiveUser));
+    Mockito.doThrow(
+        new DataIntegrityViolationException(
+            "duplicate key value violates unique constraint \"uk_users_active_display_name\""
+        )
+    ).when(userRepository).flush();
+
+    assertThatThrownBy(() -> userRegistrationService.register("test@example.com", "Alice", "password123"))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.DUPLICATE_DISPLAY_NAME);
   }
 }

@@ -7,6 +7,7 @@ public enum ErrorCode {
   FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "You do not have permission to access this resource"),
   NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "Resource not found"),
   DUPLICATE_EMAIL(HttpStatus.CONFLICT, "DUPLICATE_EMAIL", "Email is already registered"),
+  DUPLICATE_DISPLAY_NAME(HttpStatus.CONFLICT, "DUPLICATE_DISPLAY_NAME", "Nickname is already in use"),
   INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect"),
   EMAIL_VERIFICATION_REQUIRED(
       HttpStatus.BAD_REQUEST,

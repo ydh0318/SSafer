@@ -93,6 +93,9 @@ class SecurityConfigTest {
     mockMvc.perform(get("/api/v1/users/check-email"))
         .andExpect(status().isOk());
 
+    mockMvc.perform(get("/api/v1/users/check-nickname"))
+        .andExpect(status().isOk());
+
     mockMvc.perform(post("/api/v1/guests/enter").contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isOk());
   }
@@ -276,6 +279,11 @@ class SecurityConfigTest {
 
     @GetMapping("/api/v1/users/check-email")
     String checkEmail() {
+      return "ok";
+    }
+
+    @GetMapping("/api/v1/users/check-nickname")
+    String checkNickname() {
       return "ok";
     }
 

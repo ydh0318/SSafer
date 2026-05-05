@@ -7,7 +7,6 @@ import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
 import java.util.Locale;
-import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -36,30 +35,38 @@ public class UserRegistrationService {
 
   @Transactional
   public Long register(String rawEmail, String rawDisplayName, String rawPassword) {
-    // 가입/재가입 모두 동일한 정규화 규칙을 사용해야 이메일 중복 판단이 일관된다.
+    // 가입과 재가입 모두 동일한 정규화 규칙을 써야 중복 판단이 흔들리지 않는다.
     String email = normalizeEmailOrThrow(rawEmail);
     String displayName = normalizeDisplayNameOrThrow(rawDisplayName);
     String password = normalizePasswordOrThrow(rawPassword);
 
-    // 이메일 인증이 끝난 주소만 회원가입이나 재가입을 허용한다.
     if (!emailVerificationService.isVerifiedEmail(email)) {
       throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_REQUIRED);
     }
 
-    Optional<User> existingUser = userRepository.findByEmail(email);
-    if (existingUser.isPresent()) {
-      User user = existingUser.get();
-      if (user.getAccountStatus() == AccountStatus.INACTIVE) {
-        // 탈퇴로 비활성화된 동일 이메일 계정은 새 row를 만들지 않고 기존 계정을 되살린다.
+    User user = userRepository.findByEmail(email).orElse(null);
+    if (user != null) {
+      if (user.getAccountStatus() != AccountStatus.INACTIVE) {
+        throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+      }
+
+      // 탈퇴한 동일 이메일 계정은 새 row를 만들지 않고 기존 계정을 되살린다.
+      ensureDisplayNameAvailable(displayName);
+
+      try {
         user.reactivate(displayName, passwordEncoder.encode(password));
+        userRepository.flush();
         emailVerificationService.clearVerifiedEmail(email);
         return user.getId();
+      } catch (DataIntegrityViolationException ex) {
+        throw UserConstraintViolationSupport.translateRegistrationException(ex);
       }
-      // 활성/정지 계정이 이미 있으면 같은 이메일로는 새 가입을 막는다.
-      throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
     }
 
-    User user = new User(
+    // 활성 사용자 닉네임 중복은 DB 저장 전에 한 번 빠르게 차단한다.
+    ensureDisplayNameAvailable(displayName);
+
+    User newUser = new User(
         email,
         displayName,
         passwordEncoder.encode(password),
@@ -67,28 +74,34 @@ public class UserRegistrationService {
     );
 
     try {
-      User saved = userRepository.save(user);
-      // 인증 완료 상태는 1회성으로 사용하고 가입이 끝나면 정리한다.
+      User saved = userRepository.saveAndFlush(newUser);
       emailVerificationService.clearVerifiedEmail(email);
       return saved.getId();
     } catch (DataIntegrityViolationException ex) {
-      // 동시 요청으로 save 시점에 충돌한 경우만 중복 이메일로 변환한다.
-      if (userRepository.findByEmail(email)
-          .filter(foundUser -> foundUser.getAccountStatus() != AccountStatus.INACTIVE)
-          .isPresent()) {
-        throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
-      }
-      throw ex;
+      // 동시 요청 충돌은 DB 제약 이름을 기준으로 이메일/닉네임 중복으로 변환한다.
+      throw UserConstraintViolationSupport.translateRegistrationException(ex);
     }
   }
 
   @Transactional(readOnly = true)
   public boolean isEmailAvailable(String rawEmail) {
     String email = normalizeEmailOrThrow(rawEmail);
-    // 비활성 계정은 재가입 시 재활성화 대상이므로 사용 가능한 이메일로 본다.
     return userRepository.findByEmail(email)
         .map(user -> user.getAccountStatus() == AccountStatus.INACTIVE)
         .orElse(true);
+  }
+
+  @Transactional(readOnly = true)
+  public boolean isDisplayNameAvailable(String rawDisplayName) {
+    String displayName = normalizeDisplayNameOrThrow(rawDisplayName);
+    // 비활성 계정은 닉네임을 점유하지 않는 것으로 본다.
+    return !userRepository.existsByDisplayNameAndAccountStatus(displayName, AccountStatus.ACTIVE);
+  }
+
+  private void ensureDisplayNameAvailable(String displayName) {
+    if (userRepository.existsByDisplayNameAndAccountStatus(displayName, AccountStatus.ACTIVE)) {
+      throw new BusinessException(ErrorCode.DUPLICATE_DISPLAY_NAME);
+    }
   }
 
   private String normalizeEmailOrThrow(String rawEmail) {
