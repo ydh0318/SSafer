@@ -9,6 +9,8 @@ import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.global.security.CurrentActorProvider;
 import com.ssafer.user.api.dto.CheckEmailRequest;
 import com.ssafer.user.api.dto.CheckEmailResponseData;
+import com.ssafer.user.api.dto.CheckNicknameRequest;
+import com.ssafer.user.api.dto.CheckNicknameResponseData;
 import com.ssafer.user.api.dto.RegisterUserRequest;
 import com.ssafer.user.api.dto.RegisterUserResponseData;
 import com.ssafer.user.api.dto.UpdatePasswordRequest;
@@ -38,11 +40,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/users")
-@Tag(name = "회원", description = "회원 계정과 프로필 관련 API")
+@Tag(name = "회원", description = "회원 계정 및 프로필 관련 API")
 public class UserController {
 
   private static final String REGISTER_SUCCESS_MESSAGE = "User registration succeeded";
   private static final String CHECK_EMAIL_SUCCESS_MESSAGE = "Email availability check succeeded";
+  private static final String CHECK_NICKNAME_SUCCESS_MESSAGE = "Nickname availability check succeeded";
   private static final String PROFILE_RETRIEVE_SUCCESS_MESSAGE = "User profile retrieval succeeded";
   private static final String PROFILE_UPDATE_SUCCESS_MESSAGE = "User profile update succeeded";
   private static final String PASSWORD_CHANGE_SUCCESS_MESSAGE = "Password change succeeded";
@@ -81,11 +84,11 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "요청 본문이 잘못되었거나 필수 값이 누락됨"
+          description = "요청 본문이 올바르지 않거나 필수 값이 누락되었습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "409",
-          description = "이미 가입된 이메일임"
+          description = "이미 가입된 이메일이거나 사용 중인 닉네임입니다."
       )
   })
   public ResponseEntity<ApiResponse<RegisterUserResponseData>> register(
@@ -114,7 +117,7 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "이메일 형식이 잘못되었거나 쿼리 파라미터가 누락됨"
+          description = "이메일 형식이 올바르지 않거나 쿼리 파라미터가 누락되었습니다."
       )
   })
   public ResponseEntity<ApiResponse<CheckEmailResponseData>> checkEmail(
@@ -123,6 +126,31 @@ public class UserController {
     boolean available = userRegistrationService.isEmailAvailable(request.getEmail());
     return ResponseEntity.ok(
         ApiResponse.success(CHECK_EMAIL_SUCCESS_MESSAGE, new CheckEmailResponseData(available))
+    );
+  }
+
+  @GetMapping("/check-nickname")
+  @Operation(
+      summary = "닉네임 중복 확인",
+      description = "회원가입 또는 프로필 수정에 사용할 수 있는 닉네임인지 확인합니다."
+  )
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "닉네임 중복 확인 성공",
+          content = @Content(schema = @Schema(implementation = CheckNicknameResponseData.class))
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "400",
+          description = "닉네임 형식이 올바르지 않거나 쿼리 파라미터가 누락되었습니다."
+      )
+  })
+  public ResponseEntity<ApiResponse<CheckNicknameResponseData>> checkNickname(
+      @Valid @ModelAttribute CheckNicknameRequest request
+  ) {
+    boolean available = userRegistrationService.isDisplayNameAvailable(request.getNickname());
+    return ResponseEntity.ok(
+        ApiResponse.success(CHECK_NICKNAME_SUCCESS_MESSAGE, new CheckNicknameResponseData(available))
     );
   }
 
@@ -139,15 +167,15 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 유효하지 않음"
+          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
-          description = "게스트 계정은 회원 전용 API에 접근할 수 없음"
+          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "404",
-          description = "사용자 정보를 찾을 수 없음"
+          description = "회원 정보를 찾을 수 없습니다."
       )
   })
   public ResponseEntity<ApiResponse<UserProfileResponseData>> getCurrentUserProfile() {
@@ -172,25 +200,29 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "요청 본문이 잘못되었거나 필수 값이 누락됨"
+          description = "요청 본문이 올바르지 않거나 필수 값이 누락되었습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 유효하지 않음"
+          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
-          description = "게스트 계정은 회원 전용 API에 접근할 수 없음"
+          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "404",
-          description = "사용자 정보를 찾을 수 없음"
+          description = "회원 정보를 찾을 수 없습니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "409",
+          description = "이미 사용 중인 닉네임입니다."
       )
   })
   public ResponseEntity<ApiResponse<UserProfileResponseData>> updateCurrentUserProfile(
       @Valid @RequestBody(required = false) UpdateUserProfileRequest request
   ) {
-    // 수정할 닉네임 값이 없으면 잘못된 요청으로 처리한다.
+    // 요청 본문 자체가 없거나 displayName 필드가 빠지면 잘못된 요청으로 본다.
     if (request == null || request.displayName() == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -216,25 +248,25 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "요청 본문이 잘못되었거나 필수 값이 누락됨"
+          description = "요청 본문이 올바르지 않거나 필수 값이 누락되었습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 유효하지 않음"
+          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
-          description = "게스트 계정은 회원 전용 API에 접근할 수 없음"
+          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "404",
-          description = "사용자 정보를 찾을 수 없음"
+          description = "회원 정보를 찾을 수 없습니다."
       )
   })
   public ResponseEntity<ApiResponse<LoginResponseData>> updateCurrentUserPassword(
       @Valid @RequestBody(required = false) UpdatePasswordRequest request
   ) {
-    // 현재 비밀번호와 새 비밀번호가 모두 있어야 변경을 진행할 수 있다.
+    // 비밀번호 변경은 현재 비밀번호와 새 비밀번호가 모두 있어야 처리할 수 있다.
     if (request == null || request.currentPassword() == null || request.newPassword() == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -259,7 +291,7 @@ public class UserController {
   @DeleteMapping
   @Operation(
       summary = "회원 탈퇴",
-      description = "현재 로그인한 회원 계정을 비활성화하고 refresh token을 삭제합니다."
+      description = "현재 로그인한 회원 계정을 비활성화하고 refresh token을 제거합니다."
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -268,19 +300,19 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 유효하지 않음"
+          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
-          description = "게스트 계정은 회원 전용 API에 접근할 수 없음"
+          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "404",
-          description = "사용자 정보를 찾을 수 없음"
+          description = "회원 정보를 찾을 수 없습니다."
       )
   })
   public ResponseEntity<ApiResponse<Void>> withdrawCurrentUser() {
-    // 탈퇴는 회원 전용 기능이며, 성공하면 계정은 비활성화 상태가 된다.
+    // 탈퇴 후 계정은 비활성화되고 refresh token 도 함께 정리된다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     userWithdrawalService.withdrawCurrentUser(actor);
     return ResponseEntity.ok(ApiResponse.success(WITHDRAWAL_SUCCESS_MESSAGE, null));

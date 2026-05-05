@@ -193,6 +193,7 @@ public class GlobalExceptionHandler {
       case FORBIDDEN -> "요청한 자원에 접근할 권한이 없습니다.";
       case NOT_FOUND -> "요청한 데이터를 찾을 수 없습니다.";
       case DUPLICATE_EMAIL -> "이미 가입된 이메일입니다.";
+      case DUPLICATE_DISPLAY_NAME -> "이미 사용 중인 닉네임입니다.";
       case INVALID_CREDENTIALS -> "이메일 또는 비밀번호가 올바르지 않습니다.";
       case EMAIL_VERIFICATION_REQUIRED -> "회원가입 전에 이메일 인증이 필요합니다.";
       case EMAIL_VERIFICATION_CODE_INVALID -> "이메일 인증 코드가 올바르지 않거나 만료되었습니다.";

@@ -14,6 +14,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class UserProfileServiceTest {
@@ -42,6 +43,8 @@ class UserProfileServiceTest {
   void updateCurrentUserProfileChangesDisplayName() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice");
     given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
+    given(userRepository.existsByDisplayNameAndAccountStatusAndIdNot("Alice Updated", AccountStatus.ACTIVE, 1L))
+        .willReturn(false);
 
     UserProfileResult result = userProfileService.updateCurrentUserProfile(
         AuthenticatedActor.member(1L),
@@ -86,6 +89,43 @@ class UserProfileServiceTest {
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.INVALID_PARAMETER);
+  }
+
+  @Test
+  void updateCurrentUserProfileThrowsDuplicateDisplayNameWhenAlreadyUsedByAnotherActiveUser() {
+    User user = createUser(1L, "user@ssafer.co.kr", "Alice");
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
+    given(userRepository.existsByDisplayNameAndAccountStatusAndIdNot("Alice Updated", AccountStatus.ACTIVE, 1L))
+        .willReturn(true);
+
+    assertThatThrownBy(() -> userProfileService.updateCurrentUserProfile(
+        AuthenticatedActor.member(1L),
+        "Alice Updated"
+    ))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.DUPLICATE_DISPLAY_NAME);
+  }
+
+  @Test
+  void updateCurrentUserProfileTranslatesUniqueConstraintViolationToDuplicateDisplayName() {
+    User user = createUser(1L, "user@ssafer.co.kr", "Alice");
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
+    given(userRepository.existsByDisplayNameAndAccountStatusAndIdNot("Alice Updated", AccountStatus.ACTIVE, 1L))
+        .willReturn(false);
+    Mockito.doThrow(
+        new DataIntegrityViolationException(
+            "duplicate key value violates unique constraint \"uk_users_active_display_name\""
+        )
+    ).when(userRepository).flush();
+
+    assertThatThrownBy(() -> userProfileService.updateCurrentUserProfile(
+        AuthenticatedActor.member(1L),
+        "Alice Updated"
+    ))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.DUPLICATE_DISPLAY_NAME);
   }
 
   private User createUser(Long userId, String email, String displayName) {
