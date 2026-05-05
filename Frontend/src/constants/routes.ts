@@ -3,7 +3,6 @@ export const ROUTES = {
   login: '/login',
   projects: '/projects',
   projectDetail: '/projects/:projectId',
-  scanProgress: '/scans/:scanId/progress',
   scanDetail: '/scans/:scanId',
   resultDetail: '/results/:scanId',
 } as const;

@@ -150,10 +150,7 @@ function LoginPanel() {
       </form>
 
       {isForgotPasswordOpen ? (
-        <ForgotPasswordModal
-          initialEmail={values.email}
-          onClose={() => setIsForgotPasswordOpen(false)}
-        />
+        <ForgotPasswordModal initialEmail={values.email} onClose={() => setIsForgotPasswordOpen(false)} />
       ) : null}
     </>
   );
