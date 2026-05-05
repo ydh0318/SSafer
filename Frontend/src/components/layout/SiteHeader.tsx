@@ -30,6 +30,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+
   const profileInitial = getProfileInitial(user?.name, user?.email);
   const isMemberSession = Boolean(refreshToken) || user?.role === 'USER' || user?.role === 'ADMIN';
 

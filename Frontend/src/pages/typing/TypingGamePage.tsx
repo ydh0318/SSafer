@@ -1,19 +1,59 @@
-import { Info, Trophy } from 'lucide-react';
+import { Check, Info, Trophy } from 'lucide-react';
 import { useState } from 'react';
 
 import PixelGoose from '../../components/common/PixelGoose';
 import TypingBox from '../../components/common/TypingBox';
 import SiteHeader from '../../components/layout/SiteHeader';
-import { typingChallenges } from '../../mocks/ssaferShowcase';
+
+const typingChallenges = [
+  {
+    id: 1,
+    level: '초급',
+    xp: 10,
+    title: 'Dockerfile에 USER 지정',
+    snippet: 'USER node',
+    explain: '컨테이너를 root 권한으로 실행하지 않도록 기본 사용자를 명시합니다.',
+  },
+  {
+    id: 2,
+    level: '초급',
+    xp: 15,
+    title: '내부 포트만 노출',
+    snippet: 'ports:\n  - "127.0.0.1:5432:5432"',
+    explain: 'DB 포트가 외부 전체에 열리지 않도록 localhost에만 바인딩합니다.',
+  },
+  {
+    id: 3,
+    level: '중급',
+    xp: 20,
+    title: '시크릿 환경 변수 참조',
+    snippet: 'DB_PASSWORD=${DB_PASSWORD}',
+    explain: '평문 비밀번호 대신 환경 변수 주입 방식으로 바꿉니다.',
+  },
+  {
+    id: 4,
+    level: '중급',
+    xp: 25,
+    title: 'SSHD 안전 설정',
+    snippet: 'PermitRootLogin no\nPasswordAuthentication no',
+    explain: 'root 로그인과 비밀번호 인증을 모두 차단하는 기본 설정입니다.',
+  },
+  {
+    id: 5,
+    level: '고급',
+    xp: 40,
+    title: '읽기 전용 볼륨 마운트',
+    snippet: 'volumes:\n  - ./config:/etc/app:ro',
+    explain: '설정 파일은 읽기 전용으로 마운트해 의도치 않은 변경을 막습니다.',
+  },
+];
 
 function TypingGamePage() {
   const [active, setActive] = useState(0);
   const [completed, setCompleted] = useState<number[]>([]);
 
   const handleComplete = (challengeId: number) => {
-    setCompleted((current) =>
-      current.includes(challengeId) ? current : [...current, challengeId],
-    );
+    setCompleted((current) => (current.includes(challengeId) ? current : [...current, challengeId]));
   };
 
   return (
@@ -27,9 +67,9 @@ function TypingGamePage() {
               <Trophy className="h-3 w-3" />
               security typing challenge
             </p>
-            <h1 className="mt-3 text-5xl font-black tracking-tight">손에 익히는 안전한 한 줄.</h1>
+            <h1 className="mt-3 text-5xl font-black tracking-tight">손에 익히는 안전한 한 줄</h1>
             <p className="mt-3 max-w-2xl text-neutral-600">
-              매일 5분, 자주 쓰는 안전한 설정을 직접 타이핑해보세요. 실수가 줄고 코드 리뷰가 빨라집니다.
+              매일 몇 분씩 직접 입력해보면 보안 설정이 훨씬 빠르게 익숙해집니다.
             </p>
           </div>
           <div className="flex items-end gap-6">
@@ -68,20 +108,14 @@ function TypingGamePage() {
                             : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
-                      {isDone ? '✓' : index + 1}
+                      {isDone ? <Check className="h-3.5 w-3.5" /> : index + 1}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold tracking-[0.24em] text-neutral-400">
-                          {challenge.level}
-                        </span>
+                        <span className="text-[10px] font-bold tracking-[0.24em] text-neutral-400">{challenge.level}</span>
                         <span className="text-[10px] text-neutral-400">+{challenge.xp} XP</span>
                       </div>
-                      <div
-                        className={`mt-1 text-sm font-bold ${
-                          isDone ? 'line-through text-neutral-400' : ''
-                        }`}
-                      >
+                      <div className={`mt-1 text-sm font-bold ${isDone ? 'line-through text-neutral-400' : ''}`}>
                         {challenge.title}
                       </div>
                     </div>
@@ -99,10 +133,7 @@ function TypingGamePage() {
               </div>
               <div className="mt-4 grid grid-cols-7 gap-1">
                 {[1, 1, 1, 1, 1, 1, 1].map((value, index) => (
-                  <div
-                    className={value ? 'aspect-square bg-[#3DDC84]' : 'aspect-square bg-neutral-100'}
-                    key={index}
-                  />
+                  <div className={value ? 'aspect-square bg-[#3DDC84]' : 'aspect-square bg-neutral-100'} key={index} />
                 ))}
               </div>
               <div className="mt-4 border-t border-neutral-100 pt-3 text-xs text-neutral-500">
@@ -138,7 +169,7 @@ function TypingGamePage() {
                   {typingChallenges[active].explain}
                 </p>
                 <div className="mt-8 text-xs font-bold uppercase tracking-[0.28em] text-neutral-500">
-                  아래 코드를 그대로 따라쳐 주세요
+                  아래 코드를 그대로 입력해보세요
                 </div>
                 <div className="mt-3">
                   <TypingBox
@@ -154,7 +185,7 @@ function TypingGamePage() {
             <div className="theme-dark-soft-card mt-6 flex items-center gap-4 border border-[#FFE066] bg-[#FFF9DB] p-5">
               <PixelGoose mood="happy" size={52} />
               <div className="flex-1">
-                <div className="text-sm font-bold">SSAFE의 응원</div>
+                <div className="text-sm font-bold">SSAfer의 응원</div>
                 <p className="mt-1 text-sm text-neutral-700">
                   줄바꿈이 있는 문제도 이제 그대로 입력할 수 있습니다. 엔터를 치면 다음 줄로 자연스럽게 이어집니다.
                 </p>

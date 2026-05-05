@@ -51,9 +51,9 @@ function LandingPage() {
             <p className="mt-6 max-w-2xl text-lg leading-9 text-neutral-700">
               `.env`, `docker-compose`, `Dockerfile`, `sshd_config`.
               <br />
-              놓치기 쉬운 설정 위험을 SSAfer가 스캔하고,
+              놓치기 쉬운 보안 설정을 SSAfer가 스캔하고,
               <br />
-              왜 위험한지와 어떻게 고칠지를 바로 보여줍니다.
+              왜 위험한지와 어떻게 고칠지까지 빠르게 보여줍니다.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -89,12 +89,12 @@ function LandingPage() {
               }}
             />
             <div className="absolute right-8 top-8 bg-black px-3 py-1.5 text-[10px] font-bold tracking-[0.28em] text-white">
-              MEET SSAFE
+              MEET SSAFER
             </div>
             <div className="flex min-h-[360px] items-center justify-center">
               <PixelGoose mood="happy" size={220} />
             </div>
-            <div className="absolute bottom-8 left-8 inline-flex items-center gap-1.5 bg-[#3DDC84] px-3 py-1.5 text-xs font-bold tracking-wide text-black">
+            <div className="theme-accent-card absolute bottom-8 left-8 inline-flex items-center gap-1.5 bg-[#3DDC84] px-3 py-1.5 text-xs font-bold tracking-wide text-black">
               <Shield className="h-3 w-3" />
               결정론적 탐지
             </div>
@@ -114,22 +114,22 @@ function LandingPage() {
                   icon: Upload,
                   mode: 'UPLOAD',
                   title: '웹 업로드',
-                  desc: '파일 1~3개만 올리면 바로 체험할 수 있는 가장 빠른 시작.',
+                  desc: '파일 1~3개만 올리면 가장 빠르게 결과를 확인할 수 있습니다.',
                   detail: 'docker-compose / .env / Dockerfile · 총 1MB',
                 },
                 {
                   icon: Terminal,
                   mode: 'CLI',
                   title: 'CLI',
-                  desc: '터미널 한 줄로 프로젝트를 깊게 검사하고 업로드까지 한 번에.',
-                  detail: 'ssafer run --upload · 로컬 마스킹',
+                  desc: '터미널 한 줄로 프로젝트를 더 깊게 검사하고 업로드할 수 있습니다.',
+                  detail: 'ssafer run --upload · 로컬 마스킹 처리',
                 },
                 {
                   icon: Server,
                   mode: 'AGENT',
                   title: 'Local Agent',
-                  desc: '서버에 붙여두면 웹에서 클릭만으로 실시간 점검과 패치까지.',
-                  detail: 'WebSocket 연결 · 자동 패치 흐름',
+                  desc: '서버에 연결해두면 웹에서 원격 점검과 패치 적용까지 이어집니다.',
+                  detail: 'WebSocket 상시 연결 · 자동 패치 지원',
                 },
               ].map((item) => {
                 const Icon = item.icon;
@@ -159,31 +159,31 @@ function LandingPage() {
         <section className="theme-dark-banner mx-auto max-w-7xl px-6 py-20">
           <p className="text-xs font-bold uppercase tracking-[0.32em] text-neutral-500">why ssafer</p>
           <h2 className="mt-4 max-w-3xl text-4xl font-black tracking-tight">
-            Cursor, Claude Code 와는 다른
+            일반적인 코드 도우미와 달리
             <br />
-            설정 보안 전용 경험입니다.
+            보안 설정 분석에 집중했습니다.
           </h2>
           <div className="mt-10 grid gap-4 lg:grid-cols-4">
             {[
               {
                 icon: Hash,
                 title: '고정된 룰셋',
-                desc: '버전 관리되는 룰 기반이라 실행할 때마다 결과가 흔들리지 않습니다.',
+                desc: '버전 관리되는 규칙을 기반으로 결과를 내므로 실행할 때마다 기준이 흔들리지 않습니다.',
               },
               {
                 icon: Bug,
                 title: '결정론적 탐지',
-                desc: 'Trivy와 커스텀 룰로 보안 설정을 규칙적으로 잡아냅니다.',
+                desc: 'Trivy와 커스텀 룰 기반으로 분석해 설정 이슈를 안정적으로 찾습니다.',
               },
               {
                 icon: Lock,
                 title: '마스킹 레이어',
-                desc: '.env 원본은 외부 모델로 보내지 않고 마스킹 후 처리합니다.',
+                desc: '.env 같은 민감 정보는 마스킹한 뒤 후속 처리 흐름으로 넘깁니다.',
               },
               {
                 icon: Activity,
                 title: '이력 추적',
-                desc: 'scanId 단위로 비교해 추가, 해결, 유지된 finding을 따라갑니다.',
+                desc: 'scanId를 기준으로 이전 결과와 비교해 해결/증가 여부를 추적할 수 있습니다.',
               },
             ].map((item, index) => {
               const Icon = item.icon;
@@ -203,16 +203,14 @@ function LandingPage() {
         <section className="bg-black text-white">
           <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-6 py-16 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-center">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.32em] text-neutral-500">
-                security typing challenge
-              </p>
+              <p className="text-xs font-bold uppercase tracking-[0.32em] text-neutral-500">security typing challenge</p>
               <h2 className="mt-4 text-4xl font-black tracking-tight">
                 따라 치면서 익히는
                 <br />
-                안전한 설정 한 줄.
+                안전한 설정 한 줄
               </h2>
               <p className="mt-4 max-w-xl text-neutral-400">
-                매일 1분, 안전한 설정을 직접 타이핑해보세요. 손에 익으면 다음엔 같은 실수를 덜 하게 됩니다.
+                매일 1분, 안전한 설정을 직접 입력해보세요. 손에 익으면 실수도 줄고 리뷰 속도도 빨라집니다.
               </p>
               <Link
                 className="mt-8 inline-flex items-center gap-2 bg-[#3DDC84] px-6 py-3 text-sm font-bold tracking-wide text-black"

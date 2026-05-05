@@ -50,7 +50,7 @@ function ScanDetailPage() {
         }
 
         setStatusData(null);
-        setErrorMessage(error instanceof Error ? error.message : '스캔 상태를 불러오지 못했습니다.');
+        setErrorMessage(error instanceof Error ? error.message : '스캔 진행 상태를 불러오지 못했습니다.');
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -77,7 +77,7 @@ function ScanDetailPage() {
           setStatusData(data);
           setErrorMessage(null);
         } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : '스캔 상태를 다시 불러오지 못했습니다.');
+          setErrorMessage(error instanceof Error ? error.message : '스캔 진행 상태를 새로고침하지 못했습니다.');
         }
       })();
     }, 5000);
@@ -100,11 +100,13 @@ function ScanDetailPage() {
       setStatusData(data);
     } catch (error) {
       setStatusData(null);
-      setErrorMessage(error instanceof Error ? error.message : '스캔 상태를 불러오지 못했습니다.');
+      setErrorMessage(error instanceof Error ? error.message : '스캔 진행 상태를 불러오지 못했습니다.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const canOpenResult = statusData?.status === 'DONE';
 
   return (
     <section className="space-y-8">
@@ -128,14 +130,21 @@ function ScanDetailPage() {
                 프로젝트 목록
               </Link>
             )}
-            <Link
-              className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
-              state={routeState}
-              to={ROUTES.resultDetail.replace(':scanId', scanId)}
-            >
-              결과 화면 보기
-              <FileSearch className="h-4 w-4" />
-            </Link>
+            {canOpenResult ? (
+              <Link
+                className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
+                state={routeState}
+                to={ROUTES.resultDetail.replace(':scanId', scanId)}
+              >
+                결과 보기
+                <FileSearch className="h-4 w-4" />
+              </Link>
+            ) : (
+              <span className="inline-flex items-center gap-2 bg-neutral-200 px-5 py-3 text-sm font-bold text-neutral-500">
+                결과 생성 대기 중
+                <FileSearch className="h-4 w-4" />
+              </span>
+            )}
           </>
         }
         aside={
@@ -159,28 +168,28 @@ function ScanDetailPage() {
               />
             </div>
             <p className="mt-4 text-sm leading-7 text-neutral-600">
-              스캔 진행 상태는 이 화면에서 계속 갱신됩니다. 완료되면 결과 화면으로 바로 넘어가 최종 상태를 다시 확인할 수 있습니다.
+              현재 스캔 상태를 기준으로 자동 새로고침이 동작합니다. 완료 전에는 결과 페이지로 이동하지 않고 진행 상황만 확인하도록 막아두었습니다.
             </p>
           </div>
         }
         description={
           <>
-            스캔 요청 이후 현재 단계, 업로드 완료 여부, 종료 상태를 사용자 입장에서 지속적으로 볼 수 있도록 구성한 페이지입니다.
+            스캔 요청부터 업로드, 분석, 완료까지의 상태를 추적합니다. 실제 결과 검증은 `DONE` 상태가 된 이후 결과 페이지로 이동하는 것이 가장 안전합니다.
           </>
         }
         eyebrow="SCAN STATUS"
         title={
           <>
-            스캔이 지금 어디까지 진행됐는지
+            스캔 진행 상태를 확인하고
             <br />
-            한 화면에서 계속 확인합니다.
+            완료 후 결과로 이동하세요.
           </>
         }
       />
 
       {routeState.autoOpenedFromScanRequest ? (
         <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-          스캔 요청이 정상적으로 등록되어 상태 화면으로 이동했습니다. 아래에서 진행 상황을 계속 확인할 수 있습니다.
+          스캔이 생성되었습니다. 진행 상태를 확인하다가 `DONE` 상태가 되면 결과 페이지로 이동해 실제 결과 API를 확인할 수 있습니다.
         </div>
       ) : null}
 

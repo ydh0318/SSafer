@@ -2,7 +2,27 @@ import { AlertCircle, BellRing, Wifi, WifiOff } from 'lucide-react';
 
 import PageHero from '../../components/common/PageHero';
 import PixelGoose from '../../components/common/PixelGoose';
-import { monitorFeed, monitorProjects, severityMeta } from '../../mocks/ssaferShowcase';
+
+const monitorProjects = [
+  { id: 101, name: 'shopping-mall-api', monitorEnabled: true, agentStatus: 'ONLINE', agentId: 1, lastSeenAt: '5초 전', currentTaskType: null, openCritical: 2 },
+  { id: 102, name: 'admin-dashboard', monitorEnabled: false, agentStatus: 'OFFLINE', agentId: 2, lastSeenAt: '3시간 전', currentTaskType: null, openCritical: 0 },
+  { id: 103, name: 'auth-service', monitorEnabled: true, agentStatus: 'ONLINE', agentId: 3, lastSeenAt: '방금', currentTaskType: 'PATCH_APPLY', openCritical: 0 },
+  { id: 105, name: 'media-uploader', monitorEnabled: true, agentStatus: 'ERROR', agentId: 5, lastSeenAt: '10분 전', currentTaskType: null, openCritical: 1 },
+] as const;
+
+const monitorFeed = [
+  { time: '방금', sev: 'CRITICAL', text: 'shopping-mall-api: 새 finding +1', detail: 'CVE-2024-5678' },
+  { time: '5분 전', sev: 'INFO', text: 'auth-service: PATCH_APPLY 시작', detail: 'findingId #2010' },
+  { time: '12분 전', sev: 'HIGH', text: 'media-uploader: Agent ERROR', detail: 'connection lost' },
+  { time: '1시간 전', sev: 'INFO', text: 'shopping-mall-api: scan #1001 완료', detail: 'findings: 17' },
+  { time: '3시간 전', sev: 'INFO', text: 'admin-dashboard: 12건 RESOLVED', detail: 'auto-applied' },
+] as const;
+
+const feedDotColor: Record<(typeof monitorFeed)[number]['sev'], string> = {
+  CRITICAL: '#E63946',
+  HIGH: '#FF8A33',
+  INFO: '#9CA3AF',
+};
 
 function MonitorPage() {
   return (
@@ -97,7 +117,9 @@ function MonitorPage() {
               </div>
               <div className="col-span-2 flex justify-end gap-2">
                 {project.monitorEnabled ? (
-                  <span className="bg-[#3D5AFE] px-2 py-0.5 text-[10px] font-bold tracking-[0.22em] text-white">MONITOR</span>
+                  <span className="bg-[#3D5AFE] px-2 py-0.5 text-[10px] font-bold tracking-[0.22em] text-white">
+                    MONITOR
+                  </span>
                 ) : null}
                 <button className="bg-black px-3 py-1.5 text-xs font-bold text-white" type="button">
                   점검
@@ -118,7 +140,7 @@ function MonitorPage() {
           <div className="divide-y divide-neutral-100">
             {monitorFeed.map((item) => (
               <div className="flex items-start gap-3 px-5 py-3" key={`${item.time}-${item.text}`}>
-                <span className="mt-2 h-1.5 w-1.5 rounded-full" style={{ background: severityMeta[item.sev].bg }} />
+                <span className="mt-2 h-1.5 w-1.5 rounded-full" style={{ background: feedDotColor[item.sev] }} />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{item.text}</div>
                   <div className="mt-0.5 font-mono text-[11px] text-neutral-400">{item.detail}</div>
