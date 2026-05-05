@@ -74,11 +74,8 @@ public class CliRawResultUploadReportService {
     ));
 
     String rawResultMetadataJson = buildRawResultMetadataJson(request);
-    ScanRequestTaskMessage message = new ScanRequestTaskMessage(
-        agentTask.getId(),
-        agent.getId(),
-        scan.getProjectId(),
-        scan.getId(),
+    ScanRequestTaskMessage message = ScanRequestTaskMessage.of(
+        agentTask,
         scan.getRawResultPath(),
         request.resultCount(),
         normalizeBlank(request.tool()),

@@ -29,4 +29,16 @@ class AgentTaskStatusTest {
     assertThat(AgentTaskStatus.CANCELED.isTerminal()).isTrue();
     assertThat(AgentTaskStatus.ACKED.isTerminal()).isFalse();
   }
+
+  @Test
+  void canTransitionToFollowsTaskLifecycle() {
+    assertThat(AgentTaskStatus.PENDING.canTransitionTo(AgentTaskStatus.SENT)).isTrue();
+    assertThat(AgentTaskStatus.SENT.canTransitionTo(AgentTaskStatus.ACKED)).isTrue();
+    assertThat(AgentTaskStatus.ACKED.canTransitionTo(AgentTaskStatus.RUNNING)).isTrue();
+    assertThat(AgentTaskStatus.RUNNING.canTransitionTo(AgentTaskStatus.SUCCEEDED)).isTrue();
+
+    assertThat(AgentTaskStatus.PENDING.canTransitionTo(AgentTaskStatus.RUNNING)).isFalse();
+    assertThat(AgentTaskStatus.SUCCEEDED.canTransitionTo(AgentTaskStatus.RUNNING)).isFalse();
+    assertThat(AgentTaskStatus.FAILED.canTransitionTo(AgentTaskStatus.SENT)).isFalse();
+  }
 }

@@ -72,6 +72,7 @@ class CliRawResultUploadReportServiceTest {
     when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
       AgentTask task = invocation.getArgument(0);
       ReflectionTestUtils.setField(task, "id", 3001L);
+      ReflectionTestUtils.setField(task, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
       return task;
     });
 
@@ -103,6 +104,9 @@ class CliRawResultUploadReportServiceTest {
     verify(agentTaskPublisher).publishScanRequest(messageCaptor.capture());
     ScanRequestTaskMessage message = messageCaptor.getValue();
     assertThat(message.taskId()).isEqualTo(3001L);
+    assertThat(message.messageType()).isEqualTo("SCAN_REQUEST");
+    assertThat(message.messageVersion()).isEqualTo(1);
+    assertThat(message.taskType()).isEqualTo(com.ssafer.agent.domain.enums.AgentTaskType.SCAN_REQUEST);
     assertThat(message.agentId()).isEqualTo(200L);
     assertThat(message.projectId()).isEqualTo(101L);
     assertThat(message.scanId()).isEqualTo(1001L);
@@ -110,6 +114,7 @@ class CliRawResultUploadReportServiceTest {
     assertThat(message.resultCount()).isEqualTo(152);
     assertThat(message.payloadHash())
         .isEqualTo("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    assertThat(message.queuedAt()).isEqualTo(java.time.Instant.parse("2026-05-06T04:00:00Z"));
   }
 
   @Test
@@ -140,6 +145,7 @@ class CliRawResultUploadReportServiceTest {
     when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
       AgentTask task = invocation.getArgument(0);
       ReflectionTestUtils.setField(task, "id", 3001L);
+      ReflectionTestUtils.setField(task, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
       return task;
     });
     doThrow(new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR))
