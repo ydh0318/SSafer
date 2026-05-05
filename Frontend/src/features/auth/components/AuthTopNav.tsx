@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import AppBrand from '../../../components/common/AppBrand';
+import ThemeToggleButton from '../../../components/common/ThemeToggleButton';
 import { ROUTES } from '../../../constants/routes';
 import { useAuthStore } from '../../../store/authStore';
 import { enterGuestMode } from '../api/guest';
@@ -28,38 +29,43 @@ function AuthTopNav() {
         user: {
           id: `guest:${session.expiresAt}`,
           email: 'guest@ssafer.local',
-          name: '게스트 워크스페이스',
+          name: '게스트 사용자',
           role: 'GUEST',
         },
       });
 
-      navigate(ROUTES.projects);
+      navigate(ROUTES.root);
     } catch (error) {
-      setGuestErrorMessage(error instanceof Error ? error.message : '게스트 입장에 실패했습니다.');
+      setGuestErrorMessage(
+        error instanceof Error ? error.message : '게스트 모드 진입 중 문제가 생겼습니다. 잠시 후 다시 시도해주세요.',
+      );
     } finally {
       setIsGuestPending(false);
     }
   };
 
   return (
-    <header className="fixed inset-x-0 top-0 z-30 border-b border-black/10 bg-[#f4f4f4]/95 backdrop-blur">
-      <div className="mx-auto flex h-20 max-w-[1500px] items-center justify-between px-6 md:px-10">
+    <header className="site-header-shell theme-surface-header fixed inset-x-0 top-0 z-30 border-b border-black/10 bg-[#f4f4f4]/95 backdrop-blur">
+      <div className="site-header-inner mx-auto flex h-20 max-w-[1500px] items-center justify-between px-6 md:px-10">
         <AppBrand titleClassName="text-xl font-black tracking-normal" to={ROUTES.root} />
 
-        <nav className="flex items-center gap-6 text-sm font-bold uppercase tracking-[0.08em]">
+        <nav className="site-header-nav flex items-center gap-6 text-sm font-bold uppercase tracking-[0.08em]">
           {isAuthenticated ? (
-            <Link className="text-black transition hover:opacity-70" to={ROUTES.projects}>
-              {user?.role === 'GUEST' ? '게스트 홈' : '프로젝트'}
+            <Link className="site-header-link text-black transition hover:opacity-70" to={ROUTES.root}>
+              <span className="site-header-link-label">{user?.role === 'GUEST' ? '메인 화면' : '대시보드'}</span>
             </Link>
           ) : null}
+
+          <ThemeToggleButton />
+
           <button
-            className="inline-flex items-center gap-2 text-black transition hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-50"
+            className="site-header-link inline-flex items-center gap-2 text-black transition hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isGuestPending}
             onClick={() => void handleGuestEntry()}
             type="button"
           >
             {isGuestPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-            게스트 입장
+            <span className="site-header-link-label">게스트 모드로 이용</span>
           </button>
         </nav>
       </div>

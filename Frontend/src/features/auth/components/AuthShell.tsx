@@ -21,13 +21,13 @@ function AuthShell({
   const leftSlotClassName = hasRightPanel ? 'auth-login-slot' : 'auth-single-slot';
 
   return (
-    <div className="h-screen overflow-hidden bg-[#f4f4f4] px-4 pt-20 text-black md:px-8">
+    <div className="site-page-shell h-screen overflow-hidden bg-[#f4f4f4] px-4 pt-20 text-black md:px-8">
       <AuthTopNav />
       <div
-        className={`flex h-[calc(100vh-5rem)] justify-center overflow-hidden ${contentClassName ?? 'items-center'}`}
+        className={`site-main-shell flex h-[calc(100vh-5rem)] justify-center overflow-hidden ${contentClassName ?? 'items-center'}`}
       >
         <div
-          className={`${hasRightPanel ? 'auth-design-frame' : 'auth-design-frame auth-single-frame'} ${frameClassName ?? ''}`.trim()}
+          className={`${hasRightPanel ? 'auth-design-frame' : 'auth-design-frame auth-single-frame'} theme-auth-frame ${frameClassName ?? ''}`.trim()}
         >
           {hasRightPanel ? <div className="auth-divider" aria-hidden="true" /> : null}
           <section className={`${leftSlotClassName} ${leftClassName ?? ''}`.trim()}>{left}</section>

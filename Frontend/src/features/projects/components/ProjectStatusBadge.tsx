@@ -20,10 +20,10 @@ const labelByStatus: Record<WorkStatus, string> = {
   DONE: '완료',
   ANALYZING: '분석 중',
   FAILED: '실패',
-  OPEN: '대응 필요',
+  OPEN: '조치 필요',
   APPROVED: '승인됨',
-  NEW: '새 항목',
-  READ: '확인됨',
+  NEW: '신규',
+  READ: '확인 완료',
   ONLINE: '온라인',
   OFFLINE: '오프라인',
 };

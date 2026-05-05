@@ -3,7 +3,7 @@ import type { AgentStatus, AgentTaskStatus, ScanMode, ScanStatus } from '../../.
 const scanStatusLabelMap: Record<ScanStatus, string> = {
   REQUESTED: '요청됨',
   QUEUED: '대기 중',
-  RUNNING: '진행 중',
+  RUNNING: '실행 중',
   RAW_UPLOADED: '원본 업로드 완료',
   DONE: '완료',
   FAILED: '실패',
@@ -66,7 +66,7 @@ export function formatCompactDateTime(value: string | null | undefined) {
 }
 
 export function formatBooleanLabel(value: boolean) {
-  return value ? '사용' : '미사용';
+  return value ? '활성화' : '비활성화';
 }
 
 export function getScanStatusLabel(status: ScanStatus) {
@@ -132,7 +132,15 @@ export function getTaskStatusClassName(status: AgentTaskStatus) {
 }
 
 export function getScanModeLabel(scanMode: ScanMode) {
-  return scanMode === 'AGENT' ? '에이전트' : '파일 업로드';
+  if (scanMode === 'AGENT') {
+    return 'Local Agent';
+  }
+
+  if (scanMode === 'CLI') {
+    return 'CLI';
+  }
+
+  return '웹 업로드';
 }
 
 export function isTerminalScanStatus(status: ScanStatus) {

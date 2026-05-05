@@ -20,12 +20,12 @@ const scanModeOptions: Array<{ value: ScanMode; label: string; helper: string }>
   {
     value: 'AGENT',
     label: '로컬 에이전트 스캔',
-    helper: '프로젝트 생성 후 로컬 에이전트가 직접 경로를 검사하는 기본 흐름입니다.',
+    helper: '프로젝트를 만든 뒤 로컬 에이전트가 연결된 환경에서 바로 스캔을 시작합니다.',
   },
   {
     value: 'UPLOAD',
     label: '파일 업로드 스캔',
-    helper: '프로젝트 생성 후 JSON 결과 파일을 업로드해 스캔을 바로 등록할 수 있습니다.',
+    helper: 'JSON 스캔 결과 파일을 업로드하는 흐름을 기본값으로 사용합니다.',
   },
 ];
 
@@ -39,13 +39,10 @@ function ProjectCreateForm({
   isSubmitting = false,
   errorMessage,
   title = '새 프로젝트 만들기',
-  description = '프로젝트를 만들면서 필요하면 첫 스캔 결과 파일도 함께 업로드할 수 있습니다.',
+  description = '프로젝트 기본 정보와 기본 스캔 방식을 정하고, 원한다면 첫 번째 스캔 파일도 바로 함께 올릴 수 있습니다.',
   submitLabel = '프로젝트 생성',
 }: ProjectCreateFormProps) {
-  const setField = <K extends keyof CreateProjectFormValues>(
-    field: K,
-    nextValue: CreateProjectFormValues[K],
-  ) => {
+  const setField = <K extends keyof CreateProjectFormValues>(field: K, nextValue: CreateProjectFormValues[K]) => {
     onChange({
       ...value,
       [field]: nextValue,
@@ -55,52 +52,53 @@ function ProjectCreateForm({
   const isNameBlank = value.name.trim().length === 0;
 
   return (
-    <div className="rounded-[1.75rem] border border-[#e9e2d4] bg-[#fffdfa] p-6">
-      <div className="flex flex-col gap-2">
-        <h3 className="text-xl font-black text-[#111111]">{title}</h3>
-        <p className="text-sm leading-6 text-[#6b6257]">{description}</p>
+    <div className="border border-neutral-200 bg-[#f8f8f8] p-6">
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-neutral-500">NEW PROJECT</p>
+        <h3 className="mt-3 text-3xl font-black tracking-tight text-black">{title}</h3>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-neutral-600">{description}</p>
       </div>
 
-      <div className="mt-5 grid gap-4">
+      <div className="mt-8 grid gap-5">
         <label className="grid gap-2">
-          <span className="text-sm font-bold text-[#3d352d]">프로젝트 이름</span>
+          <span className="text-sm font-bold text-black">프로젝트 이름</span>
           <input
-            className="rounded-2xl border border-[#ded8cc] bg-white px-4 py-3 text-sm text-[#111111] outline-none transition focus:border-[#111111]"
+            className="border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
             maxLength={255}
             onChange={(event) => setField('name', event.target.value)}
             placeholder="예: payment-api"
             value={value.name}
           />
-          <span className="text-xs text-[#8b7f6a]">이 이름을 기준으로 프로젝트와 스캔 이력이 연결됩니다.</span>
+          <span className="text-xs leading-6 text-neutral-500">프로젝트 목록과 스캔 요청 화면에서 함께 표시됩니다.</span>
         </label>
 
         <label className="grid gap-2">
-          <span className="text-sm font-bold text-[#3d352d]">설명</span>
+          <span className="text-sm font-bold text-black">프로젝트 설명</span>
           <textarea
-            className="min-h-28 rounded-2xl border border-[#ded8cc] bg-white px-4 py-3 text-sm text-[#111111] outline-none transition focus:border-[#111111]"
+            className="min-h-28 border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
             maxLength={1000}
             onChange={(event) => setField('description', event.target.value)}
-            placeholder="프로젝트 성격, 주요 점검 대상, 운영 환경 등을 적어두면 이후 관리에 도움이 됩니다."
+            placeholder="무엇을 점검하는 프로젝트인지 간단히 적어두면 나중에 여러 프로젝트를 구분하기 편합니다."
             value={value.description}
           />
         </label>
 
         <div className="grid gap-3">
-          <span className="text-sm font-bold text-[#3d352d]">기본 스캔 방식</span>
+          <span className="text-sm font-bold text-black">기본 스캔 방식</span>
           <div className="grid gap-3 md:grid-cols-2">
             {scanModeOptions.map((option) => (
               <button
-                className={`rounded-2xl border px-4 py-4 text-left transition ${
+                className={`border px-4 py-4 text-left transition ${
                   value.defaultScanMode === option.value
-                    ? 'border-[#111111] bg-[#111111] text-white'
-                    : 'border-[#ded8cc] bg-white text-[#111111] hover:border-[#111111]'
+                    ? 'border-black bg-black text-white'
+                    : 'border-neutral-300 bg-white text-black hover:border-black'
                 }`}
                 key={option.value}
                 onClick={() => setField('defaultScanMode', option.value)}
                 type="button"
               >
                 <p className="text-sm font-black">{option.label}</p>
-                <p className={`mt-2 text-xs leading-6 ${value.defaultScanMode === option.value ? 'text-slate-200' : 'text-[#6b6257]'}`}>
+                <p className={`mt-2 text-xs leading-6 ${value.defaultScanMode === option.value ? 'text-neutral-300' : 'text-neutral-500'}`}>
                   {option.helper}
                 </p>
               </button>
@@ -108,46 +106,45 @@ function ProjectCreateForm({
           </div>
         </div>
 
-        <label className="flex items-center gap-3 rounded-2xl border border-[#ded8cc] bg-[#faf7f0] px-4 py-3">
+        <label className="flex items-center gap-3 border border-neutral-200 bg-white px-4 py-3">
           <input
             checked={value.monitorEnabled}
-            className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+            className="h-4 w-4 rounded border-neutral-300 text-black focus:ring-black"
             onChange={(event) => setField('monitorEnabled', event.target.checked)}
             type="checkbox"
           />
-          <span className="text-sm font-medium text-[#4b4339]">모니터링 기능을 활성화합니다.</span>
+          <span className="text-sm font-medium text-neutral-700">이 프로젝트의 상태 추적 기능을 활성화합니다.</span>
         </label>
 
-        <section className="rounded-[1.5rem] border border-dashed border-[#d8cfbd] bg-[#faf7f0] p-5">
-          <div className="flex items-start gap-3">
-            <div className="rounded-2xl bg-white p-3 text-slate-900 shadow-sm">
+        <section className="border border-dashed border-neutral-300 bg-white p-5">
+          <div className="flex items-start gap-4">
+            <div className="bg-black p-3 text-white">
               <Upload className="h-5 w-5" />
             </div>
-            <div>
-              <p className="text-sm font-black text-[#111111]">프로젝트 생성과 동시에 첫 스캔 업로드</p>
-              <p className="mt-2 text-sm leading-6 text-[#6b6257]">
-                선택 사항입니다. JSON 스캔 결과 파일을 고르면 프로젝트를 만든 직후 첫 업로드 스캔까지 자동으로 등록합니다.
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-black">프로젝트 생성과 동시에 첫 스캔 업로드</p>
+              <p className="mt-2 text-sm leading-7 text-neutral-600">
+                스캔 결과 JSON 파일이 준비되어 있다면 여기에서 함께 선택할 수 있습니다. 파일이 있으면 프로젝트 생성 직후 스캔 등록,
+                업로드, 업로드 완료 보고까지 이어서 진행합니다.
               </p>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-2">
+          <div className="mt-5 grid gap-2">
             <label className="grid gap-2">
-              <span className="text-sm font-bold text-[#3d352d]">초기 스캔 결과 파일</span>
+              <span className="text-sm font-bold text-black">스캔 결과 파일</span>
               <input
                 accept=".json,application/json,text/json"
-                className="w-full rounded-2xl border border-dashed border-[#cfc5b2] bg-white px-4 py-4 text-sm text-[#111111] outline-none transition file:mr-4 file:rounded-full file:border-0 file:bg-[#111111] file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:border-[#8b7f6a]"
+                className="w-full border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-4 text-sm text-black outline-none transition file:mr-4 file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:border-black"
                 onChange={(event) => onUploadFileChange(event.target.files?.[0] ?? null)}
                 type="file"
               />
             </label>
-
-            <p className="text-xs leading-6 text-[#8b7f6a]">
-              파일을 선택하지 않으면 프로젝트만 생성됩니다. 파일을 선택하면 프로젝트 생성 후 업로드 스캔이 자동으로 이어집니다.
+            <p className="text-xs leading-6 text-neutral-500">
+              파일을 선택하지 않으면 프로젝트만 생성됩니다. 선택하면 첫 스캔이 자동으로 함께 등록됩니다.
             </p>
-
             {selectedUploadFile ? (
-              <div className="rounded-2xl border border-[#ded8cc] bg-white px-4 py-3 text-sm text-[#4b4339]">
+              <div className="border border-neutral-200 bg-[#f5f5f5] px-4 py-3 text-sm text-neutral-700">
                 선택된 파일: <strong>{selectedUploadFile.name}</strong> ({Math.ceil(selectedUploadFile.size / 1024)} KB)
               </div>
             ) : null}
@@ -155,25 +152,25 @@ function ProjectCreateForm({
         </section>
 
         {errorMessage ? (
-          <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-700">
+          <div className="flex items-start gap-3 border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-700">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         ) : null}
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
+      <div className="mt-8 flex flex-wrap gap-3">
         <button
-          className="inline-flex items-center gap-2 rounded-full bg-[#111111] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#262626] disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
           disabled={isSubmitting || isNameBlank}
           onClick={onSubmit}
           type="button"
         >
           {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-          {isSubmitting ? '생성 중입니다...' : submitLabel}
+          {isSubmitting ? '생성 중...' : submitLabel}
         </button>
         <button
-          className="inline-flex rounded-full border border-[#d7cfbf] px-5 py-3 text-sm font-bold text-[#3d352d] transition hover:border-[#8b7f6a]"
+          className="border border-neutral-300 px-5 py-3 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
           onClick={onCancel}
           type="button"
         >

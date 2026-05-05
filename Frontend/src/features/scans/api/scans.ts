@@ -79,15 +79,23 @@ async function createSha256Hash(file: File) {
 }
 
 export async function uploadScanResultFile(rawUploadUrl: string, file: File) {
-  const response = await fetch(rawUploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': file.type || 'application/json',
-    },
-    body: file,
-  });
+  try {
+    const response = await fetch(rawUploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type || 'application/json',
+      },
+      body: file,
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      throw new Error(`${UPLOAD_SCAN_FILE_ERROR} (HTTP ${response.status})`);
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(error.message || UPLOAD_SCAN_FILE_ERROR);
+    }
+
     throw new Error(UPLOAD_SCAN_FILE_ERROR);
   }
 }

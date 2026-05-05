@@ -1,8 +1,15 @@
 export const ROUTES = {
   root: '/',
   login: '/login',
+  dashboard: '/dashboard',
   projects: '/projects',
   projectDetail: '/projects/:projectId',
   scanDetail: '/scans/:scanId',
   resultDetail: '/results/:scanId',
+  resultFindingDetail: '/results/:scanId/findings/:findingId',
+  history: '/history',
+  monitor: '/monitor',
+  guide: '/guide',
+  settings: '/settings',
+  typingGame: '/typing-game',
 } as const;

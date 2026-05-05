@@ -12,10 +12,10 @@ const toneByRisk: Record<RiskLevel, string> = {
 };
 
 const labelByRisk: Record<RiskLevel, string> = {
-  CRITICAL: 'Critical Risk',
-  HIGH: 'High Risk',
-  MEDIUM: 'Medium Risk',
-  LOW: 'Low Risk',
+  CRITICAL: '치명적 위험',
+  HIGH: '높은 위험',
+  MEDIUM: '중간 위험',
+  LOW: '낮은 위험',
 };
 
 function ProjectRiskBadge({ risk }: ProjectRiskBadgeProps) {

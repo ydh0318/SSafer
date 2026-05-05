@@ -16,6 +16,7 @@ type RetryableRequestConfig = AxiosRequestConfig & {
 };
 
 const REFRESH_PATH = '/auth/refresh';
+const SESSION_EXPIRED_STORAGE_KEY = 'ssafer.sessionExpiredMessage';
 const REFRESH_TOKEN_MISSING_MESSAGE =
   'Refresh API completed but did not return an access token in the response body or Authorization header.';
 
@@ -111,6 +112,18 @@ export const setupInterceptors = (client: AxiosInstance) => {
         return client(originalRequest);
       } catch (refreshError) {
         useAuthStore.getState().logout();
+
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(
+            SESSION_EXPIRED_STORAGE_KEY,
+            '세션이 만료되었습니다. 다시 로그인해주세요.',
+          );
+
+          if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+            window.location.assign('/login');
+          }
+        }
+
         return Promise.reject(refreshError);
       }
     },
