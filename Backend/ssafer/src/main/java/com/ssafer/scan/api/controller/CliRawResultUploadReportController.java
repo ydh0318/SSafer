@@ -18,22 +18,23 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "CLI Raw 결과 업로드 완료 보고", description = "CLI raw results 업로드 완료 보고 API")
+@Tag(name = "CLI raw 결과 업로드 완료 보고", description = "CLI가 raw 결과 업로드 완료를 알리는 API")
 @RestController
 @RequestMapping("/api/v1/scans")
 @RequiredArgsConstructor
-// CLI가 S3 업로드를 마친 뒤 호출하는 사용자용 완료 보고 컨트롤러.
+// 이 API는 CLI 전용 완료 알림이다.
+// 워커 분석 완료 콜백은 internal 경로의 별도 API에서 처리할 예정이다.
 public class CliRawResultUploadReportController {
 
-  private static final String SUCCESS_MESSAGE = "Raw 결과 업로드 완료 보고 성공";
+  private static final String SUCCESS_MESSAGE = "CLI 분석 완료 알림 성공";
 
   private final CurrentActorProvider currentActorProvider;
   private final CliRawResultUploadReportService cliRawResultUploadReportService;
 
   @PostMapping("/{scanId}/raw-results")
-  @Operation(summary = "CLI Raw 결과 업로드 완료 보고")
+  @Operation(summary = "CLI 분석 완료 알림")
   @ApiResponses(value = {
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "업로드 완료 보고 성공"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "CLI 분석 완료 알림 성공"),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 값 오류 (INVALID_PARAMETER, INVALID_PAYLOAD_HASH)"),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패 (UNAUTHORIZED)"),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "scan 접근 권한 없음 (FORBIDDEN)"),
@@ -45,7 +46,7 @@ public class CliRawResultUploadReportController {
       @PathVariable Long scanId,
       @Valid @RequestBody CliRawResultUploadReportRequest request
   ) {
-    // 인증 주체를 서비스에 전달해 scan 접근 권한까지 함께 검증한다.
+    // 인증 주체를 서비스에 전달하고 scan 접근 권한까지 함께 검증한다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     CliRawResultUploadReportResponseData data = cliRawResultUploadReportService.report(scanId, actor, request);
     return ResponseEntity.ok(ApiResponse.success(SUCCESS_MESSAGE, data));

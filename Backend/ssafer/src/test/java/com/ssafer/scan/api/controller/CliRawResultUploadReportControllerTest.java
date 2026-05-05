@@ -59,7 +59,7 @@ class CliRawResultUploadReportControllerTest {
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.message").value("Raw 결과 업로드 완료 보고 성공"))
+        .andExpect(jsonPath("$.message").value("CLI 분석 완료 알림 성공"))
         .andExpect(jsonPath("$.data.scanId").value(1001))
         .andExpect(jsonPath("$.data.status").value("RAW_UPLOADED"))
         .andExpect(jsonPath("$.data.resultCount").value(152));
