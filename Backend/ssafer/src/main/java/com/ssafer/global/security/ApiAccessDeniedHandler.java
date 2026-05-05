@@ -2,6 +2,7 @@ package com.ssafer.global.security;
 
 import com.ssafer.global.api.ApiErrorResponse;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.global.logging.ApiLogContext;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,6 +31,15 @@ public class ApiAccessDeniedHandler implements AccessDeniedHandler {
       AccessDeniedException accessDeniedException
   ) throws IOException, ServletException {
     ErrorCode code = ErrorCode.FORBIDDEN;
+    String reason = accessDeniedException.getMessage();
+    if (reason == null || reason.isBlank() || "Access Denied".equalsIgnoreCase(reason)) {
+      reason = "인증은 되었지만 이 API에 접근할 권한이 없습니다.";
+    }
+    ApiLogContext.markFailure(
+        request,
+        "스프링 시큐리티 권한 검사",
+        reason
+    );
     response.setStatus(code.status().value());
     // 권한 거부 응답도 일반 API 에러와 같은 JSON/UTF-8 포맷으로 고정한다.
     response.setContentType(MediaType.APPLICATION_JSON_VALUE);

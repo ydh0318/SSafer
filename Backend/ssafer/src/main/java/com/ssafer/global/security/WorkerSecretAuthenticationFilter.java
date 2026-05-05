@@ -1,5 +1,6 @@
 package com.ssafer.global.security;
 
+import com.ssafer.global.logging.ApiLogContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,7 +26,6 @@ public class WorkerSecretAuthenticationFilter extends OncePerRequestFilter {
   public WorkerSecretAuthenticationFilter(
       @Value("${WORKER_API_SECRET:}") String workerApiSecret
   ) {
-    // 내부 콜백 보호가 목적이라 시크릿이 비어 있으면 애플리케이션을 바로 실패시킨다.
     if (workerApiSecret == null || workerApiSecret.isBlank()) {
       throw new IllegalStateException("WORKER_API_SECRET must not be blank");
     }
@@ -41,19 +41,26 @@ public class WorkerSecretAuthenticationFilter extends OncePerRequestFilter {
     String workerSecret = request.getHeader(WORKER_SECRET_HEADER);
     if (workerSecret == null || workerSecret.isBlank()) {
       SecurityContextHolder.clearContext();
-      // 인증을 세우지 않고 다음 단계로 넘기면 Security가 최종적으로 401 응답을 만든다.
+      ApiLogContext.markFailure(
+          request,
+          "워커 시크릿 인증 필터",
+          "X-Worker-Secret 헤더가 없거나 비어 있습니다."
+      );
       filterChain.doFilter(request, response);
       return;
     }
 
     if (!matches(workerSecret)) {
       SecurityContextHolder.clearContext();
-      // 시크릿 불일치도 동일하게 미인증 요청으로 처리한다.
+      ApiLogContext.markFailure(
+          request,
+          "워커 시크릿 인증 필터",
+          "X-Worker-Secret 값이 서버 설정과 일치하지 않습니다."
+      );
       filterChain.doFilter(request, response);
       return;
     }
 
-    // 내부 API에서는 사용자 principal 대신 worker principal만 세팅한다.
     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
         "worker",
         null,

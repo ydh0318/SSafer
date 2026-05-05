@@ -1,5 +1,6 @@
 package com.ssafer.global.security;
 
+import com.ssafer.global.logging.ApiRequestLoggingFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -19,6 +20,7 @@ public class SecurityConfig {
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
   private final AgentTokenAuthenticationFilter agentTokenAuthenticationFilter;
   private final WorkerSecretAuthenticationFilter workerSecretAuthenticationFilter;
+  private final ApiRequestLoggingFilter apiRequestLoggingFilter;
   private final ApiAuthenticationEntryPoint apiAuthenticationEntryPoint;
   private final ApiAccessDeniedHandler apiAccessDeniedHandler;
 
@@ -26,12 +28,14 @@ public class SecurityConfig {
       JwtAuthenticationFilter jwtAuthenticationFilter,
       AgentTokenAuthenticationFilter agentTokenAuthenticationFilter,
       WorkerSecretAuthenticationFilter workerSecretAuthenticationFilter,
+      ApiRequestLoggingFilter apiRequestLoggingFilter,
       ApiAuthenticationEntryPoint apiAuthenticationEntryPoint,
       ApiAccessDeniedHandler apiAccessDeniedHandler
   ) {
     this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     this.agentTokenAuthenticationFilter = agentTokenAuthenticationFilter;
     this.workerSecretAuthenticationFilter = workerSecretAuthenticationFilter;
+    this.apiRequestLoggingFilter = apiRequestLoggingFilter;
     this.apiAuthenticationEntryPoint = apiAuthenticationEntryPoint;
     this.apiAccessDeniedHandler = apiAccessDeniedHandler;
   }
@@ -50,6 +54,7 @@ public class SecurityConfig {
             .accessDeniedHandler(apiAccessDeniedHandler)
         )
         .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+        .addFilterBefore(apiRequestLoggingFilter, UsernamePasswordAuthenticationFilter.class)
         .addFilterBefore(agentTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
         .build();
   }
@@ -69,6 +74,7 @@ public class SecurityConfig {
             .accessDeniedHandler(apiAccessDeniedHandler)
         )
         .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+        .addFilterBefore(apiRequestLoggingFilter, UsernamePasswordAuthenticationFilter.class)
         .addFilterBefore(workerSecretAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
         .build();
   }
@@ -108,6 +114,7 @@ public class SecurityConfig {
             .requestMatchers("/api/**").authenticated()
             .anyRequest().permitAll()
         )
+        .addFilterBefore(apiRequestLoggingFilter, UsernamePasswordAuthenticationFilter.class)
         .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
         .build();
   }
@@ -144,6 +151,16 @@ public class SecurityConfig {
   ) {
     FilterRegistrationBean<AgentTokenAuthenticationFilter> registration =
         new FilterRegistrationBean<>(agentTokenAuthenticationFilter);
+    registration.setEnabled(false);
+    return registration;
+  }
+
+  @Bean
+  public FilterRegistrationBean<ApiRequestLoggingFilter> apiRequestLoggingFilterRegistration(
+      ApiRequestLoggingFilter apiRequestLoggingFilter
+  ) {
+    FilterRegistrationBean<ApiRequestLoggingFilter> registration =
+        new FilterRegistrationBean<>(apiRequestLoggingFilter);
     registration.setEnabled(false);
     return registration;
   }

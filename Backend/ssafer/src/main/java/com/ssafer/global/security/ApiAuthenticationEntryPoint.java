@@ -2,6 +2,7 @@ package com.ssafer.global.security;
 
 import com.ssafer.global.api.ApiErrorResponse;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.global.logging.ApiLogContext;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,6 +31,17 @@ public class ApiAuthenticationEntryPoint implements AuthenticationEntryPoint {
       AuthenticationException authException
   ) throws IOException, ServletException {
     ErrorCode code = ErrorCode.UNAUTHORIZED;
+    String reason = authException.getMessage();
+    if (reason == null
+        || reason.isBlank()
+        || "Full authentication is required to access this resource".equals(reason)) {
+      reason = "보호된 API인데 인증 정보가 없거나 토큰 검증에 실패했습니다.";
+    }
+    ApiLogContext.markFailure(
+        request,
+        "스프링 시큐리티 인증 진입점",
+        reason
+    );
     response.setStatus(code.status().value());
     // Security 예외 응답도 일반 API 에러와 같은 JSON/UTF-8 포맷으로 고정한다.
     response.setContentType(MediaType.APPLICATION_JSON_VALUE);

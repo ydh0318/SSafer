@@ -1,5 +1,6 @@
 package com.ssafer.global.security;
 
+import com.ssafer.global.logging.ApiLogContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,6 +34,11 @@ public class AgentTokenAuthenticationFilter extends OncePerRequestFilter {
     String authorization = request.getHeader("Authorization");
     if (authorization == null || !authorization.startsWith(BEARER_PREFIX)) {
       SecurityContextHolder.clearContext();
+      ApiLogContext.markFailure(
+          request,
+          "에이전트 토큰 인증 필터",
+          "Authorization Bearer 토큰이 없습니다."
+      );
       filterChain.doFilter(request, response);
       return;
     }
@@ -40,6 +46,11 @@ public class AgentTokenAuthenticationFilter extends OncePerRequestFilter {
     String token = authorization.substring(BEARER_PREFIX.length()).trim();
     if (token.isBlank()) {
       SecurityContextHolder.clearContext();
+      ApiLogContext.markFailure(
+          request,
+          "에이전트 토큰 인증 필터",
+          "Authorization Bearer 토큰 값이 비어 있습니다."
+      );
       filterChain.doFilter(request, response);
       return;
     }
@@ -47,6 +58,11 @@ public class AgentTokenAuthenticationFilter extends OncePerRequestFilter {
     Long matchedAgentId = agentTokenRegistry.findMatchedAgentId(token);
     if (matchedAgentId == null) {
       SecurityContextHolder.clearContext();
+      ApiLogContext.markFailure(
+          request,
+          "에이전트 토큰 인증 필터",
+          "에이전트 토큰이 등록된 값과 일치하지 않습니다."
+      );
       filterChain.doFilter(request, response);
       return;
     }
