@@ -18,6 +18,20 @@ function EntryPage() {
   } | null>(null);
 
   useEffect(() => {
+    const sessionExpiredMessage = window.sessionStorage.getItem('ssafer.sessionExpiredMessage');
+
+    if (!sessionExpiredMessage) {
+      return;
+    }
+
+    setToast({
+      tone: 'info',
+      message: sessionExpiredMessage,
+    });
+    window.sessionStorage.removeItem('ssafer.sessionExpiredMessage');
+  }, []);
+
+  useEffect(() => {
     if (!toast) {
       return undefined;
     }

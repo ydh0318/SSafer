@@ -1,6 +1,9 @@
+import { ArrowLeft, FileSearch } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
+import PageHero from '../../components/common/PageHero';
+import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import { getScanStatus } from '../../features/scans/api/scans';
 import ScanProgressPanel from '../../features/scans/components/ScanProgressPanel';
@@ -74,7 +77,7 @@ function ScanDetailPage() {
           setStatusData(data);
           setErrorMessage(null);
         } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : '스캔 상태를 새로고침하지 못했습니다.');
+          setErrorMessage(error instanceof Error ? error.message : '스캔 상태를 다시 불러오지 못했습니다.');
         }
       })();
     }, 5000);
@@ -105,44 +108,81 @@ function ScanDetailPage() {
 
   return (
     <section className="space-y-8">
-      <section className="overflow-hidden rounded-[2rem] border border-[#eadfcb] bg-[linear-gradient(135deg,#fffdf8_0%,#f6efe0_52%,#efe7d9_100%)] px-6 py-8 shadow-[0_24px_90px_rgba(15,23,42,0.08)] md:px-8 md:py-10">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[#8b7f6a]">스캔 진행 상태</p>
-        <h2 className="mt-4 text-4xl font-black leading-tight text-[#111111] md:text-5xl">스캔 #{scanId} 상태 확인</h2>
-        <p className="mt-5 max-w-3xl text-base leading-8 text-[#5f564c]">
-          이 화면에서 스캔이 실제로 등록되었는지, 현재 진행 중인지, 완료 또는 실패했는지를 계속 확인할 수 있습니다.
-        </p>
-
-        {routeState.autoOpenedFromScanRequest ? (
-          <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-            스캔 요청이 등록되었습니다. 이 페이지에서 자동 갱신으로 진행 상태를 확인할 수 있습니다.
+      <PageHero
+        actions={
+          <>
+            {routeState.projectId ? (
+              <Link
+                className="inline-flex items-center gap-2 border border-neutral-300 px-5 py-3 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+                to={ROUTES.projectDetail.replace(':projectId', routeState.projectId)}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                프로젝트로 돌아가기
+              </Link>
+            ) : (
+              <Link
+                className="inline-flex items-center gap-2 border border-neutral-300 px-5 py-3 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+                to={ROUTES.projects}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                프로젝트 목록
+              </Link>
+            )}
+            <Link
+              className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
+              state={routeState}
+              to={ROUTES.resultDetail.replace(':scanId', scanId)}
+            >
+              결과 화면 보기
+              <FileSearch className="h-4 w-4" />
+            </Link>
+          </>
+        }
+        aside={
+          <div className="border border-neutral-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-neutral-500">LIVE STATUS</p>
+                <h2 className="mt-3 text-2xl font-black tracking-tight text-black">Scan #{scanId}</h2>
+              </div>
+              <PixelGoose
+                mood={
+                  statusData?.status === 'DONE'
+                    ? 'victory'
+                    : statusData?.status === 'FAILED'
+                      ? 'alert'
+                      : statusData?.status === 'RUNNING'
+                        ? 'working'
+                        : 'idle'
+                }
+                size={88}
+              />
+            </div>
+            <p className="mt-4 text-sm leading-7 text-neutral-600">
+              스캔 진행 상태는 이 화면에서 계속 갱신됩니다. 완료되면 결과 화면으로 바로 넘어가 최종 상태를 다시 확인할 수 있습니다.
+            </p>
           </div>
-        ) : null}
+        }
+        description={
+          <>
+            스캔 요청 이후 현재 단계, 업로드 완료 여부, 종료 상태를 사용자 입장에서 지속적으로 볼 수 있도록 구성한 페이지입니다.
+          </>
+        }
+        eyebrow="SCAN STATUS"
+        title={
+          <>
+            스캔이 지금 어디까지 진행됐는지
+            <br />
+            한 화면에서 계속 확인합니다.
+          </>
+        }
+      />
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          {routeState.projectId ? (
-            <Link
-              className="inline-flex rounded-full border border-[#cbbda6] px-5 py-3 text-sm font-bold text-[#3f352b] transition hover:border-[#9f937f]"
-              to={ROUTES.projectDetail.replace(':projectId', routeState.projectId)}
-            >
-              프로젝트 상세로 돌아가기
-            </Link>
-          ) : (
-            <Link
-              className="inline-flex rounded-full border border-[#cbbda6] px-5 py-3 text-sm font-bold text-[#3f352b] transition hover:border-[#9f937f]"
-              to={ROUTES.projects}
-            >
-              프로젝트 목록으로 이동
-            </Link>
-          )}
-          <Link
-            className="inline-flex rounded-full bg-[#111111] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#262626]"
-            state={routeState}
-            to={ROUTES.resultDetail.replace(':scanId', scanId)}
-          >
-            결과 화면 보기
-          </Link>
+      {routeState.autoOpenedFromScanRequest ? (
+        <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
+          스캔 요청이 정상적으로 등록되어 상태 화면으로 이동했습니다. 아래에서 진행 상황을 계속 확인할 수 있습니다.
         </div>
-      </section>
+      ) : null}
 
       <ScanProgressPanel
         errorMessage={errorMessage}

@@ -1,6 +1,6 @@
 export type ScanRequestSource = 'CLI';
 
-export type ScanMode = 'UPLOAD' | 'AGENT';
+export type ScanMode = 'UPLOAD' | 'CLI' | 'AGENT';
 
 export type ScanStatus =
   | 'REQUESTED'

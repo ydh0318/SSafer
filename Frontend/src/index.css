@@ -17,15 +17,230 @@
     min-height: 100vh;
     background: #f5f4f1;
     color: #020617;
+    transition:
+      background-color 180ms ease,
+      color 180ms ease;
   }
 
   button,
-  input {
+  input,
+  textarea {
     font: inherit;
   }
 }
 
+html.theme-dark,
+body.theme-dark {
+  background: #2b2b2b;
+  color: #f3f4f6;
+}
+
+html.theme-dark body {
+  background: #2b2b2b;
+  color: #f3f4f6;
+}
+
+html.theme-dark .bg-\[\#F5F5F5\],
+html.theme-dark .bg-\[\#f5f5f5\],
+html.theme-dark .bg-\[\#f4f4f4\] {
+  background: #2b2b2b !important;
+}
+
+html.theme-dark .bg-\[\#F5F5F5\]\/95,
+html.theme-dark .bg-\[\#f5f5f5\]\/95,
+html.theme-dark .bg-\[\#f4f4f4\]\/95,
+html.theme-dark .theme-surface-header {
+  background: rgba(43, 43, 43, 0.96) !important;
+}
+
+html.theme-dark .bg-white {
+  background: #181818 !important;
+}
+
+html.theme-dark .theme-dark-banner {
+  background: #000000 !important;
+}
+
+html.theme-dark .theme-dark-panel {
+  background: #181818 !important;
+  color: #f3f4f6 !important;
+}
+
+html.theme-dark .theme-dark-soft-card {
+  background: #1f1f1f !important;
+  border-color: #5b5b5b !important;
+  color: #f3f4f6 !important;
+}
+
+html.theme-dark .theme-accent-card,
+html.theme-dark .theme-accent-card p,
+html.theme-dark .theme-accent-card div,
+html.theme-dark .theme-accent-card span,
+html.theme-dark .theme-accent-card h1,
+html.theme-dark .theme-accent-card h2,
+html.theme-dark .theme-accent-card h3,
+html.theme-dark .theme-accent-card h4,
+html.theme-dark .theme-accent-card svg {
+  color: #111111 !important;
+}
+
+html.theme-dark .bg-\[\#3DDC84\],
+html.theme-dark .bg-\[\#FFF9DB\],
+html.theme-dark .bg-\[\#FFE066\] {
+  color: #111111 !important;
+}
+
+html.theme-dark .theme-guide-tip {
+  background: #6a5200 !important;
+  border-color: #9a7a00 !important;
+  color: #fff8d6 !important;
+}
+
+html.theme-dark .theme-guide-tip p,
+html.theme-dark .theme-guide-tip div,
+html.theme-dark .theme-guide-tip span {
+  color: inherit !important;
+}
+
+html.theme-dark .theme-monitor-banner {
+  background: #111111 !important;
+  border-color: #3d3d3d !important;
+  color: #f8fafc !important;
+}
+
+html.theme-dark .theme-monitor-danger {
+  background: #5a161d !important;
+  border-color: #7f1d1d !important;
+  color: #ffffff !important;
+}
+
+html.theme-dark .theme-monitor-success {
+  background: #0f3d29 !important;
+  border-color: #166534 !important;
+  color: #ffffff !important;
+}
+
+html.theme-dark .theme-dark-soft-card p,
+html.theme-dark .theme-dark-soft-card div,
+html.theme-dark .theme-dark-soft-card span {
+  color: inherit !important;
+}
+
+html.theme-dark .bg-neutral-100 {
+  background: #202020 !important;
+}
+
+html.theme-dark .bg-neutral-900 {
+  background: #050505 !important;
+}
+
+html.theme-dark .bg-black {
+  background: #000000 !important;
+}
+
+html.theme-dark .text-black {
+  color: #f9fafb !important;
+}
+
+html.theme-dark .text-neutral-400 {
+  color: #9ca3af !important;
+}
+
+html.theme-dark .text-neutral-500,
+html.theme-dark .text-slate-500,
+html.theme-dark .text-slate-400 {
+  color: #cbd5e1 !important;
+}
+
+html.theme-dark .text-neutral-600,
+html.theme-dark .text-neutral-700,
+html.theme-dark .text-slate-600,
+html.theme-dark .text-slate-700 {
+  color: #e5e7eb !important;
+}
+
+html.theme-dark .border-black {
+  border-color: #f3f4f6 !important;
+}
+
+html.theme-dark .border-neutral-100,
+html.theme-dark .border-neutral-200,
+html.theme-dark .border-neutral-300,
+html.theme-dark .border-black\/10,
+html.theme-dark .border-slate-200,
+html.theme-dark .border-slate-300 {
+  border-color: #424242 !important;
+}
+
+html.theme-dark .hover\:bg-white:hover {
+  background: #181818 !important;
+}
+
+html.theme-dark .hover\:bg-\[\#F5F5F5\]:hover,
+html.theme-dark .hover\:bg-neutral-800:hover {
+  background: #202020 !important;
+}
+
+html.theme-dark .auth-design-frame {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+html.theme-dark .auth-divider {
+  display: none;
+}
+
+html.theme-dark .auth-input {
+  border-color: #424242;
+  color: #f9fafb;
+  background: #121212;
+}
+
+html.theme-dark .auth-input::placeholder {
+  color: #6b7280;
+}
+
+html.theme-dark .auth-button {
+  background: #000000;
+  color: #ffffff;
+}
+
+html.theme-dark .auth-back-button,
+html.theme-dark .auth-label,
+html.theme-dark .auth-label-sm,
+html.theme-dark .auth-body-text,
+html.theme-dark .auth-social-text,
+html.theme-dark .auth-heading,
+html.theme-dark input,
+html.theme-dark button,
+html.theme-dark a,
+html.theme-dark p,
+html.theme-dark h1,
+html.theme-dark h2,
+html.theme-dark h3,
+html.theme-dark h4,
+html.theme-dark h5,
+html.theme-dark h6,
+html.theme-dark span,
+html.theme-dark label {
+  color: inherit;
+}
+
 @layer components {
+  .theme-toggle-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    transition:
+      color 150ms ease,
+      background-color 150ms ease;
+  }
+
+  .theme-toggle-button:hover {
+    transform: none;
+  }
+
   .auth-design-frame {
     position: relative;
     width: min(calc(100vw - 2rem), 1520px);
@@ -163,6 +378,55 @@
   }
 
   @media (max-width: 1023px) {
+    .site-page-shell {
+      padding-left: 88px;
+    }
+
+    .site-main-shell {
+      max-width: none;
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+
+    .site-header-shell {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: 88px;
+      border-right: 1px solid #d4d4d4;
+      border-bottom: 0;
+    }
+
+    .site-header-inner {
+      display: flex;
+      height: 100%;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 0.75rem;
+      padding: 1rem 0.75rem;
+    }
+
+    .site-header-nav {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.5rem;
+      width: 100%;
+    }
+
+    .site-header-link {
+      justify-content: center;
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+
+    .site-header-link-label {
+      display: none;
+    }
+
+    .theme-toggle-button {
+      width: 100%;
+      justify-content: center;
+    }
+
     .auth-design-frame {
       aspect-ratio: auto;
       width: min(100%, 34rem);
