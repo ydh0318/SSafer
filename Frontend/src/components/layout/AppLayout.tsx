@@ -8,26 +8,26 @@ function AppLayout() {
   const logout = useAuthStore((state) => state.logout);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/95">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+    <div className="min-h-screen bg-[#f5f2ea] text-[#111111]">
+      <header className="border-b border-[#e7decd] bg-[#f8f5ee]/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">SSAFER</p>
-            <h1 className="text-lg font-semibold">Frontend Workspace</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.34em] text-[#8b7f6a]">SSAFER</p>
+            <h1 className="text-lg font-black text-[#111111]">Security Workspace</h1>
           </div>
-          <nav className="flex items-center gap-4 text-sm text-slate-300">
-            <Link className="transition hover:text-white" to={ROUTES.projects}>
-              Projects
+          <nav className="flex items-center gap-4 text-sm font-semibold text-[#5f564c]">
+            <Link className="transition hover:text-[#111111]" to={ROUTES.projects}>
+              Dashboard
             </Link>
             <Link
-              className="transition hover:text-white"
-              to={ROUTES.resultDetail.replace(':scanId', '1')}
+              className="transition hover:text-[#111111]"
+              to={ROUTES.resultDetail.replace(':scanId', 'scan-a36')}
             >
-              Results
+              Recent Results
             </Link>
             {isAuthenticated ? (
               <button
-                className="rounded-md border border-slate-700 px-3 py-1.5 transition hover:border-slate-500"
+                className="rounded-full border border-[#d5cbb7] px-4 py-2 transition hover:border-[#9f937f]"
                 onClick={logout}
                 type="button"
               >
@@ -35,7 +35,7 @@ function AppLayout() {
               </button>
             ) : (
               <Link
-                className="rounded-md border border-cyan-500 px-3 py-1.5 text-cyan-300 transition hover:bg-cyan-500/10"
+                className="rounded-full border border-[#111111] px-4 py-2 text-[#111111] transition hover:bg-[#111111] hover:text-white"
                 to={ROUTES.login}
               >
                 Login
@@ -44,7 +44,7 @@ function AppLayout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-10">
+      <main className="mx-auto max-w-7xl px-6 py-10">
         <Outlet />
       </main>
     </div>
