@@ -50,9 +50,9 @@ function ProjectScanList({
           목록 새로고침
         </button>
       }
-      description="프로젝트에서 생성된 스캔 이력을 한 번에 확인하고, 진행 상태 화면과 결과 화면으로 바로 이동할 수 있습니다."
+      description="프로젝트의 실제 스캔 목록을 확인하고, 완료된 스캔만 결과 페이지로 이동할 수 있습니다."
       eyebrow="SCAN HISTORY"
-      title="프로젝트 스캔 이력"
+      title="프로젝트 스캔 목록"
     >
       <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <label className="block space-y-2">
@@ -82,7 +82,7 @@ function ProjectScanList({
         <label className="block space-y-2">
           <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">
             <Filter className="h-3.5 w-3.5" />
-            방식
+            스캔 방식
           </span>
           <select
             className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
@@ -112,7 +112,7 @@ function ProjectScanList({
         <div className="border border-rose-200 bg-rose-50 px-4 py-5 text-sm text-rose-700">{errorMessage}</div>
       ) : scans.length === 0 ? (
         <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-6 text-sm text-neutral-600">
-          조건에 맞는 스캔 이력이 아직 없습니다.
+          조건에 맞는 스캔이 없습니다.
         </div>
       ) : (
         <div className="space-y-3">
@@ -148,15 +148,21 @@ function ProjectScanList({
                     state={{ projectId }}
                     to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
                   >
-                    진행 상태
+                    진행 현황
                   </Link>
-                  <Link
-                    className="bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
-                    state={{ projectId }}
-                    to={ROUTES.resultDetail.replace(':scanId', String(scan.scanId))}
-                  >
-                    결과 보기
-                  </Link>
+                  {scan.status === 'DONE' ? (
+                    <Link
+                      className="bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+                      state={{ projectId }}
+                      to={ROUTES.resultDetail.replace(':scanId', String(scan.scanId))}
+                    >
+                      결과 보기
+                    </Link>
+                  ) : (
+                    <span className="inline-flex cursor-not-allowed items-center bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-500">
+                      결과 대기 중
+                    </span>
+                  )}
                 </div>
               </div>
             </article>
