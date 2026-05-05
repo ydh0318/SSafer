@@ -27,6 +27,7 @@ public class ScanRawResultController {
 
   private final ScanRawResultUploadService scanRawResultUploadService;
 
+  //api/v1/internal/scans/{scanId}/analysis-results 이걸로 바꿀 예정
   @PostMapping("/{scanId}/raw-results")
   @Operation(
       summary = "Raw 결과 업로드 완료 콜백",

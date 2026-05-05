@@ -159,4 +159,56 @@ public class AgentTask {
   public String getFailureReason() {
     return failureReason;
   }
+
+  // 작업 메시지 규격이 확정된 뒤 taskId 포함 payload를 다시 기록할 때 사용한다.
+  public void updatePayloadJson(String payloadJson) {
+    this.payloadJson = payloadJson;
+  }
+
+  // RabbitMQ 발행 완료 이후 미전송 상태를 SENT로 전환한다.
+  public void markSent(Instant now) {
+    transitionTo(AgentTaskStatus.SENT);
+    this.sentAt = now;
+    this.failureReason = null;
+  }
+
+  // 워커가 메시지를 받았음을 ack 했을 때 호출한다.
+  public void markAcked(Instant now) {
+    transitionTo(AgentTaskStatus.ACKED);
+    this.ackedAt = now;
+    this.failureReason = null;
+  }
+
+  // 실제 분석/적재 처리를 시작한 시점을 기록한다.
+  public void markRunning(Instant now) {
+    transitionTo(AgentTaskStatus.RUNNING);
+    this.startedAt = now;
+    this.failureReason = null;
+  }
+
+  // 작업이 정상 종료되면 완료 시각과 함께 종료 상태를 남긴다.
+  public void markSucceeded(Instant now) {
+    transitionTo(AgentTaskStatus.SUCCEEDED);
+    this.completedAt = now;
+    this.failureReason = null;
+  }
+
+  // 작업 처리 중 장애가 나면 종료 상태와 사유를 함께 남긴다.
+  public void markFailed(Instant now, String failureReason) {
+    transitionTo(AgentTaskStatus.FAILED);
+    this.completedAt = now;
+    this.failureReason = failureReason;
+  }
+
+  // 사용자 취소나 정책상 중단 시 취소 상태와 사유를 함께 남긴다.
+  public void markCanceled(Instant now, String failureReason) {
+    transitionTo(AgentTaskStatus.CANCELED);
+    this.completedAt = now;
+    this.failureReason = failureReason;
+  }
+
+  private void transitionTo(AgentTaskStatus nextStatus) {
+    this.taskStatus.assertTransitionAllowed(nextStatus);
+    this.taskStatus = nextStatus;
+  }
 }

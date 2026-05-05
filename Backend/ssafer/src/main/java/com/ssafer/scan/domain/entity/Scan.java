@@ -108,6 +108,7 @@ public class Scan {
       LocalDateTime startedAt,
       LocalDateTime completedAt,
       LocalDateTime lastUpdatedAt) {
+    this.status.assertTransitionAllowed(status);
     this.status = status;
     this.progressStep = progressStep;
     this.failureReason = failureReason;
@@ -118,4 +119,15 @@ public class Scan {
     this.lastUpdatedAt = lastUpdatedAt;
   }
 
+  // CLI raw 결과 업로드 완료 알림을 작업 큐에 실은 뒤 대기 상태로 전환한다.
+  public void markQueued(String progressStep, String rawResultJson, LocalDateTime startedAt, LocalDateTime lastUpdatedAt) {
+    this.status.assertTransitionAllowed(ScanStatus.QUEUED);
+    this.status = ScanStatus.QUEUED;
+    this.progressStep = progressStep;
+    this.failureReason = null;
+    this.rawResultJson = rawResultJson;
+    this.startedAt = startedAt;
+    this.completedAt = null;
+    this.lastUpdatedAt = lastUpdatedAt;
+  }
 }
