@@ -1,7 +1,8 @@
-import { LoaderCircle, Shield } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import AppBrand from '../../../components/common/AppBrand';
 import { ROUTES } from '../../../constants/routes';
 import { useAuthStore } from '../../../store/authStore';
 import { enterGuestMode } from '../api/guest';
@@ -27,16 +28,14 @@ function AuthTopNav() {
         user: {
           id: `guest:${session.expiresAt}`,
           email: 'guest@ssafer.local',
-          name: 'Guest Workspace',
+          name: '게스트 워크스페이스',
           role: 'GUEST',
         },
       });
 
       navigate(ROUTES.projects);
     } catch (error) {
-      setGuestErrorMessage(
-        error instanceof Error ? error.message : '게스트 모드로 진입하지 못했습니다.',
-      );
+      setGuestErrorMessage(error instanceof Error ? error.message : '게스트 입장에 실패했습니다.');
     } finally {
       setIsGuestPending(false);
     }
@@ -45,17 +44,12 @@ function AuthTopNav() {
   return (
     <header className="fixed inset-x-0 top-0 z-30 border-b border-black/10 bg-[#f4f4f4]/95 backdrop-blur">
       <div className="mx-auto flex h-20 max-w-[1500px] items-center justify-between px-6 md:px-10">
-        <Link className="inline-flex items-center gap-3 text-black" to={ROUTES.root}>
-          <span className="grid h-10 w-10 place-items-center bg-black text-white">
-            <Shield className="h-5 w-5" />
-          </span>
-          <span className="text-xl font-black tracking-normal">SSAFER.io</span>
-        </Link>
+        <AppBrand titleClassName="text-xl font-black tracking-normal" to={ROUTES.root} />
 
         <nav className="flex items-center gap-6 text-sm font-bold uppercase tracking-[0.08em]">
           {isAuthenticated ? (
             <Link className="text-black transition hover:opacity-70" to={ROUTES.projects}>
-              {user?.role === 'GUEST' ? 'Guest Main' : 'Main'}
+              {user?.role === 'GUEST' ? '게스트 홈' : '프로젝트'}
             </Link>
           ) : null}
           <button
@@ -65,7 +59,7 @@ function AuthTopNav() {
             type="button"
           >
             {isGuestPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-            Guest
+            게스트 입장
           </button>
         </nav>
       </div>

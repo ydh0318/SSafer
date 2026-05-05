@@ -6,7 +6,8 @@ import axios, {
 } from 'axios';
 
 import { useAuthStore } from '../store/authStore';
-import type { ApiSuccessResponse, TokenReissueData } from '../types/api';
+import type { ApiSuccessResponse } from '../types/api';
+import type { AuthTokenData, RefreshTokenRequest } from '../types/auth';
 import { tokenStorage } from './tokenStorage';
 
 type RetryableRequestConfig = AxiosRequestConfig & {
@@ -14,13 +15,13 @@ type RetryableRequestConfig = AxiosRequestConfig & {
   skipAuth?: boolean;
 };
 
-const REISSUE_PATH = '/auth/reissue';
-const REISSUE_TOKEN_MISSING_MESSAGE =
-  'Reissue API completed but did not return an access token in the response body or Authorization header.';
+const REFRESH_PATH = '/auth/refresh';
+const REFRESH_TOKEN_MISSING_MESSAGE =
+  'Refresh API completed but did not return an access token in the response body or Authorization header.';
 
 const getAuthorizationHeader = (accessToken: string) => `Bearer ${accessToken}`;
 
-const extractAccessToken = (response: ApiSuccessResponse<TokenReissueData>, header?: string) => {
+const extractAccessToken = (response: ApiSuccessResponse<AuthTokenData>, header?: string) => {
   const tokenFromBody = response.data?.accessToken;
 
   if (tokenFromBody) {
@@ -34,19 +35,25 @@ const extractAccessToken = (response: ApiSuccessResponse<TokenReissueData>, head
   return null;
 };
 
-const requestTokenReissue = async (refreshClient: AxiosInstance) => {
-  const reissueResponse =
-    await refreshClient.post<ApiSuccessResponse<TokenReissueData>>(REISSUE_PATH);
+const requestTokenRefresh = async (refreshClient: AxiosInstance, refreshToken: string) => {
+  const payload: RefreshTokenRequest = { refreshToken };
+  const refreshResponse = await refreshClient.post<ApiSuccessResponse<AuthTokenData>>(
+    REFRESH_PATH,
+    payload,
+  );
   const nextAccessToken = extractAccessToken(
-    reissueResponse.data,
-    reissueResponse.headers.authorization,
+    refreshResponse.data,
+    refreshResponse.headers.authorization,
   );
 
   if (!nextAccessToken) {
-    throw new Error(REISSUE_TOKEN_MISSING_MESSAGE);
+    throw new Error(REFRESH_TOKEN_MISSING_MESSAGE);
   }
 
-  return nextAccessToken;
+  return {
+    accessToken: nextAccessToken,
+    refreshToken: refreshResponse.data.data?.refreshToken,
+  };
 };
 
 const attachAccessToken = (config: InternalAxiosRequestConfig) => {
@@ -75,11 +82,11 @@ export const setupInterceptors = (client: AxiosInstance) => {
 
   client.interceptors.response.use(
     (response) => response,
-    async (error: AxiosError<ApiSuccessResponse<TokenReissueData>>) => {
+    async (error: AxiosError<ApiSuccessResponse<AuthTokenData>>) => {
       const originalRequest = error.config as RetryableRequestConfig | undefined;
       const status = error.response?.status;
       const requestUrl = originalRequest?.url ?? '';
-      const isReissueRequest = requestUrl.includes(REISSUE_PATH);
+      const isRefreshRequest = requestUrl.includes(REFRESH_PATH);
       const refreshToken = tokenStorage.getRefreshToken();
 
       if (
@@ -87,7 +94,7 @@ export const setupInterceptors = (client: AxiosInstance) => {
         status !== 401 ||
         originalRequest._retry ||
         originalRequest.skipAuth ||
-        isReissueRequest ||
+        isRefreshRequest ||
         !refreshToken
       ) {
         return Promise.reject(error);
@@ -96,15 +103,15 @@ export const setupInterceptors = (client: AxiosInstance) => {
       originalRequest._retry = true;
 
       try {
-        const nextAccessToken = await requestTokenReissue(refreshClient);
-        useAuthStore.getState().setAccessToken(nextAccessToken);
+        const nextTokens = await requestTokenRefresh(refreshClient, refreshToken);
+        useAuthStore.getState().setTokens(nextTokens);
         originalRequest.headers = originalRequest.headers ?? {};
-        originalRequest.headers.Authorization = getAuthorizationHeader(nextAccessToken);
+        originalRequest.headers.Authorization = getAuthorizationHeader(nextTokens.accessToken);
 
         return client(originalRequest);
-      } catch (reissueError) {
+      } catch (refreshError) {
         useAuthStore.getState().logout();
-        return Promise.reject(reissueError);
+        return Promise.reject(refreshError);
       }
     },
   );

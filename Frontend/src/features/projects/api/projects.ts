@@ -1,5 +1,5 @@
-import { getApiErrorMessage } from '../../../api/error';
 import { apiClient } from '../../../api/client';
+import { getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
   CreateProjectFormValues,
@@ -27,13 +27,10 @@ function normalizeProjectRequest(values: CreateProjectFormValues): CreateProject
 export async function createProject(values: CreateProjectFormValues) {
   try {
     const payload = normalizeProjectRequest(values);
-    const response = await apiClient.post<ApiSuccessResponse<CreateProjectResponseData>>(
-      '/projects',
-      payload,
-    );
+    const response = await apiClient.post<ApiSuccessResponse<CreateProjectResponseData>>('/projects', payload);
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '프로젝트를 생성하지 못했습니다.'));
+    throw new Error(getApiErrorMessage(error, '프로젝트 생성에 실패했습니다.'));
   }
 }
 
@@ -54,9 +51,7 @@ export async function getProjects(query: ProjectListQuery = {}) {
 
 export async function getProjectDetail(projectId: string) {
   try {
-    const response = await apiClient.get<ApiSuccessResponse<ProjectDetailResponseData>>(
-      `/projects/${projectId}`,
-    );
+    const response = await apiClient.get<ApiSuccessResponse<ProjectDetailResponseData>>(`/projects/${projectId}`);
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, '프로젝트 상세 정보를 불러오지 못했습니다.'));
@@ -71,7 +66,7 @@ export async function updateProject(projectId: string, payload: UpdateProjectReq
     );
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '프로젝트를 수정하지 못했습니다.'));
+    throw new Error(getApiErrorMessage(error, '프로젝트 수정에 실패했습니다.'));
   }
 }
 
@@ -79,6 +74,6 @@ export async function deleteProject(projectId: string) {
   try {
     await apiClient.delete<ApiSuccessResponse<null>>(`/projects/${projectId}`);
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '프로젝트를 삭제하지 못했습니다.'));
+    throw new Error(getApiErrorMessage(error, '프로젝트 삭제에 실패했습니다.'));
   }
 }
