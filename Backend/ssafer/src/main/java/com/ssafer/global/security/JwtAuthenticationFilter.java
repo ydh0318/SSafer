@@ -2,6 +2,7 @@ package com.ssafer.global.security;
 
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.global.logging.ApiLogContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -54,6 +55,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     String token = authorization.substring(BEARER_PREFIX.length()).trim();
     if (token.isBlank()) {
       SecurityContextHolder.clearContext();
+      ApiLogContext.markFailure(
+          request,
+          "JWT 인증 필터",
+          "Authorization Bearer 토큰 값이 비어 있습니다."
+      );
       throw new BadCredentialsException(ErrorCode.UNAUTHORIZED.message());
     }
 
@@ -63,6 +69,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       SecurityContextHolder.getContext().setAuthentication(createAuthentication(actor));
     } catch (BusinessException ex) {
       SecurityContextHolder.clearContext();
+      ApiLogContext.markFailure(
+          request,
+          "JWT 인증 필터",
+          "JWT 토큰 검증에 실패했습니다: " + ex.getMessage()
+      );
       throw new BadCredentialsException(ex.getMessage(), ex);
     }
 
