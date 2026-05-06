@@ -2,7 +2,8 @@ import { RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import PageHero from '../../components/common/PageHero';
+import FeatureBanner from '../../components/common/FeatureBanner';
+import FeatureInfoCard from '../../components/common/FeatureInfoCard';
 import { ROUTES } from '../../constants/routes';
 import { hasStoredMemberSession, isStoredGuestSession } from '../../features/auth/utils/session';
 import { getHistoryScans } from '../../features/history/api/history';
@@ -109,7 +110,7 @@ function HistoryPage() {
 
   return (
     <section className="space-y-8">
-      <PageHero
+      <FeatureBanner
         actions={
           canAccessHistory ? (
             <button
@@ -122,14 +123,19 @@ function HistoryPage() {
             </button>
           ) : null
         }
-        description={null}
+        description="과거 스캔 결과를 모아 보고, 지금까지 쌓인 위험과 완료 흐름을 한 번에 확인할 수 있습니다."
         eyebrow="HISTORY"
-        title="히스토리"
+        title={
+          <div>
+            <div className="text-sm text-neutral-500">지금까지 쌓인 기록</div>
+            <h1 className="mt-3 text-5xl font-black tracking-tight md:text-6xl">히스토리</h1>
+          </div>
+        }
       />
 
       {!canAccessHistory ? (
         <div className="border border-dashed border-neutral-300 bg-white p-10">
-          <h2 className="text-3xl font-black tracking-tight text-black">로그인이 필요합니다.</h2>
+          <h2 className="text-3xl font-black tracking-tight text-black">회원 로그인 후 사용할 수 있어요.</h2>
           <div className="mt-5">
             <button
               className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
@@ -150,35 +156,23 @@ function HistoryPage() {
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="border border-neutral-200 bg-white p-5">
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">Total scans</div>
-              <div className="mt-3 text-3xl font-black text-black">{historyData.summary.totalScanCount}</div>
-            </div>
-            <div className="border border-neutral-200 bg-white p-5">
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">Total findings</div>
-              <div className="mt-3 text-3xl font-black text-black">{historyData.summary.totalFindingCount}</div>
-            </div>
-            <div className="border border-neutral-200 bg-white p-5">
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">Critical</div>
-              <div className="mt-3 text-3xl font-black text-rose-600">{historyData.summary.criticalCount}</div>
-            </div>
-            <div className="border border-neutral-200 bg-white p-5">
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">High</div>
-              <div className="mt-3 text-3xl font-black text-orange-500">{historyData.summary.highCount}</div>
-            </div>
+            <FeatureInfoCard eyebrow="TOTAL SCANS" title={<div className="text-3xl font-black">{historyData.summary.totalScanCount}</div>} />
+            <FeatureInfoCard eyebrow="TOTAL FINDINGS" title={<div className="text-3xl font-black">{historyData.summary.totalFindingCount}</div>} />
+            <FeatureInfoCard eyebrow="CRITICAL" title={<div className="text-3xl font-black text-[#E63946]">{historyData.summary.criticalCount}</div>} />
+            <FeatureInfoCard eyebrow="HIGH" title={<div className="text-3xl font-black text-[#FF8A33]">{historyData.summary.highCount}</div>} />
           </div>
 
-          <div className="border border-neutral-200 bg-white p-8 shadow-sm">
+          <div className="border border-black/5 bg-white p-8 shadow-sm">
             {isLoading ? (
-              <div className="text-sm leading-7 text-neutral-600">불러오는 중...</div>
+              <div className="text-sm leading-7 text-neutral-600">히스토리를 불러오는 중입니다.</div>
             ) : !hasHistoryItems ? (
-              <div className="rounded-sm border border-dashed border-neutral-300 bg-[#fafafa] p-6 text-sm leading-7 text-neutral-600">
-                표시할 히스토리가 없습니다.
+              <div className="theme-dark-soft-card rounded-sm border border-dashed border-neutral-300 bg-[#fafafa] p-6 text-sm leading-7 text-neutral-600">
+                아직 저장된 히스토리가 없습니다.
               </div>
             ) : (
               <div className="space-y-3">
                 {historyData.items.map((item) => (
-                  <article className="border border-neutral-200 bg-[#fafafa] p-4" key={item.scanId}>
+                  <article className="border border-black/5 bg-[#fafaf8] p-4" key={item.scanId}>
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
@@ -213,11 +207,11 @@ function HistoryPage() {
                         </div>
                         <div className="border border-neutral-200 bg-white p-3">
                           <div className="font-bold text-neutral-400">CRIT</div>
-                          <div className="mt-1 text-lg font-black text-rose-600">{item.criticalCount}</div>
+                          <div className="mt-1 text-lg font-black text-[#E63946]">{item.criticalCount}</div>
                         </div>
                         <div className="border border-neutral-200 bg-white p-3">
                           <div className="font-bold text-neutral-400">HIGH</div>
-                          <div className="mt-1 text-lg font-black text-orange-500">{item.highCount}</div>
+                          <div className="mt-1 text-lg font-black text-[#FF8A33]">{item.highCount}</div>
                         </div>
                       </div>
                     </div>
