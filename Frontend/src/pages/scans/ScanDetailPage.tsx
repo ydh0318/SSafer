@@ -15,6 +15,9 @@ type ScanRouteState = {
   autoOpenedFromScanRequest?: boolean;
 };
 
+const LOAD_STATUS_ERROR_MESSAGE = '스캔 진행 상태를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const REFRESH_STATUS_ERROR_MESSAGE = '자동 새로고침에 일시적으로 실패했습니다. 잠시 후 다시 시도합니다.';
+
 function ScanDetailPage() {
   const { scanId = '' } = useParams<{ scanId: string }>();
   const location = useLocation();
@@ -23,6 +26,7 @@ function ScanDetailPage() {
   const [statusData, setStatusData] = useState<ScanProgressStatusData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(true);
 
   useEffect(() => {
@@ -35,6 +39,7 @@ function ScanDetailPage() {
     const loadStatus = async () => {
       setIsLoading(true);
       setErrorMessage(null);
+      setRefreshNotice(null);
 
       try {
         const data = await getScanStatus(scanId);
@@ -44,13 +49,13 @@ function ScanDetailPage() {
         }
 
         setStatusData(data);
-      } catch (error) {
+      } catch {
         if (!isMounted) {
           return;
         }
 
         setStatusData(null);
-        setErrorMessage(error instanceof Error ? error.message : '스캔 진행 상태를 불러오지 못했습니다.');
+        setErrorMessage(LOAD_STATUS_ERROR_MESSAGE);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -76,8 +81,9 @@ function ScanDetailPage() {
           const data = await getScanStatus(scanId);
           setStatusData(data);
           setErrorMessage(null);
-        } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : '스캔 진행 상태를 새로고침하지 못했습니다.');
+          setRefreshNotice(null);
+        } catch {
+          setRefreshNotice(REFRESH_STATUS_ERROR_MESSAGE);
         }
       })();
     }, 5000);
@@ -94,13 +100,14 @@ function ScanDetailPage() {
 
     setIsLoading(true);
     setErrorMessage(null);
+    setRefreshNotice(null);
 
     try {
       const data = await getScanStatus(scanId);
       setStatusData(data);
-    } catch (error) {
+    } catch {
       setStatusData(null);
-      setErrorMessage(error instanceof Error ? error.message : '스캔 진행 상태를 불러오지 못했습니다.');
+      setErrorMessage(LOAD_STATUS_ERROR_MESSAGE);
     } finally {
       setIsLoading(false);
     }
@@ -168,13 +175,15 @@ function ScanDetailPage() {
               />
             </div>
             <p className="mt-4 text-sm leading-7 text-neutral-600">
-              현재 스캔 상태를 기준으로 자동 새로고침이 동작합니다. 완료 전에는 결과 페이지로 이동하지 않고 진행 상황만 확인하도록 막아두었습니다.
+              현재 스캔 상태를 기준으로 자동 새로고침이 동작합니다. 완료 전에는 결과 페이지로 이동하지 않고 진행 상황만 확인하도록
+              안내합니다.
             </p>
           </div>
         }
         description={
           <>
-            스캔 요청부터 업로드, 분석, 완료까지의 상태를 추적합니다. 실제 결과 검증은 `DONE` 상태가 된 이후 결과 페이지로 이동하는 것이 가장 안전합니다.
+            스캔 요청부터 업로드, 분석, 완료까지의 상태를 추적합니다. 실제 결과 검증은 `DONE` 상태가 된 이후 결과 페이지로 이동하는
+            흐름이 가장 안전합니다.
           </>
         }
         eyebrow="SCAN STATUS"
@@ -182,15 +191,19 @@ function ScanDetailPage() {
           <>
             스캔 진행 상태를 확인하고
             <br />
-            완료 후 결과로 이동하세요.
+            완료 후 결과로 이동하세요
           </>
         }
       />
 
       {routeState.autoOpenedFromScanRequest ? (
         <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-          스캔이 생성되었습니다. 진행 상태를 확인하다가 `DONE` 상태가 되면 결과 페이지로 이동해 실제 결과 API를 확인할 수 있습니다.
+          스캔이 생성되었습니다. 진행 상태를 확인하다가 `DONE` 상태가 되면 결과 페이지로 이동해 실제 결과를 확인할 수 있습니다.
         </div>
+      ) : null}
+
+      {refreshNotice ? (
+        <div className="border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">{refreshNotice}</div>
       ) : null}
 
       <ScanProgressPanel
