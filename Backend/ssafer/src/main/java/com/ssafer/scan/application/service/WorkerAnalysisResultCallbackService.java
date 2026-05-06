@@ -4,7 +4,7 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
-import com.ssafer.scan.api.dto.RawScanResultUploadRequest;
+import com.ssafer.scan.api.dto.WorkerAnalysisResultCallbackRequest;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.repository.ScanRepository;
@@ -16,16 +16,17 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
-public class ScanRawResultUploadService {
+// 워커 분석 완료 콜백을 받아 scan 상태와 결과 경로를 갱신한다.
+public class WorkerAnalysisResultCallbackService {
 
   private final ScanRepository scanRepository;
 
   @Transactional
-  public Scan upload(Long scanId, RawScanResultUploadRequest request) {
+  public Scan report(Long scanId, WorkerAnalysisResultCallbackRequest request) {
     Scan scan = scanRepository.findById(scanId)
         .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Scan not found: " + scanId));
 
-    validateUploadable(scan);
+    validateReportable(scan);
 
     ScanStatus status = resolveStatus(request);
     validateRequestedStatus(status, request);
@@ -37,7 +38,7 @@ public class ScanRawResultUploadService {
 
     validateResolvedTimeRange(startedAt, completedAt);
 
-    // raw 산출물 본문은 S3에 있고, 이 콜백은 경로와 상태만 갱신한다.
+    // 현재 단계에서는 결과 파일 자체는 S3에 두고, 콜백은 상태와 경로만 반영한다.
     scan.updateRawResult(
         status,
         request.progressStep(),
@@ -46,28 +47,29 @@ public class ScanRawResultUploadService {
         normalizeBlank(request.rawResultPath()),
         startedAt,
         completedAt,
-        lastUpdatedAt);
+        lastUpdatedAt
+    );
 
     return scan;
   }
 
-  private void validateUploadable(Scan scan) {
+  private void validateReportable(Scan scan) {
     if (scan.getStatus().isTerminal() || scan.getStatus() == ScanStatus.RAW_UPLOADED) {
       throw new ResponseStatusException(
           CONFLICT,
-          "Raw result upload is not allowed for current scan status: " + scan.getStatus());
+          "Analysis result callback is not allowed for current scan status: " + scan.getStatus());
     }
   }
 
-  private ScanStatus resolveStatus(RawScanResultUploadRequest request) {
+  private ScanStatus resolveStatus(WorkerAnalysisResultCallbackRequest request) {
     return request.status() != null ? request.status() : ScanStatus.RAW_UPLOADED;
   }
 
-  private void validateRequestedStatus(ScanStatus status, RawScanResultUploadRequest request) {
+  private void validateRequestedStatus(ScanStatus status, WorkerAnalysisResultCallbackRequest request) {
     if (status != ScanStatus.RAW_UPLOADED && status != ScanStatus.FAILED) {
       throw new ResponseStatusException(
           BAD_REQUEST,
-          "Raw result upload only supports RAW_UPLOADED or FAILED status");
+          "Analysis result callback only supports RAW_UPLOADED or FAILED status");
     }
 
     if (status == ScanStatus.RAW_UPLOADED && !hasText(request.rawResultPath())) {
@@ -85,7 +87,7 @@ public class ScanRawResultUploadService {
     }
   }
 
-  private LocalDateTime resolveLastUpdatedAt(RawScanResultUploadRequest request, LocalDateTime now) {
+  private LocalDateTime resolveLastUpdatedAt(WorkerAnalysisResultCallbackRequest request, LocalDateTime now) {
     return request.lastUpdatedAt() != null
         ? request.lastUpdatedAt()
         : request.completedAt() != null ? request.completedAt() : now;
@@ -93,10 +95,11 @@ public class ScanRawResultUploadService {
 
   private LocalDateTime resolveStartedAt(
       Scan scan,
-      RawScanResultUploadRequest request,
+      WorkerAnalysisResultCallbackRequest request,
       ScanStatus status,
       LocalDateTime lastUpdatedAt,
-      LocalDateTime completedAt) {
+      LocalDateTime completedAt
+  ) {
     if (request.startedAt() != null) {
       return request.startedAt();
     }
@@ -111,9 +114,10 @@ public class ScanRawResultUploadService {
 
   private LocalDateTime resolveCompletedAt(
       Scan scan,
-      RawScanResultUploadRequest request,
+      WorkerAnalysisResultCallbackRequest request,
       ScanStatus status,
-      LocalDateTime lastUpdatedAt) {
+      LocalDateTime lastUpdatedAt
+  ) {
     if (request.completedAt() != null) {
       return request.completedAt();
     }

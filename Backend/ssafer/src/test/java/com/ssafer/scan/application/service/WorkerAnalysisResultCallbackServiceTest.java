@@ -8,7 +8,7 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
-import com.ssafer.scan.api.dto.RawScanResultUploadRequest;
+import com.ssafer.scan.api.dto.WorkerAnalysisResultCallbackRequest;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
@@ -24,16 +24,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
-class ScanRawResultUploadServiceTest {
+class WorkerAnalysisResultCallbackServiceTest {
 
   @Mock
   private ScanRepository scanRepository;
 
   @InjectMocks
-  private ScanRawResultUploadService scanRawResultUploadService;
+  private WorkerAnalysisResultCallbackService workerAnalysisResultCallbackService;
 
   @Test
-  void uploadWithoutStatusDefaultsToRawUploaded() {
+  void reportWithoutStatusDefaultsToRawUploaded() {
     LocalDateTime startedAt = LocalDateTime.of(2026, 4, 24, 15, 0);
     Scan existing = Scan.builder()
         .id(1L)
@@ -49,16 +49,16 @@ class ScanRawResultUploadServiceTest {
 
     when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         null,
-        "uploaded",
+        "analysis_completed",
         null,
         "s3://ssafer/raw/1/scan_result.json",
         null,
         null,
         null);
 
-    Scan saved = scanRawResultUploadService.upload(1L, request);
+    Scan saved = workerAnalysisResultCallbackService.report(1L, request);
 
     assertThat(saved.getStatus()).isEqualTo(ScanStatus.RAW_UPLOADED);
     assertThat(saved.getRawResultPath()).isEqualTo("s3://ssafer/raw/1/scan_result.json");
@@ -69,7 +69,7 @@ class ScanRawResultUploadServiceTest {
   }
 
   @Test
-  void uploadFailedStatusWithoutCompletedAtBackfillsCompletedAt() {
+  void reportFailedStatusWithoutCompletedAtBackfillsCompletedAt() {
     LocalDateTime requestedAt = LocalDateTime.of(2026, 4, 24, 15, 0);
     Scan existing = Scan.builder()
         .id(1L)
@@ -84,25 +84,25 @@ class ScanRawResultUploadServiceTest {
 
     when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         ScanStatus.FAILED,
-        "upload_failed",
-        "S3 upload failed",
+        "analysis_failed",
+        "worker analysis failed",
         null,
         null,
         null,
         null);
 
-    Scan saved = scanRawResultUploadService.upload(1L, request);
+    Scan saved = workerAnalysisResultCallbackService.report(1L, request);
 
     assertThat(saved.getStatus()).isEqualTo(ScanStatus.FAILED);
-    assertThat(saved.getFailureReason()).isEqualTo("S3 upload failed");
+    assertThat(saved.getFailureReason()).isEqualTo("worker analysis failed");
     assertThat(saved.getCompletedAt()).isEqualTo(saved.getLastUpdatedAt());
     assertThat(saved.getStartedAt()).isEqualTo(saved.getCompletedAt());
   }
 
   @Test
-  void uploadRawUploadedStatusRejectsCompletedAt() {
+  void reportRawUploadedStatusRejectsCompletedAt() {
     Scan existing = Scan.builder()
         .id(1L)
         .projectId(10L)
@@ -116,7 +116,7 @@ class ScanRawResultUploadServiceTest {
 
     when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         ScanStatus.RAW_UPLOADED,
         null,
         null,
@@ -125,17 +125,17 @@ class ScanRawResultUploadServiceTest {
         LocalDateTime.of(2026, 4, 24, 15, 10),
         null);
 
-    assertThatThrownBy(() -> scanRawResultUploadService.upload(1L, request))
+    assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(1L, request))
         .isInstanceOf(ResponseStatusException.class)
         .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
         .isEqualTo(BAD_REQUEST);
   }
 
   @Test
-  void uploadWhenScanMissingThrowsNotFound() {
+  void reportWhenScanMissingThrowsNotFound() {
     when(scanRepository.findById(999L)).thenReturn(Optional.empty());
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         ScanStatus.RAW_UPLOADED,
         null,
         null,
@@ -144,14 +144,14 @@ class ScanRawResultUploadServiceTest {
         null,
         null);
 
-    assertThatThrownBy(() -> scanRawResultUploadService.upload(999L, request))
+    assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(999L, request))
         .isInstanceOf(ResponseStatusException.class)
         .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
         .isEqualTo(NOT_FOUND);
   }
 
   @Test
-  void uploadWhenExistingScanIsTerminalThrowsConflict() {
+  void reportWhenExistingScanIsTerminalThrowsConflict() {
     Scan existing = Scan.builder()
         .id(1L)
         .projectId(10L)
@@ -165,7 +165,7 @@ class ScanRawResultUploadServiceTest {
 
     when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         ScanStatus.RAW_UPLOADED,
         null,
         null,
@@ -174,14 +174,14 @@ class ScanRawResultUploadServiceTest {
         null,
         null);
 
-    assertThatThrownBy(() -> scanRawResultUploadService.upload(1L, request))
+    assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(1L, request))
         .isInstanceOf(ResponseStatusException.class)
         .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
         .isEqualTo(CONFLICT);
   }
 
   @Test
-  void uploadWhenExistingScanIsAlreadyRawUploadedThrowsConflict() {
+  void reportWhenExistingScanIsAlreadyRawUploadedThrowsConflict() {
     Scan existing = Scan.builder()
         .id(1L)
         .projectId(10L)
@@ -195,7 +195,7 @@ class ScanRawResultUploadServiceTest {
 
     when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         ScanStatus.RAW_UPLOADED,
         null,
         null,
@@ -204,14 +204,14 @@ class ScanRawResultUploadServiceTest {
         null,
         null);
 
-    assertThatThrownBy(() -> scanRawResultUploadService.upload(1L, request))
+    assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(1L, request))
         .isInstanceOf(ResponseStatusException.class)
         .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
         .isEqualTo(CONFLICT);
   }
 
   @Test
-  void uploadFailedStatusWithoutFailureReasonThrowsBadRequest() {
+  void reportFailedStatusWithoutFailureReasonThrowsBadRequest() {
     Scan existing = Scan.builder()
         .id(1L)
         .projectId(10L)
@@ -225,7 +225,7 @@ class ScanRawResultUploadServiceTest {
 
     when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         ScanStatus.FAILED,
         null,
         null,
@@ -234,7 +234,7 @@ class ScanRawResultUploadServiceTest {
         null,
         null);
 
-    assertThatThrownBy(() -> scanRawResultUploadService.upload(1L, request))
+    assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(1L, request))
         .isInstanceOf(ResponseStatusException.class)
         .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
         .isEqualTo(BAD_REQUEST);
