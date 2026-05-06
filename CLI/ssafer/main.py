@@ -203,8 +203,13 @@ def login(
 def signup(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
 ) -> None:
-    """Create a SSAfer backend user account."""
-    from ssafer.core.auth import load_endpoint, register_user
+    """Verify email and create a SSAfer backend user account."""
+    from ssafer.core.auth import (
+        load_endpoint,
+        register_user,
+        send_email_verification_code,
+        verify_email_code,
+    )
 
     effective_endpoint = endpoint or load_endpoint()
     email = typer.prompt("Email")
@@ -214,6 +219,13 @@ def signup(
         console.print("[red]Email, display name, and password are required.[/red]")
         raise typer.Exit(code=1)
     try:
+        send_email_verification_code(effective_endpoint, email.strip())
+        console.print("[green]Verification code sent. Check your email.[/green]")
+        code = typer.prompt("Verification code")
+        if not code.strip():
+            console.print("[red]Verification code is required.[/red]")
+            raise typer.Exit(code=1)
+        verify_email_code(effective_endpoint, email.strip(), code.strip())
         register_user(effective_endpoint, email.strip(), display_name.strip(), password)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]Signup failed:[/red] {_format_http_error(exc)}")
@@ -309,6 +321,13 @@ def _format_http_error(exc: httpx.HTTPStatusError) -> str:
     if message:
         return f"backend returned {status_code} ({message})."
     return f"backend returned {status_code}."
+
+
+def _format_upload_request_url(url: object) -> str:
+    text = str(url)
+    if "/api/" in text:
+        return text
+    return "S3 presigned upload URL hidden"
 
 
 def _print_scan_summary(scan: dict) -> None:
@@ -580,7 +599,7 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
         return upload_last_scan(path, api_url=effective_url, token=token)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
-        console.print(f"[dim]Request URL: {exc.request.url}[/dim]")
+        console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
         console.print(f"[red]Upload failed:[/red] {exc}")
     except RuntimeError as exc:

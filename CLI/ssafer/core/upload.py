@@ -13,7 +13,7 @@ from ssafer.core.result_store import load_last_scan
 from ssafer.core.sanitize import AWS_KEY_RE, PRIVATE_KEY_RE, is_placeholder, is_secret_key
 
 
-DEFAULT_API_URL = "http://localhost:8080"
+DEFAULT_API_URL = "https://k14b105.p.ssafy.io"
 IGNORED_SECRET_PATH_KEYS = {
     "id",
     "ruleId",

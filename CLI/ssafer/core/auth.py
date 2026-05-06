@@ -9,7 +9,7 @@ import yaml
 
 CONFIG_PATH = Path.home() / ".ssafer" / "config.yml"
 ENV_TOKEN_KEY = "SSAFER_TOKEN"
-DEFAULT_API_URL = "http://localhost:8080"
+DEFAULT_API_URL = "https://k14b105.p.ssafy.io"
 
 
 def load_token(token_env_key: str | None = None) -> str | None:

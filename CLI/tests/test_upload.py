@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from security_samples import scan_payload_with_trivy_secret, sanitized_scan_payload_with_trivy_secret
+import ssafer.main as main_module
 from ssafer.core import upload
 
 
@@ -107,6 +108,22 @@ def test_upload_last_scan_registers_uploads_to_s3_and_reports_completion(tmp_pat
     ]
 
 
+def test_upload_error_request_url_keeps_backend_api_url_visible():
+    assert (
+        main_module._format_upload_request_url("https://api.example.com/api/v1/scans/1/raw-results")
+        == "https://api.example.com/api/v1/scans/1/raw-results"
+    )
+
+
+def test_upload_error_request_url_hides_s3_presigned_url():
+    assert (
+        main_module._format_upload_request_url(
+            "https://bucket.s3.ap-northeast-2.amazonaws.com/raw/1/scan_result.json?X-Amz-Signature=secret"
+        )
+        == "S3 presigned upload URL hidden"
+    )
+
+
 def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
     scan = {"scanId": "local-scan-test", "artifacts": []}
     _write_scan(tmp_path, scan)
@@ -148,8 +165,8 @@ def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
     upload.upload_last_scan(tmp_path)
 
     assert posted_urls == [
-        "http://localhost:8080/api/v1/scans",
-        "http://localhost:8080/api/v1/scans/1001/raw-results",
+        "https://k14b105.p.ssafy.io/api/v1/scans",
+        "https://k14b105.p.ssafy.io/api/v1/scans/1001/raw-results",
     ]
 
 

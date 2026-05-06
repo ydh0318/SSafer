@@ -289,30 +289,36 @@ def test_login_command_authenticates_with_backend_and_saves_tokens(monkeypatch, 
 
 
 def test_signup_command_registers_backend_user(monkeypatch):
-    captured: dict[str, str] = {}
+    calls: list[tuple[str, str, str | None, str | None]] = []
+
+    def fake_send(endpoint: str, email: str) -> dict[str, str]:
+        calls.append(("send", endpoint, email, None))
+        return {}
+
+    def fake_verify(endpoint: str, email: str, code: str) -> dict[str, str]:
+        calls.append(("verify", endpoint, email, code))
+        return {}
 
     def fake_register(endpoint: str, email: str, display_name: str, password: str) -> dict[str, int]:
-        captured["endpoint"] = endpoint
-        captured["email"] = email
-        captured["display_name"] = display_name
-        captured["password"] = password
+        calls.append(("register", endpoint, email, f"{display_name}:{password}"))
         return {"userId": 1001}
 
+    monkeypatch.setattr(auth_module, "send_email_verification_code", fake_send)
+    monkeypatch.setattr(auth_module, "verify_email_code", fake_verify)
     monkeypatch.setattr(auth_module, "register_user", fake_register)
 
     result = CliRunner().invoke(
         app,
         ["signup", "--endpoint", "https://api.example.com"],
-        input="user@example.com\nUser\npassword123\n",
+        input="user@example.com\nUser\npassword123\n123456\n",
     )
 
     assert result.exit_code == 0
-    assert captured == {
-        "endpoint": "https://api.example.com",
-        "email": "user@example.com",
-        "display_name": "User",
-        "password": "password123",
-    }
+    assert calls == [
+        ("send", "https://api.example.com", "user@example.com", None),
+        ("verify", "https://api.example.com", "user@example.com", "123456"),
+        ("register", "https://api.example.com", "user@example.com", "User:password123"),
+    ]
 
 
 def test_send_email_code_command_requests_backend_email_code(monkeypatch):
@@ -389,7 +395,7 @@ def test_auth_commands_print_backend_error_code(monkeypatch):
 
 def test_load_endpoint_returns_default_when_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(auth_module, "CONFIG_PATH", tmp_path / "config.yml")
-    assert load_endpoint() == "http://localhost:8080"
+    assert load_endpoint() == "https://k14b105.p.ssafy.io"
 
 
 def test_load_endpoint_returns_saved_endpoint(monkeypatch, tmp_path):
