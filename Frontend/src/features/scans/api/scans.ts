@@ -1,5 +1,5 @@
 import { apiClient } from '../../../api/client';
-import { getApiErrorMessage } from '../../../api/error';
+import { getApiErrorCode, getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
   CreateScanRequestPayload,
@@ -11,11 +11,11 @@ import type {
   ScanProgressStatusData,
 } from '../../../types/scan';
 
-const CREATE_SCAN_ERROR = '스캔 요청을 등록하지 못했습니다.';
+const CREATE_SCAN_ERROR = '스캔 요청을 생성하지 못했습니다.';
 const GET_PROJECT_SCANS_ERROR = '프로젝트 스캔 목록을 불러오지 못했습니다.';
 const GET_SCAN_STATUS_ERROR = '스캔 상태를 불러오지 못했습니다.';
-const UPLOAD_SCAN_FILE_ERROR = '스캔 결과 파일 업로드에 실패했습니다.';
-const REPORT_SCAN_UPLOAD_ERROR = '업로드 완료 보고에 실패했습니다.';
+const UPLOAD_SCAN_FILE_ERROR = '스캔 결과 파일을 업로드하지 못했습니다.';
+const REPORT_SCAN_UPLOAD_ERROR = '업로드된 스캔 결과를 보고하지 못했습니다.';
 
 export async function createScanRequest(payload: CreateScanRequestPayload) {
   try {
@@ -60,7 +60,25 @@ export async function deleteScanHistory(scanId: string | number) {
     const response = await apiClient.delete<ApiSuccessResponse<DeleteScanHistoryResponseData>>(`/scans/${scanId}`);
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, 'Failed to delete scan history.'));
+    const errorCode = getApiErrorCode(error);
+
+    if (errorCode === 'INVALID_PARAMETER') {
+      throw new Error('잘못된 스캔 ID입니다.');
+    }
+
+    if (errorCode === 'FORBIDDEN') {
+      throw new Error('이 스캔을 삭제할 권한이 없습니다.');
+    }
+
+    if (errorCode === 'NOT_FOUND') {
+      throw new Error('스캔이 존재하지 않거나 이미 삭제되었습니다.');
+    }
+
+    if (errorCode === 'SCAN_STATUS_CONFLICT') {
+      throw new Error('현재 스캔 상태에서는 삭제할 수 없습니다.');
+    }
+
+    throw new Error(getApiErrorMessage(error, '스캔 이력을 삭제하지 못했습니다.'));
   }
 }
 

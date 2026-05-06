@@ -4,7 +4,12 @@ import { Link } from 'react-router-dom';
 import SectionPanel from '../../../components/common/SectionPanel';
 import { ROUTES } from '../../../constants/routes';
 import type { ProjectScanListItemData, ProjectScanListQuery, ScanMode, ScanStatus } from '../../../types/scan';
-import { canDeleteScanHistory, formatCompactDateTime, getScanModeLabel } from '../utils/scanPresentation';
+import {
+  canDeleteScanHistory,
+  formatCompactDateTime,
+  getDeleteBlockedReason,
+  getScanModeLabel,
+} from '../utils/scanPresentation';
 import ScanStatusBadge from './ScanStatusBadge';
 
 const scanStatuses: Array<ScanStatus> = ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED', 'DONE', 'FAILED', 'CANCELED'];
@@ -42,18 +47,18 @@ function ProjectScanList({
           type="button"
         >
           <RefreshCw className="h-4 w-4" />
-          ?덈줈怨좎묠
+          새로고침
         </button>
       }
-      description="?꾨줈?앺듃蹂??ㅼ틪 吏꾪뻾 ?곹솴怨??꾨즺??寃곌낵 ?먮쫫?????붾㈃?먯꽌 ?뺤씤?????덉뒿?덈떎."
-      eyebrow="SCAN HISTORY"
-      title="?꾨줈?앺듃 ?ㅼ틪 紐⑸줉"
+      description="프로젝트의 스캔 진행 상황을 확인하고, 완료된 결과를 열거나 상태에 따라 스캔 이력을 삭제할 수 있습니다."
+      eyebrow="스캔 히스토리"
+      title="프로젝트 스캔"
     >
       <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <label className="block space-y-2">
-          <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">
+          <span className="inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.24em] text-neutral-500">
             <Filter className="h-3.5 w-3.5" />
-            Status
+            상태
           </span>
           <select
             className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
@@ -65,7 +70,7 @@ function ProjectScanList({
             }
             value={filters.status ?? ''}
           >
-            <option value="">?꾩껜 ?곹깭</option>
+            <option value="">전체 상태</option>
             {scanStatuses.map((status) => (
               <option key={status} value={status}>
                 {status}
@@ -75,9 +80,9 @@ function ProjectScanList({
         </label>
 
         <label className="block space-y-2">
-          <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">
+          <span className="inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.24em] text-neutral-500">
             <Filter className="h-3.5 w-3.5" />
-            Scan Mode
+            스캔 방식
           </span>
           <select
             className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
@@ -89,7 +94,7 @@ function ProjectScanList({
             }
             value={filters.scanMode ?? ''}
           >
-            <option value="">?꾩껜 諛⑹떇</option>
+            <option value="">전체 방식</option>
             {scanModes.map((scanMode) => (
               <option key={scanMode} value={scanMode}>
                 {scanMode}
@@ -100,18 +105,19 @@ function ProjectScanList({
       </div>
 
       {isLoading ? (
-        <div className="border border-neutral-200 bg-[#fafafa] px-4 py-5 text-sm text-neutral-600">?ㅼ틪 紐⑸줉??遺덈윭?ㅻ뒗 以묒엯?덈떎...</div>
+        <div className="border border-neutral-200 bg-[#fafafa] px-4 py-5 text-sm text-neutral-600">스캔 목록을 불러오는 중입니다...</div>
       ) : errorMessage ? (
         <div className="border border-rose-200 bg-rose-50 px-4 py-5 text-sm text-rose-700">{errorMessage}</div>
       ) : scans.length === 0 ? (
         <div className="theme-dark-soft-card border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-6 text-sm text-neutral-600">
-          議곌굔??留욌뒗 ?ㅼ틪???꾩쭅 ?놁뒿?덈떎.
+          현재 필터에 해당하는 스캔이 없습니다.
         </div>
       ) : (
         <div className="space-y-3">
           {scans.map((scan) => {
             const isDeleting = deletingScanIds.includes(scan.scanId);
             const isDeleteAllowed = canDeleteScanHistory(scan.status);
+            const deleteBlockedReason = getDeleteBlockedReason(scan.status);
 
             return (
               <article className="border border-neutral-200 bg-white p-4 shadow-sm" key={scan.scanId}>
@@ -123,17 +129,17 @@ function ProjectScanList({
                         {getScanModeLabel(scan.scanMode)}
                       </span>
                       <span className="inline-flex rounded-full bg-black px-2.5 py-1 text-xs font-bold text-white">
-                        Scan #{scan.scanId}
+                        스캔 #{scan.scanId}
                       </span>
                     </div>
 
                     <dl className="grid gap-3 text-sm text-neutral-600 md:grid-cols-2">
                       <div>
-                        <dt className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Requested</dt>
+                        <dt className="text-[11px] font-bold tracking-[0.24em] text-neutral-400">요청 시각</dt>
                         <dd className="mt-1 font-semibold text-black">{formatCompactDateTime(scan.requestedAt)}</dd>
                       </div>
                       <div>
-                        <dt className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Completed</dt>
+                        <dt className="text-[11px] font-bold tracking-[0.24em] text-neutral-400">완료 시각</dt>
                         <dd className="mt-1 font-semibold text-black">{formatCompactDateTime(scan.completedAt)}</dd>
                       </div>
                     </dl>
@@ -145,7 +151,7 @@ function ProjectScanList({
                       state={{ projectId }}
                       to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
                     >
-                      吏꾪뻾 ?꾪솴
+                      진행 상황 보기
                     </Link>
                     {scan.status === 'DONE' ? (
                       <>
@@ -154,23 +160,23 @@ function ProjectScanList({
                           state={{ projectId }}
                           to={ROUTES.resultDetail.replace(':scanId', String(scan.scanId))}
                         >
-                          寃곌낵 蹂닿린
+                          결과 보기
                         </Link>
                         <button
                           aria-disabled="true"
                           className="border border-dashed border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-400"
-                          title="寃곌낵 ??젣 API ?곌껐 ??諛붾줈 ?쒖꽦?뷀븷 踰꾪듉?낅땲??"
+                          title="결과 삭제 기능은 아직 연결되지 않았습니다."
                           type="button"
                         >
-                          寃곌낵 ??젣 ?덉젙
+                          결과 삭제 준비 중
                         </button>
                       </>
                     ) : (
                       <span
                         className="inline-flex cursor-not-allowed items-center bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-500"
-                        title="?ㅼ틪???꾨즺?섎㈃ 寃곌낵 蹂닿린 踰꾪듉???쒖꽦?붾맗?덈떎."
+                        title="스캔이 완료되면 결과 페이지를 열 수 있습니다."
                       >
-                        寃곌낵 ?湲?以?
+                        결과 대기 중
                       </span>
                     )}
                     <button
@@ -181,16 +187,16 @@ function ProjectScanList({
                       }
                       disabled={!isDeleteAllowed || isDeleting}
                       onClick={() => onDeleteScan(scan.scanId)}
-                      title={isDeleteAllowed ? undefined : 'Only REQUESTED, DONE, FAILED, and CANCELED scans can be deleted.'}
+                      title={isDeleteAllowed ? undefined : deleteBlockedReason ?? undefined}
                       type="button"
                     >
                       <Trash2 className="h-4 w-4" />
-                      {isDeleting ? 'Deleting...' : 'Delete'}
+                      {isDeleting ? '삭제 중...' : '이력 삭제'}
                     </button>
                   </div>
                 </div>
                 {scan.status !== 'DONE' ? (
-                  <p className="mt-3 text-xs text-neutral-500">?ㅼ틪???앸굹硫?寃곌낵 ?붾㈃?쇰줈 諛붾줈 ?댁뼱???뺤씤?????덉뒿?덈떎.</p>
+                  <p className="mt-3 text-xs text-neutral-500">스캔이 종료 상태가 되면 결과 페이지를 확인할 수 있습니다.</p>
                 ) : null}
               </article>
             );
