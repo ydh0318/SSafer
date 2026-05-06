@@ -6,32 +6,19 @@ from app.schemas.analysis import (
     AnalysisRequest,
     AnalysisResponse,
 )
+from app.core.analysis_errors import (
+    get_error_code_for_stage,
+    get_http_status_for_stage,
+)
 from app.services.analysis_service import analyze_scan_result
 
 router = APIRouter(tags=["analysis"])
 
 
-ERROR_STATUS_BY_STAGE = {
-    "input": 400,
-    "explain": 502,
-    "fix": 502,
-    "analysis": 502,
-    "output": 500,
-}
-
-ERROR_CODE_BY_STAGE = {
-    "input": "ANALYSIS_INPUT_ERROR",
-    "explain": "ANALYSIS_EXPLAIN_ERROR",
-    "fix": "ANALYSIS_FIX_ERROR",
-    "analysis": "ANALYSIS_PIPELINE_ERROR",
-    "output": "ANALYSIS_OUTPUT_ERROR",
-}
-
-
 def build_error_response(response: AnalysisResponse) -> JSONResponse:
     stage = response.stage or "analysis"
     error = AnalysisErrorResponse(
-        error_code=ERROR_CODE_BY_STAGE.get(stage, "ANALYSIS_ERROR"),
+        error_code=response.error_code or get_error_code_for_stage(stage),
         message=response.message or "Analysis failed.",
         stage=stage,
         finding_id=response.finding_id,
@@ -44,7 +31,7 @@ def build_error_response(response: AnalysisResponse) -> JSONResponse:
         invalid_findings=response.invalid_findings,
     )
     return JSONResponse(
-        status_code=ERROR_STATUS_BY_STAGE.get(stage, 500),
+        status_code=get_http_status_for_stage(stage),
         content=error.model_dump(),
     )
 

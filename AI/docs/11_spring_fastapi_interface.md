@@ -255,7 +255,8 @@ Content-Type: application/json
   "taskId": 123,
   "status": "FAILED",
   "progressStep": "analysis_failed",
-  "failureReason": "FastAPI analysis failed: Failed to download scan_result.json from S3.",
+  "errorCode": "ANALYSIS_INPUT_ERROR",
+  "failureReason": "ANALYSIS_INPUT_ERROR: FastAPI analysis failed: Failed to download scan_result.json from S3. (stage=input)",
   "startedAt": "2026-05-06T04:00:00",
   "completedAt": "2026-05-06T04:05:00",
   "lastUpdatedAt": "2026-05-06T04:05:00"
@@ -275,7 +276,8 @@ Request body:
 | `taskId` | number | 예 | 완료 처리할 Spring Boot `agent_tasks.id` |
 | `status` | string | 아니오 | `DONE` 또는 `FAILED`. 생략 시 Spring Boot에서 `DONE` 처리 |
 | `progressStep` | string 또는 null | 아니오 | `analysis_completed` 또는 `analysis_failed` |
-| `failureReason` | string 또는 null | 실패 시 예 | 실패 사유 |
+| `errorCode` | string 또는 null | 실패 시 예 | 표준 에러 코드 |
+| `failureReason` | string 또는 null | 실패 시 예 | `{errorCode}: {실패 위치}: {실패 사유}` 형식의 실패 사유 |
 | `analysisResultPath` | string 또는 null | 성공 시 예 | S3에 저장된 analysis result 경로 |
 | `startedAt` | string 또는 null | 아니오 | Worker 분석 시작 시각 |
 | `completedAt` | string 또는 null | 아니오 | Worker 분석 완료 시각 |

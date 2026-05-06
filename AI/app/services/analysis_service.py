@@ -8,6 +8,7 @@ from app.loaders.scan_loader import (
     split_valid_invalid_findings,
     validate_scan_result_required_fields,
 )
+from app.core.analysis_errors import build_standard_analysis_error
 from app.schemas.analysis import AnalysisRequest, AnalysisResponse
 
 from app.services.explain_service import generate_finding_explanation
@@ -41,6 +42,41 @@ class AnalysisPipelineContext:
     invalid_findings: list[dict[str, Any]]
 
 
+def build_failed_analysis_result(
+    *,
+    stage: str,
+    message: str | None,
+    scan_result_path: str,
+    analysis_result_path: str | None,
+    finding_id: str | None = None,
+    finding_count: int = 0,
+    valid_finding_count: int = 0,
+    invalid_finding_count: int = 0,
+    result_count: int = 0,
+    invalid_findings: list[dict[str, Any]] | None = None,
+    error_code: str | None = None,
+) -> dict[str, object]:
+    error = build_standard_analysis_error(
+        stage=stage,
+        message=message,
+        error_code=error_code,
+    )
+    return {
+        "status": error.status,
+        "error_code": error.error_code,
+        "stage": error.stage,
+        "finding_id": finding_id,
+        "scan_result_path": scan_result_path,
+        "analysis_result_path": analysis_result_path,
+        "finding_count": finding_count,
+        "valid_finding_count": valid_finding_count,
+        "invalid_finding_count": invalid_finding_count,
+        "invalid_findings": invalid_findings or [],
+        "result_count": result_count,
+        "message": error.message,
+    }
+
+
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
     if request.raw_result_path is not None:
         result = run_s3_analysis_pipeline(
@@ -69,13 +105,12 @@ def run_s3_analysis_pipeline(
     try:
         scan_result = parse_scan_result(download_scan_result_json_data(raw_result_path))
     except Exception as exc:
-        return {
-            "status": "failed",
-            "stage": "input",
-            "scan_result_path": raw_result_path,
-            "analysis_result_path": analysis_result_path,
-            "message": str(exc),
-        }
+        return build_failed_analysis_result(
+            stage="input",
+            scan_result_path=raw_result_path,
+            analysis_result_path=analysis_result_path,
+            message=str(exc),
+        )
 
     return run_analysis_pipeline_from_scan_result(
         scan_result=scan_result,
@@ -139,13 +174,12 @@ def run_analysis_pipeline(
     try:
         scan_result = load_scan_result(scan_result_path)
     except Exception as exc:
-        return {
-            "status": "failed",
-            "stage": "input",
-            "scan_result_path": scan_result_path,
-            "analysis_result_path": output_path,
-            "message": str(exc),
-        }
+        return build_failed_analysis_result(
+            stage="input",
+            scan_result_path=scan_result_path,
+            analysis_result_path=output_path,
+            message=str(exc),
+        )
 
     return run_analysis_pipeline_from_scan_result(
         scan_result=scan_result,
@@ -164,41 +198,38 @@ def run_analysis_pipeline_from_scan_result(
     try:
         context = prepare_analysis_pipeline_context(scan_result)
     except Exception as exc:
-        return {
-            "status": "failed",
-            "stage": "input",
-            "scan_result_path": scan_result_path,
-            "analysis_result_path": output_path,
-            "message": str(exc),
-        }
+        return build_failed_analysis_result(
+            stage="input",
+            scan_result_path=scan_result_path,
+            analysis_result_path=output_path,
+            message=str(exc),
+        )
 
     try:
         structured_results = analyze_findings(context.valid_findings)
     except FindingAnalysisError as exc:
-        return {
-            "status": "failed",
-            "stage": exc.stage,
-            "finding_id": exc.finding_id,
-            "scan_result_path": scan_result_path,
-            "analysis_result_path": output_path,
-            "finding_count": len(context.raw_findings),
-            "valid_finding_count": len(context.valid_findings),
-            "invalid_finding_count": len(context.invalid_findings),
-            "invalid_findings": context.invalid_findings,
-            "message": exc.message,
-        }
+        return build_failed_analysis_result(
+            stage=exc.stage,
+            finding_id=exc.finding_id,
+            scan_result_path=scan_result_path,
+            analysis_result_path=output_path,
+            finding_count=len(context.raw_findings),
+            valid_finding_count=len(context.valid_findings),
+            invalid_finding_count=len(context.invalid_findings),
+            invalid_findings=context.invalid_findings,
+            message=exc.message,
+        )
     except Exception as exc:
-        return {
-            "status": "failed",
-            "stage": "analysis",
-            "scan_result_path": scan_result_path,
-            "analysis_result_path": output_path,
-            "finding_count": len(context.raw_findings),
-            "valid_finding_count": len(context.valid_findings),
-            "invalid_finding_count": len(context.invalid_findings),
-            "invalid_findings": context.invalid_findings,
-            "message": str(exc),
-        }
+        return build_failed_analysis_result(
+            stage="analysis",
+            scan_result_path=scan_result_path,
+            analysis_result_path=output_path,
+            finding_count=len(context.raw_findings),
+            valid_finding_count=len(context.valid_findings),
+            invalid_finding_count=len(context.invalid_findings),
+            invalid_findings=context.invalid_findings,
+            message=str(exc),
+        )
 
     try:
         analysis_result = build_analysis_result_from_results(
@@ -211,18 +242,17 @@ def run_analysis_pipeline_from_scan_result(
         else:
             saved_path = save_analysis_result(analysis_result, output_path)
     except Exception as exc:
-        return {
-            "status": "failed",
-            "stage": "output",
-            "scan_result_path": scan_result_path,
-            "analysis_result_path": output_path,
-            "finding_count": len(context.raw_findings),
-            "valid_finding_count": len(context.valid_findings),
-            "invalid_finding_count": len(context.invalid_findings),
-            "invalid_findings": context.invalid_findings,
-            "result_count": len(structured_results),
-            "message": str(exc),
-        }
+        return build_failed_analysis_result(
+            stage="output",
+            scan_result_path=scan_result_path,
+            analysis_result_path=output_path,
+            finding_count=len(context.raw_findings),
+            valid_finding_count=len(context.valid_findings),
+            invalid_finding_count=len(context.invalid_findings),
+            invalid_findings=context.invalid_findings,
+            result_count=len(structured_results),
+            message=str(exc),
+        )
 
     return {
         "status": "completed",

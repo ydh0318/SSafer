@@ -130,9 +130,10 @@ class WorkerProcessorTest(unittest.TestCase):
         self.assertEqual(callback.task_id, 123)
         self.assertEqual(callback.status, "FAILED")
         self.assertEqual(callback.progress_step, "analysis_failed")
+        self.assertEqual(callback.error_code, "UNKNOWN_ERROR")
         self.assertEqual(
             callback.failure_reason,
-            "FastAPI analysis failed: FastAPI down",
+            "UNKNOWN_ERROR: FastAPI analysis failed: FastAPI down",
         )
         self.assertIsNone(callback.analysis_result_path)
 
@@ -161,10 +162,11 @@ class WorkerProcessorTest(unittest.TestCase):
         callback = spring_client.callbacks[0][1]
         self.assertEqual(callback.status, "FAILED")
         self.assertEqual(callback.progress_step, "analysis_failed")
+        self.assertEqual(callback.error_code, "ANALYSIS_INPUT_ERROR")
         self.assertEqual(
             callback.failure_reason,
             (
-                "FastAPI analysis failed: ANALYSIS_INPUT_ERROR: "
+                "ANALYSIS_INPUT_ERROR: FastAPI analysis failed: "
                 "Failed to download scan_result.json from S3. (stage=input)"
             ),
         )

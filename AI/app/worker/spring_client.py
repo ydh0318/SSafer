@@ -11,7 +11,10 @@ class SpringClient:
         scan_id: int,
         request: AnalysisResultCallbackRequest,
     ) -> dict:
+        payload = request.model_dump(by_alias=True)
+        if request.status != "FAILED":
+            payload.pop("errorCode", None)
         return self.http_client.post_json(
             f"/api/v1/internal/scans/{scan_id}/analysis-results",
-            request.model_dump(by_alias=True),
+            payload,
         )

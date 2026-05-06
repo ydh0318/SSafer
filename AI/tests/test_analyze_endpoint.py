@@ -306,7 +306,7 @@ class AnalyzeEndpointTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 502)
         self.assertEqual(payload["status"], "failed")
-        self.assertEqual(payload["error_code"], "ANALYSIS_FIX_ERROR")
+        self.assertEqual(payload["error_code"], "LLM_CALL_FAILED")
         self.assertEqual(payload["stage"], "fix")
         self.assertEqual(payload["finding_id"], "FND-0001")
         self.assertEqual(payload["finding_count"], 1)

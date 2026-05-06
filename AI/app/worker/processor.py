@@ -1,5 +1,11 @@
 from datetime import datetime, timezone
 
+from app.core.analysis_errors import (
+    ANALYSIS_FAILED_PROGRESS_STEP,
+    SPRING_ANALYSIS_FAILED_STATUS,
+    UNKNOWN_ERROR_CODE,
+    format_failure_reason,
+)
 from app.worker.config import WorkerSettings
 from app.worker.fastapi_client import FastApiClient
 from app.worker.schemas import (
@@ -66,7 +72,12 @@ class ScanTaskProcessor:
             self._send_failed_callback(
                 message=message,
                 started_at=started_at,
-                failure_reason=f"FastAPI analysis failed: {exc}",
+                error_code=UNKNOWN_ERROR_CODE,
+                failure_reason=format_failure_reason(
+                    error_code=UNKNOWN_ERROR_CODE,
+                    message=str(exc),
+                    prefix="FastAPI analysis failed",
+                ),
             )
             return
 
@@ -82,6 +93,7 @@ class ScanTaskProcessor:
         self._send_failed_callback(
             message=message,
             started_at=started_at,
+            error_code=response.error_code or UNKNOWN_ERROR_CODE,
             failure_reason=self._build_failure_reason(response),
         )
 
@@ -111,6 +123,7 @@ class ScanTaskProcessor:
         *,
         message: ScanRequestMessage,
         started_at: str,
+        error_code: str,
         failure_reason: str,
     ) -> None:
         completed_at = utc_now_iso()
@@ -118,8 +131,9 @@ class ScanTaskProcessor:
             message.scan_id,
             AnalysisResultCallbackRequest(
                 taskId=message.task_id,
-                status="FAILED",
-                progressStep="analysis_failed",
+                status=SPRING_ANALYSIS_FAILED_STATUS,
+                progressStep=ANALYSIS_FAILED_PROGRESS_STEP,
+                errorCode=error_code,
                 failureReason=failure_reason,
                 startedAt=started_at,
                 completedAt=completed_at,
@@ -129,9 +143,9 @@ class ScanTaskProcessor:
 
     @staticmethod
     def _build_failure_reason(response: FastApiAnalyzeResponse) -> str:
-        details = response.message or "Analysis failed."
-        if response.error_code:
-            details = f"{response.error_code}: {details}"
-        if response.stage:
-            details = f"{details} (stage={response.stage})"
-        return f"FastAPI analysis failed: {details}"
+        return format_failure_reason(
+            error_code=response.error_code,
+            message=response.message,
+            stage=response.stage,
+            prefix="FastAPI analysis failed",
+        )
