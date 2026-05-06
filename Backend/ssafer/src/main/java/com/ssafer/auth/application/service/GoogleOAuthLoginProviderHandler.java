@@ -28,7 +28,7 @@ public class GoogleOAuthLoginProviderHandler implements OAuthLoginProviderHandle
     }
 
     GoogleOAuthUserInfoResponse userInfo = googleOAuthApiClient.fetchUserInfo(tokenResponse.accessToken());
-    // 기존 사용자 매칭 기준이 이메일이므로, Google이 이메일 검증을 끝낸 계정만 신뢰한다.
+    // 기존 사용자 매칭 기준이 이메일이므로 Google의 verified email만 신뢰한다.
     if (userInfo.sub() == null
         || userInfo.sub().isBlank()
         || userInfo.email() == null

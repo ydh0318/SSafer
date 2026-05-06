@@ -33,11 +33,11 @@ public class AuthOAuthLoginService {
       throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 
-    // provider별 인가 코드 교환과 사용자 정보 조회는 handler 구현체에 위임한다.
+    // provider별 코드 교환과 사용자 정보 조회는 handler 구현체에 위임한다.
     OAuthProviderUserInfo userInfo = handler.fetchUserInfo(authorizationCode, redirectUri);
     String normalizedEmail = normalizeEmail(userInfo.email());
 
-    // 기존 사용자 매칭은 이메일 기준으로만 조회하고, 상태 판단은 다음 단계 JWT 발급 시점에 이어간다.
+    // 기존 사용자 매칭은 이메일 기준으로만 조회하고, 계정 상태 판단은 JWT 발급 단계에서 이어간다.
     User matchedUser = userRepository.findByEmail(normalizedEmail).orElse(null);
 
     return new OAuthLoginResult(

@@ -38,7 +38,7 @@ class AuthOAuthLoginServiceTest {
   }
 
   @Test
-  void loginDelegatesToMatchedProviderHandlerAndMatchesExistingUser() {
+  void loginDelegatesToMatchedGoogleProviderHandlerAndMatchesExistingUser() {
     OAuthProviderUserInfo userInfo = new OAuthProviderUserInfo(
         OAuthProvider.GOOGLE,
         "google-user-123",
@@ -48,13 +48,13 @@ class AuthOAuthLoginServiceTest {
     User matchedUser = new User("user@ssafer.co.kr", "싸피맨", null, AccountStatus.ACTIVE);
     setUserId(matchedUser, 1L);
 
-    given(googleHandler.fetchUserInfo("auth-code", "http://localhost:3000/oauth/callback")).willReturn(userInfo);
+    given(googleHandler.fetchUserInfo("auth-code", "http://localhost:5173/oauth/google/callback")).willReturn(userInfo);
     given(userRepository.findByEmail("user@ssafer.co.kr")).willReturn(Optional.of(matchedUser));
 
     OAuthLoginResult result = authOAuthLoginService.login(
         OAuthProvider.GOOGLE,
         "auth-code",
-        "http://localhost:3000/oauth/callback"
+        "http://localhost:5173/oauth/google/callback"
     );
 
     assertThat(result.provider()).isEqualTo(OAuthProvider.GOOGLE);
@@ -65,10 +65,43 @@ class AuthOAuthLoginServiceTest {
     assertThat(result.existingUserId()).isEqualTo(1L);
     assertThat(result.existingUserAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
 
-    then(googleHandler).should().fetchUserInfo("auth-code", "http://localhost:3000/oauth/callback");
+    then(googleHandler).should().fetchUserInfo("auth-code", "http://localhost:5173/oauth/google/callback");
     then(userRepository).should().findByEmail("user@ssafer.co.kr");
     then(githubHandler).should().provider();
     then(githubHandler).should(never()).fetchUserInfo(Mockito.anyString(), Mockito.anyString());
+  }
+
+  @Test
+  void loginDelegatesToMatchedGithubProviderHandlerAndMatchesExistingUser() {
+    OAuthProviderUserInfo userInfo = new OAuthProviderUserInfo(
+        OAuthProvider.GITHUB,
+        "101",
+        "github-user@ssafer.co.kr",
+        "github-dev"
+    );
+    User matchedUser = new User("github-user@ssafer.co.kr", "깃허브사용자", null, AccountStatus.ACTIVE);
+    setUserId(matchedUser, 2L);
+
+    given(githubHandler.fetchUserInfo("auth-code", "http://localhost:5173/oauth/github/callback")).willReturn(userInfo);
+    given(userRepository.findByEmail("github-user@ssafer.co.kr")).willReturn(Optional.of(matchedUser));
+
+    OAuthLoginResult result = authOAuthLoginService.login(
+        OAuthProvider.GITHUB,
+        "auth-code",
+        "http://localhost:5173/oauth/github/callback"
+    );
+
+    assertThat(result.provider()).isEqualTo(OAuthProvider.GITHUB);
+    assertThat(result.providerUserId()).isEqualTo("101");
+    assertThat(result.email()).isEqualTo("github-user@ssafer.co.kr");
+    assertThat(result.displayName()).isEqualTo("github-dev");
+    assertThat(result.existingUserMatched()).isTrue();
+    assertThat(result.existingUserId()).isEqualTo(2L);
+    assertThat(result.existingUserAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
+
+    then(githubHandler).should().fetchUserInfo("auth-code", "http://localhost:5173/oauth/github/callback");
+    then(userRepository).should().findByEmail("github-user@ssafer.co.kr");
+    then(googleHandler).should(never()).fetchUserInfo(Mockito.anyString(), Mockito.anyString());
   }
 
   @Test
@@ -80,13 +113,13 @@ class AuthOAuthLoginServiceTest {
         "새사용자"
     );
 
-    given(googleHandler.fetchUserInfo("auth-code", "http://localhost:3000/oauth/callback")).willReturn(userInfo);
+    given(googleHandler.fetchUserInfo("auth-code", "http://localhost:5173/oauth/google/callback")).willReturn(userInfo);
     given(userRepository.findByEmail("new-user@ssafer.co.kr")).willReturn(Optional.empty());
 
     OAuthLoginResult result = authOAuthLoginService.login(
         OAuthProvider.GOOGLE,
         "auth-code",
-        "http://localhost:3000/oauth/callback"
+        "http://localhost:5173/oauth/google/callback"
     );
 
     assertThat(result.existingUserMatched()).isFalse();
@@ -101,7 +134,7 @@ class AuthOAuthLoginServiceTest {
     assertThatThrownBy(() -> serviceWithoutGithub.login(
         OAuthProvider.GITHUB,
         "auth-code",
-        "http://localhost:3000/oauth/callback"
+        "http://localhost:5173/oauth/github/callback"
     ))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
