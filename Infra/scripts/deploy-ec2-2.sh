@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# EC2 #2 (분석 서버) 배포 스크립트
-# Jenkins CI에서 SSH로 호출: ssh ubuntu@ec2-2 'bash /home/ubuntu/ssafer/S14P31B105/Infra/scripts/deploy-ec2-2.sh'
-# 전제: /home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-2/prod/ 에 docker-compose.yml과 .env가 존재
+# EC2 #2 (analysis server) deploy script
+# Called by Jenkins over SSH:
+#   FASTAPI_IMAGE=... bash /home/ubuntu/ssafer/S14P31B105/Infra/scripts/deploy-ec2-2.sh
+# Prerequisite:
+#   /home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-2/prod/ contains docker-compose.yml and .env
 
 set -euo pipefail
 
@@ -11,36 +13,52 @@ ENV_FILE="${DEPLOY_DIR}/.env"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
-log "=== EC2 #2 배포 시작 ==="
+check_env_key() {
+  local key="$1"
+  if [[ -n "${!key:-}" ]] || grep -Eq "^${key}=" "${ENV_FILE}"; then
+    log "env ${key}=SET"
+  else
+    log "env ${key}=MISSING"
+  fi
+}
+
+log "=== EC2 #2 deploy start ==="
 
 if [[ ! -f "${ENV_FILE}" ]]; then
-  log "ERROR: .env 파일이 없습니다: ${ENV_FILE}"
+  log "ERROR: .env file not found: ${ENV_FILE}"
   exit 1
 fi
 
+log "DEPLOY_DIR=${DEPLOY_DIR}"
+check_env_key "FASTAPI_IMAGE"
+check_env_key "REDIS_LLM_PASSWORD"
+check_env_key "ANTHROPIC_API_KEY"
+check_env_key "EC2_1_PRIVATE_IP"
+check_env_key "INTERNAL_TOKEN"
+
 cd "${DEPLOY_DIR}"
 
-log "이미지 pull 시작..."
+log "Pull images..."
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull
 
-log "컨테이너 재시작..."
+log "Restart containers..."
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --remove-orphans
 
-log "미사용 이미지 정리..."
+log "Prune unused images..."
 docker image prune -af
 
-log "FastAPI 헬스체크 대기 (최대 60초)..."
+log "Wait for FastAPI healthcheck (max 60s)..."
 for i in $(seq 1 12); do
   if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-    log "FastAPI 정상 기동 확인"
+    log "FastAPI is healthy"
     break
   fi
   if [[ $i -eq 12 ]]; then
-    log "ERROR: FastAPI 헬스체크 타임아웃"
+    log "ERROR: FastAPI healthcheck timed out"
     exit 1
   fi
-  log "  대기 중... (${i}/12)"
+  log "  waiting... (${i}/12)"
   sleep 5
 done
 
-log "=== EC2 #2 배포 완료 ==="
+log "=== EC2 #2 deploy complete ==="
