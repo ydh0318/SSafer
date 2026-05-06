@@ -21,8 +21,10 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
 
   long countByScanIdAndSeverity(Long scanId, Severity severity);
 
-  // 히스토리 목록 item에서는 현재 페이지에 포함된 scanId들만 대상으로 위험도 분포를 집계한다.
-  // page size가 20이면 여기서도 그 20건만 대상으로 count를 계산해 불필요한 전체 집계를 막는다.
+  List<ScanFinding> findAllByScanId(Long scanId);
+
+  // 히스토리 목록 item에서 현재 페이지에 포함된 scanId들만 대상으로 위험도 분포를 집계한다.
+  // page size가 20이면 여기도 그 20건만 대상으로 count를 계산해 불필요한 전체 집계를 막는다.
   @Query("""
       select f.scanId, f.severity, count(f)
       from ScanFinding f
@@ -31,7 +33,7 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
       """)
   List<Object[]> countSeverityByScanIds(@Param("scanIds") List<Long> scanIds);
 
-  // 히스토리 summary는 페이지 item과 달리 현재 필터 전체 결과 기준의 위험도 합계가 필요하다.
+  // 히스토리 summary는 페이지 item과 별개로 현재 필터 전체 결과 기준의 위험도 통계가 필요하다.
   // 그래서 Scan 엔티티 전체를 메모리로 읽지 않고 DB에서 바로 severity별 aggregate 결과만 가져온다.
   @Query("""
       select f.severity, count(f)
@@ -61,7 +63,7 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
 
   Page<ScanFinding> findByScanIdAndSeverity(Long scanId, Severity severity, Pageable pageable);
 
-  // category는 문자열 컬럼이므로 현재 저장된 값 기준으로 바로 집계한다.
+  // category는 문자열 컬럼이므로 현재 등록된 값 기준으로 바로 집계한다.
   @Query("""
       select f.category, count(f)
       from ScanFinding f

@@ -134,7 +134,7 @@ class SecurityConfigTest {
 
   @Test
   void internalApisRequireWorkerSecretHeader() throws Exception {
-    mockMvc.perform(post("/api/v1/internal/scans/1/raw-results")
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
             .contentType(MediaType.APPLICATION_JSON)
             .content("{}"))
         .andExpect(status().isUnauthorized())
@@ -143,11 +143,37 @@ class SecurityConfigTest {
 
   @Test
   void internalApisAcceptValidWorkerSecretHeader() throws Exception {
-    mockMvc.perform(post("/api/v1/internal/scans/1/raw-results")
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
             .header(WorkerSecretAuthenticationFilter.WORKER_SECRET_HEADER, WORKER_SECRET)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{}"))
         .andExpect(status().isOk());
+  }
+
+  @Test
+  void internalApisRejectInvalidWorkerSecretHeader() throws Exception {
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
+            .header(WorkerSecretAuthenticationFilter.WORKER_SECRET_HEADER, "wrong-secret")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+  }
+
+  @Test
+  void internalApisDoNotAcceptMemberAuthenticationWithoutWorkerSecret() throws Exception {
+    UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+        AuthenticatedActor.member(1L),
+        null,
+        List.of(new SimpleGrantedAuthority("ROLE_MEMBER"))
+    );
+
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
+            .with(authentication(authenticationToken))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
   }
 
   @Test
@@ -302,8 +328,8 @@ class SecurityConfigTest {
       return "ok";
     }
 
-    @PostMapping("/api/v1/internal/scans/1/raw-results")
-    String rawResults() {
+    @PostMapping("/api/v1/internal/scans/1/analysis-results")
+    String analysisResults() {
       return "ok";
     }
 

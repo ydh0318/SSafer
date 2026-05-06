@@ -2,6 +2,7 @@ package com.ssafer.global.logging;
 
 import com.ssafer.global.security.AgentPrincipal;
 import com.ssafer.global.security.AuthenticatedActor;
+import com.ssafer.global.security.WorkerPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -80,6 +81,10 @@ public class ApiLogFormatter {
 
     if (principal instanceof AgentPrincipal agentPrincipal) {
       return "에이전트(agentId=" + agentPrincipal.agentId() + ")";
+    }
+
+    if (principal instanceof WorkerPrincipal) {
+      return "워커 내부 호출";
     }
 
     if (principal instanceof String principalText && StringUtils.hasText(principalText)) {
