@@ -10,7 +10,7 @@ type PageHeroProps = {
 
 function PageHero({ eyebrow, title, description, actions, aside }: PageHeroProps) {
   return (
-    <section className="overflow-hidden border border-neutral-200 bg-[linear-gradient(135deg,#fafafa_0%,#f2f2f2_52%,#ebebeb_100%)]">
+    <section className="theme-page-hero theme-dark-soft-card overflow-hidden border border-neutral-200 bg-[linear-gradient(135deg,#fafafa_0%,#f2f2f2_52%,#ebebeb_100%)]">
       <div className="grid gap-8 px-6 py-8 md:px-8 md:py-10 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)] xl:items-center">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-neutral-500">{eyebrow}</p>

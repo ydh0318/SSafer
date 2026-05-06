@@ -183,11 +183,11 @@ function TypingGamePage() {
               </div>
             </div>
 
-            <div className="theme-dark-soft-card mt-6 flex items-center gap-4 border border-[#FFE066] bg-[#FFF9DB] p-5">
+            <div className="theme-accent-card mt-6 flex items-center gap-4 border border-[#D4FC64] bg-[#D4FC64] p-5 text-black">
               <PixelGoose mood="happy" size={52} />
               <div className="flex-1">
                 <div className="text-sm font-bold">SSAfer의 응원</div>
-                <p className="mt-1 text-sm text-neutral-700">
+                <p className="mt-1 text-sm text-black">
                   줄바꿈이 있는 문제도 이제 그대로 입력할 수 있습니다. 엔터를 치면 다음 줄로 자연스럽게 이어집니다.
                 </p>
               </div>

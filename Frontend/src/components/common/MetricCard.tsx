@@ -12,7 +12,7 @@ const toneClass: Record<MetricTone, string> = {
 type MetricCardProps = {
   label: string;
   value: string | number;
-  helper: string;
+  helper?: string;
   tone?: MetricTone;
 };
 
@@ -21,7 +21,7 @@ function MetricCard({ label, value, helper, tone = 'plain' }: MetricCardProps) {
     <article className={`border p-5 shadow-sm transition hover:-translate-y-0.5 ${toneClass[tone]}`}>
       <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-slate-500">{label}</p>
       <p className="mt-3 text-4xl font-black tracking-tight text-slate-950">{value}</p>
-      <p className="mt-3 text-xs leading-6 text-slate-500">{helper}</p>
+      {helper ? <p className="mt-3 text-xs leading-6 text-slate-500">{helper}</p> : null}
     </article>
   );
 }
