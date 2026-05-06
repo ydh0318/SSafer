@@ -37,7 +37,6 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
     Boolean(refreshToken) || user?.role === 'USER' || user?.role === 'ADMIN' || hasStoredMemberSession();
   const isGuestSession = user?.role === 'GUEST' || isStoredGuestSession();
   void showSessionBar;
-  void isGuestSession;
   void isMemberSession;
 
   const navItems = [
@@ -124,6 +123,26 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
 
               <button
                 aria-label="로그아웃"
+                className="site-header-link inline-flex h-10 w-10 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
+                onClick={logout}
+                type="button"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </>
+          ) : isGuestSession ? (
+            <>
+              <button
+                aria-label="게스트 설정"
+                className="site-header-link inline-flex h-9 items-center justify-center rounded-full bg-black px-3 text-sm font-black text-white transition hover:opacity-85"
+                onClick={() => navigate(ROUTES.settings)}
+                type="button"
+              >
+                <span>guest1</span>
+              </button>
+
+              <button
+                aria-label="게스트 로그아웃"
                 className="site-header-link inline-flex h-10 w-10 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
                 onClick={logout}
                 type="button"

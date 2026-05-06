@@ -2,8 +2,6 @@ import { ArrowLeft, FileSearch } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
-import PageHero from '../../components/common/PageHero';
-import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import { getScanStatus } from '../../features/scans/api/scans';
 import ScanProgressPanel from '../../features/scans/components/ScanProgressPanel';
@@ -15,8 +13,8 @@ type ScanRouteState = {
   autoOpenedFromScanRequest?: boolean;
 };
 
-const LOAD_STATUS_ERROR_MESSAGE = '스캔 진행 상태를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
-const REFRESH_STATUS_ERROR_MESSAGE = '자동 새로고침에 일시적으로 실패했습니다. 잠시 후 다시 시도합니다.';
+const LOAD_STATUS_ERROR_MESSAGE = '스캔 진행 상태를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
+const REFRESH_STATUS_ERROR_MESSAGE = '새로고침 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
 
 function ScanDetailPage() {
   const { scanId = '' } = useParams<{ scanId: string }>();
@@ -114,91 +112,39 @@ function ScanDetailPage() {
   };
 
   const canOpenResult = statusData?.status === 'DONE';
+  const backTo = routeState.projectId ? ROUTES.projectDetail.replace(':projectId', routeState.projectId) : ROUTES.projects;
 
   return (
     <section className="space-y-8">
-      <PageHero
-        actions={
-          <>
-            {routeState.projectId ? (
-              <Link
-                className="inline-flex items-center gap-2 border border-neutral-300 px-5 py-3 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
-                to={ROUTES.projectDetail.replace(':projectId', routeState.projectId)}
-              >
-                <ArrowLeft className="h-4 w-4" />
-                프로젝트로 돌아가기
-              </Link>
-            ) : (
-              <Link
-                className="inline-flex items-center gap-2 border border-neutral-300 px-5 py-3 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
-                to={ROUTES.projects}
-              >
-                <ArrowLeft className="h-4 w-4" />
-                프로젝트 목록
-              </Link>
-            )}
-            {canOpenResult ? (
-              <Link
-                className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
-                state={routeState}
-                to={ROUTES.resultDetail.replace(':scanId', scanId)}
-              >
-                결과 보기
-                <FileSearch className="h-4 w-4" />
-              </Link>
-            ) : (
-              <span className="inline-flex items-center gap-2 bg-neutral-200 px-5 py-3 text-sm font-bold text-neutral-500">
-                결과 생성 대기 중
-                <FileSearch className="h-4 w-4" />
-              </span>
-            )}
-          </>
-        }
-        aside={
-          <div className="border border-neutral-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-neutral-500">LIVE STATUS</p>
-                <h2 className="mt-3 text-2xl font-black tracking-tight text-black">Scan #{scanId}</h2>
-              </div>
-              <PixelGoose
-                mood={
-                  statusData?.status === 'DONE'
-                    ? 'victory'
-                    : statusData?.status === 'FAILED'
-                      ? 'alert'
-                      : statusData?.status === 'RUNNING'
-                        ? 'working'
-                        : 'idle'
-                }
-                size={88}
-              />
-            </div>
-            <p className="mt-4 text-sm leading-7 text-neutral-600">
-              현재 스캔 상태를 기준으로 자동 새로고침이 동작합니다. 완료 전에는 결과 페이지로 이동하지 않고 진행 상황만 확인하도록
-              안내합니다.
-            </p>
-          </div>
-        }
-        description={
-          <>
-            스캔 요청부터 업로드, 분석, 완료까지의 상태를 추적합니다. 실제 결과 검증은 `DONE` 상태가 된 이후 결과 페이지로 이동하는
-            흐름이 가장 안전합니다.
-          </>
-        }
-        eyebrow="SCAN STATUS"
-        title={
-          <>
-            스캔 진행 상태를 확인하고
-            <br />
-            완료 후 결과로 이동하세요
-          </>
-        }
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          className="inline-flex items-center gap-2 text-sm font-bold text-neutral-500 transition hover:text-black"
+          to={backTo}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          프로젝트로 돌아가기
+        </Link>
+
+        {canOpenResult ? (
+          <Link
+            className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
+            state={routeState}
+            to={ROUTES.resultDetail.replace(':scanId', scanId)}
+          >
+            결과 보기
+            <FileSearch className="h-4 w-4" />
+          </Link>
+        ) : (
+          <span className="inline-flex items-center gap-2 bg-neutral-200 px-5 py-3 text-sm font-bold text-neutral-500">
+            결과 준비 중
+            <FileSearch className="h-4 w-4" />
+          </span>
+        )}
+      </div>
 
       {routeState.autoOpenedFromScanRequest ? (
         <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-          스캔이 생성되었습니다. 진행 상태를 확인하다가 `DONE` 상태가 되면 결과 페이지로 이동해 실제 결과를 확인할 수 있습니다.
+          스캔 요청이 접수되었습니다. 완료되면 결과 화면으로 이동할 수 있습니다.
         </div>
       ) : null}
 
