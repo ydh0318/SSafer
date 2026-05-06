@@ -124,6 +124,7 @@ class CliRawResultUploadReportServiceTest {
   void reportWhenAgentMissingCreatesFallbackAgentAndContinues() throws Exception {
     // 프로젝트에 agent가 없어도 fallback agent를 생성해
     // 기존 메시지 발행 경로가 끊기지 않아야 한다.
+    // 프로젝트에 Agent가 없어도 placeholder Agent를 생성하고 publish가 이어져야 한다.
     Scan scan = createScan(ScanStatus.REQUESTED);
     Project project = createProject(101L);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
@@ -152,7 +153,9 @@ class CliRawResultUploadReportServiceTest {
 
     assertThat(response.scanId()).isEqualTo(1001L);
     assertThat(response.status()).isEqualTo(ScanStatus.QUEUED);
-    verify(agentRepository).save(any(Agent.class));
+    ArgumentCaptor<Agent> fallbackCaptor = ArgumentCaptor.forClass(Agent.class);
+    verify(agentRepository).save(fallbackCaptor.capture());
+    assertThat(fallbackCaptor.getValue().isPlaceholder()).isTrue();
     verify(agentTaskPublisher).publishScanRequest(any(ScanRequestTaskMessage.class));
   }
 

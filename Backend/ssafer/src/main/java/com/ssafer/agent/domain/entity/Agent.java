@@ -50,12 +50,22 @@ public class Agent {
   @Column(name = "auth_token_hash", length = 64)
   private String authTokenHash;
 
+  @Column(name = "is_placeholder", nullable = false)
+  // 실제 Agent가 붙기 전에 임시로 만든 대리 Agent 여부.
+  private boolean placeholder;
+
   protected Agent() {
   }
 
   public Agent(Project project, AgentStatus status) {
+    this(project, status, false);
+  }
+
+  public Agent(Project project, AgentStatus status, boolean placeholder) {
+    // placeholder=true면 "프로젝트에 Agent가 없어서 임시로 만든 행"을 뜻한다.
     this.project = project;
     this.status = status;
+    this.placeholder = placeholder;
   }
 
   @PrePersist
@@ -101,11 +111,17 @@ public class Agent {
     return authTokenHash;
   }
 
+  public boolean isPlaceholder() {
+    return placeholder;
+  }
+
   public void markOnline(Instant now) {
     status = AgentStatus.ONLINE;
     connectedAt = now;
     lastSeenAt = now;
     disconnectedAt = null;
+    // 실제 연결이 성립하면 placeholder 표시는 즉시 해제한다.
+    placeholder = false;
   }
 
   public void markOffline(Instant now) {
