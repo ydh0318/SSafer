@@ -9,7 +9,10 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
 import com.ssafer.scan.api.dto.ScanBasicResponse;
+import com.ssafer.scan.api.dto.ScanCompareFindingResponse;
 import com.ssafer.scan.api.dto.ScanCompareResponse;
+import com.ssafer.scan.api.dto.ScanCompareSeverityChangedFindingResponse;
+import com.ssafer.scan.api.dto.ScanCompareSummaryResponse;
 import com.ssafer.scan.api.dto.ScanFindingDetailResponse;
 import com.ssafer.scan.api.dto.ScanFindingListItemResponse;
 import com.ssafer.scan.api.dto.ScanFindingListResponseData;
@@ -60,7 +63,59 @@ class ScanQueryControllerTest {
   void compareScansReturnsOkResponse() throws Exception {
     MockMvc mockMvc = buildMockMvc();
     when(scanCompareQueryService.compare(1001L, 1002L))
-        .thenReturn(new ScanCompareResponse(1001L, 1002L, 101L, ScanStatus.DONE, ScanStatus.DONE));
+        .thenReturn(new ScanCompareResponse(
+            1001L,
+            1002L,
+            101L,
+            ScanStatus.DONE,
+            ScanStatus.DONE,
+            new ScanCompareSummaryResponse(3L, 4L, 1L, 1L, 1L, 1L),
+            List.of(new ScanCompareFindingResponse(
+                2001L,
+                1002L,
+                "sha256:new",
+                "sha256:new",
+                FindingSourceType.TRIVY,
+                Severity.MEDIUM,
+                "CONFIG",
+                "New finding",
+                "Dockerfile",
+                12,
+                "DS-0002"
+            )),
+            List.of(),
+            List.of(),
+            List.of(new ScanCompareSeverityChangedFindingResponse(
+                new ScanCompareFindingResponse(
+                    100L,
+                    1001L,
+                    "sha256:changed",
+                    "sha256:changed",
+                    FindingSourceType.CUSTOM_RULE,
+                    Severity.HIGH,
+                    "SECRET",
+                    "Base finding",
+                    ".env",
+                    1,
+                    "ENV-001"
+                ),
+                new ScanCompareFindingResponse(
+                    101L,
+                    1002L,
+                    "sha256:changed",
+                    "sha256:changed",
+                    FindingSourceType.CUSTOM_RULE,
+                    Severity.LOW,
+                    "SECRET",
+                    "Target finding",
+                    ".env",
+                    1,
+                    "ENV-001"
+                ),
+                Severity.HIGH,
+                Severity.LOW
+            ))
+        ));
 
     mockMvc.perform(get("/api/v1/scans/compare")
             .param("baseScanId", "1001")
@@ -71,7 +126,16 @@ class ScanQueryControllerTest {
         .andExpect(jsonPath("$.data.targetScanId").value(1002))
         .andExpect(jsonPath("$.data.projectId").value(101))
         .andExpect(jsonPath("$.data.baseStatus").value("DONE"))
-        .andExpect(jsonPath("$.data.targetStatus").value("DONE"));
+        .andExpect(jsonPath("$.data.targetStatus").value("DONE"))
+        .andExpect(jsonPath("$.data.summary.baseFindingCount").value(3))
+        .andExpect(jsonPath("$.data.summary.targetFindingCount").value(4))
+        .andExpect(jsonPath("$.data.summary.newCount").value(1))
+        .andExpect(jsonPath("$.data.summary.resolvedCount").value(1))
+        .andExpect(jsonPath("$.data.summary.retainedCount").value(1))
+        .andExpect(jsonPath("$.data.summary.severityChangedCount").value(1))
+        .andExpect(jsonPath("$.data.newFindings[0].findingId").value(2001))
+        .andExpect(jsonPath("$.data.severityChangedFindings[0].baseSeverity").value("HIGH"))
+        .andExpect(jsonPath("$.data.severityChangedFindings[0].targetSeverity").value("LOW"));
   }
 
   @Test

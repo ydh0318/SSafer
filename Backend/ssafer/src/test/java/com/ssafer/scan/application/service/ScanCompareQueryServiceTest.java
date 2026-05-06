@@ -10,6 +10,7 @@ import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.global.security.CurrentActorProvider;
 import com.ssafer.project.application.service.ProjectAuthorizationService;
+import com.ssafer.scan.api.dto.ScanCompareFindingResponse;
 import com.ssafer.scan.api.dto.ScanCompareResponse;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
@@ -54,7 +55,7 @@ class ScanCompareQueryServiceTest {
   void compareReturnsBasicMetadataWhenBothScansAuthorized() {
     AuthenticatedActor actor = AuthenticatedActor.member(1L);
     Scan baseScan = createScan(1001L, 101L, ScanStatus.DONE);
-    Scan targetScan = createScan(1002L, 101L, ScanStatus.RUNNING);
+    Scan targetScan = createScan(1002L, 101L, ScanStatus.DONE);
 
     given(currentActorProvider.getCurrentActor()).willReturn(actor);
     given(scanRepository.findById(1001L)).willReturn(Optional.of(baseScan));
@@ -68,8 +69,50 @@ class ScanCompareQueryServiceTest {
     assertThat(response.targetScanId()).isEqualTo(1002L);
     assertThat(response.projectId()).isEqualTo(101L);
     assertThat(response.baseStatus()).isEqualTo(ScanStatus.DONE);
-    assertThat(response.targetStatus()).isEqualTo(ScanStatus.RUNNING);
+    assertThat(response.targetStatus()).isEqualTo(ScanStatus.DONE);
+    assertThat(response.summary().baseFindingCount()).isZero();
+    assertThat(response.summary().targetFindingCount()).isZero();
+    assertThat(response.newFindings()).isEmpty();
+    assertThat(response.resolvedFindings()).isEmpty();
+    assertThat(response.retainedFindings()).isEmpty();
+    assertThat(response.severityChangedFindings()).isEmpty();
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);
+  }
+
+  @Test
+  void compareReturnsSummaryAndSeverityChangedGroups() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Scan baseScan = createScan(1001L, 101L, ScanStatus.DONE);
+    Scan targetScan = createScan(1002L, 101L, ScanStatus.DONE);
+    ScanFinding resolvedFinding = createFinding(11L, 1001L, "sha256:resolved", Severity.HIGH, "Resolved finding");
+    ScanFinding retainedSameBase = createFinding(12L, 1001L, "sha256:retained-same", Severity.HIGH, "Retained same");
+    ScanFinding retainedSameTarget = createFinding(21L, 1002L, "sha256:retained-same", Severity.HIGH, "Retained same");
+    ScanFinding retainedChangedBase = createFinding(13L, 1001L, "sha256:retained-changed", Severity.HIGH, "Retained changed");
+    ScanFinding retainedChangedTarget = createFinding(22L, 1002L, "sha256:retained-changed", Severity.LOW, "Retained changed");
+    ScanFinding newFinding = createFinding(23L, 1002L, "sha256:new", Severity.MEDIUM, "New finding");
+
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(scanRepository.findById(1001L)).willReturn(Optional.of(baseScan));
+    given(scanRepository.findById(1002L)).willReturn(Optional.of(targetScan));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1001L))
+        .willReturn(List.of(resolvedFinding, retainedSameBase, retainedChangedBase));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1002L))
+        .willReturn(List.of(retainedSameTarget, retainedChangedTarget, newFinding));
+
+    ScanCompareResponse response = scanCompareQueryService.compare(1001L, 1002L);
+
+    assertThat(response.summary().baseFindingCount()).isEqualTo(3);
+    assertThat(response.summary().targetFindingCount()).isEqualTo(3);
+    assertThat(response.summary().newCount()).isEqualTo(1);
+    assertThat(response.summary().resolvedCount()).isEqualTo(1);
+    assertThat(response.summary().retainedCount()).isEqualTo(1);
+    assertThat(response.summary().severityChangedCount()).isEqualTo(1);
+    assertThat(response.newFindings()).extracting(ScanCompareFindingResponse::findingId).containsExactly(23L);
+    assertThat(response.resolvedFindings()).extracting(ScanCompareFindingResponse::findingId).containsExactly(11L);
+    assertThat(response.retainedFindings()).extracting(ScanCompareFindingResponse::findingId).containsExactly(21L);
+    assertThat(response.severityChangedFindings()).hasSize(1);
+    assertThat(response.severityChangedFindings().getFirst().baseSeverity()).isEqualTo(Severity.HIGH);
+    assertThat(response.severityChangedFindings().getFirst().targetSeverity()).isEqualTo(Severity.LOW);
   }
 
   @Test
@@ -198,6 +241,28 @@ class ScanCompareQueryServiceTest {
   void compareWhenScansBelongToDifferentProjectsThrowsInvalidParameter() {
     given(scanRepository.findById(1001L)).willReturn(Optional.of(createScan(1001L, 101L, ScanStatus.DONE)));
     given(scanRepository.findById(1002L)).willReturn(Optional.of(createScan(1002L, 202L, ScanStatus.DONE)));
+
+    assertThatThrownBy(() -> scanCompareQueryService.compare(1001L, 1002L))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.INVALID_PARAMETER);
+  }
+
+  @Test
+  void compareWhenBaseScanStatusIsNotDoneThrowsInvalidParameter() {
+    given(scanRepository.findById(1001L)).willReturn(Optional.of(createScan(1001L, 101L, ScanStatus.RUNNING)));
+    given(scanRepository.findById(1002L)).willReturn(Optional.of(createScan(1002L, 101L, ScanStatus.DONE)));
+
+    assertThatThrownBy(() -> scanCompareQueryService.compare(1001L, 1002L))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.INVALID_PARAMETER);
+  }
+
+  @Test
+  void compareWhenTargetScanStatusIsNotDoneThrowsInvalidParameter() {
+    given(scanRepository.findById(1001L)).willReturn(Optional.of(createScan(1001L, 101L, ScanStatus.DONE)));
+    given(scanRepository.findById(1002L)).willReturn(Optional.of(createScan(1002L, 101L, ScanStatus.FAILED)));
 
     assertThatThrownBy(() -> scanCompareQueryService.compare(1001L, 1002L))
         .isInstanceOf(BusinessException.class)

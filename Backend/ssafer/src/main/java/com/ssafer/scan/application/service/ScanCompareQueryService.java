@@ -5,8 +5,12 @@ import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.global.security.CurrentActorProvider;
 import com.ssafer.project.application.service.ProjectAuthorizationService;
+import com.ssafer.scan.api.dto.ScanCompareFindingResponse;
 import com.ssafer.scan.api.dto.ScanCompareResponse;
+import com.ssafer.scan.api.dto.ScanCompareSeverityChangedFindingResponse;
+import com.ssafer.scan.api.dto.ScanCompareSummaryResponse;
 import com.ssafer.scan.domain.entity.Scan;
+import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.util.ArrayList;
@@ -29,12 +33,52 @@ public class ScanCompareQueryService {
   @Transactional(readOnly = true)
   public ScanCompareResponse compare(Long baseScanId, Long targetScanId) {
     ScanCompareContext context = loadCompareContext(baseScanId, targetScanId);
+    ScanCompareClassificationResult classificationResult = classify(context);
+
+    List<ScanCompareFindingResponse> newFindings = classificationResult.newFindings().stream()
+        .map(this::toFindingResponse)
+        .toList();
+    List<ScanCompareFindingResponse> resolvedFindings = classificationResult.resolvedFindings().stream()
+        .map(this::toFindingResponse)
+        .toList();
+
+    List<ScanCompareFindingResponse> retainedFindings = new ArrayList<>();
+    List<ScanCompareSeverityChangedFindingResponse> severityChangedFindings = new ArrayList<>();
+
+    for (ScanCompareMatchedFinding retainedFinding : classificationResult.retainedFindings()) {
+      if (retainedFinding.baseFinding().severity() == retainedFinding.targetFinding().severity()) {
+        retainedFindings.add(toFindingResponse(retainedFinding.targetFinding()));
+        continue;
+      }
+
+      severityChangedFindings.add(new ScanCompareSeverityChangedFindingResponse(
+          toFindingResponse(retainedFinding.baseFinding()),
+          toFindingResponse(retainedFinding.targetFinding()),
+          retainedFinding.baseFinding().severity(),
+          retainedFinding.targetFinding().severity()
+      ));
+    }
+
+    ScanCompareSummaryResponse summary = new ScanCompareSummaryResponse(
+        context.baseFindings().size(),
+        context.targetFindings().size(),
+        newFindings.size(),
+        resolvedFindings.size(),
+        retainedFindings.size(),
+        severityChangedFindings.size()
+    );
+
     return new ScanCompareResponse(
         context.baseScan().getId(),
         context.targetScan().getId(),
         context.baseScan().getProjectId(),
         context.baseScan().getStatus(),
-        context.targetScan().getStatus()
+        context.targetScan().getStatus(),
+        summary,
+        newFindings,
+        resolvedFindings,
+        retainedFindings,
+        severityChangedFindings
     );
   }
 
@@ -54,6 +98,10 @@ public class ScanCompareQueryService {
     if (!baseScan.getProjectId().equals(targetScan.getProjectId())) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
+
+    // 결과 비교는 적재까지 끝난 DONE 스캔끼리만 허용한다.
+    assertComparableScanStatus(baseScan);
+    assertComparableScanStatus(targetScan);
 
     // 같은 프로젝트의 스캔이므로 한 번의 프로젝트 권한 검증으로 비교 가능 여부를 확인한다.
     projectAuthorizationService.loadAuthorizedProjectOrThrow(baseScan.getProjectId(), actor);
@@ -117,5 +165,27 @@ public class ScanCompareQueryService {
       indexed.putIfAbsent(finding.comparisonKey(), finding);
     }
     return indexed;
+  }
+
+  private ScanCompareFindingResponse toFindingResponse(ScanCompareFindingCandidate finding) {
+    return new ScanCompareFindingResponse(
+        finding.findingId(),
+        finding.scanId(),
+        finding.comparisonKey(),
+        finding.fingerprint(),
+        finding.sourceType(),
+        finding.severity(),
+        finding.category(),
+        finding.title(),
+        finding.filePath(),
+        finding.lineNumber(),
+        finding.ruleCode()
+    );
+  }
+
+  private void assertComparableScanStatus(Scan scan) {
+    if (scan.getStatus() != ScanStatus.DONE) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
   }
 }

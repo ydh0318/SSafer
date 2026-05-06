@@ -47,7 +47,11 @@ public class ScanQueryController {
   private final ScanFindingDetailQueryService scanFindingDetailQueryService;
 
   @GetMapping("/compare")
-  @Operation(summary = "스캔 결과 비교", description = "기준 스캔과 대상 스캔의 권한을 검증하고 비교 기본 정보를 조회합니다.")
+  @Operation(
+      summary = "스캔 결과 비교",
+      description = "기준 스캔과 대상 스캔을 비교해 신규 발생, 해결, 유지, 심각도 변경 취약점과 비교 요약을 조회합니다. "
+          + "비교는 같은 프로젝트에 속한 DONE 상태 스캔끼리만 허용합니다."
+  )
   public ResponseEntity<ApiResponse<ScanCompareResponse>> compareScans(
       @RequestParam Long baseScanId,
       @RequestParam Long targetScanId
