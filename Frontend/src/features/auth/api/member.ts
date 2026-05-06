@@ -5,6 +5,7 @@ import type {
   AuthTokenData,
   ChangePasswordRequest,
   CheckEmailAvailabilityData,
+  CheckNicknameAvailabilityData,
   LoginRequest,
   LogoutRequest,
   PasswordResetCompleteRequest,
@@ -44,6 +45,17 @@ export async function checkEmailAvailability(email: string) {
     '/users/check-email',
     {
       params: { email },
+    },
+  );
+
+  return response.data.data;
+}
+
+export async function checkNicknameAvailability(nickname: string) {
+  const response = await publicApiClient.get<ApiSuccessResponse<CheckNicknameAvailabilityData>>(
+    '/users/check-nickname',
+    {
+      params: { nickname },
     },
   );
 

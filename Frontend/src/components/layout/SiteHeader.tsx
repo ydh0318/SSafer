@@ -3,6 +3,7 @@ import {
   FolderKanban,
   History,
   LayoutDashboard,
+  LogIn,
   LogOut,
   ScanSearch,
   Trophy,
@@ -10,6 +11,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { ROUTES } from '../../constants/routes';
+import { hasStoredMemberSession, isStoredGuestSession } from '../../features/auth/utils/session';
 import { useAuthStore } from '../../store/authStore';
 import AppBrand from '../common/AppBrand';
 import ThemeToggleButton from '../common/ThemeToggleButton';
@@ -32,15 +34,14 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
   const logout = useAuthStore((state) => state.logout);
 
   const profileInitial = getProfileInitial(user?.name, user?.email);
-  const isMemberSession = Boolean(refreshToken) || user?.role === 'USER' || user?.role === 'ADMIN';
+  const isMemberSession =
+    Boolean(refreshToken) || user?.role === 'USER' || user?.role === 'ADMIN' || hasStoredMemberSession();
+  const isGuestSession = user?.role === 'GUEST' || isStoredGuestSession();
+  void showSessionBar;
+  void isGuestSession;
+  void isMemberSession;
 
   const navItems = [
-    {
-      label: '대시보드',
-      to: ROUTES.dashboard,
-      icon: LayoutDashboard,
-      active: location.pathname === ROUTES.dashboard,
-    },
     {
       label: '프로젝트',
       to: ROUTES.projects,
@@ -52,50 +53,61 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
         location.pathname.startsWith('/scans/'),
     },
     {
+      label: '대시보드',
+      to: ROUTES.dashboard,
+      icon: LayoutDashboard,
+      active: location.pathname === ROUTES.dashboard,
+    },
+    {
       label: '히스토리',
       to: ROUTES.history,
       icon: History,
       active: location.pathname.startsWith('/history'),
+      memberOnly: true,
     },
     {
-      label: '가이드',
+      label: '사용 가이드',
       to: ROUTES.guide,
       icon: BookOpen,
       active: location.pathname.startsWith('/guide'),
     },
     {
-      label: '챌린지',
+      label: '타이핑',
       to: ROUTES.typingGame,
       icon: Trophy,
       active: location.pathname.startsWith('/typing-game'),
     },
-  ];
+  ].filter((item) => !('memberOnly' in item) || isMemberSession);
 
   const linkClass = (active: boolean) =>
-    `site-header-link inline-flex items-center gap-2 px-4 py-2 font-bold tracking-wide transition ${
+    `site-header-link inline-flex h-10 w-10 items-center justify-center rounded-sm p-0 font-bold tracking-wide transition lg:h-auto lg:w-auto lg:gap-2 lg:px-4 lg:py-2 ${
       active ? 'bg-black text-white' : 'text-neutral-600 hover:text-black'
     }`;
 
   return (
-    <header className="site-header-shell theme-surface-header border-b border-neutral-200 bg-[#f5f5f5]/95 backdrop-blur">
-      <div className="site-header-inner mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <AppBrand titleClassName="text-lg font-black tracking-tight text-black" to={ROUTES.root} />
+    <header className="site-header-shell site-app-header-shell theme-surface-header border-b border-neutral-200 bg-[#f5f5f5]/95 backdrop-blur">
+      <div className="site-header-inner mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+        <AppBrand
+          textClassName="hidden lg:block"
+          titleClassName="text-lg font-black tracking-tight text-black"
+          to={ROUTES.root}
+        />
 
-        <nav className="site-header-nav flex flex-wrap items-center gap-3 text-sm">
+        <nav className="site-header-nav flex flex-wrap items-center gap-2 text-sm lg:gap-3">
           {navItems.map((item) => {
             const Icon = item.icon;
 
             return (
               <Link className={linkClass(item.active)} key={item.to} to={item.to}>
-                <Icon className="h-4 w-4" />
-                <span className="site-header-link-label">{item.label}</span>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="site-header-link-label hidden lg:inline">{item.label}</span>
               </Link>
             );
           })}
 
           <Link className={linkClass(location.pathname.startsWith('/monitor'))} to={ROUTES.monitor}>
-            <ScanSearch className="h-4 w-4" />
-            <span className="site-header-link-label">모니터링</span>
+            <ScanSearch className="h-4 w-4 shrink-0" />
+            <span className="site-header-link-label hidden lg:inline">모니터링</span>
           </Link>
 
           <ThemeToggleButton />
@@ -113,7 +125,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
 
               <button
                 aria-label="로그아웃"
-                className="site-header-link inline-flex items-center justify-center px-2 py-2 text-neutral-600 transition hover:text-black"
+                className="site-header-link inline-flex h-10 w-10 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
                 onClick={logout}
                 type="button"
               >
@@ -122,24 +134,16 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
             </>
           ) : (
             <button
-              className="site-header-link px-4 py-2 font-bold tracking-wide text-black transition hover:opacity-70"
+              className="site-header-link inline-flex h-10 w-10 items-center justify-center rounded-sm p-0 font-bold tracking-wide text-black transition hover:opacity-70 lg:h-auto lg:w-auto lg:gap-2 lg:px-4 lg:py-2"
               onClick={() => navigate(ROUTES.login)}
               type="button"
             >
-              <span className="site-header-link-label">로그인</span>
+              <LogIn className="h-4 w-4 shrink-0 lg:hidden" />
+              <span className="site-header-link-label hidden lg:inline">로그인</span>
             </button>
           )}
         </nav>
       </div>
-
-      {showSessionBar && isAuthenticated && isMemberSession ? (
-        <div className="border-t border-neutral-200 bg-white">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-2 text-xs text-neutral-500">
-            <span>회원 세션</span>
-            <span>{user?.email ?? 'member@ssafer.local'}</span>
-          </div>
-        </div>
-      ) : null}
     </header>
   );
 }

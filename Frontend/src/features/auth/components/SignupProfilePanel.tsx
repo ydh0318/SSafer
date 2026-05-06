@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { getApiErrorMessage, getApiFieldErrors } from '../../../api/error';
 import type { SignupFormValues } from '../../../types/auth';
-import { registerUser } from '../api/member';
+import { checkNicknameAvailability, registerUser } from '../api/member';
 import {
   validateDisplayName,
   validatePassword,
@@ -30,11 +30,12 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
   } | null>(null);
   const [displayNameCheckMessage, setDisplayNameCheckMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingDisplayName, setIsCheckingDisplayName] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
   const [isDisplayNameConfirmed, setIsDisplayNameConfirmed] = useState(false);
 
-  const handleDisplayNameCheck = () => {
+  const handleDisplayNameCheck = async () => {
     const displayNameError = validateDisplayName(values.displayName);
 
     if (displayNameError) {
@@ -47,12 +48,41 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
       return;
     }
 
+    setIsCheckingDisplayName(true);
     setFieldErrors((current) => ({
       ...current,
       displayName: undefined,
     }));
-    setDisplayNameCheckMessage('사용 가능한 닉네임입니다.');
-    setIsDisplayNameConfirmed(true);
+    setDisplayNameCheckMessage(null);
+    setMessage(null);
+
+    try {
+      const result = await checkNicknameAvailability(values.displayName.trim());
+
+      if (result.available) {
+        setDisplayNameCheckMessage('사용 가능한 닉네임입니다.');
+        setIsDisplayNameConfirmed(true);
+        return;
+      }
+
+      setFieldErrors((current) => ({
+        ...current,
+        displayName: '이미 사용 중인 닉네임입니다.',
+      }));
+      setIsDisplayNameConfirmed(false);
+    } catch (error) {
+      setFieldErrors((current) => ({
+        ...current,
+        ...getApiFieldErrors(error),
+      }));
+      setMessage({
+        tone: 'error',
+        text: getApiErrorMessage(error, '닉네임 중복 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
+      });
+      setIsDisplayNameConfirmed(false);
+    } finally {
+      setIsCheckingDisplayName(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -73,7 +103,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
     if (!isDisplayNameConfirmed) {
       setFieldErrors((current) => ({
         ...current,
-        displayName: '닉네임 확인 버튼을 눌러 확인해 주세요.',
+        displayName: '닉네임 중복 확인을 먼저 진행해 주세요.',
       }));
       return;
     }
@@ -96,10 +126,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
       }));
       setMessage({
         tone: 'error',
-        text: getApiErrorMessage(
-          error,
-          '회원가입을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.',
-        ),
+        text: getApiErrorMessage(error, '회원가입을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.'),
       });
     } finally {
       setIsSubmitting(false);
@@ -128,7 +155,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
             Ok, Let&apos;s complete the last step.
           </h2>
           <p className="auth-body-text text-[#6f6f6f]">
-            인증이 완료되었습니다. 닉네임과 비밀번호를 입력해 계정을 마무리해 주세요.
+            회원가입을 완료하기 전에 사용할 닉네임과 비밀번호를 설정해 주세요.
           </p>
         </header>
 
@@ -154,11 +181,12 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
                 value={values.displayName}
               />
               <button
-                className="auth-button w-[9rem] shrink-0 border border-black bg-black px-4 text-white transition hover:bg-zinc-800"
-                onClick={handleDisplayNameCheck}
+                className="auth-button w-[9rem] shrink-0 border border-black bg-black px-4 text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isCheckingDisplayName}
+                onClick={() => void handleDisplayNameCheck()}
                 type="button"
               >
-                확인
+                {isCheckingDisplayName ? '확인 중...' : '중복 확인'}
               </button>
             </div>
 
@@ -169,7 +197,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
             ) : null}
 
             <div className="space-y-1 text-[0.98rem] leading-7 text-black">
-              <p>- 닉네임은 3자 이상 입력해 주세요.</p>
+              <p>- 닉네임은 3자 이상 100자 이하로 입력해 주세요.</p>
             </div>
           </div>
 
@@ -218,11 +246,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
                     onClick={() => setIsConfirmPasswordVisible((current) => !current)}
                     type="button"
                   >
-                    {isConfirmPasswordVisible ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {isConfirmPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     show
                   </button>
                 }
@@ -231,7 +255,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
               />
 
               <div className="space-y-1 text-[0.98rem] leading-7 text-black">
-                <p>- 영문, 숫자, 특수문자를 조합해 8자 이상으로 설정해 주세요.</p>
+                <p>- 비밀번호는 8자 이상 72자 이하로 입력해 주세요.</p>
               </div>
             </div>
           </div>
@@ -241,7 +265,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
 
         <div className="space-y-3 border-t border-dashed border-[#cfcfcf] pt-4">
           <p className="auth-body-text text-black">
-            회원가입을 진행하면 서비스 이용약관 및 데이터 정책에 동의하게 됩니다.
+            입력한 정보가 맞는지 확인한 뒤 회원가입을 완료해 주세요.
           </p>
           <AuthButton isLoading={isSubmitting} type="submit">
             Register

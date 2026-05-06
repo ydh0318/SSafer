@@ -20,6 +20,10 @@ export interface CheckEmailAvailabilityData {
   available: boolean;
 }
 
+export interface CheckNicknameAvailabilityData {
+  available: boolean;
+}
+
 export interface SendEmailVerificationCodeRequest {
   email: string;
 }
