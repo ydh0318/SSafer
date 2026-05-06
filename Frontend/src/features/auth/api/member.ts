@@ -16,6 +16,8 @@ import type {
   RegisterUserData,
   RegisterUserRequest,
   SendEmailVerificationCodeRequest,
+  UpdateUserProfileRequest,
+  UserProfileData,
   VerifyEmailCodeRequest,
 } from '../../../types/auth';
 
@@ -75,6 +77,16 @@ export async function registerUser(payload: RegisterUserRequest) {
     '/users',
     payload,
   );
+  return response.data.data;
+}
+
+export async function getCurrentUserProfile() {
+  const response = await apiClient.get<ApiSuccessResponse<UserProfileData>>('/users/me');
+  return response.data.data;
+}
+
+export async function updateCurrentUserProfile(payload: UpdateUserProfileRequest) {
+  const response = await apiClient.patch<ApiSuccessResponse<UserProfileData>>('/users/me/profile', payload);
   return response.data.data;
 }
 
