@@ -357,6 +357,8 @@ errorCode
 durationMs
 ```
 
+`durationMs`는 Spring Boot 콜백 payload에는 포함하지 않고, AI 서버와 Worker 로그에서 확인합니다.
+
 권장 stage:
 
 ```text

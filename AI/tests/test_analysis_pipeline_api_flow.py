@@ -111,6 +111,42 @@ class AnalysisPipelineApiFlowTest(unittest.TestCase):
         self.assertEqual(response.stage, "explain")
         self.assertEqual(response.finding_id, "FND-0001")
 
+    def test_analyze_scan_result_logs_scan_id_and_duration(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "analysis_result.json"
+
+            with patch(
+                "app.services.analysis_service.generate_finding_explanation",
+                return_value="테스트 설명",
+            ), patch(
+                "app.services.analysis_service.generate_finding_fix",
+                return_value={
+                    "summary": "테스트 수정 요약",
+                    "priority": "high",
+                    "recommendedActions": ["조치 1", "조치 2"],
+                    "codeGuidance": "테스트 코드 가이드",
+                    "verification": "테스트 검증",
+                    "cautions": ["주의 1"],
+                },
+            ), self.assertLogs("app.services.analysis_service", level="INFO") as logs:
+                analyze_scan_result(
+                    AnalysisRequest(
+                        taskId=123,
+                        agentId=10,
+                        projectId=2,
+                        scanId=5,
+                        scan_result_path="inline",
+                        analysis_result_path=str(output_path),
+                        scan_result=build_scan_result(),
+                    )
+                )
+
+        output = "\n".join(logs.output)
+        self.assertIn("scanId=5", output)
+        self.assertIn("taskId=123", output)
+        self.assertIn("stage=TASK_COMPLETED", output)
+        self.assertIn("durationMs=", output)
+
 
 if __name__ == "__main__":
     unittest.main()

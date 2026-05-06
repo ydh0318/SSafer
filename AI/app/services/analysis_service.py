@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 from typing import Any
 
 from app.loaders.scan_loader import (
@@ -10,6 +11,7 @@ from app.loaders.scan_loader import (
 )
 from app.core.analysis_errors import build_standard_analysis_error
 from app.core.llm import LLMCallError, LLMTimeoutError
+from app.core.logging_utils import elapsed_ms, log_with_fields, monotonic_ms
 from app.schemas.analysis import AnalysisRequest, AnalysisResponse
 
 from app.services.explain_service import generate_finding_explanation
@@ -27,6 +29,10 @@ from app.services.s3_service import (
     download_scan_result_json_data,
     upload_analysis_result_json_data,
 )
+
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class FindingAnalysisError(RuntimeError):
@@ -94,22 +100,80 @@ def get_s3_download_error_code(exc: S3DownloadError) -> str:
 
 
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
-    if request.raw_result_path is not None:
-        result = run_s3_analysis_pipeline(
-            raw_result_path=request.raw_result_path,
-            analysis_result_path=request.analysis_result_s3_path
-            or request.analysis_result_path,
+    started_ms = monotonic_ms()
+    log_with_fields(
+        logger,
+        logging.INFO,
+        "FastAPI analysis started.",
+        scanId=request.scan_id,
+        taskId=request.task_id,
+        agentId=request.agent_id,
+        projectId=request.project_id,
+        stage="ANALYZE_REQUEST",
+        status="RUNNING",
+    )
+
+    try:
+        if request.raw_result_path is not None:
+            result = run_s3_analysis_pipeline(
+                raw_result_path=request.raw_result_path,
+                analysis_result_path=request.analysis_result_s3_path
+                or request.analysis_result_path,
+            )
+        elif request.scan_result is None:
+            result = run_analysis_pipeline(
+                scan_result_path=request.scan_result_path,
+                output_path=request.analysis_result_path,
+            )
+        else:
+            result = run_analysis_pipeline_from_scan_result(
+                scan_result=request.scan_result.model_dump(by_alias=True),
+                scan_result_path=request.scan_result_path,
+                output_path=request.analysis_result_path,
+            )
+    except Exception:
+        log_with_fields(
+            logger,
+            logging.ERROR,
+            "FastAPI analysis failed with unhandled exception.",
+            scanId=request.scan_id,
+            taskId=request.task_id,
+            agentId=request.agent_id,
+            projectId=request.project_id,
+            stage="TASK_FAILED",
+            status="failed",
+            errorCode="UNKNOWN_ERROR",
+            durationMs=elapsed_ms(started_ms),
         )
-    elif request.scan_result is None:
-        result = run_analysis_pipeline(
-            scan_result_path=request.scan_result_path,
-            output_path=request.analysis_result_path,
+        raise
+
+    status = str(result.get("status") or "")
+    if status == "failed":
+        log_with_fields(
+            logger,
+            logging.ERROR,
+            "FastAPI analysis failed.",
+            scanId=request.scan_id,
+            taskId=request.task_id,
+            agentId=request.agent_id,
+            projectId=request.project_id,
+            stage=result.get("stage") or "TASK_FAILED",
+            status=status,
+            errorCode=result.get("error_code"),
+            durationMs=elapsed_ms(started_ms),
         )
     else:
-        result = run_analysis_pipeline_from_scan_result(
-            scan_result=request.scan_result.model_dump(by_alias=True),
-            scan_result_path=request.scan_result_path,
-            output_path=request.analysis_result_path,
+        log_with_fields(
+            logger,
+            logging.INFO,
+            "FastAPI analysis completed.",
+            scanId=request.scan_id,
+            taskId=request.task_id,
+            agentId=request.agent_id,
+            projectId=request.project_id,
+            stage="TASK_COMPLETED",
+            status=status,
+            durationMs=elapsed_ms(started_ms),
         )
     return AnalysisResponse(**result)
 
