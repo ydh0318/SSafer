@@ -165,6 +165,66 @@ def upload(
     _print_upload_response(response)
 
 
+@app.command("apply")
+def apply_fix(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to patch."),
+    analysis_result: Path = typer.Option(..., "--analysis-result", help="Worker analysis_result.json with patch payloads."),
+    patch_id: Optional[str] = typer.Option(None, "--patch-id", help="Apply only one patch ID."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch payloads without modifying files."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirmation prompt."),
+) -> None:
+    """Apply approved patch payloads to local project files."""
+    from ssafer.core.patches import PatchError, apply_patch_candidates, load_patch_candidates_from_file
+
+    try:
+        candidates = load_patch_candidates_from_file(analysis_result)
+        selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
+        if not selected:
+            console.print("[yellow]No applicable patch payloads found.[/yellow]")
+            raise typer.Exit(code=1)
+
+        table = Table(title="Patch candidates")
+        table.add_column("Patch ID")
+        table.add_column("Finding ID")
+        table.add_column("File", overflow="fold")
+        table.add_column("Operation")
+        for candidate in selected:
+            table.add_row(
+                candidate.patch_id,
+                candidate.finding_id or "-",
+                candidate.file_path,
+                candidate.operation,
+            )
+        console.print(table)
+
+        if not dry_run and not yes:
+            confirmed = typer.confirm("Apply selected patches?")
+            if not confirmed:
+                console.print("[yellow]Patch apply canceled.[/yellow]")
+                raise typer.Exit(code=1)
+
+        results = apply_patch_candidates(path.resolve(), candidates, patch_id=patch_id, dry_run=dry_run)
+    except (OSError, ValueError, PatchError, RuntimeError) as exc:
+        console.print(f"[red]Patch apply failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    result_table = Table(title="Patch apply result")
+    result_table.add_column("Patch ID")
+    result_table.add_column("Status")
+    result_table.add_column("File", overflow="fold")
+    result_table.add_column("Message", overflow="fold")
+    result_table.add_column("Backup", overflow="fold")
+    for result in results:
+        result_table.add_row(
+            result.patch_id,
+            result.status,
+            result.file_path,
+            result.message,
+            result.backup_path or "-",
+        )
+    console.print(result_table)
+
+
 @app.command()
 def login(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer 서버 API URL"),
