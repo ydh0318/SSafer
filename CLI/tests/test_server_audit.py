@@ -98,6 +98,45 @@ def test_server_audit_records_firewall_inactive():
     assert result.findings[0].ruleId == "SERVER_FIREWALL_INACTIVE"
 
 
+def test_server_audit_firewall_warning_explains_permission_issue():
+    def fake_runner(command: list[str]) -> CommandResult:
+        return CommandResult(command, 1, stderr="Permission denied")
+
+    result = run_server_audit(checks=["firewall"], runner=fake_runner)
+
+    assert "elevated privileges" in result.warnings[0]
+
+
+def test_server_audit_nginx_falls_back_to_docker_container():
+    commands: list[list[str]] = []
+
+    def fake_runner(command: list[str]) -> CommandResult:
+        commands.append(command)
+        if command == ["nginx", "-T"]:
+            return CommandResult(command, 127, stderr="nginx: command not found")
+        if command == ["docker", "ps", "--format", "{{json .}}"]:
+            return CommandResult(command, 0, '{"Names":"ssafer-nginx","Image":"nginx:1.27"}\n')
+        if command == ["docker", "exec", "ssafer-nginx", "nginx", "-T"]:
+            return CommandResult(command, 0, "server { listen 80; }")
+        raise AssertionError(command)
+
+    result = run_server_audit(checks=["nginx"], runner=fake_runner)
+
+    assert result.warnings == []
+    assert ["docker", "exec", "ssafer-nginx", "nginx", "-T"] in commands
+
+
+def test_server_audit_trivy_warning_suggests_install_tools(monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    monkeypatch.setattr(audit_module.shutil, "which", lambda name: None)
+
+    result = run_server_audit(checks=["os-packages"], runner=lambda command: CommandResult(command, 0, ""))
+
+    assert "ssafer install-tools" in result.warnings[0]
+    assert "--include-os-packages" in result.warnings[0]
+
+
 def test_save_server_audit_result_writes_json_and_marker(tmp_path: Path):
     result = run_server_audit(checks=["ports"], runner=lambda command: CommandResult(command, 0, ""))
 
@@ -135,3 +174,21 @@ def test_server_audit_command_saves_result(tmp_path: Path, monkeypatch):
     assert result.exit_code == 0
     assert "Server audit saved" in result.output
     assert (tmp_path / ".ssafer" / "server-audit" / "last_audit.txt").exists()
+
+
+def test_server_audit_command_details_prints_findings_and_artifacts(tmp_path: Path, monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    monkeypatch.setattr(
+        audit_module,
+        "run_command",
+        lambda command: CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:5432 0.0.0.0:*"),
+    )
+
+    result = CliRunner().invoke(app, ["server-audit", "--path", str(tmp_path), "--checks", "ports", "--details"])
+
+    assert result.exit_code == 0
+    assert "Server audit findings" in result.output
+    assert "0.0.0.0:5432" in result.output
+    assert "Server audit artifacts" in result.output
+    assert "listening-ports" in result.output

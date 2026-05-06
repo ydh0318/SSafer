@@ -268,19 +268,46 @@ def _audit_firewall(result: ServerAuditResult, runner: Runner) -> None:
             )
         )
     if ufw.exit_code != 0 and iptables.exit_code != 0:
-        result.warnings.append("Failed to collect firewall status with ufw and iptables.")
+        result.warnings.append(_firewall_warning(ufw, iptables))
 
 
 def _audit_nginx(result: ServerAuditResult, runner: Runner) -> None:
     command_result = runner(["nginx", "-T"])
-    if command_result.exit_code != 0:
-        result.warnings.append("nginx command failed or nginx is not installed. nginx checks skipped.")
+    if command_result.exit_code == 0:
+        result.artifacts.append(ServerArtifact("command-output", "nginx -T", asdict(command_result)))
+        return
+
     result.artifacts.append(ServerArtifact("command-output", "nginx -T", asdict(command_result)))
+    docker_result = runner(["docker", "ps", "--format", "{{json .}}"])
+    result.artifacts.append(ServerArtifact("command-output", "docker ps for nginx", asdict(docker_result)))
+    if docker_result.exit_code != 0:
+        result.warnings.append(
+            "Host nginx config could not be collected, and Docker nginx fallback failed. "
+            "If nginx runs in Docker, check Docker permissions or run the command from a user that can access Docker."
+        )
+        return
+
+    nginx_containers = _extract_nginx_containers(docker_result.stdout)
+    if not nginx_containers:
+        result.warnings.append(
+            "Host nginx config could not be collected, and no running Docker nginx container was found."
+        )
+        return
+
+    for container in nginx_containers:
+        exec_result = runner(["docker", "exec", container, "nginx", "-T"])
+        result.artifacts.append(ServerArtifact("command-output", f"docker exec {container} nginx -T", asdict(exec_result)))
+        if exec_result.exit_code == 0:
+            return
+    result.warnings.append("Docker nginx container was found, but nginx -T failed inside the container.")
 
 
 def _audit_os_packages(result: ServerAuditResult, runner: Runner, *, include_os_packages: bool) -> None:
     if shutil.which("trivy") is None:
-        result.warnings.append("Trivy command not found. OS package vulnerability checks skipped.")
+        result.warnings.append(
+            "Trivy command not found. OS package vulnerability checks skipped. "
+            "Run 'ssafer install-tools' on this server, then retry with '--include-os-packages'."
+        )
         return
     if not include_os_packages:
         result.warnings.append("OS package vulnerability scan skipped. Use --include-os-packages to run Trivy rootfs scan.")
@@ -302,6 +329,41 @@ def _audit_os_packages(result: ServerAuditResult, runner: Runner, *, include_os_
 def _is_public_host(host: str) -> bool:
     normalized = host.strip().lower()
     return normalized in {"*", "0.0.0.0", "::", ":::", "[::]"} or normalized.startswith(":::")
+
+
+def _firewall_warning(ufw: CommandResult, iptables: CommandResult) -> str:
+    combined = f"{ufw.stderr}\n{iptables.stderr}".casefold()
+    if "permission denied" in combined or "must be root" in combined or "permission" in combined:
+        return (
+            "Firewall status could not be collected because ufw/iptables require elevated privileges. "
+            "Run from a user with sudo permission if firewall details are needed."
+        )
+    if ufw.exit_code == 127 and iptables.exit_code == 127:
+        return "Firewall status could not be collected because ufw and iptables commands were not found."
+    return (
+        "Firewall status could not be collected with ufw or iptables. "
+        "This server may rely on AWS Security Group rules instead of host firewall commands."
+    )
+
+
+def _extract_nginx_containers(output: str) -> list[str]:
+    containers: list[str] = []
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            if "nginx" in line.casefold():
+                containers.append(line.split()[0])
+            continue
+        image = str(payload.get("Image") or payload.get("image") or "")
+        names = str(payload.get("Names") or payload.get("names") or payload.get("Name") or "")
+        container_id = str(payload.get("ID") or payload.get("id") or "")
+        target = names or container_id
+        if target and ("nginx" in image.casefold() or "nginx" in names.casefold()):
+            containers.append(target)
+    return containers
 
 
 def _assign_finding_ids(findings: list[ServerFinding]) -> None:

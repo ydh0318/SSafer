@@ -113,6 +113,7 @@ def server_audit(
         "--checks",
         help="Comma-separated checks: ports,processes,docker,ssh,firewall,nginx,os-packages.",
     ),
+    details: bool = typer.Option(False, "--details", "-d", help="Print findings, warnings, and artifacts."),
     include_os_packages: bool = typer.Option(
         False,
         "--include-os-packages",
@@ -137,6 +138,8 @@ def server_audit(
         console.print("[yellow]Warnings[/yellow]")
         for warning in result.warnings:
             console.print(f"  - {warning}")
+    if details:
+        _print_server_audit_details(result)
     console.print(f"[green]Server audit saved:[/green] {output_path}")
 
 
@@ -719,6 +722,73 @@ def _print_upload_response(response: dict) -> None:
     console.print(f"스캔 ID: {response.get('scanId', 'unknown')}")
     if response.get("viewUrl"):
         console.print(f"결과 보기: {response['viewUrl']}")
+
+
+def _print_server_audit_details(result: object) -> None:
+    findings = getattr(result, "findings", [])
+    warnings = getattr(result, "warnings", [])
+    artifacts = getattr(result, "artifacts", [])
+
+    finding_table = Table(title="Server audit findings", show_lines=True)
+    finding_table.add_column("ID")
+    finding_table.add_column("Severity")
+    finding_table.add_column("Rule")
+    finding_table.add_column("Target", overflow="fold")
+    finding_table.add_column("Title", overflow="fold")
+    finding_table.add_column("Evidence", overflow="fold")
+    if not findings:
+        finding_table.add_row("-", "-", "-", "-", "-", "-")
+    for finding in findings:
+        finding_table.add_row(
+            getattr(finding, "id", "-"),
+            getattr(finding, "severity", "-"),
+            getattr(finding, "ruleId", "-"),
+            getattr(finding, "target", "-"),
+            getattr(finding, "title", "-"),
+            getattr(finding, "evidence", "-"),
+        )
+    console.print(finding_table)
+
+    warning_table = Table(title="Server audit warnings", show_lines=True)
+    warning_table.add_column("No.", justify="right")
+    warning_table.add_column("Message", overflow="fold")
+    if not warnings:
+        warning_table.add_row("-", "-")
+    for index, warning in enumerate(warnings, start=1):
+        warning_table.add_row(str(index), str(warning))
+    console.print(warning_table)
+
+    artifact_table = Table(title="Server audit artifacts", show_lines=True)
+    artifact_table.add_column("Type")
+    artifact_table.add_column("Target", overflow="fold")
+    artifact_table.add_column("Summary", overflow="fold")
+    if not artifacts:
+        artifact_table.add_row("-", "-", "-")
+    for artifact in artifacts:
+        artifact_table.add_row(
+            getattr(artifact, "type", "-"),
+            getattr(artifact, "target", "-"),
+            _summarize_server_artifact(getattr(artifact, "content", None)),
+        )
+    console.print(artifact_table)
+
+
+def _summarize_server_artifact(content: object) -> str:
+    if isinstance(content, list):
+        return f"{len(content)} items"
+    if isinstance(content, dict):
+        if {"command", "exit_code"}.issubset(content):
+            command = " ".join(content.get("command") or [])
+            return f"{command} (exit {content.get('exit_code')})"
+        return f"{len(content)} keys"
+    if content is None:
+        return "-"
+    text = str(content).replace("\r", " ").replace("\n", " ").strip()
+    if not text:
+        return "-"
+    if len(text) <= _REPORT_EVIDENCE_MAX:
+        return text
+    return text[: _REPORT_EVIDENCE_MAX - 3] + "..."
 
 
 def _upload_or_exit(path: Path, api_url: str | None) -> dict:
