@@ -44,7 +44,22 @@ def test_server_audit_reports_public_sensitive_port():
     assert finding.id == "SRV-0001"
     assert finding.ruleId == "SERVER_PUBLIC_SENSITIVE_PORT"
     assert finding.severity == "HIGH"
-    assert finding.evidence == "0.0.0.0:5432"
+    assert finding.title == "PostgreSQL 포트(5432)가 외부 인터페이스에 열려 있음"
+    assert finding.evidence == "5432/tcp (IPv4 외부 공개)"
+
+
+def test_server_audit_groups_ipv4_and_ipv6_public_port_findings():
+    output = "\n".join(
+        [
+            "tcp LISTEN 0 4096 0.0.0.0:22 0.0.0.0:* users:((\"sshd\"))",
+            "tcp LISTEN 0 4096 [::]:22 [::]:* users:((\"sshd\"))",
+        ]
+    )
+
+    result = run_server_audit(checks=["ports"], runner=lambda command: CommandResult(command, 0, output))
+
+    assert len(result.findings) == 1
+    assert result.findings[0].evidence == "22/tcp (IPv4 외부 공개, IPv6 외부 공개)"
 
 
 def test_server_audit_ignores_localhost_sensitive_port():
@@ -104,7 +119,23 @@ def test_server_audit_firewall_warning_explains_permission_issue():
 
     result = run_server_audit(checks=["firewall"], runner=fake_runner)
 
-    assert "elevated privileges" in result.warnings[0]
+    assert "sudo 권한" in result.warnings[0]
+
+
+def test_server_audit_firewall_uses_sudo_when_allowed():
+    commands: list[list[str]] = []
+
+    def fake_runner(command: list[str]) -> CommandResult:
+        commands.append(command)
+        if command[0] == "sudo":
+            return CommandResult(command, 0, "Status: active")
+        return CommandResult(command, 1, stderr="Permission denied")
+
+    result = run_server_audit(checks=["firewall"], runner=fake_runner, allow_sudo=True)
+
+    assert result.warnings == []
+    assert ["sudo", "ufw", "status"] in commands
+    assert ["sudo", "iptables", "-S"] in commands
 
 
 def test_server_audit_nginx_falls_back_to_docker_container():
@@ -135,6 +166,29 @@ def test_server_audit_trivy_warning_suggests_install_tools(monkeypatch):
 
     assert "ssafer install-tools" in result.warnings[0]
     assert "--include-os-packages" in result.warnings[0]
+
+
+def test_server_audit_trivy_rootfs_retries_with_sudo_when_allowed(monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    monkeypatch.setattr(audit_module.shutil, "which", lambda name: "/usr/bin/trivy" if name == "trivy" else None)
+    commands: list[list[str]] = []
+
+    def fake_runner(command: list[str]) -> CommandResult:
+        commands.append(command)
+        if command[0] == "sudo":
+            return CommandResult(command, 0, '{"Results":[]}')
+        return CommandResult(command, 1, stderr="permission denied")
+
+    result = run_server_audit(
+        checks=["os-packages"],
+        include_os_packages=True,
+        allow_sudo=True,
+        runner=fake_runner,
+    )
+
+    assert result.warnings == []
+    assert any(command[:2] == ["sudo", "trivy"] for command in commands)
 
 
 def test_save_server_audit_result_writes_json_and_marker(tmp_path: Path):
@@ -172,7 +226,7 @@ def test_server_audit_command_saves_result(tmp_path: Path, monkeypatch):
     result = CliRunner().invoke(app, ["server-audit", "--path", str(tmp_path), "--checks", "ports"])
 
     assert result.exit_code == 0
-    assert "Server audit saved" in result.output
+    assert "서버 점검 결과 저장" in result.output
     assert (tmp_path / ".ssafer" / "server-audit" / "last_audit.txt").exists()
 
 
@@ -188,7 +242,9 @@ def test_server_audit_command_details_prints_findings_and_artifacts(tmp_path: Pa
     result = CliRunner().invoke(app, ["server-audit", "--path", str(tmp_path), "--checks", "ports", "--details"])
 
     assert result.exit_code == 0
-    assert "Server audit findings" in result.output
-    assert "0.0.0.0:5432" in result.output
-    assert "Server audit artifacts" in result.output
+    assert "서버 점검 Findings" in result.output
+    assert "PUBLIC_PORT" in result.output
+    assert "5432/tcp" in result.output
+    assert "IPv4" in result.output
+    assert "서버 점검 산출물" in result.output
     assert "listening-ports" in result.output

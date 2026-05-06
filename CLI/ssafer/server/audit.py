@@ -66,6 +66,7 @@ def run_server_audit(
     *,
     checks: list[str] | None = None,
     include_os_packages: bool = False,
+    allow_sudo: bool = False,
     runner: Runner | None = None,
     sshd_config: Path = Path("/etc/ssh/sshd_config"),
 ) -> ServerAuditResult:
@@ -82,11 +83,11 @@ def run_server_audit(
     if "ssh" in selected:
         _audit_ssh(result, sshd_config)
     if "firewall" in selected:
-        _audit_firewall(result, command_runner)
+        _audit_firewall(result, command_runner, allow_sudo=allow_sudo)
     if "nginx" in selected:
         _audit_nginx(result, command_runner)
     if "os-packages" in selected:
-        _audit_os_packages(result, command_runner, include_os_packages=include_os_packages)
+        _audit_os_packages(result, command_runner, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
 
     _assign_finding_ids(result.findings)
     return result
@@ -175,12 +176,17 @@ def _audit_ports(result: ServerAuditResult, runner: Runner) -> None:
 
     ports = parse_ss_listening_ports(command_result.stdout)
     result.artifacts.append(ServerArtifact("listening-ports", "ss -tulpen", ports))
+    public_sensitive_ports: dict[int, set[str]] = {}
     for port in ports:
         port_number = int(port["port"])
         service = SENSITIVE_PORTS.get(port_number)
         if not service or not _is_public_host(str(port["host"])):
             continue
-        service_name, severity = service
+        public_sensitive_ports.setdefault(port_number, set()).add(str(port["host"]))
+
+    for port_number, hosts in sorted(public_sensitive_ports.items()):
+        service_name, severity = SENSITIVE_PORTS[port_number]
+        interfaces = _format_public_interfaces(hosts)
         result.findings.append(
             ServerFinding(
                 id="",
@@ -188,8 +194,8 @@ def _audit_ports(result: ServerAuditResult, runner: Runner) -> None:
                 source="server-audit",
                 severity=severity,
                 target="ports",
-                title=f"{service_name} port is listening on a public interface",
-                evidence=f"{port['host']}:{port_number}",
+                title=f"{service_name} 포트({port_number})가 외부 인터페이스에 열려 있음",
+                evidence=f"{port_number}/tcp ({interfaces})",
             )
         )
 
@@ -232,7 +238,7 @@ def _audit_ssh(result: ServerAuditResult, sshd_config: Path) -> None:
                 source="server-audit",
                 severity="HIGH",
                 target=str(sshd_config),
-                title="SSH root login is enabled",
+                title="SSH root 로그인이 허용되어 있음",
                 evidence="PermitRootLogin yes",
             )
         )
@@ -244,15 +250,18 @@ def _audit_ssh(result: ServerAuditResult, sshd_config: Path) -> None:
                 source="server-audit",
                 severity="MEDIUM",
                 target=str(sshd_config),
-                title="SSH password authentication is enabled",
+                title="SSH 비밀번호 로그인이 허용되어 있음",
                 evidence="PasswordAuthentication yes",
             )
         )
 
 
-def _audit_firewall(result: ServerAuditResult, runner: Runner) -> None:
+def _audit_firewall(result: ServerAuditResult, runner: Runner, *, allow_sudo: bool) -> None:
     ufw = runner(["ufw", "status"])
     iptables = runner(["iptables", "-S"])
+    if allow_sudo and _looks_like_permission_error(ufw, iptables):
+        ufw = runner(["sudo", "ufw", "status"])
+        iptables = runner(["sudo", "iptables", "-S"])
     result.artifacts.append(ServerArtifact("command-output", "ufw status", asdict(ufw)))
     result.artifacts.append(ServerArtifact("command-output", "iptables -S", asdict(iptables)))
     if ufw.exit_code == 0 and "Status: inactive" in ufw.stdout:
@@ -263,7 +272,7 @@ def _audit_firewall(result: ServerAuditResult, runner: Runner) -> None:
                 source="server-audit",
                 severity="MEDIUM",
                 target="firewall",
-                title="UFW firewall is inactive",
+                title="UFW 방화벽이 비활성화되어 있음",
                 evidence="ufw status: inactive",
             )
         )
@@ -302,7 +311,7 @@ def _audit_nginx(result: ServerAuditResult, runner: Runner) -> None:
     result.warnings.append("Docker nginx container was found, but nginx -T failed inside the container.")
 
 
-def _audit_os_packages(result: ServerAuditResult, runner: Runner, *, include_os_packages: bool) -> None:
+def _audit_os_packages(result: ServerAuditResult, runner: Runner, *, include_os_packages: bool, allow_sudo: bool) -> None:
     if shutil.which("trivy") is None:
         result.warnings.append(
             "Trivy command not found. OS package vulnerability checks skipped. "
@@ -314,9 +323,12 @@ def _audit_os_packages(result: ServerAuditResult, runner: Runner, *, include_os_
         version = runner(["trivy", "--version"])
         result.artifacts.append(ServerArtifact("command-output", "trivy --version", asdict(version)))
         return
-    command_result = runner(["trivy", "rootfs", "--scanners", "vuln", "--format", "json", "--quiet", "/"])
+    command = ["trivy", "rootfs", "--scanners", "vuln", "--format", "json", "--quiet", "/"]
+    command_result = runner(command)
+    if allow_sudo and _looks_like_permission_error(command_result):
+        command_result = runner(["sudo", *command])
     if command_result.exit_code != 0:
-        result.warnings.append("Trivy OS package vulnerability scan failed.")
+        result.warnings.append(f"Trivy OS package vulnerability scan failed: {_short_command_error(command_result)}")
         result.artifacts.append(ServerArtifact("command-output", "trivy rootfs", asdict(command_result)))
         return
     try:
@@ -331,18 +343,29 @@ def _is_public_host(host: str) -> bool:
     return normalized in {"*", "0.0.0.0", "::", ":::", "[::]"} or normalized.startswith(":::")
 
 
+def _format_public_interfaces(hosts: set[str]) -> str:
+    normalized = {host.strip().lower() for host in hosts}
+    labels: list[str] = []
+    if any(host in normalized for host in {"*", "0.0.0.0"}):
+        labels.append("IPv4 외부 공개")
+    if any(host in normalized for host in {"::", ":::", "[::]"}) or any(host.startswith(":::") for host in normalized):
+        labels.append("IPv6 외부 공개")
+    if labels:
+        return ", ".join(labels)
+    return ", ".join(sorted(hosts))
+
+
 def _firewall_warning(ufw: CommandResult, iptables: CommandResult) -> str:
-    combined = f"{ufw.stderr}\n{iptables.stderr}".casefold()
-    if "permission denied" in combined or "must be root" in combined or "permission" in combined:
+    if _looks_like_permission_error(ufw, iptables):
         return (
-            "Firewall status could not be collected because ufw/iptables require elevated privileges. "
-            "Run from a user with sudo permission if firewall details are needed."
+            "방화벽 상태를 수집하려면 ufw/iptables에 sudo 권한이 필요합니다. "
+            "방화벽 상세 점검이 필요하면 sudo 사용을 허용하고 다시 실행하세요."
         )
     if ufw.exit_code == 127 and iptables.exit_code == 127:
-        return "Firewall status could not be collected because ufw and iptables commands were not found."
+        return "ufw와 iptables 명령어를 찾을 수 없어 방화벽 상태를 수집하지 못했습니다."
     return (
-        "Firewall status could not be collected with ufw or iptables. "
-        "This server may rely on AWS Security Group rules instead of host firewall commands."
+        "ufw 또는 iptables로 방화벽 상태를 수집하지 못했습니다. "
+        "이 서버는 호스트 방화벽 대신 AWS Security Group에 의존할 수 있습니다."
     )
 
 
@@ -364,6 +387,19 @@ def _extract_nginx_containers(output: str) -> list[str]:
         if target and ("nginx" in image.casefold() or "nginx" in names.casefold()):
             containers.append(target)
     return containers
+
+
+def _looks_like_permission_error(*results: CommandResult) -> bool:
+    combined = "\n".join(f"{result.stdout}\n{result.stderr}" for result in results).casefold()
+    markers = ["permission denied", "must be root", "operation not permitted", "permission"]
+    return any(marker in combined for marker in markers)
+
+
+def _short_command_error(result: CommandResult) -> str:
+    text = (result.stderr or result.stdout or "").strip()
+    if not text:
+        return f"exit {result.exit_code}"
+    return text.splitlines()[-1][:200]
 
 
 def _assign_finding_ids(findings: list[ServerFinding]) -> None:

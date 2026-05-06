@@ -124,23 +124,30 @@ def server_audit(
     from ssafer.server.audit import run_server_audit, save_server_audit_result
 
     selected_checks = [item.strip() for item in checks.split(",") if item.strip()] if checks else None
-    result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages)
+    needs_sudo_prompt = include_os_packages or selected_checks is None or "firewall" in selected_checks
+    allow_sudo = False
+    if needs_sudo_prompt:
+        allow_sudo = typer.confirm(
+            "일부 서버 점검은 sudo 권한이 필요할 수 있습니다. 필요한 명령에만 sudo를 사용하시겠습니까?",
+            default=False,
+        )
+    result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
     output_path = save_server_audit_result(path.resolve(), result)
 
-    table = Table(title="Server audit result")
-    table.add_column("Item")
-    table.add_column("Count", justify="right")
+    table = Table(title="서버 점검 결과")
+    table.add_column("항목")
+    table.add_column("수량", justify="right")
     table.add_row("Findings", str(len(result.findings)))
     table.add_row("Warnings", str(len(result.warnings)))
     table.add_row("Artifacts", str(len(result.artifacts)))
     console.print(table)
     if result.warnings:
-        console.print("[yellow]Warnings[/yellow]")
+        console.print("[yellow]경고 목록[/yellow]")
         for warning in result.warnings:
             console.print(f"  - {warning}")
     if details:
         _print_server_audit_details(result)
-    console.print(f"[green]Server audit saved:[/green] {output_path}")
+    console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
 
 
 @app.command()
@@ -729,7 +736,7 @@ def _print_server_audit_details(result: object) -> None:
     warnings = getattr(result, "warnings", [])
     artifacts = getattr(result, "artifacts", [])
 
-    finding_table = Table(title="Server audit findings", show_lines=True)
+    finding_table = Table(title="서버 점검 Findings", show_lines=True)
     finding_table.add_column("ID")
     finding_table.add_column("Severity")
     finding_table.add_column("Rule")
@@ -742,23 +749,23 @@ def _print_server_audit_details(result: object) -> None:
         finding_table.add_row(
             getattr(finding, "id", "-"),
             getattr(finding, "severity", "-"),
-            getattr(finding, "ruleId", "-"),
+            _format_server_rule_id(getattr(finding, "ruleId", "-")),
             getattr(finding, "target", "-"),
             getattr(finding, "title", "-"),
             getattr(finding, "evidence", "-"),
         )
     console.print(finding_table)
 
-    warning_table = Table(title="Server audit warnings", show_lines=True)
-    warning_table.add_column("No.", justify="right")
-    warning_table.add_column("Message", overflow="fold")
+    warning_table = Table(title="서버 점검 경고", show_lines=True)
+    warning_table.add_column("번호", justify="right")
+    warning_table.add_column("메시지", overflow="fold")
     if not warnings:
         warning_table.add_row("-", "-")
     for index, warning in enumerate(warnings, start=1):
         warning_table.add_row(str(index), str(warning))
     console.print(warning_table)
 
-    artifact_table = Table(title="Server audit artifacts", show_lines=True)
+    artifact_table = Table(title="서버 점검 산출물", show_lines=True)
     artifact_table.add_column("Type")
     artifact_table.add_column("Target", overflow="fold")
     artifact_table.add_column("Summary", overflow="fold")
@@ -789,6 +796,20 @@ def _summarize_server_artifact(content: object) -> str:
     if len(text) <= _REPORT_EVIDENCE_MAX:
         return text
     return text[: _REPORT_EVIDENCE_MAX - 3] + "..."
+
+
+def _format_server_rule_id(rule_id: object) -> str:
+    text = str(rule_id)
+    prefix = "SERVER_"
+    if text.startswith(prefix):
+        text = text[len(prefix):]
+    known = {
+        "PUBLIC_SENSITIVE_PORT": "PUBLIC_PORT",
+        "SSH_ROOT_LOGIN": "SSH_ROOT_LOGIN",
+        "SSH_PASSWORD_AUTH": "SSH_PASSWORD_AUTH",
+        "FIREWALL_INACTIVE": "FIREWALL_INACTIVE",
+    }
+    return known.get(text, text)
 
 
 def _upload_or_exit(path: Path, api_url: str | None) -> dict:
