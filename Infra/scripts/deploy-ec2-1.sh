@@ -30,10 +30,10 @@ fi
 log "DEPLOY_DIR=${DEPLOY_DIR}"
 log "COMPOSE_FILE=${COMPOSE_FILE}"
 log "ENV_FILE=${ENV_FILE}"
-check_env_key "AWS_REGION"
-check_env_key "AWS_S3_BUCKET"
 check_env_key "APP_SCAN_RAW_S3_BUCKET"
 check_env_key "APP_SCAN_RAW_S3_REGION"
+check_env_key "RABBITMQ_USERNAME"
+check_env_key "RABBITMQ_PASSWORD"
 check_env_key "SPRING_IMAGE"
 check_env_key "NGINX_IMAGE"
 

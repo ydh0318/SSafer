@@ -63,6 +63,27 @@ services:
       retries: 5
       start_period: 15s
 
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ssafer-rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - ec1-internal
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   spring:
     image: ${SPRING_IMAGE}
     container_name: ssafer-spring
@@ -76,6 +97,10 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       SPRING_FLYWAY_ENABLED: "true"
       SPRING_FLYWAY_OUT_OF_ORDER: "true"
       ANALYSIS_SERVER_URL: http://${EC2_2_PRIVATE_IP}:8000
@@ -85,8 +110,6 @@ services:
       JWT_ACCESS_TOKEN_EXPIRES_SECONDS: ${JWT_ACCESS_TOKEN_EXPIRES_SECONDS:-7200}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_REGION: ${AWS_REGION}
-      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
       APP_SCAN_RAW_S3_BUCKET: ${APP_SCAN_RAW_S3_BUCKET}
       APP_SCAN_RAW_S3_REGION: ${APP_SCAN_RAW_S3_REGION:-ap-northeast-2}
       SPRING_PROFILES_ACTIVE: prod
@@ -99,6 +122,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
@@ -160,6 +185,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  rabbitmq-data:
   n8n-data:
 
 networks:
