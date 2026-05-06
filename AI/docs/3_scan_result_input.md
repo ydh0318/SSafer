@@ -6,6 +6,7 @@
 
 ```text
 scan_result.json 파일 로딩 구현
+scan_result.json 요청 DTO 정의
 scan_result.json 최상위 필수 필드 검증
 findings 배열 추출 로직 구현
 finding 필수 필드 검증
@@ -23,27 +24,64 @@ data/scan_result.json
 
 ## 3. 로더 파일
 
-JSON 파일 로딩 함수는 아래 파일에 있습니다.
+scan_result.json DTO와 JSON 파일 로딩 함수는 아래 파일에 있습니다.
 
 ```text
+app/schemas/scan_result.py
 app/loaders/scan_loader.py
 ```
 
 현재 구현된 함수:
 
 ```python
+parse_scan_result(scan_result: dict) -> dict
+parse_finding(finding: dict, index: int) -> dict
 load_scan_result(scan_result_path: str) -> dict
 ```
 
 처리 내용:
 
 ```text
+ScanResult DTO 기준 최상위 필드 파싱
+ScanFinding DTO 기준 개별 finding 파싱
 상대 경로를 프로젝트 실행 위치 기준 경로로 변환
 파일 존재 여부 확인
 UTF-8 BOM 포함 JSON 파일 로딩 지원
 JSON 파싱 실패 처리
 JSON root object 여부 확인
 ```
+
+## 3-1. scan_result.json DTO
+
+최상위 DTO:
+
+```python
+class ScanResult(BaseModel):
+    schema_version: Literal["0.1"] = Field(alias="schemaVersion")
+    scan_id: str = Field(alias="scanId")
+    source: Literal["cli"]
+    scanned_at: str = Field(alias="scannedAt")
+    analysis_status: Literal["SUCCESS", "PARTIAL", "FAILED"] = Field(alias="analysisStatus")
+    findings: list[Any]
+```
+
+Finding DTO:
+
+```python
+class ScanFinding(BaseModel):
+    id: str
+    rule_id: str = Field(alias="ruleId")
+    source: str
+    severity: str
+    file: str
+    line: int | None
+    title: str
+    masked_evidence: str = Field(alias="maskedEvidence")
+```
+
+`ScanResult`의 `findings`는 `list[Any]`로 둡니다. 그 이유는 일부 finding이 잘못되어도 전체 scan_result 요청을 실패시키지 않고, 개별 finding만 invalid로 분리하기 위해서입니다.
+
+`toolVersion`, `toolVersions`, `warnings`, `artifacts`, `cliSummary` 같은 부가 필드는 `extra="allow"`로 보존합니다.
 
 ## 4. scan_result.json 필수 필드 검증
 
@@ -58,9 +96,10 @@ analysisStatus
 findings
 ```
 
-검증 함수:
+검증/파싱 함수:
 
 ```python
+parse_scan_result(scan_result: dict) -> dict
 validate_scan_result_required_fields(scan_result: dict) -> None
 ```
 
@@ -113,6 +152,7 @@ maskedEvidence
 검증 함수:
 
 ```python
+parse_finding(finding: dict, index: int) -> dict
 validate_finding_required_fields(finding: dict, index: int) -> None
 validate_findings_required_fields(findings: list[dict]) -> None
 split_valid_invalid_findings(findings: list) -> tuple[list[dict], list[dict]]
@@ -183,31 +223,51 @@ Finding ID: FND-0001
 
 ## 9. API 연결 확인
 
-현재 `/analysis`는 `scan_result.json` 파일을 로딩하고 `findings` 배열을 추출한 뒤 valid/invalid finding을 분리하고, valid finding만 LLM 입력 데이터로 변환합니다.
+현재 `/analyze`는 `scan_result.json` 파일을 로딩한 뒤 분석 파이프라인을 실행하고 `analysis_result.json`을 저장합니다.
 
 ```bash
-curl -X POST http://127.0.0.1:8000/analysis \
+curl -X POST http://127.0.0.1:8000/analyze \
   -H "Content-Type: application/json" \
-  -d '{"scan_result_path":"data/scan_result.json"}'
+  -d '{"scan_result_path":"data/scan_result.json","analysis_result_path":"data/analysis_result.json"}'
 ```
 
 정상 응답 예시:
 
 ```json
 {
-  "status": "prepared",
-  "message": "scan_result.json loaded, validated, and converted. findings=3, valid=3, invalid=0",
+  "status": "completed",
+  "message": null,
+  "stage": null,
+  "finding_id": null,
   "scan_result_path": "data/scan_result.json",
+  "analysis_result_path": "data/analysis_result.json",
   "finding_count": 3,
   "valid_finding_count": 3,
   "invalid_finding_count": 0,
-  "llm_input_count": 3,
+  "result_count": 3,
   "invalid_findings": []
+}
+```
+
+요청 본문에 `scan_result` 객체를 직접 포함할 수도 있습니다.
+
+```json
+{
+  "scan_result_path": "inline",
+  "analysis_result_path": "data/analysis_result.json",
+  "scan_result": {
+    "schemaVersion": "0.1",
+    "scanId": "a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd",
+    "source": "cli",
+    "scannedAt": "2026-04-27T00:26:05Z",
+    "analysisStatus": "SUCCESS",
+    "findings": []
+  }
 }
 ```
 
 ## 10. 다음 작업
 
 ```text
-Explain Chain 구축
+API 예외 처리 및 기본 응답 구조 정의
 ```

@@ -13,6 +13,8 @@
 5_analysis_result_output.md
 6_fix_chain.md
 7_local_model_comparison.md
+8_analyze_api.md
+9_test_guide.md
 ```
 
 ## 문서 설명
@@ -27,3 +29,5 @@
 | `5_analysis_result_output.md` | analysis_result.json 출력 검증 |
 | `6_fix_chain.md` | Fix Chain 구축 |
 | `7_local_model_comparison.md` | 로컬 모델 성능 비교 |
+| `8_analyze_api.md` | `/analyze` API 요청/응답 스펙 |
+| `9_test_guide.md` | 현재 구현 상태 기준 테스트 방법 |

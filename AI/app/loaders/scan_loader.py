@@ -4,6 +4,10 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError
+
+from app.schemas.scan_result import ScanFinding, ScanResult
+
 REQUIRED_SCAN_RESULT_FIELDS = (
     "schemaVersion",
     "scanId",
@@ -64,7 +68,25 @@ def load_scan_result(scan_result_path: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("scan_result.json root must be a JSON object.")
 
-    return data
+    return parse_scan_result(data)
+
+
+def parse_scan_result(scan_result: dict[str, Any]) -> dict[str, Any]:
+    try:
+        parsed = ScanResult.model_validate(scan_result)
+    except ValidationError as exc:
+        raise ValueError(f"Invalid scan_result.json: {exc}") from exc
+
+    return parsed.model_dump(by_alias=True)
+
+
+def parse_finding(finding: dict[str, Any], index: int) -> dict[str, Any]:
+    try:
+        parsed = ScanFinding.model_validate(finding)
+    except ValidationError as exc:
+        raise ValueError(f"findings[{index}] invalid: {exc}") from exc
+
+    return parsed.model_dump(by_alias=True)
 
 
 def _is_iso8601_datetime(value: str) -> bool:
@@ -208,7 +230,7 @@ def split_valid_invalid_findings(
             continue
 
         try:
-            validate_finding_required_fields(finding, index)
+            parsed_finding = parse_finding(finding, index)
         except ValueError as exc:
             invalid_findings.append(
                 build_invalid_finding(
@@ -219,6 +241,6 @@ def split_valid_invalid_findings(
             )
             continue
 
-        valid_findings.append(finding)
+        valid_findings.append(parsed_finding)
 
     return valid_findings, invalid_findings
