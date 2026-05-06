@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -147,6 +148,46 @@ def download_scan_result_json(
     return destination
 
 
+def download_scan_result_json_data(
+    object_key_or_uri: str,
+    *,
+    settings: S3Settings | None = None,
+    s3_client: Any | None = None,
+) -> dict[str, Any]:
+    settings = settings or load_s3_settings()
+    location = resolve_raw_scan_location(object_key_or_uri, settings)
+    client = s3_client or create_s3_client(settings)
+
+    try:
+        response = client.get_object(Bucket=location.bucket, Key=location.key)
+        body = response["Body"].read()
+    except Exception as exc:
+        error_code = _extract_s3_error_code(exc)
+        raise S3DownloadError(
+            message=(
+                "Failed to download scan_result.json from S3: "
+                f"s3://{location.bucket}/{location.key} ({error_code})"
+            ),
+            operation="download",
+            bucket=location.bucket,
+            key=location.key,
+            error_code=error_code,
+        ) from exc
+
+    try:
+        data = json.loads(body.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            "Invalid JSON downloaded from S3: "
+            f"s3://{location.bucket}/{location.key}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise ValueError("scan_result.json root must be a JSON object.")
+
+    return data
+
+
 def upload_analysis_result_json(
     source_path: str,
     object_key_or_uri: str,
@@ -177,6 +218,41 @@ def upload_analysis_result_json(
             Bucket=location.bucket,
             Key=location.key,
             ExtraArgs={"ContentType": "application/json"},
+        )
+    except Exception as exc:
+        error_code = _extract_s3_error_code(exc)
+        raise S3UploadError(
+            message=(
+                "Failed to upload analysis_result.json to S3: "
+                f"s3://{location.bucket}/{location.key} ({error_code})"
+            ),
+            operation="upload",
+            bucket=location.bucket,
+            key=location.key,
+            error_code=error_code,
+        ) from exc
+
+    return f"s3://{location.bucket}/{location.key}"
+
+
+def upload_analysis_result_json_data(
+    analysis_result: dict[str, Any],
+    object_key_or_uri: str,
+    *,
+    settings: S3Settings | None = None,
+    s3_client: Any | None = None,
+) -> str:
+    settings = settings or load_s3_settings()
+    location = resolve_analysis_result_location(object_key_or_uri, settings)
+    client = s3_client or create_s3_client(settings)
+
+    try:
+        body = json.dumps(analysis_result, ensure_ascii=False, indent=2).encode("utf-8")
+        client.put_object(
+            Bucket=location.bucket,
+            Key=location.key,
+            Body=body,
+            ContentType="application/json",
         )
     except Exception as exc:
         error_code = _extract_s3_error_code(exc)

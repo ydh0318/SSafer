@@ -4,6 +4,7 @@ from typing import Any
 from app.loaders.scan_loader import (
     extract_findings,
     load_scan_result,
+    parse_scan_result,
     split_valid_invalid_findings,
     validate_scan_result_required_fields,
 )
@@ -17,6 +18,10 @@ from app.services.result_service import (
     build_structured_analysis_result,
     save_analysis_result,
     validate_finding_id_mapping,
+)
+from app.services.s3_service import (
+    download_scan_result_json_data,
+    upload_analysis_result_json_data,
 )
 
 
@@ -37,7 +42,13 @@ class AnalysisPipelineContext:
 
 
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
-    if request.scan_result is None:
+    if request.raw_result_path is not None:
+        result = run_s3_analysis_pipeline(
+            raw_result_path=request.raw_result_path,
+            analysis_result_path=request.analysis_result_s3_path
+            or request.analysis_result_path,
+        )
+    elif request.scan_result is None:
         result = run_analysis_pipeline(
             scan_result_path=request.scan_result_path,
             output_path=request.analysis_result_path,
@@ -49,6 +60,29 @@ def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
             output_path=request.analysis_result_path,
         )
     return AnalysisResponse(**result)
+
+
+def run_s3_analysis_pipeline(
+    raw_result_path: str,
+    analysis_result_path: str,
+) -> dict[str, object]:
+    try:
+        scan_result = parse_scan_result(download_scan_result_json_data(raw_result_path))
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "stage": "input",
+            "scan_result_path": raw_result_path,
+            "analysis_result_path": analysis_result_path,
+            "message": str(exc),
+        }
+
+    return run_analysis_pipeline_from_scan_result(
+        scan_result=scan_result,
+        scan_result_path=raw_result_path,
+        output_path=analysis_result_path,
+        upload_to_s3=True,
+    )
 
 
 def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:
@@ -124,6 +158,8 @@ def run_analysis_pipeline_from_scan_result(
     scan_result: dict[str, Any],
     scan_result_path: str,
     output_path: str,
+    *,
+    upload_to_s3: bool = False,
 ) -> dict[str, object]:
     try:
         context = prepare_analysis_pipeline_context(scan_result)
@@ -170,7 +206,10 @@ def run_analysis_pipeline_from_scan_result(
             structured_results=structured_results,
         )
         validate_finding_id_mapping(context.valid_findings, analysis_result)
-        saved_path = save_analysis_result(analysis_result, output_path)
+        if upload_to_s3:
+            saved_path = upload_analysis_result_json_data(analysis_result, output_path)
+        else:
+            saved_path = save_analysis_result(analysis_result, output_path)
     except Exception as exc:
         return {
             "status": "failed",
@@ -185,12 +224,8 @@ def run_analysis_pipeline_from_scan_result(
             "message": str(exc),
         }
 
-    status = "completed"
-    if context.invalid_findings:
-        status = "completed_with_invalid_findings"
-
     return {
-        "status": status,
+        "status": "completed",
         "scan_result_path": scan_result_path,
         "analysis_result_path": str(saved_path),
         "finding_count": len(context.raw_findings),
