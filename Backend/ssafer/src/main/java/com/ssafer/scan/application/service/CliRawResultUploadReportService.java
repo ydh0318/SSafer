@@ -12,6 +12,7 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.project.application.service.ProjectAuthorizationService;
+import com.ssafer.project.domain.entity.Project;
 import com.ssafer.scan.api.dto.CliRawResultUploadReportRequest;
 import com.ssafer.scan.api.dto.CliRawResultUploadReportResponseData;
 import com.ssafer.scan.domain.entity.Scan;
@@ -55,12 +56,15 @@ public class CliRawResultUploadReportService {
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
     // 권한, 입력값, 상태, S3 객체 존재 여부를 순서대로 검증한다.
-    projectAuthorizationService.loadAuthorizedProjectOrThrow(scan.getProjectId(), actor);
+    // 권한 검증과 동시에 Project 엔티티를 확보해 fallback agent 생성에 재사용한다.
+    Project project = projectAuthorizationService.loadAuthorizedProjectOrThrow(scan.getProjectId(), actor);
     validatePayloadHash(request.payloadHash());
     validateScanStatus(scan.getStatus());
     validateRawObjectExists(scan.getRawResultPath());
 
-    Agent agent = loadDispatchAgent(scan.getProjectId());
+    // 프로젝트에 agent가 없으면 placeholder(OFFLINE) agent를 만들어
+    // 기존 Rabbit 메시지 계약(taskId/agentId 포함)을 유지한다.
+    Agent agent = loadOrCreateDispatchAgent(project);
     LocalDateTime now = LocalDateTime.now();
 
     AgentTask agentTask = agentTaskRepository.save(new AgentTask(
@@ -109,10 +113,12 @@ public class CliRawResultUploadReportService {
     return new CliRawResultUploadReportResponseData(scan.getId(), scan.getStatus(), request.resultCount());
   }
 
-  private Agent loadDispatchAgent(Long projectId) {
+  private Agent loadOrCreateDispatchAgent(Project project) {
+    // CLI raw-results callback은 agent 사전 등록이 없어도 처리되어야 하므로
+    // project 기준 agent가 없으면 OFFLINE placeholder를 즉시 생성한다.
     // 현재는 프로젝트별 대표 agent 1대를 선택해 작업을 발행한다.
-    return agentRepository.findFirstByProjectId(projectId)
-        .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    return agentRepository.findFirstByProjectId(project.getId())
+        .orElseGet(() -> agentRepository.save(new Agent(project, com.ssafer.agent.domain.enums.AgentStatus.OFFLINE)));
   }
 
   private void validatePayloadHash(String payloadHash) {
