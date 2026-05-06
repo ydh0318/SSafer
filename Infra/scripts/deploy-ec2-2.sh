@@ -15,11 +15,31 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 check_env_key() {
   local key="$1"
-  if [[ -n "${!key:-}" ]] || grep -Eq "^${key}=" "${ENV_FILE}"; then
-    log "env ${key}=SET"
-  else
-    log "env ${key}=MISSING"
+  local value="${!key:-}"
+
+  if [[ -z "${value}" ]] && grep -Eq "^${key}=" "${ENV_FILE}"; then
+    value="$(grep -E "^${key}=" "${ENV_FILE}" | tail -n 1 | cut -d '=' -f 2-)"
   fi
+
+  if [[ -z "${value// }" ]]; then
+    log "env ${key}=MISSING"
+    return 1
+  fi
+
+  if [[ "${value}" == *REPLACE* ]]; then
+    log "env ${key}=PLACEHOLDER"
+    return 1
+  fi
+
+  log "env ${key}=SET"
+}
+
+print_diagnostics() {
+  log "Docker compose ps:"
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" ps || true
+
+  log "FastAPI recent logs:"
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs --tail=80 fastapi || true
 }
 
 log "=== EC2 #2 deploy start ==="
@@ -30,10 +50,21 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 fi
 
 log "DEPLOY_DIR=${DEPLOY_DIR}"
-check_env_key "FASTAPI_IMAGE"
-check_env_key "ANTHROPIC_API_KEY"
-check_env_key "EC2_1_PRIVATE_IP"
-check_env_key "INTERNAL_TOKEN"
+missing_env=0
+check_env_key "FASTAPI_IMAGE" || missing_env=1
+check_env_key "ANTHROPIC_API_KEY" || missing_env=1
+check_env_key "EC2_1_PRIVATE_IP" || missing_env=1
+check_env_key "INTERNAL_TOKEN" || missing_env=1
+check_env_key "AWS_ACCESS_KEY_ID" || missing_env=1
+check_env_key "AWS_SECRET_ACCESS_KEY" || missing_env=1
+check_env_key "AWS_REGION" || missing_env=1
+check_env_key "APP_SCAN_RAW_S3_BUCKET" || missing_env=1
+check_env_key "APP_ANALYSIS_RESULT_S3_BUCKET" || missing_env=1
+
+if [[ "${missing_env}" -ne 0 ]]; then
+  log "ERROR: required environment values are missing or still placeholders"
+  exit 1
+fi
 
 cd "${DEPLOY_DIR}"
 
@@ -54,6 +85,7 @@ for i in $(seq 1 12); do
   fi
   if [[ $i -eq 12 ]]; then
     log "ERROR: FastAPI healthcheck timed out"
+    print_diagnostics
     exit 1
   fi
   log "  waiting... (${i}/12)"
