@@ -12,11 +12,17 @@ import com.ssafer.global.security.CurrentActorProvider;
 import com.ssafer.project.application.service.ProjectAuthorizationService;
 import com.ssafer.scan.api.dto.ScanCompareResponse;
 import com.ssafer.scan.domain.entity.Scan;
+import com.ssafer.scan.domain.entity.ScanFinding;
+import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.RequestActorType;
+import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.Severity;
+import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +31,7 @@ import org.mockito.Mockito;
 class ScanCompareQueryServiceTest {
 
   private ScanRepository scanRepository;
+  private ScanFindingRepository scanFindingRepository;
   private CurrentActorProvider currentActorProvider;
   private ProjectAuthorizationService projectAuthorizationService;
   private ScanCompareQueryService scanCompareQueryService;
@@ -32,10 +39,12 @@ class ScanCompareQueryServiceTest {
   @BeforeEach
   void setUp() {
     scanRepository = Mockito.mock(ScanRepository.class);
+    scanFindingRepository = Mockito.mock(ScanFindingRepository.class);
     currentActorProvider = Mockito.mock(CurrentActorProvider.class);
     projectAuthorizationService = Mockito.mock(ProjectAuthorizationService.class);
     scanCompareQueryService = new ScanCompareQueryService(
         scanRepository,
+        scanFindingRepository,
         currentActorProvider,
         projectAuthorizationService
     );
@@ -50,6 +59,8 @@ class ScanCompareQueryServiceTest {
     given(currentActorProvider.getCurrentActor()).willReturn(actor);
     given(scanRepository.findById(1001L)).willReturn(Optional.of(baseScan));
     given(scanRepository.findById(1002L)).willReturn(Optional.of(targetScan));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1001L)).willReturn(List.of());
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1002L)).willReturn(List.of());
 
     ScanCompareResponse response = scanCompareQueryService.compare(1001L, 1002L);
 
@@ -59,6 +70,70 @@ class ScanCompareQueryServiceTest {
     assertThat(response.baseStatus()).isEqualTo(ScanStatus.DONE);
     assertThat(response.targetStatus()).isEqualTo(ScanStatus.RUNNING);
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);
+  }
+
+  @Test
+  void loadCompareContextReturnsFindingsIndexedByFingerprint() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Scan baseScan = createScan(1001L, 101L, ScanStatus.DONE);
+    Scan targetScan = createScan(1002L, 101L, ScanStatus.DONE);
+    ScanFinding baseFinding = createFinding(11L, 1001L, "sha256:ABC123", Severity.HIGH, "Hardcoded secret");
+    ScanFinding targetFinding = createFinding(22L, 1002L, "sha256:abc123", Severity.LOW, "Hardcoded secret changed");
+
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(scanRepository.findById(1001L)).willReturn(Optional.of(baseScan));
+    given(scanRepository.findById(1002L)).willReturn(Optional.of(targetScan));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1001L)).willReturn(List.of(baseFinding));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1002L)).willReturn(List.of(targetFinding));
+
+    ScanCompareContext context = scanCompareQueryService.loadCompareContext(1001L, 1002L);
+
+    assertThat(context.baseFindings()).hasSize(1);
+    assertThat(context.targetFindings()).hasSize(1);
+    assertThat(context.baseFindingsByComparisonKey()).containsKey("sha256:abc123");
+    assertThat(context.targetFindingsByComparisonKey()).containsKey("sha256:abc123");
+    assertThat(context.baseFindings().getFirst().isSameFinding(context.targetFindings().getFirst())).isTrue();
+  }
+
+  @Test
+  void loadCompareContextWhenSameFingerprintExistsTwiceKeepsFirstFindingAsRepresentative() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Scan baseScan = createScan(1001L, 101L, ScanStatus.DONE);
+    Scan targetScan = createScan(1002L, 101L, ScanStatus.DONE);
+    ScanFinding firstFinding = createFinding(11L, 1001L, "sha256:abc123", Severity.HIGH, "First finding");
+    ScanFinding duplicatedFinding = createFinding(12L, 1001L, "sha256:abc123", Severity.HIGH, "Duplicated finding");
+
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(scanRepository.findById(1001L)).willReturn(Optional.of(baseScan));
+    given(scanRepository.findById(1002L)).willReturn(Optional.of(targetScan));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1001L)).willReturn(List.of(firstFinding, duplicatedFinding));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1002L)).willReturn(List.of());
+
+    ScanCompareContext context = scanCompareQueryService.loadCompareContext(1001L, 1002L);
+
+    assertThat(context.baseFindingsByComparisonKey()).hasSize(1);
+    assertThat(context.baseFindingsByComparisonKey().get("sha256:abc123").findingId()).isEqualTo(11L);
+  }
+
+  @Test
+  void loadCompareContextWhenFingerprintMissingUsesFallbackComparisonKey() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Scan baseScan = createScan(1001L, 101L, ScanStatus.DONE);
+    Scan targetScan = createScan(1002L, 101L, ScanStatus.DONE);
+    ScanFinding baseFinding = createFinding(11L, 1001L, "   ", Severity.HIGH, "Same title");
+    ScanFinding targetFinding = createFinding(22L, 1002L, null, Severity.LOW, "Same title");
+
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(scanRepository.findById(1001L)).willReturn(Optional.of(baseScan));
+    given(scanRepository.findById(1002L)).willReturn(Optional.of(targetScan));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1001L)).willReturn(List.of(baseFinding));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1002L)).willReturn(List.of(targetFinding));
+
+    ScanCompareContext context = scanCompareQueryService.loadCompareContext(1001L, 1002L);
+
+    assertThat(context.baseFindings().getFirst().comparisonKey())
+        .startsWith("fallback:custom_rule|env_plain_secret|.env|1|same title");
+    assertThat(context.baseFindings().getFirst().isSameFinding(context.targetFindings().getFirst())).isTrue();
   }
 
   @Test
@@ -111,6 +186,35 @@ class ScanCompareQueryServiceTest {
         .status(status)
         .requestedAt(LocalDateTime.of(2026, 5, 6, 10, 0))
         .lastUpdatedAt(LocalDateTime.of(2026, 5, 6, 10, 5))
+        .build();
+  }
+
+  private ScanFinding createFinding(
+      Long findingId,
+      Long scanId,
+      String fingerprint,
+      Severity severity,
+      String title
+  ) {
+    return ScanFinding.builder()
+        .id(findingId)
+        .scanId(scanId)
+        .scanNodeId(500L)
+        .sourceType(FindingSourceType.CUSTOM_RULE)
+        .fingerprint(fingerprint)
+        .severity(severity)
+        .category("SECRET")
+        .title(title)
+        .description("설명")
+        .filePath(".env")
+        .lineNumber(1)
+        .resourceName("cli")
+        .ruleCode("ENV_PLAIN_SECRET")
+        .attackScenario("시나리오")
+        .remediationGuide("가이드")
+        .rawSnippetJson("{}")
+        .resolutionStatus(ResolutionStatus.OPEN)
+        .createdAt(LocalDateTime.of(2026, 5, 6, 10, 0))
         .build();
   }
 }
