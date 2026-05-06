@@ -52,17 +52,18 @@ class WorkerAnalysisResultControllerTest {
             .projectId(10L)
             .requestActorType(RequestActorType.USER)
             .scanMode(ScanMode.AGENT)
-            .status(ScanStatus.RAW_UPLOADED)
-            .rawResultPath("s3://ssafer/raw/1/scan_result.json")
+            .status(ScanStatus.RUNNING)
+            .analysisResultPath("s3://ssafer/result/1/analysis_result.json")
             .requestedAt(requestedAt)
             .lastUpdatedAt(lastUpdatedAt)
             .build());
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
-        ScanStatus.RAW_UPLOADED,
+        100L,
+        ScanStatus.DONE,
         "analysis_completed",
         null,
-        "s3://ssafer/raw/1/scan_result.json",
+        "s3://ssafer/result/1/analysis_result.json",
         null,
         null,
         lastUpdatedAt);
@@ -74,19 +75,20 @@ class WorkerAnalysisResultControllerTest {
         .andExpect(jsonPath("$.scanId").value(1))
         .andExpect(jsonPath("$.projectId").value(10))
         .andExpect(jsonPath("$.scanMode").value("AGENT"))
-        .andExpect(jsonPath("$.status").value("RAW_UPLOADED"))
-        .andExpect(jsonPath("$.rawResultPath").value("s3://ssafer/raw/1/scan_result.json"));
+        .andExpect(jsonPath("$.status").value("RUNNING"))
+        .andExpect(jsonPath("$.analysisResultPath").value("s3://ssafer/result/1/analysis_result.json"));
   }
 
   @Test
-  void reportAnalysisResultWithoutPathReturnsBadRequest() throws Exception {
+  void reportAnalysisResultWithoutTaskIdReturnsBadRequest() throws Exception {
     MockMvc mockMvc = buildMockMvc();
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         null,
+        ScanStatus.DONE,
         null,
         null,
-        null,
+        "s3://ssafer/result/1/analysis_result.json",
         null,
         null,
         null);
@@ -104,10 +106,11 @@ class WorkerAnalysisResultControllerTest {
         .thenThrow(new ResponseStatusException(NOT_FOUND, "Scan not found: 999"));
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
-        ScanStatus.RAW_UPLOADED,
+        999L,
+        ScanStatus.DONE,
         null,
         null,
-        "s3://ssafer/raw/999/scan_result.json",
+        "s3://ssafer/result/999/analysis_result.json",
         null,
         null,
         null);
@@ -125,10 +128,11 @@ class WorkerAnalysisResultControllerTest {
         .thenThrow(new ResponseStatusException(CONFLICT, "Analysis result callback is not allowed"));
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
-        ScanStatus.RAW_UPLOADED,
+        100L,
+        ScanStatus.DONE,
         null,
         null,
-        "s3://ssafer/raw/1/scan_result.json",
+        "s3://ssafer/result/1/analysis_result.json",
         null,
         null,
         null);

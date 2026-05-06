@@ -8,6 +8,10 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
+import com.ssafer.agent.domain.entity.AgentTask;
+import com.ssafer.agent.domain.enums.AgentTaskStatus;
+import com.ssafer.agent.domain.enums.AgentTaskType;
+import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.scan.api.dto.WorkerAnalysisResultCallbackRequest;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
@@ -29,47 +33,60 @@ class WorkerAnalysisResultCallbackServiceTest {
   @Mock
   private ScanRepository scanRepository;
 
+  @Mock
+  private AgentTaskRepository agentTaskRepository;
+
+  @Mock
+  private WorkerAnalysisResultIngestionJob workerAnalysisResultIngestionJob;
+
   @InjectMocks
   private WorkerAnalysisResultCallbackService workerAnalysisResultCallbackService;
 
   @Test
-  void reportWithoutStatusDefaultsToRawUploaded() {
-    LocalDateTime startedAt = LocalDateTime.of(2026, 4, 24, 15, 0);
+  void reportDoneStatusStartsIngestionJob() {
+    LocalDateTime requestedAt = LocalDateTime.of(2026, 4, 24, 15, 0);
     Scan existing = Scan.builder()
         .id(1L)
         .projectId(10L)
         .requestedByUserId(20L)
         .requestActorType(RequestActorType.USER)
         .scanMode(ScanMode.AGENT)
-        .status(ScanStatus.RUNNING)
-        .requestedAt(startedAt.minusMinutes(5))
-        .startedAt(startedAt)
-        .lastUpdatedAt(startedAt.minusMinutes(1))
+        .status(ScanStatus.QUEUED)
+        .requestedAt(requestedAt)
+        .startedAt(requestedAt.plusMinutes(1))
+        .lastUpdatedAt(requestedAt.plusMinutes(2))
         .build();
+    AgentTask agentTask = org.mockito.Mockito.mock(AgentTask.class);
 
-    when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existing));
+    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+    when(agentTask.getTaskType()).thenReturn(AgentTaskType.SCAN_REQUEST);
+    when(agentTask.getTaskStatus()).thenReturn(AgentTaskStatus.SENT);
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
-        null,
+        100L,
+        ScanStatus.DONE,
         "analysis_completed",
         null,
-        "s3://ssafer/raw/1/scan_result.json",
+        "s3://ssafer/result/1/analysis_result.json",
         null,
         null,
         null);
 
     Scan saved = workerAnalysisResultCallbackService.report(1L, request);
 
-    assertThat(saved.getStatus()).isEqualTo(ScanStatus.RAW_UPLOADED);
-    assertThat(saved.getRawResultPath()).isEqualTo("s3://ssafer/raw/1/scan_result.json");
-    assertThat(saved.getStartedAt()).isEqualTo(startedAt);
-    assertThat(saved.getCompletedAt()).isNull();
-    assertThat(saved.getLastUpdatedAt()).isNotNull();
-    verify(scanRepository).findById(1L);
+    assertThat(saved).isSameAs(existing);
+    verify(workerAnalysisResultIngestionJob).start(
+        org.mockito.ArgumentMatchers.same(existing),
+        org.mockito.ArgumentMatchers.same(agentTask),
+        org.mockito.ArgumentMatchers.same(request),
+        org.mockito.ArgumentMatchers.any(LocalDateTime.class),
+        org.mockito.ArgumentMatchers.any(LocalDateTime.class)
+    );
   }
 
   @Test
-  void reportFailedStatusWithoutCompletedAtBackfillsCompletedAt() {
+  void reportFailedStatusMarksTaskAndScanFailed() {
     LocalDateTime requestedAt = LocalDateTime.of(2026, 4, 24, 15, 0);
     Scan existing = Scan.builder()
         .id(1L)
@@ -79,12 +96,18 @@ class WorkerAnalysisResultCallbackServiceTest {
         .scanMode(ScanMode.AGENT)
         .status(ScanStatus.RUNNING)
         .requestedAt(requestedAt)
-        .lastUpdatedAt(requestedAt.plusMinutes(1))
+        .startedAt(requestedAt.plusMinutes(1))
+        .lastUpdatedAt(requestedAt.plusMinutes(2))
         .build();
+    AgentTask agentTask = org.mockito.Mockito.mock(AgentTask.class);
 
-    when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existing));
+    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+    when(agentTask.getTaskType()).thenReturn(AgentTaskType.SCAN_REQUEST);
+    when(agentTask.getTaskStatus()).thenReturn(AgentTaskStatus.RUNNING);
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
+        100L,
         ScanStatus.FAILED,
         "analysis_failed",
         "worker analysis failed",
@@ -97,32 +120,36 @@ class WorkerAnalysisResultCallbackServiceTest {
 
     assertThat(saved.getStatus()).isEqualTo(ScanStatus.FAILED);
     assertThat(saved.getFailureReason()).isEqualTo("worker analysis failed");
-    assertThat(saved.getCompletedAt()).isEqualTo(saved.getLastUpdatedAt());
-    assertThat(saved.getStartedAt()).isEqualTo(saved.getCompletedAt());
+    verify(agentTask).markFailed(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("worker analysis failed"));
   }
 
   @Test
-  void reportRawUploadedStatusRejectsCompletedAt() {
+  void reportDoneStatusWithoutAnalysisResultPathThrowsBadRequest() {
     Scan existing = Scan.builder()
         .id(1L)
         .projectId(10L)
         .requestedByUserId(20L)
         .requestActorType(RequestActorType.USER)
         .scanMode(ScanMode.AGENT)
-        .status(ScanStatus.RUNNING)
+        .status(ScanStatus.QUEUED)
         .requestedAt(LocalDateTime.of(2026, 4, 24, 15, 0))
         .lastUpdatedAt(LocalDateTime.of(2026, 4, 24, 15, 5))
         .build();
+    AgentTask agentTask = org.mockito.Mockito.mock(AgentTask.class);
 
-    when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existing));
+    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+    when(agentTask.getTaskType()).thenReturn(AgentTaskType.SCAN_REQUEST);
+    when(agentTask.getTaskStatus()).thenReturn(AgentTaskStatus.SENT);
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
-        ScanStatus.RAW_UPLOADED,
+        100L,
+        ScanStatus.DONE,
         null,
         null,
-        "s3://ssafer/raw/1/scan_result.json",
         null,
-        LocalDateTime.of(2026, 4, 24, 15, 10),
+        null,
+        null,
         null);
 
     assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(1L, request))
@@ -133,13 +160,14 @@ class WorkerAnalysisResultCallbackServiceTest {
 
   @Test
   void reportWhenScanMissingThrowsNotFound() {
-    when(scanRepository.findById(999L)).thenReturn(Optional.empty());
+    when(scanRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
-        ScanStatus.RAW_UPLOADED,
+        999L,
+        ScanStatus.DONE,
         null,
         null,
-        "s3://ssafer/raw/999/scan_result.json",
+        "s3://ssafer/result/999/analysis_result.json",
         null,
         null,
         null);
@@ -151,7 +179,39 @@ class WorkerAnalysisResultCallbackServiceTest {
   }
 
   @Test
-  void reportWhenExistingScanIsTerminalThrowsConflict() {
+  void reportWhenTaskMissingThrowsNotFound() {
+    Scan existing = Scan.builder()
+        .id(1L)
+        .projectId(10L)
+        .requestedByUserId(20L)
+        .requestActorType(RequestActorType.USER)
+        .scanMode(ScanMode.AGENT)
+        .status(ScanStatus.QUEUED)
+        .requestedAt(LocalDateTime.of(2026, 4, 24, 15, 0))
+        .lastUpdatedAt(LocalDateTime.of(2026, 4, 24, 15, 5))
+        .build();
+
+    when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existing));
+    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.empty());
+
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
+        100L,
+        ScanStatus.DONE,
+        null,
+        null,
+        "s3://ssafer/result/1/analysis_result.json",
+        null,
+        null,
+        null);
+
+    assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(1L, request))
+        .isInstanceOf(ResponseStatusException.class)
+        .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+        .isEqualTo(NOT_FOUND);
+  }
+
+  @Test
+  void reportWhenScanIsTerminalThrowsConflict() {
     Scan existing = Scan.builder()
         .id(1L)
         .projectId(10L)
@@ -162,14 +222,17 @@ class WorkerAnalysisResultCallbackServiceTest {
         .requestedAt(LocalDateTime.of(2026, 4, 24, 15, 0))
         .lastUpdatedAt(LocalDateTime.of(2026, 4, 24, 15, 5))
         .build();
+    AgentTask agentTask = org.mockito.Mockito.mock(AgentTask.class);
 
-    when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existing));
+    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
-        ScanStatus.RAW_UPLOADED,
+        100L,
+        ScanStatus.DONE,
         null,
         null,
-        "s3://ssafer/raw/1/scan_result.json",
+        "s3://ssafer/result/1/analysis_result.json",
         null,
         null,
         null);
@@ -178,65 +241,5 @@ class WorkerAnalysisResultCallbackServiceTest {
         .isInstanceOf(ResponseStatusException.class)
         .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
         .isEqualTo(CONFLICT);
-  }
-
-  @Test
-  void reportWhenExistingScanIsAlreadyRawUploadedThrowsConflict() {
-    Scan existing = Scan.builder()
-        .id(1L)
-        .projectId(10L)
-        .requestedByUserId(20L)
-        .requestActorType(RequestActorType.USER)
-        .scanMode(ScanMode.AGENT)
-        .status(ScanStatus.RAW_UPLOADED)
-        .requestedAt(LocalDateTime.of(2026, 4, 24, 15, 0))
-        .lastUpdatedAt(LocalDateTime.of(2026, 4, 24, 15, 5))
-        .build();
-
-    when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
-
-    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
-        ScanStatus.RAW_UPLOADED,
-        null,
-        null,
-        "s3://ssafer/raw/1/scan_result.json",
-        null,
-        null,
-        null);
-
-    assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(1L, request))
-        .isInstanceOf(ResponseStatusException.class)
-        .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
-        .isEqualTo(CONFLICT);
-  }
-
-  @Test
-  void reportFailedStatusWithoutFailureReasonThrowsBadRequest() {
-    Scan existing = Scan.builder()
-        .id(1L)
-        .projectId(10L)
-        .requestedByUserId(20L)
-        .requestActorType(RequestActorType.USER)
-        .scanMode(ScanMode.AGENT)
-        .status(ScanStatus.RUNNING)
-        .requestedAt(LocalDateTime.of(2026, 4, 24, 15, 0))
-        .lastUpdatedAt(LocalDateTime.of(2026, 4, 24, 15, 5))
-        .build();
-
-    when(scanRepository.findById(1L)).thenReturn(Optional.of(existing));
-
-    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
-        ScanStatus.FAILED,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null);
-
-    assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(1L, request))
-        .isInstanceOf(ResponseStatusException.class)
-        .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
-        .isEqualTo(BAD_REQUEST);
   }
 }

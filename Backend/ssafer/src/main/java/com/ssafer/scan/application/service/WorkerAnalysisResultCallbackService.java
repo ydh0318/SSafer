@@ -4,10 +4,15 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
+import com.ssafer.agent.domain.entity.AgentTask;
+import com.ssafer.agent.domain.enums.AgentTaskStatus;
+import com.ssafer.agent.domain.enums.AgentTaskType;
+import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.scan.api.dto.WorkerAnalysisResultCallbackRequest;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.repository.ScanRepository;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,70 +21,88 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
-// 워커 분석 완료 콜백을 받아 scan 상태와 결과 경로를 갱신한다.
+// 워커 완료 콜백을 받아 task와 scan 상태를 적재 단계에 맞게 전이한다.
 public class WorkerAnalysisResultCallbackService {
 
+  private static final String FAILED_PROGRESS_STEP = "ANALYSIS_FAILED";
+
   private final ScanRepository scanRepository;
+  private final AgentTaskRepository agentTaskRepository;
+  private final WorkerAnalysisResultIngestionJob workerAnalysisResultIngestionJob;
 
   @Transactional
   public Scan report(Long scanId, WorkerAnalysisResultCallbackRequest request) {
-    Scan scan = scanRepository.findById(scanId)
+    Scan scan = scanRepository.findByIdForUpdate(scanId)
         .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Scan not found: " + scanId));
+    AgentTask agentTask = agentTaskRepository.findByIdAndScanId(request.taskId(), scanId)
+        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Agent task not found: " + request.taskId()));
 
-    validateReportable(scan);
+    validateReportable(scan, agentTask);
 
-    ScanStatus status = resolveStatus(request);
-    validateRequestedStatus(status, request);
+    ScanStatus requestedStatus = resolveStatus(request);
+    validateRequestedStatus(requestedStatus, request);
 
     LocalDateTime now = LocalDateTime.now();
     LocalDateTime lastUpdatedAt = resolveLastUpdatedAt(request, now);
-    LocalDateTime completedAt = resolveCompletedAt(scan, request, status, lastUpdatedAt);
-    LocalDateTime startedAt = resolveStartedAt(scan, request, status, lastUpdatedAt, completedAt);
+    LocalDateTime completedAt = resolveCompletedAt(scan, request, requestedStatus, lastUpdatedAt);
+    LocalDateTime startedAt = resolveStartedAt(scan, request, completedAt, lastUpdatedAt);
 
     validateResolvedTimeRange(startedAt, completedAt);
 
-    // 현재 단계에서는 결과 파일 자체는 S3에 두고, 콜백은 상태와 경로만 반영한다.
-    scan.updateRawResult(
-        status,
-        request.progressStep(),
-        normalizeBlank(request.failureReason()),
-        scan.getRawResultJson(),
-        normalizeBlank(request.rawResultPath()),
-        startedAt,
-        completedAt,
-        lastUpdatedAt
-    );
+    if (requestedStatus == ScanStatus.FAILED) {
+      markTaskFailed(agentTask, lastUpdatedAt, request.failureReason());
+      scan.markAnalysisFailed(
+          resolveFailureProgressStep(request.progressStep()),
+          normalizeBlank(request.failureReason()),
+          startedAt,
+          completedAt,
+          lastUpdatedAt
+      );
+      return scan;
+    }
 
+    workerAnalysisResultIngestionJob.start(scan, agentTask, request, startedAt, lastUpdatedAt);
     return scan;
   }
 
-  private void validateReportable(Scan scan) {
-    if (scan.getStatus().isTerminal() || scan.getStatus() == ScanStatus.RAW_UPLOADED) {
+  private void validateReportable(Scan scan, AgentTask agentTask) {
+    if (scan.getStatus().isTerminal()) {
       throw new ResponseStatusException(
           CONFLICT,
-          "Analysis result callback is not allowed for current scan status: " + scan.getStatus());
+          "Analysis result callback is not allowed for current scan status: " + scan.getStatus()
+      );
+    }
+    if (scan.getStatus() != ScanStatus.QUEUED && scan.getStatus() != ScanStatus.RUNNING) {
+      throw new ResponseStatusException(
+          CONFLICT,
+          "Analysis result callback requires QUEUED or RUNNING scan status"
+      );
+    }
+    if (agentTask.getTaskType() != AgentTaskType.SCAN_REQUEST) {
+      throw new ResponseStatusException(BAD_REQUEST, "Analysis result callback requires SCAN_REQUEST task");
+    }
+    if (agentTask.getTaskStatus().isTerminal()) {
+      throw new ResponseStatusException(
+          CONFLICT,
+          "Analysis result callback is not allowed for current task status: " + agentTask.getTaskStatus()
+      );
+    }
+    if (agentTask.getTaskStatus() == AgentTaskStatus.PENDING) {
+      throw new ResponseStatusException(CONFLICT, "Analysis result callback requires SENT or RUNNING task status");
     }
   }
 
   private ScanStatus resolveStatus(WorkerAnalysisResultCallbackRequest request) {
-    return request.status() != null ? request.status() : ScanStatus.RAW_UPLOADED;
+    return request.status() != null ? request.status() : ScanStatus.DONE;
   }
 
   private void validateRequestedStatus(ScanStatus status, WorkerAnalysisResultCallbackRequest request) {
-    if (status != ScanStatus.RAW_UPLOADED && status != ScanStatus.FAILED) {
-      throw new ResponseStatusException(
-          BAD_REQUEST,
-          "Analysis result callback only supports RAW_UPLOADED or FAILED status");
+    if (status != ScanStatus.DONE && status != ScanStatus.FAILED) {
+      throw new ResponseStatusException(BAD_REQUEST, "Analysis result callback only supports DONE or FAILED status");
     }
 
-    if (status == ScanStatus.RAW_UPLOADED && !hasText(request.rawResultPath())) {
-      throw new ResponseStatusException(BAD_REQUEST, "RAW_UPLOADED status requires rawResultPath");
-    }
-
-    if (status == ScanStatus.RAW_UPLOADED && request.completedAt() != null) {
-      throw new ResponseStatusException(
-          BAD_REQUEST,
-          "RAW_UPLOADED status cannot include completedAt");
+    if (status == ScanStatus.DONE && !hasText(request.analysisResultPath())) {
+      throw new ResponseStatusException(BAD_REQUEST, "DONE status requires analysisResultPath");
     }
 
     if (status == ScanStatus.FAILED && !hasText(request.failureReason())) {
@@ -87,29 +110,24 @@ public class WorkerAnalysisResultCallbackService {
     }
   }
 
-  private LocalDateTime resolveLastUpdatedAt(WorkerAnalysisResultCallbackRequest request, LocalDateTime now) {
-    return request.lastUpdatedAt() != null
-        ? request.lastUpdatedAt()
-        : request.completedAt() != null ? request.completedAt() : now;
+  private void markTaskFailed(AgentTask agentTask, LocalDateTime lastUpdatedAt, String failureReason) {
+    if (agentTask.getTaskStatus() == AgentTaskStatus.SENT) {
+      agentTask.markAcked(toInstant(lastUpdatedAt));
+    }
+    if (agentTask.getTaskStatus() == AgentTaskStatus.ACKED) {
+      agentTask.markRunning(toInstant(lastUpdatedAt));
+    }
+    agentTask.markFailed(toInstant(lastUpdatedAt), normalizeBlank(failureReason));
   }
 
-  private LocalDateTime resolveStartedAt(
-      Scan scan,
-      WorkerAnalysisResultCallbackRequest request,
-      ScanStatus status,
-      LocalDateTime lastUpdatedAt,
-      LocalDateTime completedAt
-  ) {
-    if (request.startedAt() != null) {
-      return request.startedAt();
+  private LocalDateTime resolveLastUpdatedAt(WorkerAnalysisResultCallbackRequest request, LocalDateTime now) {
+    if (request.lastUpdatedAt() != null) {
+      return request.lastUpdatedAt();
     }
-    if (scan.getStartedAt() != null) {
-      return scan.getStartedAt();
+    if (request.completedAt() != null) {
+      return request.completedAt();
     }
-    if (status == ScanStatus.FAILED && completedAt != null) {
-      return completedAt;
-    }
-    return status == ScanStatus.RAW_UPLOADED ? lastUpdatedAt : null;
+    return now;
   }
 
   private LocalDateTime resolveCompletedAt(
@@ -121,18 +139,39 @@ public class WorkerAnalysisResultCallbackService {
     if (request.completedAt() != null) {
       return request.completedAt();
     }
-    if (scan.getCompletedAt() != null) {
-      return scan.getCompletedAt();
+    if (status == ScanStatus.FAILED) {
+      return lastUpdatedAt;
     }
-    return status == ScanStatus.FAILED ? lastUpdatedAt : null;
+    return scan.getCompletedAt();
+  }
+
+  private LocalDateTime resolveStartedAt(
+      Scan scan,
+      WorkerAnalysisResultCallbackRequest request,
+      LocalDateTime completedAt,
+      LocalDateTime lastUpdatedAt
+  ) {
+    if (request.startedAt() != null) {
+      return request.startedAt();
+    }
+    if (scan.getStartedAt() != null) {
+      return scan.getStartedAt();
+    }
+    return completedAt != null ? completedAt : lastUpdatedAt;
   }
 
   private void validateResolvedTimeRange(LocalDateTime startedAt, LocalDateTime completedAt) {
     if (startedAt != null && completedAt != null && startedAt.isAfter(completedAt)) {
-      throw new ResponseStatusException(
-          BAD_REQUEST,
-          "startedAt must be before or equal to completedAt");
+      throw new ResponseStatusException(BAD_REQUEST, "startedAt must be before or equal to completedAt");
     }
+  }
+
+  private String resolveFailureProgressStep(String progressStep) {
+    return hasText(progressStep) ? progressStep : FAILED_PROGRESS_STEP;
+  }
+
+  private Instant toInstant(LocalDateTime value) {
+    return value.atZone(java.time.ZoneId.systemDefault()).toInstant();
   }
 
   private String normalizeBlank(String value) {

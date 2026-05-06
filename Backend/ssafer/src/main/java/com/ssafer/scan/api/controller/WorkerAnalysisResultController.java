@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 워커가 분석 완료 또는 실패를 백엔드에 알리는 내부 콜백 API다.
- * 현재 단계에서는 scan 상태와 S3 결과 경로만 반영하고, 실제 결과 적재는 다음 작업에서 이어진다.
+ * 성공 콜백이면 S3 분석 결과를 읽어 적재 준비 상태로 전이하고, 실패 콜백이면 실패 상태를 반영한다.
  */
 @Tag(name = "워커 분석 결과 콜백", description = "워커가 분석 완료 상태를 전달하는 내부 API")
 @RestController
@@ -30,7 +30,8 @@ public class WorkerAnalysisResultController {
   @PostMapping("/{scanId}/analysis-results")
   @Operation(
       summary = "워커 분석 완료 알림",
-      description = "워커가 분석 결과 파일 처리를 마친 뒤 scan 상태와 결과 경로를 반영한다.")
+      description = "워커가 분석을 마치면 S3 분석 결과를 기준으로 적재 job을 시작하고 scan 상태를 전이한다."
+  )
   public ResponseEntity<WorkerAnalysisResultCallbackResponse> reportAnalysisResult(
       @PathVariable Long scanId,
       @Valid @RequestBody WorkerAnalysisResultCallbackRequest request
@@ -42,7 +43,7 @@ public class WorkerAnalysisResultController {
         scan.getProjectId(),
         scan.getScanMode(),
         scan.getStatus(),
-        scan.getRawResultPath(),
+        scan.getAnalysisResultPath(),
         scan.getRequestedAt(),
         scan.getLastUpdatedAt()
     );
