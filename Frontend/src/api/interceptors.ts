@@ -5,6 +5,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
+import { SESSION_EXPIRED_MESSAGE, SESSION_EXPIRED_STORAGE_KEY } from '../features/auth/utils/session';
 import { useAuthStore } from '../store/authStore';
 import type { ApiSuccessResponse } from '../types/api';
 import type { AuthTokenData, RefreshTokenRequest } from '../types/auth';
@@ -16,7 +17,6 @@ type RetryableRequestConfig = AxiosRequestConfig & {
 };
 
 const REFRESH_PATH = '/auth/refresh';
-const SESSION_EXPIRED_STORAGE_KEY = 'ssafer.sessionExpiredMessage';
 const REFRESH_TOKEN_MISSING_MESSAGE =
   'Refresh API completed but did not return an access token in the response body or Authorization header.';
 
@@ -38,14 +38,8 @@ const extractAccessToken = (response: ApiSuccessResponse<AuthTokenData>, header?
 
 const requestTokenRefresh = async (refreshClient: AxiosInstance, refreshToken: string) => {
   const payload: RefreshTokenRequest = { refreshToken };
-  const refreshResponse = await refreshClient.post<ApiSuccessResponse<AuthTokenData>>(
-    REFRESH_PATH,
-    payload,
-  );
-  const nextAccessToken = extractAccessToken(
-    refreshResponse.data,
-    refreshResponse.headers.authorization,
-  );
+  const refreshResponse = await refreshClient.post<ApiSuccessResponse<AuthTokenData>>(REFRESH_PATH, payload);
+  const nextAccessToken = extractAccessToken(refreshResponse.data, refreshResponse.headers.authorization);
 
   if (!nextAccessToken) {
     throw new Error(REFRESH_TOKEN_MISSING_MESSAGE);
@@ -114,10 +108,7 @@ export const setupInterceptors = (client: AxiosInstance) => {
         useAuthStore.getState().logout();
 
         if (typeof window !== 'undefined') {
-          window.sessionStorage.setItem(
-            SESSION_EXPIRED_STORAGE_KEY,
-            '세션이 만료되었습니다. 다시 로그인해주세요.',
-          );
+          window.sessionStorage.setItem(SESSION_EXPIRED_STORAGE_KEY, SESSION_EXPIRED_MESSAGE);
 
           if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
             window.location.assign('/login');

@@ -81,7 +81,7 @@ class ApiRequestLoggingFilterTest {
 
   @Test
   void logsRequestFailureWithStageAndReason() throws Exception {
-    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/internal/scans/1/raw-results");
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/internal/scans/1/analysis-results");
     request.setContentType(MediaType.APPLICATION_JSON_VALUE);
     request.setCharacterEncoding(StandardCharsets.UTF_8.name());
     request.setContent("""

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { tokenStorage } from '../api/tokenStorage';
+import { useProjectStore } from './projectStore';
 import type { AuthUser } from '../types/auth';
 
 interface AuthState {
@@ -73,6 +74,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: () => {
     tokenStorage.clearTokens();
+    useProjectStore.getState().reset();
 
     set({
       accessToken: null,

@@ -5,6 +5,7 @@ import type {
   AuthTokenData,
   ChangePasswordRequest,
   CheckEmailAvailabilityData,
+  CheckNicknameAvailabilityData,
   LoginRequest,
   LogoutRequest,
   PasswordResetCompleteRequest,
@@ -15,6 +16,8 @@ import type {
   RegisterUserData,
   RegisterUserRequest,
   SendEmailVerificationCodeRequest,
+  UpdateUserProfileRequest,
+  UserProfileData,
   VerifyEmailCodeRequest,
 } from '../../../types/auth';
 
@@ -50,6 +53,17 @@ export async function checkEmailAvailability(email: string) {
   return response.data.data;
 }
 
+export async function checkNicknameAvailability(nickname: string) {
+  const response = await publicApiClient.get<ApiSuccessResponse<CheckNicknameAvailabilityData>>(
+    '/users/check-nickname',
+    {
+      params: { nickname },
+    },
+  );
+
+  return response.data.data;
+}
+
 export async function sendEmailVerificationCode(payload: SendEmailVerificationCodeRequest) {
   await publicApiClient.post<ApiSuccessResponse<null>>('/auth/email/send-code', payload);
 }
@@ -63,6 +77,16 @@ export async function registerUser(payload: RegisterUserRequest) {
     '/users',
     payload,
   );
+  return response.data.data;
+}
+
+export async function getCurrentUserProfile() {
+  const response = await apiClient.get<ApiSuccessResponse<UserProfileData>>('/users/me');
+  return response.data.data;
+}
+
+export async function updateCurrentUserProfile(payload: UpdateUserProfileRequest) {
+  const response = await apiClient.patch<ApiSuccessResponse<UserProfileData>>('/users/me/profile', payload);
   return response.data.data;
 }
 

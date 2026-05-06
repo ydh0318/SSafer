@@ -45,6 +45,7 @@ type ProjectStoreState = {
   projects: ProjectSummary[];
   totalElements: number;
   totalPages: number;
+  reset: () => void;
   setProjectsFromList: (items: ProjectListItemData[], totalElements: number, totalPages: number) => void;
   addProject: (project: ProjectSummary) => void;
   upsertProjectDetail: (detail: ProjectDetailResponseData) => void;
@@ -57,6 +58,13 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   projects: [],
   totalElements: 0,
   totalPages: 0,
+  reset: () => {
+    set({
+      projects: [],
+      totalElements: 0,
+      totalPages: 0,
+    });
+  },
   setProjectsFromList: (items, totalElements, totalPages) => {
     set((state) => {
       const existingById = new Map(state.projects.map((project) => [project.id, project]));

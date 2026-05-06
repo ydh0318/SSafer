@@ -169,6 +169,48 @@ export interface ScanFindingDetailData {
   createdAt: string;
 }
 
+export interface HistoryScanSummaryData {
+  totalScanCount: number;
+  totalFindingCount: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  infoCount: number;
+}
+
+export interface HistoryScanListItemData {
+  scanId: number;
+  projectId: number;
+  status: ScanStatus;
+  scanMode: ScanMode;
+  totalFindingCount: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  infoCount: number;
+  requestedAt: string;
+  completedAt: string | null;
+}
+
+export interface HistoryScanListResponseData {
+  summary: HistoryScanSummaryData;
+  items: HistoryScanListItemData[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export interface HistoryScanListQuery {
+  page?: number;
+  size?: number;
+  projectId?: number;
+  status?: ScanStatus;
+  scanMode?: ScanMode;
+}
+
 export interface AgentStatusResponseData {
   agentId: number;
   status: AgentStatus;
