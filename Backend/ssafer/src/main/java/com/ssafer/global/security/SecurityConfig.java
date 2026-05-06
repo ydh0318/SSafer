@@ -17,6 +17,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 public class SecurityConfig {
 
+  private static final String WORKER_ANALYSIS_RESULT_CALLBACK_PATTERN =
+      "/api/v1/internal/scans/*/analysis-results";
+
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
   private final AgentTokenAuthenticationFilter agentTokenAuthenticationFilter;
   private final WorkerSecretAuthenticationFilter workerSecretAuthenticationFilter;
@@ -61,10 +64,10 @@ public class SecurityConfig {
 
   @Bean
   @Order(2)
-  public SecurityFilterChain internalSecurityFilterChain(HttpSecurity http) throws Exception {
+  public SecurityFilterChain workerCallbackSecurityFilterChain(HttpSecurity http) throws Exception {
     return http
-        // 워커 콜백 API는 사용자 JWT와 분리된 내부 인증 체인을 사용한다.
-        .securityMatcher("/api/v1/internal/**")
+        // 워커 분석 완료 콜백은 worker secret 전용 내부 인증 체인으로만 보호한다.
+        .securityMatcher(WORKER_ANALYSIS_RESULT_CALLBACK_PATTERN)
         .csrf(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .httpBasic(AbstractHttpConfigurer::disable)
