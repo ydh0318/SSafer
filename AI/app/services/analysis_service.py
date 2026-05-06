@@ -9,6 +9,7 @@ from app.loaders.scan_loader import (
     validate_scan_result_required_fields,
 )
 from app.core.analysis_errors import build_standard_analysis_error
+from app.core.llm import LLMCallError, LLMTimeoutError
 from app.schemas.analysis import AnalysisRequest, AnalysisResponse
 
 from app.services.explain_service import generate_finding_explanation
@@ -27,11 +28,18 @@ from app.services.s3_service import (
 
 
 class FindingAnalysisError(RuntimeError):
-    def __init__(self, finding_id: str, stage: str, message: str):
+    def __init__(
+        self,
+        finding_id: str,
+        stage: str,
+        message: str,
+        error_code: str | None = None,
+    ):
         super().__init__(message)
         self.finding_id = finding_id
         self.stage = stage
         self.message = message
+        self.error_code = error_code
 
 
 @dataclass(frozen=True)
@@ -125,6 +133,20 @@ def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:
 
     try:
         explanation = generate_finding_explanation(finding)
+    except LLMTimeoutError as exc:
+        raise FindingAnalysisError(
+            finding_id=finding_id,
+            stage="explain",
+            message=str(exc),
+            error_code="LLM_TIMEOUT",
+        ) from exc
+    except LLMCallError as exc:
+        raise FindingAnalysisError(
+            finding_id=finding_id,
+            stage="explain",
+            message=str(exc),
+            error_code="LLM_CALL_FAILED",
+        ) from exc
     except Exception as exc:
         raise FindingAnalysisError(
             finding_id=finding_id,
@@ -134,6 +156,20 @@ def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:
 
     try:
         fix = generate_finding_fix(finding)
+    except LLMTimeoutError as exc:
+        raise FindingAnalysisError(
+            finding_id=finding_id,
+            stage="fix",
+            message=str(exc),
+            error_code="LLM_TIMEOUT",
+        ) from exc
+    except LLMCallError as exc:
+        raise FindingAnalysisError(
+            finding_id=finding_id,
+            stage="fix",
+            message=str(exc),
+            error_code="LLM_CALL_FAILED",
+        ) from exc
     except Exception as exc:
         raise FindingAnalysisError(
             finding_id=finding_id,
@@ -218,6 +254,7 @@ def run_analysis_pipeline_from_scan_result(
             invalid_finding_count=len(context.invalid_findings),
             invalid_findings=context.invalid_findings,
             message=exc.message,
+            error_code=exc.error_code,
         )
     except Exception as exc:
         return build_failed_analysis_result(

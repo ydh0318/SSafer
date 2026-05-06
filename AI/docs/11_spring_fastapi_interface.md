@@ -386,3 +386,6 @@ TASK_FAILED
 | `APP_ANALYSIS_RESULT_S3_BUCKET` 또는 `AWS_S3_BUCKET` | 없음 | `analysisResultPath` 생성용 bucket |
 | `WORKER_ANALYSIS_RESULT_PREFIX` | `analysis` | analysis result key prefix |
 | `WORKER_HTTP_TIMEOUT_SECONDS` | `120` | Spring/FastAPI HTTP 호출 timeout |
+| `OLLAMA_TIMEOUT_SECONDS` | `120` | Ollama LLM 호출 timeout |
+| `OLLAMA_MAX_RETRIES` | `2` | LLM 호출 실패 시 추가 재시도 횟수 |
+| `OLLAMA_RETRY_BACKOFF_SECONDS` | `1` | LLM 재시도 사이 대기 시간 |

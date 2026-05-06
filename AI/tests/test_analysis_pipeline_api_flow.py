@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from app.core.llm import LLMTimeoutError
 from app.schemas.analysis import AnalysisRequest
 from app.services.analysis_service import analyze_scan_result
 from app.services.result_service import load_analysis_result
@@ -91,6 +92,24 @@ class AnalysisPipelineApiFlowTest(unittest.TestCase):
                 analysis_result["results"][0]["fix"]["summary"],
                 "테스트 수정 요약",
             )
+
+    def test_analyze_scan_result_reports_llm_timeout_error_code(self):
+        with patch(
+            "app.services.analysis_service.generate_finding_explanation",
+            side_effect=LLMTimeoutError("LLM call failed after 3 attempt(s): timed out"),
+        ):
+            response = analyze_scan_result(
+                AnalysisRequest(
+                    scan_result_path="inline",
+                    analysis_result_path="unused.json",
+                    scan_result=build_scan_result(),
+                )
+            )
+
+        self.assertEqual(response.status, "failed")
+        self.assertEqual(response.error_code, "LLM_TIMEOUT")
+        self.assertEqual(response.stage, "explain")
+        self.assertEqual(response.finding_id, "FND-0001")
 
 
 if __name__ == "__main__":
