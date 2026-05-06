@@ -13,7 +13,7 @@ public record OAuthLoginRequest(
     @Schema(description = "OAuth 인가 코드", example = "4/0AQSTgQ...")
     String authorizationCode,
     @NotBlank
-    @Schema(description = "OAuth 리다이렉트 URI", example = "http://localhost:3000/oauth/callback")
+    @Schema(description = "OAuth 리다이렉트 URI", example = "http://localhost:5173/oauth/google/callback")
     String redirectUri
 ) {
 }

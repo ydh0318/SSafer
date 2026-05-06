@@ -113,6 +113,71 @@ class AuthControllerTest {
   }
 
   @Test
+  void oauthLoginReturnsTokensAndUserInfoWhenRequestIsValid() throws Exception {
+    given(authOAuthLoginService.login(
+        OAuthProvider.GOOGLE,
+        "auth-code",
+        "http://localhost:5173/oauth/google/callback"
+    )).willReturn(new OAuthLoginResult(
+        OAuthProvider.GOOGLE,
+        "google-user-123",
+        "user@ssafer.co.kr",
+        "싸피맨",
+        false,
+        1L,
+        AccountStatus.ACTIVE,
+        "access-token",
+        Instant.parse("2026-05-06T12:00:00Z"),
+        "refresh-token",
+        Instant.parse("2026-05-20T12:00:00Z")
+    ));
+
+    mockMvc.perform(post("/api/v1/auth/oauth/login")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "provider": "GOOGLE",
+                  "authorizationCode": "auth-code",
+                  "redirectUri": "http://localhost:5173/oauth/google/callback"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("OAuth login succeeded"))
+        .andExpect(jsonPath("$.data.provider").value("GOOGLE"))
+        .andExpect(jsonPath("$.data.providerUserId").value("google-user-123"))
+        .andExpect(jsonPath("$.data.email").value("user@ssafer.co.kr"))
+        .andExpect(jsonPath("$.data.displayName").value("싸피맨"))
+        .andExpect(jsonPath("$.data.newUserCreated").value(false))
+        .andExpect(jsonPath("$.data.userId").value(1L))
+        .andExpect(jsonPath("$.data.accountStatus").value("ACTIVE"))
+        .andExpect(jsonPath("$.data.accessToken").value("access-token"))
+        .andExpect(jsonPath("$.data.refreshToken").value("refresh-token"));
+
+    then(authOAuthLoginService).should().login(
+        OAuthProvider.GOOGLE,
+        "auth-code",
+        "http://localhost:5173/oauth/google/callback"
+    );
+  }
+
+  @Test
+  void oauthLoginWithMissingFieldsReturnsFieldErrors() throws Exception {
+    mockMvc.perform(post("/api/v1/auth/oauth/login")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "provider": "GOOGLE",
+                  "authorizationCode": " ",
+                  "redirectUri": ""
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.authorizationCode").exists())
+        .andExpect(jsonPath("$.data.fieldErrors.redirectUri").exists());
+  }
+
+  @Test
   void refreshReturnsTokensWhenRefreshTokenIsValid() throws Exception {
     given(authTokenRefreshService.refresh("refresh-token"))
         .willReturn(new AuthTokenResult(
@@ -135,65 +200,6 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.data.refreshToken").value("new-refresh-token"));
 
     then(authTokenRefreshService).should().refresh("refresh-token");
-  }
-
-  @Test
-  void oauthLoginReturnsProviderUserInfoAndExistingUserMatchWhenRequestIsValid() throws Exception {
-    given(authOAuthLoginService.login(
-        OAuthProvider.GOOGLE,
-        "auth-code",
-        "http://localhost:3000/oauth/callback"
-    )).willReturn(new OAuthLoginResult(
-        OAuthProvider.GOOGLE,
-        "google-user-123",
-        "user@ssafer.co.kr",
-        "싸피맨",
-        true,
-        1L,
-        AccountStatus.ACTIVE
-    ));
-
-    mockMvc.perform(post("/api/v1/auth/oauth/login")
-            .contentType(APPLICATION_JSON)
-            .content("""
-                {
-                  "provider": "GOOGLE",
-                  "authorizationCode": "auth-code",
-                  "redirectUri": "http://localhost:3000/oauth/callback"
-                }
-                """))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.message").value("OAuth login preparation succeeded"))
-        .andExpect(jsonPath("$.data.provider").value("GOOGLE"))
-        .andExpect(jsonPath("$.data.providerUserId").value("google-user-123"))
-        .andExpect(jsonPath("$.data.email").value("user@ssafer.co.kr"))
-        .andExpect(jsonPath("$.data.displayName").value("싸피맨"))
-        .andExpect(jsonPath("$.data.existingUserMatched").value(true))
-        .andExpect(jsonPath("$.data.existingUserId").value(1L))
-        .andExpect(jsonPath("$.data.existingUserAccountStatus").value("ACTIVE"));
-
-    then(authOAuthLoginService).should().login(
-        OAuthProvider.GOOGLE,
-        "auth-code",
-        "http://localhost:3000/oauth/callback"
-    );
-  }
-
-  @Test
-  void oauthLoginWithMissingFieldsReturnsFieldErrors() throws Exception {
-    mockMvc.perform(post("/api/v1/auth/oauth/login")
-            .contentType(APPLICATION_JSON)
-            .content("""
-                {
-                  "provider": "GOOGLE",
-                  "authorizationCode": " ",
-                  "redirectUri": ""
-                }
-                """))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
-        .andExpect(jsonPath("$.data.fieldErrors.authorizationCode").exists())
-        .andExpect(jsonPath("$.data.fieldErrors.redirectUri").exists());
   }
 
   @Test

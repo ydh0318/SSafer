@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
   private static final String LOGIN_SUCCESS_MESSAGE = "Login succeeded";
-  private static final String OAUTH_LOGIN_SUCCESS_MESSAGE = "OAuth login preparation succeeded";
+  private static final String OAUTH_LOGIN_SUCCESS_MESSAGE = "OAuth login succeeded";
   private static final String REFRESH_SUCCESS_MESSAGE = "Token refresh succeeded";
   private static final String LOGOUT_SUCCESS_MESSAGE = "Logout succeeded";
 
@@ -77,15 +77,16 @@ public class AuthController {
   }
 
   @PostMapping("/oauth/login")
-  @Operation(summary = "OAuth 로그인", description = "provider별 인가 코드를 교환해 사용자 정보를 조회하고 기존 사용자 매칭 결과를 반환합니다.")
+  @Operation(summary = "OAuth 로그인", description = "provider별 인가 코드를 교환해 사용자 정보를 조회하고, 신규 사용자 생성 또는 기존 사용자 매칭 후 JWT를 발급합니다.")
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "OAuth 사용자 정보 조회 성공",
+          description = "OAuth 로그인 성공",
           content = @Content(schema = @Schema(implementation = OAuthLoginResponseData.class))
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청값 형식 오류 또는 필수값 누락"),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "OAuth 제공자 통신 실패 또는 설정 누락")
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 가능한 계정이 아니거나 OAuth 인증이 유효하지 않음"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "OAuth 제공자 통신 실패 또는 서버 설정 오류")
   })
   public ResponseEntity<ApiResponse<OAuthLoginResponseData>> oauthLogin(@Valid @RequestBody OAuthLoginRequest request) {
     OAuthLoginResult result = authOAuthLoginService.login(
@@ -101,15 +102,19 @@ public class AuthController {
             result.providerUserId(),
             result.email(),
             result.displayName(),
-            result.existingUserMatched(),
-            result.existingUserId(),
-            result.existingUserAccountStatus()
+            result.newUserCreated(),
+            result.userId(),
+            result.accountStatus(),
+            result.accessToken(),
+            result.accessTokenExpiresAt(),
+            result.refreshToken(),
+            result.refreshTokenExpiresAt()
         )
     ));
   }
 
   @PostMapping("/refresh")
-  @Operation(summary = "토큰 재발급", description = "유효한 refresh token을 검증한 뒤 새 access token과 refresh token을 발급합니다.")
+  @Operation(summary = "토큰 재발급", description = "유효한 refresh token을 검증한 뒤 access token과 refresh token을 발급합니다.")
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
