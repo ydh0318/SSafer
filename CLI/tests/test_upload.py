@@ -148,8 +148,8 @@ def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
     upload.upload_last_scan(tmp_path)
 
     assert posted_urls == [
-        "http://localhost:8080/api/v1/scans",
-        "http://localhost:8080/api/v1/scans/1001/raw-results",
+        "https://k14b105.p.ssafy.io/api/v1/scans",
+        "https://k14b105.p.ssafy.io/api/v1/scans/1001/raw-results",
     ]
 
 

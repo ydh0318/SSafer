@@ -203,8 +203,13 @@ def login(
 def signup(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
 ) -> None:
-    """Create a SSAfer backend user account."""
-    from ssafer.core.auth import load_endpoint, register_user
+    """Verify email and create a SSAfer backend user account."""
+    from ssafer.core.auth import (
+        load_endpoint,
+        register_user,
+        send_email_verification_code,
+        verify_email_code,
+    )
 
     effective_endpoint = endpoint or load_endpoint()
     email = typer.prompt("Email")
@@ -214,6 +219,13 @@ def signup(
         console.print("[red]Email, display name, and password are required.[/red]")
         raise typer.Exit(code=1)
     try:
+        send_email_verification_code(effective_endpoint, email.strip())
+        console.print("[green]Verification code sent. Check your email.[/green]")
+        code = typer.prompt("Verification code")
+        if not code.strip():
+            console.print("[red]Verification code is required.[/red]")
+            raise typer.Exit(code=1)
+        verify_email_code(effective_endpoint, email.strip(), code.strip())
         register_user(effective_endpoint, email.strip(), display_name.strip(), password)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]Signup failed:[/red] {_format_http_error(exc)}")
