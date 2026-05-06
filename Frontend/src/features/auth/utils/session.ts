@@ -1,5 +1,5 @@
-import type { AuthRole } from '../../../types/auth';
 import { tokenStorage } from '../../../api/tokenStorage';
+import type { AuthRole } from '../../../types/auth';
 
 export const SESSION_EXPIRED_STORAGE_KEY = 'ssafer.sessionExpiredMessage';
 export const SESSION_EXPIRED_MESSAGE = '세션이 만료되어 로그아웃되었습니다. 다시 로그인해 주세요.';
@@ -8,6 +8,8 @@ type JwtPayload = {
   exp?: number;
   role?: string;
 };
+
+export type TokenHealth = 'missing' | 'invalid' | 'valid';
 
 function decodeBase64Url(value: string) {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
@@ -45,18 +47,34 @@ export function parseJwtPayload(token: string | null | undefined): JwtPayload | 
   }
 }
 
+export function getTokenHealth(token: string | null | undefined): TokenHealth {
+  if (!token) {
+    return 'missing';
+  }
+
+  return parseJwtPayload(token) ? 'valid' : 'invalid';
+}
+
 export function getTokenRole(token: string | null | undefined): AuthRole | string | null {
   return parseJwtPayload(token)?.role ?? null;
 }
 
 export function isTokenExpired(token: string | null | undefined) {
-  const exp = parseJwtPayload(token)?.exp;
+  const payload = parseJwtPayload(token);
 
-  if (!exp) {
+  if (!payload) {
     return false;
   }
 
-  return exp * 1000 <= Date.now();
+  if (!payload.exp) {
+    return false;
+  }
+
+  return payload.exp * 1000 <= Date.now();
+}
+
+export function hasInvalidAccessToken(token: string | null | undefined) {
+  return getTokenHealth(token) === 'invalid';
 }
 
 export function getStoredAccessTokenRole() {
@@ -70,4 +88,12 @@ export function isStoredGuestSession() {
 export function hasStoredMemberSession() {
   const role = getStoredAccessTokenRole();
   return role === 'USER' || role === 'ADMIN' || Boolean(tokenStorage.getRefreshToken());
+}
+
+export function clearSessionWithMessage(logout: () => void) {
+  logout();
+
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.setItem(SESSION_EXPIRED_STORAGE_KEY, SESSION_EXPIRED_MESSAGE);
+  }
 }
