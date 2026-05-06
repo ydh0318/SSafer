@@ -3,10 +3,70 @@ import unittest
 from unittest.mock import patch
 
 from app.api.analysis import analyze
-from app.schemas.analysis import AnalysisRequest
+from app.schemas.analysis import (
+    AgentTaskResultRequest,
+    AgentTaskStatusUpdateRequest,
+    AnalysisRequest,
+)
 
 
 class AnalyzeEndpointTest(unittest.TestCase):
+    def test_analysis_request_accepts_spring_integration_fields(self):
+        request = AnalysisRequest(
+            taskId=123,
+            agentId=10,
+            projectId=2,
+            scanId=5,
+            rawResultPath="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
+            analysisResultPath=(
+                "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+            ),
+        )
+
+        self.assertEqual(request.task_id, 123)
+        self.assertEqual(request.agent_id, 10)
+        self.assertEqual(request.project_id, 2)
+        self.assertEqual(request.scan_id, 5)
+        self.assertEqual(
+            request.raw_result_path,
+            "s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
+        )
+        self.assertEqual(
+            request.analysis_result_s3_path,
+            "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",
+        )
+
+    def test_agent_task_callback_payloads_use_spring_field_names(self):
+        status_update = AgentTaskStatusUpdateRequest(
+            agentId=10,
+            scanId=5,
+            status="RUNNING",
+            occurredAt="2026-05-06T04:00:10Z",
+        )
+        result_update = AgentTaskResultRequest(
+            agentId=10,
+            scanId=5,
+            status="SUCCEEDED",
+            analysisResultPath=(
+                "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+            ),
+            findingCount=3,
+            validFindingCount=3,
+            invalidFindingCount=0,
+            resultCount=3,
+            durationMs=73000,
+        )
+
+        self.assertEqual(
+            status_update.model_dump(by_alias=True)["occurredAt"],
+            "2026-05-06T04:00:10Z",
+        )
+        self.assertEqual(
+            result_update.model_dump(by_alias=True)["analysisResultPath"],
+            "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",
+        )
+        self.assertEqual(result_update.model_dump(by_alias=True)["durationMs"], 73000)
+
     def test_analyze_endpoint_runs_analysis_pipeline(self):
         captured_args = {}
 
