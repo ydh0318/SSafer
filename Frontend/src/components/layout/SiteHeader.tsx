@@ -28,7 +28,6 @@ function getProfileInitial(name?: string, email?: string) {
 function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
@@ -112,7 +111,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
 
           <ThemeToggleButton />
 
-          {isAuthenticated ? (
+          {isMemberSession ? (
             <>
               <button
                 aria-label="설정"

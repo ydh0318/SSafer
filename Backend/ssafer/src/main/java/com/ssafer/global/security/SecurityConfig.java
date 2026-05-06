@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -48,6 +49,7 @@ public class SecurityConfig {
   public SecurityFilterChain internalAgentSecurityFilterChain(HttpSecurity http) throws Exception {
     return http
         .securityMatcher("/api/v1/internal/agents/**")
+        .cors(Customizer.withDefaults())
         .csrf(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .httpBasic(AbstractHttpConfigurer::disable)
@@ -68,6 +70,7 @@ public class SecurityConfig {
     return http
         // 워커 분석 완료 콜백은 worker secret 전용 내부 인증 체인으로만 보호한다.
         .securityMatcher(WORKER_ANALYSIS_RESULT_CALLBACK_PATTERN)
+        .cors(Customizer.withDefaults())
         .csrf(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .httpBasic(AbstractHttpConfigurer::disable)
@@ -86,6 +89,7 @@ public class SecurityConfig {
   @Order(3)
   public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
     return http
+        .cors(Customizer.withDefaults())
         // 일반 API는 기존 회원/게스트 JWT 인증 흐름을 그대로 사용한다.
         .csrf(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)

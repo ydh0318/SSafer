@@ -64,8 +64,11 @@ class CliRawResultUploadReportServiceTest {
   @Test
   void reportSuccessCreatesTaskPublishesAndQueuesScan() throws Exception {
     Scan scan = createScan(ScanStatus.REQUESTED);
+    Project project = createProject(101L);
     Agent agent = createAgent(200L, 101L);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
+    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(101L, AuthenticatedActor.member(1L)))
+        .thenReturn(project);
     when(agentRepository.findFirstByProjectId(101L)).thenReturn(Optional.of(agent));
     when(rawResultObjectVerifier.exists(scan.getRawResultPath())).thenReturn(true);
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
@@ -118,27 +121,52 @@ class CliRawResultUploadReportServiceTest {
   }
 
   @Test
-  void reportWhenAgentMissingThrowsNotFound() {
+  void reportWhenAgentMissingCreatesFallbackAgentAndContinues() throws Exception {
+    // 프로젝트에 agent가 없어도 fallback agent를 생성해
+    // 기존 메시지 발행 경로가 끊기지 않아야 한다.
+    // 프로젝트에 Agent가 없어도 placeholder Agent를 생성하고 publish가 이어져야 한다.
     Scan scan = createScan(ScanStatus.REQUESTED);
+    Project project = createProject(101L);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
+    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(101L, AuthenticatedActor.member(1L)))
+        .thenReturn(project);
     when(rawResultObjectVerifier.exists(scan.getRawResultPath())).thenReturn(true);
     when(agentRepository.findFirstByProjectId(101L)).thenReturn(Optional.empty());
+    when(agentRepository.save(any(Agent.class))).thenAnswer(invocation -> {
+      Agent fallback = invocation.getArgument(0);
+      ReflectionTestUtils.setField(fallback, "id", 201L);
+      return fallback;
+    });
+    when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
+    when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
+      AgentTask task = invocation.getArgument(0);
+      ReflectionTestUtils.setField(task, "id", 3002L);
+      ReflectionTestUtils.setField(task, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:01Z"));
+      return task;
+    });
 
-    assertThatThrownBy(() -> service.report(
+    CliRawResultUploadReportResponseData response = service.report(
         1001L,
         AuthenticatedActor.member(1L),
         new CliRawResultUploadReportRequest("ssafer-cli", "1.4.0", 1, null)
-    ))
-        .isInstanceOf(BusinessException.class)
-        .extracting(ex -> ((BusinessException) ex).getErrorCode())
-        .isEqualTo(ErrorCode.NOT_FOUND);
+    );
+
+    assertThat(response.scanId()).isEqualTo(1001L);
+    assertThat(response.status()).isEqualTo(ScanStatus.QUEUED);
+    ArgumentCaptor<Agent> fallbackCaptor = ArgumentCaptor.forClass(Agent.class);
+    verify(agentRepository).save(fallbackCaptor.capture());
+    assertThat(fallbackCaptor.getValue().isPlaceholder()).isTrue();
+    verify(agentTaskPublisher).publishScanRequest(any(ScanRequestTaskMessage.class));
   }
 
   @Test
   void reportWhenPublishFailsThrowsInternalServerError() throws Exception {
     Scan scan = createScan(ScanStatus.REQUESTED);
+    Project project = createProject(101L);
     Agent agent = createAgent(200L, 101L);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
+    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(101L, AuthenticatedActor.member(1L)))
+        .thenReturn(project);
     when(agentRepository.findFirstByProjectId(101L)).thenReturn(Optional.of(agent));
     when(rawResultObjectVerifier.exists(scan.getRawResultPath())).thenReturn(true);
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
@@ -275,11 +303,15 @@ class CliRawResultUploadReportServiceTest {
   }
 
   private Agent createAgent(Long agentId, Long projectId) {
-    Project project = new Project(1L, null, "test-project", null, com.ssafer.project.domain.enums.ScanMode.AGENT, false);
-    ReflectionTestUtils.setField(project, "id", projectId);
-
+    Project project = createProject(projectId);
     Agent agent = new Agent(project, AgentStatus.ONLINE);
     ReflectionTestUtils.setField(agent, "id", agentId);
     return agent;
+  }
+
+  private Project createProject(Long projectId) {
+    Project project = new Project(1L, null, "test-project", null, com.ssafer.project.domain.enums.ScanMode.AGENT, false);
+    ReflectionTestUtils.setField(project, "id", projectId);
+    return project;
   }
 }
