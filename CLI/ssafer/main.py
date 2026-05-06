@@ -105,6 +105,41 @@ def install_tools() -> None:
     raise typer.Exit(code=1)
 
 
+@app.command("server-audit")
+def server_audit(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root for .ssafer output."),
+    checks: Optional[str] = typer.Option(
+        None,
+        "--checks",
+        help="Comma-separated checks: ports,processes,docker,ssh,firewall,nginx,os-packages.",
+    ),
+    include_os_packages: bool = typer.Option(
+        False,
+        "--include-os-packages",
+        help="Run Trivy rootfs OS package vulnerability scan. This can be slow and may require privileges.",
+    ),
+) -> None:
+    """Audit runtime security state from inside a server."""
+    from ssafer.server.audit import run_server_audit, save_server_audit_result
+
+    selected_checks = [item.strip() for item in checks.split(",") if item.strip()] if checks else None
+    result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages)
+    output_path = save_server_audit_result(path.resolve(), result)
+
+    table = Table(title="Server audit result")
+    table.add_column("Item")
+    table.add_column("Count", justify="right")
+    table.add_row("Findings", str(len(result.findings)))
+    table.add_row("Warnings", str(len(result.warnings)))
+    table.add_row("Artifacts", str(len(result.artifacts)))
+    console.print(table)
+    if result.warnings:
+        console.print("[yellow]Warnings[/yellow]")
+        for warning in result.warnings:
+            console.print(f"  - {warning}")
+    console.print(f"[green]Server audit saved:[/green] {output_path}")
+
+
 @app.command()
 def run(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to scan."),
@@ -168,34 +203,35 @@ def upload(
 @app.command("apply")
 def apply_fix(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to patch."),
-    analysis_result: Path = typer.Option(..., "--analysis-result", help="Worker analysis_result.json with patch payloads."),
+    analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="Worker analysis_result.json with patch payloads."),
     patch_id: Optional[str] = typer.Option(None, "--patch-id", help="Apply only one patch ID."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch payloads without modifying files."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirmation prompt."),
 ) -> None:
     """Apply approved patch payloads to local project files."""
-    from ssafer.core.patches import PatchError, apply_patch_candidates, load_patch_candidates_from_file
+    from ssafer.core.patches import (
+        PatchCandidate,
+        PatchError,
+        apply_patch_candidates,
+        find_default_analysis_result,
+        load_patch_candidates_from_file,
+    )
 
     try:
-        candidates = load_patch_candidates_from_file(analysis_result)
+        project_root = path.resolve()
+        analysis_path = analysis_result or find_default_analysis_result(project_root)
+        if analysis_path is None:
+            raise PatchError(
+                "analysis_result.json not found. Use --analysis-result or place it under .ssafer/analysis_result.json."
+            )
+
+        candidates = load_patch_candidates_from_file(analysis_path)
         selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
         if not selected:
             console.print("[yellow]No applicable patch payloads found.[/yellow]")
             raise typer.Exit(code=1)
 
-        table = Table(title="Patch candidates")
-        table.add_column("Patch ID")
-        table.add_column("Finding ID")
-        table.add_column("File", overflow="fold")
-        table.add_column("Operation")
-        for candidate in selected:
-            table.add_row(
-                candidate.patch_id,
-                candidate.finding_id or "-",
-                candidate.file_path,
-                candidate.operation,
-            )
-        console.print(table)
+        selected = _select_patch_candidates(selected, patch_id=patch_id, yes=yes)
 
         if not dry_run and not yes:
             confirmed = typer.confirm("Apply selected patches?")
@@ -203,7 +239,14 @@ def apply_fix(
                 console.print("[yellow]Patch apply canceled.[/yellow]")
                 raise typer.Exit(code=1)
 
-        results = apply_patch_candidates(path.resolve(), candidates, patch_id=patch_id, dry_run=dry_run)
+        selected_patch_id = selected[0].patch_id if len(selected) == 1 else None
+        selected_candidates = selected if selected_patch_id is None else candidates
+        results = apply_patch_candidates(
+            project_root,
+            selected_candidates,
+            patch_id=selected_patch_id,
+            dry_run=dry_run,
+        )
     except (OSError, ValueError, PatchError, RuntimeError) as exc:
         console.print(f"[red]Patch apply failed:[/red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -223,6 +266,46 @@ def apply_fix(
             result.backup_path or "-",
         )
     console.print(result_table)
+
+
+def _select_patch_candidates(
+    candidates: list["PatchCandidate"],
+    *,
+    patch_id: str | None,
+    yes: bool,
+) -> list["PatchCandidate"]:
+    table = Table(title="Patch candidates")
+    table.add_column("No.", justify="right")
+    table.add_column("Patch ID")
+    table.add_column("Finding ID")
+    table.add_column("File", overflow="fold")
+    table.add_column("Operation")
+    for index, candidate in enumerate(candidates, start=1):
+        table.add_row(
+            str(index),
+            candidate.patch_id,
+            candidate.finding_id or "-",
+            candidate.file_path,
+            candidate.operation,
+        )
+    if len(candidates) > 1 and patch_id is None:
+        table.add_row(str(len(candidates) + 1), "ALL", "-", "All patch candidates", "-")
+    console.print(table)
+
+    if patch_id is not None or yes or len(candidates) == 1:
+        return candidates
+
+    choice = typer.prompt("Select patch number")
+    try:
+        selected = int(choice)
+    except ValueError as exc:
+        raise PatchError("Patch selection must be a number.") from exc
+
+    if selected == len(candidates) + 1:
+        return candidates
+    if selected < 1 or selected > len(candidates):
+        raise PatchError(f"Patch selection is out of range: {selected}")
+    return [candidates[selected - 1]]
 
 
 @app.command()

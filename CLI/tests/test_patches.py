@@ -183,3 +183,72 @@ def test_apply_command_applies_analysis_result_patch(tmp_path: Path):
     assert result.exit_code == 0
     assert "SUCCESS" in result.output
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
+
+
+def test_apply_command_uses_default_analysis_result_and_interactive_selection(tmp_path: Path):
+    first = tmp_path / "Dockerfile"
+    second = tmp_path / ".env.example"
+    first.write_text("USER root\n", encoding="utf-8")
+    second.write_text("TOKEN=secret\n", encoding="utf-8")
+    ssafer_dir = tmp_path / ".ssafer"
+    ssafer_dir.mkdir()
+    (ssafer_dir / "analysis_result.json").write_text(
+        json.dumps(
+            {
+                "patches": [
+                    {
+                        "patchId": "P1",
+                        "findingId": "FND-0001",
+                        "filePath": "Dockerfile",
+                        "oldText": "USER root",
+                        "newText": "USER appuser",
+                    },
+                    {
+                        "patchId": "P2",
+                        "findingId": "FND-0002",
+                        "filePath": ".env.example",
+                        "oldText": "TOKEN=secret",
+                        "newText": "TOKEN=your_token_here",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["apply", "--path", str(tmp_path)], input="2\ny\n")
+
+    assert result.exit_code == 0
+    assert "P1" in result.output
+    assert "P2" in result.output
+    assert first.read_text(encoding="utf-8") == "USER root\n"
+    assert second.read_text(encoding="utf-8") == "TOKEN=your_token_here\n"
+
+
+def test_apply_command_interactive_all_selection(tmp_path: Path):
+    first = tmp_path / "a.txt"
+    second = tmp_path / "b.txt"
+    first.write_text("old a", encoding="utf-8")
+    second.write_text("old b", encoding="utf-8")
+    analysis_result = tmp_path / "analysis_result.json"
+    analysis_result.write_text(
+        json.dumps(
+            {
+                "patches": [
+                    {"patchId": "P1", "filePath": "a.txt", "oldText": "old a", "newText": "new a"},
+                    {"patchId": "P2", "filePath": "b.txt", "oldText": "old b", "newText": "new b"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["apply", "--path", str(tmp_path), "--analysis-result", str(analysis_result)],
+        input="3\ny\n",
+    )
+
+    assert result.exit_code == 0
+    assert first.read_text(encoding="utf-8") == "new a"
+    assert second.read_text(encoding="utf-8") == "new b"
