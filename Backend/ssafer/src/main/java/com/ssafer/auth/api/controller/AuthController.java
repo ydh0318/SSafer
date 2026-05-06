@@ -2,11 +2,15 @@ package com.ssafer.auth.api.controller;
 
 import com.ssafer.auth.api.dto.LoginRequest;
 import com.ssafer.auth.api.dto.LoginResponseData;
+import com.ssafer.auth.api.dto.OAuthLoginRequest;
+import com.ssafer.auth.api.dto.OAuthLoginResponseData;
 import com.ssafer.auth.api.dto.RefreshTokenRequest;
 import com.ssafer.auth.application.service.AuthLoginService;
 import com.ssafer.auth.application.service.AuthLogoutService;
+import com.ssafer.auth.application.service.AuthOAuthLoginService;
 import com.ssafer.auth.application.service.AuthTokenRefreshService;
 import com.ssafer.auth.application.service.AuthTokenResult;
+import com.ssafer.auth.application.service.OAuthLoginResult;
 import com.ssafer.global.api.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -26,19 +30,23 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
   private static final String LOGIN_SUCCESS_MESSAGE = "Login succeeded";
+  private static final String OAUTH_LOGIN_SUCCESS_MESSAGE = "OAuth login succeeded";
   private static final String REFRESH_SUCCESS_MESSAGE = "Token refresh succeeded";
   private static final String LOGOUT_SUCCESS_MESSAGE = "Logout succeeded";
 
   private final AuthLoginService authLoginService;
+  private final AuthOAuthLoginService authOAuthLoginService;
   private final AuthTokenRefreshService authTokenRefreshService;
   private final AuthLogoutService authLogoutService;
 
   public AuthController(
       AuthLoginService authLoginService,
+      AuthOAuthLoginService authOAuthLoginService,
       AuthTokenRefreshService authTokenRefreshService,
       AuthLogoutService authLogoutService
   ) {
     this.authLoginService = authLoginService;
+    this.authOAuthLoginService = authOAuthLoginService;
     this.authTokenRefreshService = authTokenRefreshService;
     this.authLogoutService = authLogoutService;
   }
@@ -51,19 +59,10 @@ public class AuthController {
           description = "로그인 성공",
           content = @Content(schema = @Schema(implementation = LoginResponseData.class))
       ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(
-          responseCode = "400",
-          description = "요청값 형식 오류 또는 필수값 누락"
-      ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(
-          responseCode = "401",
-          description = "이메일 또는 비밀번호 불일치"
-      )
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청값 형식 오류 또는 필수값 누락"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "이메일 또는 비밀번호 불일치")
   })
-  public ResponseEntity<ApiResponse<LoginResponseData>> login(
-      @Valid @RequestBody LoginRequest request
-  ) {
-    // 로그인은 세션을 만들지 않고 access/refresh 토큰만 발급해서 응답한다.
+  public ResponseEntity<ApiResponse<LoginResponseData>> login(@Valid @RequestBody LoginRequest request) {
     AuthTokenResult tokenResult = authLoginService.login(request.email(), request.password());
 
     return ResponseEntity.ok(ApiResponse.success(
@@ -77,27 +76,55 @@ public class AuthController {
     ));
   }
 
+  @PostMapping("/oauth/login")
+  @Operation(summary = "OAuth 로그인", description = "provider별 인가 코드를 교환해 사용자 정보를 조회하고, 신규 사용자 생성 또는 기존 사용자 매칭 후 JWT를 발급합니다.")
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "OAuth 로그인 성공",
+          content = @Content(schema = @Schema(implementation = OAuthLoginResponseData.class))
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청값 형식 오류 또는 필수값 누락"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 가능한 계정이 아니거나 OAuth 인증이 유효하지 않음"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "OAuth 제공자 통신 실패 또는 서버 설정 오류")
+  })
+  public ResponseEntity<ApiResponse<OAuthLoginResponseData>> oauthLogin(@Valid @RequestBody OAuthLoginRequest request) {
+    OAuthLoginResult result = authOAuthLoginService.login(
+        request.provider(),
+        request.authorizationCode(),
+        request.redirectUri()
+    );
+
+    return ResponseEntity.ok(ApiResponse.success(
+        OAUTH_LOGIN_SUCCESS_MESSAGE,
+        new OAuthLoginResponseData(
+            result.provider(),
+            result.providerUserId(),
+            result.email(),
+            result.displayName(),
+            result.newUserCreated(),
+            result.userId(),
+            result.accountStatus(),
+            result.accessToken(),
+            result.accessTokenExpiresAt(),
+            result.refreshToken(),
+            result.refreshTokenExpiresAt()
+        )
+    ));
+  }
+
   @PostMapping("/refresh")
-  @Operation(summary = "토큰 재발급", description = "유효한 refresh token을 검증한 뒤 새 access token과 refresh token을 발급합니다.")
+  @Operation(summary = "토큰 재발급", description = "유효한 refresh token을 검증한 뒤 access token과 refresh token을 발급합니다.")
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
           description = "토큰 재발급 성공",
           content = @Content(schema = @Schema(implementation = LoginResponseData.class))
       ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(
-          responseCode = "400",
-          description = "요청값 형식 오류 또는 필수값 누락"
-      ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(
-          responseCode = "401",
-          description = "refresh token이 유효하지 않거나 서버 저장값과 일치하지 않음"
-      )
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청값 형식 오류 또는 필수값 누락"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "refresh token이 유효하지 않거나 서버 저장값과 일치하지 않음")
   })
-  public ResponseEntity<ApiResponse<LoginResponseData>> refresh(
-      @Valid @RequestBody RefreshTokenRequest request
-  ) {
-    // 재발급은 access token 없이 refresh token 하나만으로 새 토큰 쌍을 발급한다.
+  public ResponseEntity<ApiResponse<LoginResponseData>> refresh(@Valid @RequestBody RefreshTokenRequest request) {
     AuthTokenResult tokenResult = authTokenRefreshService.refresh(request.refreshToken());
 
     return ResponseEntity.ok(ApiResponse.success(
@@ -114,23 +141,11 @@ public class AuthController {
   @PostMapping("/logout")
   @Operation(summary = "로그아웃", description = "현재 refresh token을 무효화해 이후 재발급이 불가능하도록 처리합니다.")
   @ApiResponses({
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(
-          responseCode = "200",
-          description = "로그아웃 성공"
-      ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(
-          responseCode = "400",
-          description = "요청값 형식 오류 또는 필수값 누락"
-      ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(
-          responseCode = "401",
-          description = "refresh token이 유효하지 않거나 서버 저장값과 일치하지 않음"
-      )
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그아웃 성공"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청값 형식 오류 또는 필수값 누락"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "refresh token이 유효하지 않거나 서버 저장값과 일치하지 않음")
   })
-  public ResponseEntity<ApiResponse<Void>> logout(
-      @Valid @RequestBody RefreshTokenRequest request
-  ) {
-    // access token이 만료된 경우도 고려해 로그아웃은 refresh token만으로 처리한다.
+  public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshTokenRequest request) {
     authLogoutService.logout(request.refreshToken());
     return ResponseEntity.ok(ApiResponse.success(LOGOUT_SUCCESS_MESSAGE, null));
   }
