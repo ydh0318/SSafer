@@ -233,6 +233,7 @@ function HistoryPage() {
       await loadHistory();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '스캔 이력을 삭제하지 못했습니다.');
+      setNoticeMessage(null);
     } finally {
       setDeletingScanIds((current) => current.filter((scanId) => scanId !== item.scanId));
     }
@@ -308,12 +309,10 @@ function HistoryPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {noticeMessage ? (
-            <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{noticeMessage}</div>
-          ) : null}
-
           {errorMessage ? (
             <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{errorMessage}</div>
+          ) : noticeMessage ? (
+            <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{noticeMessage}</div>
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -358,7 +357,11 @@ function HistoryPage() {
                   >
                     <option value="">스캔 선택</option>
                     {doneHistoryItems.map((item) => (
-                      <option key={`target-${item.scanId}`} value={item.scanId}>
+                      <option
+                        disabled={String(item.scanId) === selectedBaseScanId}
+                        key={`target-${item.scanId}`}
+                        value={item.scanId}
+                      >
                         #{item.scanId} / 프로젝트 {item.projectId}
                       </option>
                     ))}
@@ -392,10 +395,7 @@ function HistoryPage() {
                   <FeatureInfoCard eyebrow="신규" title={<div className="text-3xl font-black">{compareData.summary.newCount}</div>} />
                   <FeatureInfoCard eyebrow="해결됨" title={<div className="text-3xl font-black">{compareData.summary.resolvedCount}</div>} />
                   <FeatureInfoCard eyebrow="유지됨" title={<div className="text-3xl font-black">{compareData.summary.retainedCount}</div>} />
-                  <FeatureInfoCard
-                    eyebrow="심각도 변경"
-                    title={<div className="text-3xl font-black">{compareData.summary.severityChangedCount}</div>}
-                  />
+                  <FeatureInfoCard eyebrow="심각도 변경" title={<div className="text-3xl font-black">{compareData.summary.severityChangedCount}</div>} />
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
