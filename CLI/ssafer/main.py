@@ -323,6 +323,13 @@ def _format_http_error(exc: httpx.HTTPStatusError) -> str:
     return f"backend returned {status_code}."
 
 
+def _format_upload_request_url(url: object) -> str:
+    text = str(url)
+    if "/api/" in text:
+        return text
+    return "S3 presigned upload URL hidden"
+
+
 def _print_scan_summary(scan: dict) -> None:
     summary = scan.get("cliSummary", {})
     status = scan.get("analysisStatus", "UNKNOWN")
@@ -592,7 +599,7 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
         return upload_last_scan(path, api_url=effective_url, token=token)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
-        console.print(f"[dim]Request URL: {exc.request.url}[/dim]")
+        console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
         console.print(f"[red]Upload failed:[/red] {exc}")
     except RuntimeError as exc:
