@@ -80,6 +80,31 @@ pipeline {
             }
         }
 
+        stage('Sync EC2 #2 Deploy Files') {
+            when {
+                expression { return params.DEPLOY_EC2_2 }
+            }
+            steps {
+                script { FAILED_STAGE = 'Sync EC2 #2 Deploy Files' }
+                withCredentials([string(credentialsId: 'ec2-2-host', variable: 'EC2_2_HOST')]) {
+                    sshagent(credentials: [env.EC2_2_SSH_CREDENTIALS]) {
+                        sh '''
+                            ssh -o StrictHostKeyChecking=no ubuntu@"$EC2_2_HOST" \
+                              'mkdir -p /home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-2/prod /home/ubuntu/ssafer/S14P31B105/Infra/scripts'
+                            scp -o StrictHostKeyChecking=no \
+                              Infra/docker/ec2-2/prod/docker-compose.yml \
+                              ubuntu@"$EC2_2_HOST":/home/ubuntu/ssafer/S14P31B105/Infra/docker/ec2-2/prod/
+                            scp -o StrictHostKeyChecking=no \
+                              Infra/scripts/deploy-ec2-2.sh \
+                              ubuntu@"$EC2_2_HOST":/home/ubuntu/ssafer/S14P31B105/Infra/scripts/
+                            ssh -o StrictHostKeyChecking=no ubuntu@"$EC2_2_HOST" \
+                              'chmod +x /home/ubuntu/ssafer/S14P31B105/Infra/scripts/deploy-ec2-2.sh'
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Deploy EC2 #2') {
             when {
                 expression { return params.DEPLOY_EC2_2 }
@@ -88,10 +113,10 @@ pipeline {
                 script { FAILED_STAGE = 'Deploy EC2 #2' }
                 withCredentials([string(credentialsId: 'ec2-2-host', variable: 'EC2_2_HOST')]) {
                     sshagent(credentials: [env.EC2_2_SSH_CREDENTIALS]) {
-                        sh '''
-                            ssh -o StrictHostKeyChecking=no ubuntu@"$EC2_2_HOST" \
-                              'cd /home/ubuntu/ssafer/S14P31B105 && git pull && FASTAPI_IMAGE='"$FASTAPI_IMAGE"' bash Infra/scripts/deploy-ec2-2.sh'
-                        '''
+                        sh """
+                            ssh -o StrictHostKeyChecking=no ubuntu@"\$EC2_2_HOST" \
+                              "FASTAPI_IMAGE='${env.FASTAPI_IMAGE}' bash /home/ubuntu/ssafer/S14P31B105/Infra/scripts/deploy-ec2-2.sh"
+                        """
                     }
                 }
             }
