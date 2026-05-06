@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from botocore.exceptions import ClientError
 
@@ -81,6 +81,21 @@ class S3UploadTest(unittest.TestCase):
         self.assertEqual(call_args["ContentType"], "application/json")
         self.assertIn(b'"resultCount": 0', call_args["Body"])
 
+    def test_upload_analysis_result_json_data_retries_transient_error(self):
+        client = Mock()
+        client.put_object.side_effect = [RuntimeError("temporary network error"), None]
+
+        with patch("app.services.s3_service.S3_RETRY_BACKOFF_SECONDS", 0):
+            s3_uri = upload_analysis_result_json_data(
+                {"schemaVersion": "0.1", "resultCount": 0, "results": []},
+                "analysis/1/analysis_result.json",
+                settings=build_settings(),
+                s3_client=client,
+            )
+
+        self.assertEqual(s3_uri, "s3://analysis-bucket/analysis/1/analysis_result.json")
+        self.assertEqual(client.put_object.call_count, 2)
+
     def test_upload_analysis_result_json_rejects_missing_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             missing_path = Path(temp_dir) / "missing.json"
@@ -95,6 +110,7 @@ class S3UploadTest(unittest.TestCase):
 
         self.assertEqual(context.exception.operation, "upload")
         self.assertEqual(context.exception.error_code, "LOCAL_FILE_NOT_FOUND")
+        self.assertEqual(context.exception.attempts, 0)
         self.assertEqual(
             context.exception.s3_uri,
             "s3://analysis-bucket/analysis/1/analysis_result.json",
@@ -128,6 +144,7 @@ class S3UploadTest(unittest.TestCase):
         self.assertEqual(context.exception.bucket, "analysis-bucket")
         self.assertEqual(context.exception.key, "analysis/1/analysis_result.json")
         self.assertEqual(context.exception.error_code, "NoSuchBucket")
+        self.assertEqual(context.exception.attempts, 1)
 
 
 if __name__ == "__main__":

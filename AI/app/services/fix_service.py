@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 from app.chains.fix_chain import create_fix_chain
+from app.core.llm import invoke_llm_with_retry
 from app.services.explain_service import contains_disallowed_script
 from app.services.input_service import format_finding_for_llm
 
@@ -123,7 +124,7 @@ def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
                 error_message=str(last_error),
             )
 
-        raw_fix = chain.invoke({"finding_input": prompt_input})
+        raw_fix = invoke_llm_with_retry(chain, {"finding_input": prompt_input})
         if contains_disallowed_script(raw_fix):
             last_error = ValueError(
                 "Fix Chain output contains Japanese, Chinese, Hanja, or broken characters."

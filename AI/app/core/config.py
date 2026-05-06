@@ -3,9 +3,31 @@ from dataclasses import dataclass
 from typing import Mapping
 
 
+def _get_int_env(key: str, default: int) -> int:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return int(value)
+
+
+def _get_float_env(key: str, default: float) -> float:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return float(value)
+
+
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
-OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.1"))
+OLLAMA_TEMPERATURE = _get_float_env("OLLAMA_TEMPERATURE", 0.1)
+OLLAMA_TIMEOUT_SECONDS = _get_float_env("OLLAMA_TIMEOUT_SECONDS", 120.0)
+OLLAMA_MAX_RETRIES = _get_int_env("OLLAMA_MAX_RETRIES", 2)
+OLLAMA_RETRY_BACKOFF_SECONDS = _get_float_env(
+    "OLLAMA_RETRY_BACKOFF_SECONDS",
+    1.0,
+)
+S3_MAX_RETRIES = _get_int_env("S3_MAX_RETRIES", 2)
+S3_RETRY_BACKOFF_SECONDS = _get_float_env("S3_RETRY_BACKOFF_SECONDS", 1.0)
 
 
 class S3ConfigurationError(ValueError):

@@ -194,6 +194,5 @@ analysis_result_path: analysisResultPath와 동일
 ## 8. 현재 확인된 한계
 
 ```text
-LLM timeout/retry 미구현
 scanId 기준 로깅 및 처리 시간 측정 미구현
 ```

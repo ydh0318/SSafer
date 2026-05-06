@@ -113,6 +113,35 @@ class WorkerProcessorTest(unittest.TestCase):
         self.assertIsNotNone(callback.completed_at)
         self.assertEqual(callback.last_updated_at, callback.completed_at)
 
+    def test_process_logs_scan_id_and_duration_without_callback_payload_change(self):
+        spring_client = FakeSpringClient()
+        fastapi_client = FakeFastApiClient(
+            FastApiAnalyzeResponse(
+                status="completed",
+                scan_result_path="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
+                analysis_result_path=(
+                    "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+                ),
+            )
+        )
+        processor = ScanTaskProcessor(
+            spring_client=spring_client,
+            fastapi_client=fastapi_client,
+            settings=build_settings(),
+        )
+
+        with self.assertLogs("app.worker.processor", level="INFO") as logs:
+            processor.process(build_message())
+
+        output = "\n".join(logs.output)
+        self.assertIn("scanId=5", output)
+        self.assertIn("taskId=123", output)
+        self.assertIn("stage=TASK_COMPLETED", output)
+        self.assertIn("durationMs=", output)
+
+        callback = spring_client.callbacks[0][1]
+        self.assertNotIn("durationMs", callback.model_dump(by_alias=True))
+
     def test_process_reports_failed_when_fastapi_fails(self):
         spring_client = FakeSpringClient()
         fastapi_client = FakeFastApiClient(error=RuntimeError("FastAPI down"))
@@ -130,11 +159,32 @@ class WorkerProcessorTest(unittest.TestCase):
         self.assertEqual(callback.task_id, 123)
         self.assertEqual(callback.status, "FAILED")
         self.assertEqual(callback.progress_step, "analysis_failed")
+        self.assertEqual(callback.error_code, "UNKNOWN_ERROR")
         self.assertEqual(
             callback.failure_reason,
-            "FastAPI analysis failed: FastAPI down",
+            "UNKNOWN_ERROR: FastAPI analysis failed: FastAPI down",
         )
         self.assertIsNone(callback.analysis_result_path)
+
+    def test_process_logs_failed_scan_id_and_duration(self):
+        spring_client = FakeSpringClient()
+        fastapi_client = FakeFastApiClient(error=RuntimeError("FastAPI down"))
+        processor = ScanTaskProcessor(
+            spring_client=spring_client,
+            fastapi_client=fastapi_client,
+            settings=build_settings(),
+        )
+
+        with self.assertLogs("app.worker.processor", level="ERROR") as logs:
+            processor.process(build_message())
+
+        output = "\n".join(logs.output)
+        self.assertIn("scanId=5", output)
+        self.assertIn("taskId=123", output)
+        self.assertIn("stage=TASK_FAILED", output)
+        self.assertIn("status=FAILED", output)
+        self.assertIn("errorCode=UNKNOWN_ERROR", output)
+        self.assertIn("durationMs=", output)
 
     def test_process_reports_failed_when_fastapi_returns_failed_response(self):
         spring_client = FakeSpringClient()
@@ -161,10 +211,11 @@ class WorkerProcessorTest(unittest.TestCase):
         callback = spring_client.callbacks[0][1]
         self.assertEqual(callback.status, "FAILED")
         self.assertEqual(callback.progress_step, "analysis_failed")
+        self.assertEqual(callback.error_code, "ANALYSIS_INPUT_ERROR")
         self.assertEqual(
             callback.failure_reason,
             (
-                "FastAPI analysis failed: ANALYSIS_INPUT_ERROR: "
+                "ANALYSIS_INPUT_ERROR: FastAPI analysis failed: "
                 "Failed to download scan_result.json from S3. (stage=input)"
             ),
         )

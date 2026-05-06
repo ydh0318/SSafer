@@ -255,7 +255,8 @@ Content-Type: application/json
   "taskId": 123,
   "status": "FAILED",
   "progressStep": "analysis_failed",
-  "failureReason": "FastAPI analysis failed: Failed to download scan_result.json from S3.",
+  "errorCode": "ANALYSIS_INPUT_ERROR",
+  "failureReason": "ANALYSIS_INPUT_ERROR: FastAPI analysis failed: Failed to download scan_result.json from S3. (stage=input)",
   "startedAt": "2026-05-06T04:00:00",
   "completedAt": "2026-05-06T04:05:00",
   "lastUpdatedAt": "2026-05-06T04:05:00"
@@ -275,7 +276,8 @@ Request body:
 | `taskId` | number | 예 | 완료 처리할 Spring Boot `agent_tasks.id` |
 | `status` | string | 아니오 | `DONE` 또는 `FAILED`. 생략 시 Spring Boot에서 `DONE` 처리 |
 | `progressStep` | string 또는 null | 아니오 | `analysis_completed` 또는 `analysis_failed` |
-| `failureReason` | string 또는 null | 실패 시 예 | 실패 사유 |
+| `errorCode` | string 또는 null | 실패 시 예 | 표준 에러 코드 |
+| `failureReason` | string 또는 null | 실패 시 예 | `{errorCode}: {실패 위치}: {실패 사유}` 형식의 실패 사유 |
 | `analysisResultPath` | string 또는 null | 성공 시 예 | S3에 저장된 analysis result 경로 |
 | `startedAt` | string 또는 null | 아니오 | Worker 분석 시작 시각 |
 | `completedAt` | string 또는 null | 아니오 | Worker 분석 완료 시각 |
@@ -355,6 +357,8 @@ errorCode
 durationMs
 ```
 
+`durationMs`는 Spring Boot 콜백 payload에는 포함하지 않고, AI 서버와 Worker 로그에서 확인합니다.
+
 권장 stage:
 
 ```text
@@ -382,5 +386,10 @@ TASK_FAILED
 | `SPRING_BASE_URL` | `http://127.0.0.1:8080` | Spring Boot 서버 주소 |
 | `SPRING_WORKER_SECRET` | 없음 | Spring Boot 내부 인증용 secret. 있으면 `X-Worker-Secret` 헤더로 전송 |
 | `APP_ANALYSIS_RESULT_S3_BUCKET` 또는 `AWS_S3_BUCKET` | 없음 | `analysisResultPath` 생성용 bucket |
+| `S3_MAX_RETRIES` | `2` | S3 다운로드/업로드 실패 시 추가 재시도 횟수 |
+| `S3_RETRY_BACKOFF_SECONDS` | `1` | S3 재시도 사이 대기 시간 |
 | `WORKER_ANALYSIS_RESULT_PREFIX` | `analysis` | analysis result key prefix |
 | `WORKER_HTTP_TIMEOUT_SECONDS` | `120` | Spring/FastAPI HTTP 호출 timeout |
+| `OLLAMA_TIMEOUT_SECONDS` | `120` | Ollama LLM 호출 timeout |
+| `OLLAMA_MAX_RETRIES` | `2` | LLM 호출 실패 시 추가 재시도 횟수 |
+| `OLLAMA_RETRY_BACKOFF_SECONDS` | `1` | LLM 재시도 사이 대기 시간 |

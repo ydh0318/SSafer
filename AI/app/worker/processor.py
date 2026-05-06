@@ -1,5 +1,13 @@
 from datetime import datetime, timezone
+import logging
 
+from app.core.analysis_errors import (
+    ANALYSIS_FAILED_PROGRESS_STEP,
+    SPRING_ANALYSIS_FAILED_STATUS,
+    UNKNOWN_ERROR_CODE,
+    format_failure_reason,
+)
+from app.core.logging_utils import elapsed_ms, log_with_fields, monotonic_ms
 from app.worker.config import WorkerSettings
 from app.worker.fastapi_client import FastApiClient
 from app.worker.schemas import (
@@ -9,6 +17,10 @@ from app.worker.schemas import (
     ScanRequestMessage,
 )
 from app.worker.spring_client import SpringClient
+
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 def utc_now_iso() -> str:
@@ -49,7 +61,19 @@ class ScanTaskProcessor:
 
     def process(self, message: ScanRequestMessage) -> None:
         started_at = utc_now_iso()
+        started_ms = monotonic_ms()
         analysis_result_path = build_analysis_result_path(message, self.settings)
+        log_with_fields(
+            logger,
+            logging.INFO,
+            "Worker analysis started.",
+            scanId=message.scan_id,
+            taskId=message.task_id,
+            agentId=message.agent_id,
+            projectId=message.project_id,
+            stage="ANALYZE_REQUEST",
+            status="RUNNING",
+        )
 
         try:
             response = self.fastapi_client.analyze(
@@ -66,8 +90,14 @@ class ScanTaskProcessor:
             self._send_failed_callback(
                 message=message,
                 started_at=started_at,
-                failure_reason=f"FastAPI analysis failed: {exc}",
+                error_code=UNKNOWN_ERROR_CODE,
+                failure_reason=format_failure_reason(
+                    error_code=UNKNOWN_ERROR_CODE,
+                    message=str(exc),
+                    prefix="FastAPI analysis failed",
+                ),
             )
+            self._log_failed(message, UNKNOWN_ERROR_CODE, elapsed_ms(started_ms))
             return
 
         if response.succeeded:
@@ -77,13 +107,17 @@ class ScanTaskProcessor:
                 analysis_result_path=response.analysis_result_path
                 or analysis_result_path,
             )
+            self._log_completed(message, elapsed_ms(started_ms))
             return
 
+        error_code = response.error_code or UNKNOWN_ERROR_CODE
         self._send_failed_callback(
             message=message,
             started_at=started_at,
+            error_code=error_code,
             failure_reason=self._build_failure_reason(response),
         )
+        self._log_failed(message, error_code, elapsed_ms(started_ms))
 
     def _send_done_callback(
         self,
@@ -111,6 +145,7 @@ class ScanTaskProcessor:
         *,
         message: ScanRequestMessage,
         started_at: str,
+        error_code: str,
         failure_reason: str,
     ) -> None:
         completed_at = utc_now_iso()
@@ -118,8 +153,9 @@ class ScanTaskProcessor:
             message.scan_id,
             AnalysisResultCallbackRequest(
                 taskId=message.task_id,
-                status="FAILED",
-                progressStep="analysis_failed",
+                status=SPRING_ANALYSIS_FAILED_STATUS,
+                progressStep=ANALYSIS_FAILED_PROGRESS_STEP,
+                errorCode=error_code,
                 failureReason=failure_reason,
                 startedAt=started_at,
                 completedAt=completed_at,
@@ -129,9 +165,44 @@ class ScanTaskProcessor:
 
     @staticmethod
     def _build_failure_reason(response: FastApiAnalyzeResponse) -> str:
-        details = response.message or "Analysis failed."
-        if response.error_code:
-            details = f"{response.error_code}: {details}"
-        if response.stage:
-            details = f"{details} (stage={response.stage})"
-        return f"FastAPI analysis failed: {details}"
+        return format_failure_reason(
+            error_code=response.error_code,
+            message=response.message,
+            stage=response.stage,
+            prefix="FastAPI analysis failed",
+        )
+
+    @staticmethod
+    def _log_completed(message: ScanRequestMessage, duration_ms: int) -> None:
+        log_with_fields(
+            logger,
+            logging.INFO,
+            "Worker analysis completed.",
+            scanId=message.scan_id,
+            taskId=message.task_id,
+            agentId=message.agent_id,
+            projectId=message.project_id,
+            stage="TASK_COMPLETED",
+            status="DONE",
+            durationMs=duration_ms,
+        )
+
+    @staticmethod
+    def _log_failed(
+        message: ScanRequestMessage,
+        error_code: str,
+        duration_ms: int,
+    ) -> None:
+        log_with_fields(
+            logger,
+            logging.ERROR,
+            "Worker analysis failed.",
+            scanId=message.scan_id,
+            taskId=message.task_id,
+            agentId=message.agent_id,
+            projectId=message.project_id,
+            stage="TASK_FAILED",
+            status=SPRING_ANALYSIS_FAILED_STATUS,
+            errorCode=error_code,
+            durationMs=duration_ms,
+        )
