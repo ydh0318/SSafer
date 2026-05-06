@@ -135,6 +135,22 @@ Content-Type: application/json
 현재 FastAPI 내부 응답은 기존 구현과 호환되도록 snake_case를 유지합니다.
 Worker는 이 응답을 받아 Spring Boot 콜백 규격의 camelCase로 변환합니다.
 
+응답 필드:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `status` | string | `completed` 또는 `completed_with_invalid_findings` |
+| `message` | string 또는 null | 성공 시 보통 `null` |
+| `stage` | string 또는 null | 성공 시 `null` |
+| `finding_id` | string 또는 null | 성공 시 `null` |
+| `scan_result_path` | string | 입력 scan result 경로 또는 출처 |
+| `analysis_result_path` | string 또는 null | 저장된 analysis result 경로 |
+| `finding_count` | number | raw finding 전체 개수 |
+| `valid_finding_count` | number | 분석 대상 finding 개수 |
+| `invalid_finding_count` | number | 검증 실패로 제외된 finding 개수 |
+| `result_count` | number | 생성된 분석 결과 개수 |
+| `invalid_findings` | array | 제외된 finding 목록 |
+
 ### FastAPI 실패 응답
 
 ```json
@@ -163,6 +179,23 @@ HTTP status:
 | `502` | `fix` | fix 생성 실패 |
 | `502` | `analysis` | 일반 분석 파이프라인 실패 |
 | `500` | `output` | analysis result 생성, 검증, 저장 실패 |
+
+실패 응답 필드:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `status` | string | 항상 `failed` |
+| `error_code` | string | FastAPI 분석 실패 표준 코드 |
+| `message` | string | 실패 원인 메시지 |
+| `stage` | string | 실패 단계 |
+| `finding_id` | string 또는 null | 특정 finding 처리 중 실패한 경우 finding ID |
+| `scan_result_path` | string | 입력 scan result 경로 또는 출처 |
+| `analysis_result_path` | string 또는 null | 결과 저장 경로 |
+| `finding_count` | number | raw finding 전체 개수 |
+| `valid_finding_count` | number | 분석 대상 finding 개수 |
+| `invalid_finding_count` | number | 검증 실패로 제외된 finding 개수 |
+| `result_count` | number | 생성된 분석 결과 개수 |
+| `invalid_findings` | array | 제외된 finding 목록 |
 
 ## 5. Spring Boot 상태 콜백 API
 
@@ -207,6 +240,41 @@ Spring Boot 처리:
 | `RUNNING` | `ACKED -> RUNNING`, `started_at` 기록 | `RUNNING` |
 | `FAILED` | 현재 상태 -> `FAILED`, `completed_at`, `failure_reason` 기록 | `FAILED` |
 | `CANCELED` | 현재 상태 -> `CANCELED`, `completed_at`, `failure_reason` 기록 | `CANCELED` |
+
+성공 응답:
+
+```json
+{
+  "success": true,
+  "message": "Agent task status updated.",
+  "data": {
+    "taskId": 123,
+    "agentId": 10,
+    "scanId": 5,
+    "status": "RUNNING"
+  }
+}
+```
+
+실패 응답 예시:
+
+```json
+{
+  "success": false,
+  "message": "AgentTask status transition is not allowed: SENT -> RUNNING",
+  "data": null
+}
+```
+
+권장 HTTP status:
+
+| HTTP status | 상황 |
+| --- | --- |
+| `200` | 상태 반영 성공 |
+| `400` | 요청 body 검증 실패 또는 허용되지 않는 상태 전이 |
+| `401` | 내부 인증 실패 |
+| `403` | 요청 agent와 token 매핑 불일치 |
+| `404` | task, agent, scan을 찾을 수 없음 |
 
 ### 완료 결과 보고
 
@@ -276,6 +344,42 @@ Spring Boot 처리:
 | `SUCCEEDED` | `RUNNING -> SUCCEEDED`, `completed_at` 기록 | `DONE` |
 | `FAILED` | `RUNNING -> FAILED`, `failure_reason` 기록 | `FAILED` |
 | `CANCELED` | 현재 상태 -> `CANCELED`, `failure_reason` 기록 | `CANCELED` |
+
+성공 응답:
+
+```json
+{
+  "success": true,
+  "message": "Agent task result received.",
+  "data": {
+    "taskId": 123,
+    "agentId": 10,
+    "scanId": 5,
+    "status": "SUCCEEDED",
+    "analysisResultPath": "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+  }
+}
+```
+
+실패 응답 예시:
+
+```json
+{
+  "success": false,
+  "message": "Analysis result path is required when status is SUCCEEDED.",
+  "data": null
+}
+```
+
+권장 HTTP status:
+
+| HTTP status | 상황 |
+| --- | --- |
+| `200` | 결과 반영 성공 |
+| `400` | 요청 body 검증 실패, 필수 결과 필드 누락, 허용되지 않는 상태 전이 |
+| `401` | 내부 인증 실패 |
+| `403` | 요청 agent와 token 매핑 불일치 |
+| `404` | task, agent, scan을 찾을 수 없음 |
 
 ## 6. 상태 전이 기준
 
