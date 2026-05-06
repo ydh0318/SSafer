@@ -9,12 +9,14 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
 import com.ssafer.scan.api.dto.ScanBasicResponse;
+import com.ssafer.scan.api.dto.ScanCompareResponse;
 import com.ssafer.scan.api.dto.ScanFindingDetailResponse;
 import com.ssafer.scan.api.dto.ScanFindingListItemResponse;
 import com.ssafer.scan.api.dto.ScanFindingListResponseData;
 import com.ssafer.scan.api.dto.ScanStatusResponse;
 import com.ssafer.scan.api.dto.ScanSummaryResponse;
 import com.ssafer.scan.application.service.ScanBasicQueryService;
+import com.ssafer.scan.application.service.ScanCompareQueryService;
 import com.ssafer.scan.application.service.ScanFindingDetailQueryService;
 import com.ssafer.scan.application.service.ScanFindingListQueryService;
 import com.ssafer.scan.application.service.ScanStatusQueryService;
@@ -39,6 +41,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class ScanQueryControllerTest {
 
   @Mock
+  private ScanCompareQueryService scanCompareQueryService;
+  @Mock
   private ScanBasicQueryService scanBasicQueryService;
   @Mock
   private ScanStatusQueryService scanStatusQueryService;
@@ -51,6 +55,37 @@ class ScanQueryControllerTest {
 
   @InjectMocks
   private ScanQueryController scanQueryController;
+
+  @Test
+  void compareScansReturnsOkResponse() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanCompareQueryService.compare(1001L, 1002L))
+        .thenReturn(new ScanCompareResponse(1001L, 1002L, 101L, ScanStatus.DONE, ScanStatus.DONE));
+
+    mockMvc.perform(get("/api/v1/scans/compare")
+            .param("baseScanId", "1001")
+            .param("targetScanId", "1002"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("스캔 결과 비교 조회 성공"))
+        .andExpect(jsonPath("$.data.baseScanId").value(1001))
+        .andExpect(jsonPath("$.data.targetScanId").value(1002))
+        .andExpect(jsonPath("$.data.projectId").value(101))
+        .andExpect(jsonPath("$.data.baseStatus").value("DONE"))
+        .andExpect(jsonPath("$.data.targetStatus").value("DONE"));
+  }
+
+  @Test
+  void compareScansWhenInvalidParameterReturnsBadRequest() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanCompareQueryService.compare(1001L, 1001L))
+        .thenThrow(new BusinessException(ErrorCode.INVALID_PARAMETER));
+
+    mockMvc.perform(get("/api/v1/scans/compare")
+            .param("baseScanId", "1001")
+            .param("targetScanId", "1001"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+  }
 
   @Test
   void getScanBasicReturnsOkResponse() throws Exception {
@@ -71,7 +106,8 @@ class ScanQueryControllerTest {
         requestedAt,
         startedAt,
         completedAt,
-        lastUpdatedAt));
+        lastUpdatedAt
+    ));
 
     mockMvc.perform(get("/api/v1/scans/1001"))
         .andExpect(status().isOk())
@@ -146,7 +182,8 @@ class ScanQueryControllerTest {
         2L,
         Map.of("CONFIG", 2L, "SECRET", 1L),
         Map.of("TRIVY", 2L, "CUSTOM_RULE", 1L),
-        Map.of("OPEN", 3L)));
+        Map.of("OPEN", 3L)
+    ));
 
     mockMvc.perform(get("/api/v1/scans/1001/summary"))
         .andExpect(status().isOk())
@@ -243,8 +280,8 @@ class ScanQueryControllerTest {
   void getScanFindingsWhenMissingReturnsNotFound() throws Exception {
     MockMvc mockMvc = buildMockMvc();
     when(scanFindingListQueryService.getScanFindings(
-        999L, null, null, null, null, null, 0, 20))
-        .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
+        999L, null, null, null, null, null, 0, 20
+    )).thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
 
     mockMvc.perform(get("/api/v1/scans/999/findings"))
         .andExpect(status().isNotFound())
