@@ -147,6 +147,10 @@ export function isTerminalScanStatus(status: ScanStatus) {
   return status === 'DONE' || status === 'FAILED' || status === 'CANCELED';
 }
 
+export function canDeleteScanHistory(status: ScanStatus) {
+  return status === 'REQUESTED' || status === 'DONE' || status === 'FAILED' || status === 'CANCELED';
+}
+
 export function getInternalAgentWebSocketUrl() {
   const envBaseUrl = import.meta.env.VITE_API_BASE_URL;
 

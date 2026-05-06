@@ -2,6 +2,7 @@ import { apiClient } from '../../../api/client';
 import { getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
+  ScanCompareResponseData,
   ScanBasicData,
   ScanFindingDetailData,
   ScanFindingListQuery,
@@ -80,5 +81,20 @@ export async function getScanFindingDetail(scanId: string | number, findingId: s
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, GET_SCAN_FINDING_DETAIL_ERROR));
+  }
+}
+
+export async function getScanCompare(baseScanId: string | number, targetScanId: string | number) {
+  try {
+    const response = await apiClient.get<ApiSuccessResponse<ScanCompareResponseData>>('/scans/compare', {
+      params: {
+        baseScanId,
+        targetScanId,
+      },
+    });
+
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to load scan comparison.'));
   }
 }

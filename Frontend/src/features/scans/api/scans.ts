@@ -4,6 +4,7 @@ import type { ApiSuccessResponse } from '../../../types/api';
 import type {
   CreateScanRequestPayload,
   CreateScanResponseData,
+  DeleteScanHistoryResponseData,
   ProjectScanListQuery,
   ProjectScanListResponseData,
   RawScanUploadReportData,
@@ -51,6 +52,15 @@ export async function getScanStatus(scanId: string) {
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, GET_SCAN_STATUS_ERROR));
+  }
+}
+
+export async function deleteScanHistory(scanId: string | number) {
+  try {
+    const response = await apiClient.delete<ApiSuccessResponse<DeleteScanHistoryResponseData>>(`/scans/${scanId}`);
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to delete scan history.'));
   }
 }
 
