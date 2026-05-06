@@ -239,7 +239,7 @@ function ProjectDetailPage() {
       return;
     }
 
-    const shouldDelete = window.confirm(`Delete scan #${scanId} from history?`);
+    const shouldDelete = window.confirm(`스캔 #${scanId} 이력을 삭제하시겠습니까?`);
 
     if (!shouldDelete) {
       return;
@@ -256,10 +256,11 @@ function ProjectDetailPage() {
         setLastCreatedScan(null);
       }
 
-      setScanListNotice(`Scan #${scanId} was deleted from this project history.`);
+      setScanListNotice(`스캔 #${scanId} 이력이 프로젝트 목록에서 삭제되었습니다.`);
       await handleRefreshScans();
     } catch (error) {
       setScanListError(error instanceof Error ? error.message : 'Failed to delete scan history.');
+      setScanListNotice(null);
     } finally {
       setDeletingScanIds((current) => current.filter((value) => value !== scanId));
     }
@@ -385,7 +386,9 @@ function ProjectDetailPage() {
 
       {projectError ? <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{projectError}</div> : null}
 
-      {scanListNotice ? <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{scanListNotice}</div> : null}
+      {!scanListError && scanListNotice ? (
+        <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{scanListNotice}</div>
+      ) : null}
 
       {lastCreatedScan ? (
         <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">

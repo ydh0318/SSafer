@@ -78,6 +78,10 @@ export async function deleteScanHistory(scanId: string | number) {
       throw new Error('현재 스캔 상태에서는 삭제할 수 없습니다.');
     }
 
+    if (errorCode === 'INTERNAL_SERVER_ERROR') {
+      throw new Error('서버 내부 오류로 스캔 이력을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.');
+    }
+
     throw new Error(getApiErrorMessage(error, '스캔 이력을 삭제하지 못했습니다.'));
   }
 }
