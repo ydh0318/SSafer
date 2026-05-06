@@ -54,6 +54,7 @@ public class ScanFindingListQueryService {
     // 목록 조회도 먼저 현재 요청 주체를 구한 뒤 스캔이 속한 프로젝트 접근 권한을 검사한다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     Scan scan = scanRepository.findById(scanId)
+        .filter(found -> !found.isDeleted())
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
     projectAuthorizationService.loadAuthorizedProjectOrThrow(scan.getProjectId(), actor);

@@ -42,6 +42,7 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
       from ScanFinding f, Scan s
       where f.scanId = s.id
         and s.projectId in :projectIds
+        and s.deletedAt is null
         and (:status is null or s.status = :status)
         and (:scanMode is null or s.scanMode = :scanMode)
       group by f.severity
