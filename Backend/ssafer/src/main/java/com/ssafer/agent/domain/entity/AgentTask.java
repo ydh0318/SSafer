@@ -186,6 +186,14 @@ public class AgentTask {
     this.failureReason = null;
   }
 
+  // 적재 재시도 대기 상태에서는 RUNNING을 유지한 채 마지막 실패 사유만 덮어쓴다.
+  public void markRetryPending(String failureReason) {
+    if (this.taskStatus != AgentTaskStatus.RUNNING && this.taskStatus != AgentTaskStatus.ACKED) {
+      throw new IllegalStateException("Retry pending is only allowed for ACKED or RUNNING task");
+    }
+    this.failureReason = failureReason;
+  }
+
   // 작업이 정상 종료되면 완료 시각과 함께 종료 상태를 남긴다.
   public void markSucceeded(Instant now) {
     transitionTo(AgentTaskStatus.SUCCEEDED);

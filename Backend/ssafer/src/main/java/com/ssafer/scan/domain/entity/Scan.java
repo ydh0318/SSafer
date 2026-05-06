@@ -22,7 +22,7 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * 스캔 요청부터 실행, 결과 적재까지의 전체 상태를 표현하는 루트 엔티티다.
- * CLI 완료 알림과 워커 완료 콜백은 이 엔티티의 상태와 결과 경로만 갱신한다.
+ * CLI 완료 알림과 워커 완료 콜백은 이 엔티티의 상태와 결과 경로를 전이시킨다.
  */
 @Getter
 @Builder
@@ -123,8 +123,8 @@ public class Scan {
     this.lastUpdatedAt = lastUpdatedAt;
   }
 
-  // 워커 완료 콜백 이후 분석 결과 적재가 시작되면 RUNNING 상태로 전환한다.
-  public void markAnalysisResultIngestionRunning(
+  // 워커 콜백을 받아 적재를 백그라운드로 넘기기 직전 RUNNING 상태로 전환한다.
+  public void markAnalysisQueuedForIngestion(
       String progressStep,
       String analysisResultPath,
       LocalDateTime startedAt,
@@ -137,6 +137,22 @@ public class Scan {
     this.analysisResultPath = analysisResultPath;
     this.startedAt = startedAt;
     this.completedAt = null;
+    this.lastUpdatedAt = lastUpdatedAt;
+  }
+
+  // 적재가 최종 완료되면 DONE 상태와 완료 시각을 남긴다.
+  public void markAnalysisCompleted(
+      String progressStep,
+      LocalDateTime startedAt,
+      LocalDateTime completedAt,
+      LocalDateTime lastUpdatedAt
+  ) {
+    this.status.assertTransitionAllowed(ScanStatus.DONE);
+    this.status = ScanStatus.DONE;
+    this.progressStep = progressStep;
+    this.failureReason = null;
+    this.startedAt = startedAt;
+    this.completedAt = completedAt;
     this.lastUpdatedAt = lastUpdatedAt;
   }
 
@@ -154,6 +170,22 @@ public class Scan {
     this.failureReason = failureReason;
     this.startedAt = startedAt;
     this.completedAt = completedAt;
+    this.lastUpdatedAt = lastUpdatedAt;
+  }
+
+  // 비동기 적재 도중 일시 실패가 나면 RUNNING 상태는 유지하고 재시도 정보를 남긴다.
+  public void markAnalysisRetryPending(
+      String progressStep,
+      String failureReason,
+      LocalDateTime startedAt,
+      LocalDateTime lastUpdatedAt
+  ) {
+    this.status.assertTransitionAllowed(ScanStatus.RUNNING);
+    this.status = ScanStatus.RUNNING;
+    this.progressStep = progressStep;
+    this.failureReason = failureReason;
+    this.startedAt = startedAt;
+    this.completedAt = null;
     this.lastUpdatedAt = lastUpdatedAt;
   }
 

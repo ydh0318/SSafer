@@ -15,6 +15,7 @@ import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -24,11 +25,12 @@ import org.springframework.web.server.ResponseStatusException;
 // 워커 완료 콜백을 받아 task와 scan 상태를 적재 단계에 맞게 전이한다.
 public class WorkerAnalysisResultCallbackService {
 
+  private static final String INGESTING_PROGRESS_STEP = "INGESTING_ANALYSIS_RESULT";
   private static final String FAILED_PROGRESS_STEP = "ANALYSIS_FAILED";
 
   private final ScanRepository scanRepository;
   private final AgentTaskRepository agentTaskRepository;
-  private final WorkerAnalysisResultIngestionJob workerAnalysisResultIngestionJob;
+  private final ApplicationEventPublisher applicationEventPublisher;
 
   @Transactional
   public Scan report(Long scanId, WorkerAnalysisResultCallbackRequest request) {
@@ -61,7 +63,19 @@ public class WorkerAnalysisResultCallbackService {
       return scan;
     }
 
-    workerAnalysisResultIngestionJob.start(scan, agentTask, request, startedAt, lastUpdatedAt);
+    // 성공 콜백은 바로 적재를 끝내지 않고, 커밋 후 비동기 적재 이벤트만 발행한다.
+    if (agentTask.getTaskStatus() == AgentTaskStatus.SENT) {
+      agentTask.markAcked(toInstant(lastUpdatedAt));
+    }
+    scan.markAnalysisQueuedForIngestion(
+        resolveIngestingProgressStep(request.progressStep()),
+        request.analysisResultPath().trim(),
+        startedAt,
+        lastUpdatedAt
+    );
+    applicationEventPublisher.publishEvent(
+        new WorkerAnalysisResultIngestionRequestedEvent(scanId, agentTask.getId(), startedAt, completedAt)
+    );
     return scan;
   }
 
@@ -168,6 +182,10 @@ public class WorkerAnalysisResultCallbackService {
 
   private String resolveFailureProgressStep(String progressStep) {
     return hasText(progressStep) ? progressStep : FAILED_PROGRESS_STEP;
+  }
+
+  private String resolveIngestingProgressStep(String progressStep) {
+    return hasText(progressStep) ? progressStep : INGESTING_PROGRESS_STEP;
   }
 
   private Instant toInstant(LocalDateTime value) {
