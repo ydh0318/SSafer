@@ -30,6 +30,15 @@ Worker -> Spring Boot SUCCEEDED 또는 FAILED 결과 콜백
 Spring Boot -> scan, agent_tasks 상태 반영
 ```
 
+AI 프로젝트 실행 단위:
+
+| 실행 단위 | 명령 | 역할 |
+| --- | --- | --- |
+| FastAPI | `uvicorn app.main:app --host 0.0.0.0 --port 8000` | `/analyze` 요청 수신, S3 raw 분석, S3 result 업로드 |
+| Worker | `python -m app.worker.consumer` | RabbitMQ consume, Spring Boot 상태/결과 콜백, FastAPI `/analyze` 호출 |
+
+FastAPI와 Worker는 같은 `AI/` 코드베이스에 있지만 별도 프로세스로 실행합니다.
+
 ## 3. RabbitMQ 작업 메시지
 
 Worker는 아래 queue에서 메시지를 consume합니다.
@@ -73,6 +82,19 @@ Worker는 아래 queue에서 메시지를 consume합니다.
 
 주의: raw `scan_result.json` 내부의 `scanId`는 CLI 원본 UUID입니다. Spring Boot의 numeric `scanId`와 같은 값으로 취급하지 않습니다.
 
+Worker 처리 규칙:
+
+| 단계 | 동작 |
+| --- | --- |
+| 메시지 검증 | `messageType`, `messageVersion`, `taskType`, `rawResultPath` 검증 |
+| 수신 보고 | Spring Boot에 `ACKED` 상태 콜백 |
+| 시작 보고 | Spring Boot에 `RUNNING` 상태 콜백 |
+| 분석 요청 | FastAPI `/analyze` 호출 |
+| 성공 | Spring Boot에 `SUCCEEDED` 결과 콜백 후 RabbitMQ ack |
+| 실패 | Spring Boot에 `FAILED` 결과 콜백 후 RabbitMQ ack |
+| 메시지 형식 오류 | RabbitMQ nack, requeue false |
+| 미처리 예외 | RabbitMQ nack, requeue true |
+
 ## 4. FastAPI Analyze API
 
 ### Endpoint
@@ -113,6 +135,14 @@ Content-Type: application/json
 | `scan_result_path` | string | 로컬 `scan_result.json` 경로 |
 | `analysis_result_path` | string | 로컬 `analysis_result.json` 저장 경로 |
 | `scan_result` | object 또는 null | inline scan result DTO |
+
+S3 연동 방식:
+
+| 항목 | 방식 |
+| --- | --- |
+| raw result 입력 | `rawResultPath`의 S3 객체를 메모리로 읽어 JSON 파싱 |
+| analysis result 출력 | 생성된 JSON을 `analysisResultPath` S3 객체로 직접 업로드 |
+| 로컬 파일 저장 | Worker 연동 흐름에서는 사용하지 않음 |
 
 ### FastAPI 성공 응답
 
@@ -438,3 +468,20 @@ SPRING_CALLBACK
 TASK_COMPLETED
 TASK_FAILED
 ```
+
+## 9. Worker 환경변수
+
+| 환경변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `RABBITMQ_HOST` | `localhost` | RabbitMQ host |
+| `RABBITMQ_PORT` | `5672` | RabbitMQ port |
+| `RABBITMQ_USERNAME` | `guest` | RabbitMQ username |
+| `RABBITMQ_PASSWORD` | `guest` | RabbitMQ password |
+| `RABBITMQ_VIRTUAL_HOST` | `/` | RabbitMQ virtual host |
+| `AGENT_TASK_SCAN_REQUEST_QUEUE` | `ssafer.agent.scan.request` | consume 대상 queue |
+| `FASTAPI_BASE_URL` | `http://127.0.0.1:8000` | FastAPI 서버 주소 |
+| `SPRING_BASE_URL` | `http://127.0.0.1:8080` | Spring Boot 서버 주소 |
+| `SPRING_WORKER_SECRET` | 없음 | Spring Boot 내부 인증용 secret. 있으면 `X-Worker-Secret` 헤더로 전송 |
+| `APP_ANALYSIS_RESULT_S3_BUCKET` 또는 `AWS_S3_BUCKET` | 없음 | `analysisResultPath` 생성용 bucket |
+| `WORKER_ANALYSIS_RESULT_PREFIX` | `analysis` | analysis result key prefix |
+| `WORKER_HTTP_TIMEOUT_SECONDS` | `120` | Spring/FastAPI HTTP 호출 timeout |

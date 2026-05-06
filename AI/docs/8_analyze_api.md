@@ -91,6 +91,8 @@ Body:
 
 현재 구현은 기존 로컬 파일/inline 분석 흐름과의 호환을 위해 `scan_result_path`, `analysis_result_path`, `scan_result`를 계속 지원합니다.
 Worker 연동 필드는 Spring Boot 상태/결과 콜백과 로깅에 필요한 메타데이터입니다.
+`rawResultPath`가 있으면 FastAPI는 해당 S3 객체를 로컬 파일로 저장하지 않고 메모리에서 JSON으로 파싱한 뒤 분석합니다.
+`analysisResultPath`가 있으면 생성된 `analysis_result.json`도 임시 파일 없이 해당 S3 경로로 업로드합니다.
 
 Worker 연동 요청 예시:
 

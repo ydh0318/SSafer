@@ -9,6 +9,7 @@ from app.core.config import S3Settings
 from app.services.s3_service import (
     S3UploadError,
     resolve_analysis_result_location,
+    upload_analysis_result_json_data,
     upload_analysis_result_json,
 )
 
@@ -61,6 +62,24 @@ class S3UploadTest(unittest.TestCase):
             Key="analysis/1/analysis_result.json",
             ExtraArgs={"ContentType": "application/json"},
         )
+
+    def test_upload_analysis_result_json_data_uploads_without_local_file(self):
+        client = Mock()
+
+        s3_uri = upload_analysis_result_json_data(
+            {"schemaVersion": "0.1", "resultCount": 0, "results": []},
+            "analysis/1/analysis_result.json",
+            settings=build_settings(),
+            s3_client=client,
+        )
+
+        self.assertEqual(s3_uri, "s3://analysis-bucket/analysis/1/analysis_result.json")
+        client.put_object.assert_called_once()
+        call_args = client.put_object.call_args.kwargs
+        self.assertEqual(call_args["Bucket"], "analysis-bucket")
+        self.assertEqual(call_args["Key"], "analysis/1/analysis_result.json")
+        self.assertEqual(call_args["ContentType"], "application/json")
+        self.assertIn(b'"resultCount": 0', call_args["Body"])
 
     def test_upload_analysis_result_json_rejects_missing_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
