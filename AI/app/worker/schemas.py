@@ -60,33 +60,25 @@ class FastApiAnalyzeResponse(BaseModel):
 
     @property
     def succeeded(self) -> bool:
-        return self.status in {"completed", "completed_with_invalid_findings"}
+        return self.status == "completed"
 
 
-class AgentTaskStatusUpdateRequest(BaseModel):
+class AnalysisResultCallbackRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    agent_id: int = Field(alias="agentId")
-    scan_id: int = Field(alias="scanId")
-    status: Literal["ACKED", "RUNNING", "FAILED", "CANCELED"]
-    message: str | None = None
-    error_code: str | None = Field(default=None, alias="errorCode")
-    occurred_at: str | None = Field(default=None, alias="occurredAt")
-
-
-class AgentTaskResultRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    agent_id: int = Field(alias="agentId")
-    scan_id: int = Field(alias="scanId")
-    status: Literal["SUCCEEDED", "FAILED", "CANCELED"]
+    task_id: int = Field(alias="taskId")
+    status: Literal["DONE", "FAILED"] = "DONE"
+    progress_step: str | None = Field(default=None, alias="progressStep")
+    failure_reason: str | None = Field(default=None, alias="failureReason")
     analysis_result_path: str | None = Field(default=None, alias="analysisResultPath")
-    finding_count: int = Field(default=0, alias="findingCount")
-    valid_finding_count: int = Field(default=0, alias="validFindingCount")
-    invalid_finding_count: int = Field(default=0, alias="invalidFindingCount")
-    result_count: int = Field(default=0, alias="resultCount")
-    error_code: str | None = Field(default=None, alias="errorCode")
-    message: str | None = None
-    stage: str | None = None
-    retryable: bool = False
-    duration_ms: int | None = Field(default=None, alias="durationMs")
+    started_at: str | None = Field(default=None, alias="startedAt")
+    completed_at: str | None = Field(default=None, alias="completedAt")
+    last_updated_at: str | None = Field(default=None, alias="lastUpdatedAt")
+
+    @model_validator(mode="after")
+    def validate_callback_contract(self):
+        if self.status == "DONE" and not self.analysis_result_path:
+            raise ValueError("analysisResultPath is required when status is DONE.")
+        if self.status == "FAILED" and not self.failure_reason:
+            raise ValueError("failureReason is required when status is FAILED.")
+        return self

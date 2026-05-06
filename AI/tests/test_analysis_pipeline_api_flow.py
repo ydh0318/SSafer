@@ -73,7 +73,7 @@ class AnalysisPipelineApiFlowTest(unittest.TestCase):
                 else response.dict()
             )
 
-            self.assertEqual(payload["status"], "completed_with_invalid_findings")
+            self.assertEqual(payload["status"], "completed")
             self.assertEqual(payload["finding_count"], 2)
             self.assertEqual(payload["valid_finding_count"], 1)
             self.assertEqual(payload["invalid_finding_count"], 1)

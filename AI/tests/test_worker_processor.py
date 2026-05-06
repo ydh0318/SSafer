@@ -42,15 +42,10 @@ def build_message() -> ScanRequestMessage:
 
 class FakeSpringClient:
     def __init__(self):
-        self.status_updates = []
-        self.results = []
+        self.callbacks = []
 
-    def update_task_status(self, task_id, request):
-        self.status_updates.append((task_id, request))
-        return {"success": True}
-
-    def send_task_result(self, task_id, request):
-        self.results.append((task_id, request))
+    def send_analysis_result_callback(self, scan_id, request):
+        self.callbacks.append((scan_id, request))
         return {"success": True}
 
 
@@ -99,19 +94,24 @@ class WorkerProcessorTest(unittest.TestCase):
 
         processor.process(build_message())
 
-        self.assertEqual(
-            [request.status for _, request in spring_client.status_updates],
-            ["ACKED", "RUNNING"],
-        )
         self.assertEqual(fastapi_client.requests[0].task_id, 123)
         self.assertEqual(
             fastapi_client.requests[0].analysis_result_path,
             "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",
         )
-        self.assertEqual(len(spring_client.results), 1)
-        result = spring_client.results[0][1]
-        self.assertEqual(result.status, "SUCCEEDED")
-        self.assertEqual(result.result_count, 3)
+        self.assertEqual(len(spring_client.callbacks), 1)
+        scan_id, callback = spring_client.callbacks[0]
+        self.assertEqual(scan_id, 5)
+        self.assertEqual(callback.task_id, 123)
+        self.assertEqual(callback.status, "DONE")
+        self.assertEqual(callback.progress_step, "analysis_completed")
+        self.assertEqual(
+            callback.analysis_result_path,
+            "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",
+        )
+        self.assertIsNotNone(callback.started_at)
+        self.assertIsNotNone(callback.completed_at)
+        self.assertEqual(callback.last_updated_at, callback.completed_at)
 
     def test_process_reports_failed_when_fastapi_fails(self):
         spring_client = FakeSpringClient()
@@ -124,15 +124,50 @@ class WorkerProcessorTest(unittest.TestCase):
 
         processor.process(build_message())
 
+        self.assertEqual(len(spring_client.callbacks), 1)
+        scan_id, callback = spring_client.callbacks[0]
+        self.assertEqual(scan_id, 5)
+        self.assertEqual(callback.task_id, 123)
+        self.assertEqual(callback.status, "FAILED")
+        self.assertEqual(callback.progress_step, "analysis_failed")
         self.assertEqual(
-            [request.status for _, request in spring_client.status_updates],
-            ["ACKED", "RUNNING"],
+            callback.failure_reason,
+            "FastAPI analysis failed: FastAPI down",
         )
-        result = spring_client.results[0][1]
-        self.assertEqual(result.status, "FAILED")
-        self.assertEqual(result.error_code, "FASTAPI_ANALYZE_FAILED")
-        self.assertEqual(result.stage, "ANALYZE_REQUEST")
-        self.assertTrue(result.retryable)
+        self.assertIsNone(callback.analysis_result_path)
+
+    def test_process_reports_failed_when_fastapi_returns_failed_response(self):
+        spring_client = FakeSpringClient()
+        fastapi_client = FakeFastApiClient(
+            FastApiAnalyzeResponse(
+                status="failed",
+                error_code="ANALYSIS_INPUT_ERROR",
+                message="Failed to download scan_result.json from S3.",
+                stage="input",
+                scan_result_path="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
+                analysis_result_path=(
+                    "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+                ),
+            )
+        )
+        processor = ScanTaskProcessor(
+            spring_client=spring_client,
+            fastapi_client=fastapi_client,
+            settings=build_settings(),
+        )
+
+        processor.process(build_message())
+
+        callback = spring_client.callbacks[0][1]
+        self.assertEqual(callback.status, "FAILED")
+        self.assertEqual(callback.progress_step, "analysis_failed")
+        self.assertEqual(
+            callback.failure_reason,
+            (
+                "FastAPI analysis failed: ANALYSIS_INPUT_ERROR: "
+                "Failed to download scan_result.json from S3. (stage=input)"
+            ),
+        )
 
     def test_rejects_invalid_scan_request_message(self):
         with self.assertRaisesRegex(ValueError, "messageVersion"):

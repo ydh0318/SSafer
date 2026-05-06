@@ -189,7 +189,7 @@ Inline 요청 예시:
 
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
-| `status` | string | `completed` 또는 `completed_with_invalid_findings` |
+| `status` | string | 성공 시 `completed` |
 | `message` | string 또는 null | 성공 시 보통 `null` |
 | `stage` | string 또는 null | 성공 시 `null` |
 | `finding_id` | string 또는 null | 성공 시 `null` |
@@ -201,11 +201,11 @@ Inline 요청 예시:
 | `result_count` | number | 생성된 분석 결과 개수 |
 | `invalid_findings` | array | 제외된 finding 목록 |
 
-일부 finding이 유효하지 않아 제외되었지만 valid finding 분석은 완료된 경우:
+일부 finding이 유효하지 않아 제외되었지만 valid finding 분석은 완료된 경우에도 `status`는 `completed`를 유지하고, 제외 목록만 `invalid_findings`에 기록합니다.
 
 ```json
 {
-  "status": "completed_with_invalid_findings",
+  "status": "completed",
   "message": null,
   "stage": null,
   "finding_id": null,

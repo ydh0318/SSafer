@@ -1,27 +1,17 @@
 from app.worker.http_client import JsonHttpClient
-from app.worker.schemas import AgentTaskResultRequest, AgentTaskStatusUpdateRequest
+from app.worker.schemas import AnalysisResultCallbackRequest
 
 
 class SpringClient:
     def __init__(self, http_client: JsonHttpClient):
         self.http_client = http_client
 
-    def update_task_status(
+    def send_analysis_result_callback(
         self,
-        task_id: int,
-        request: AgentTaskStatusUpdateRequest,
-    ) -> dict:
-        return self.http_client.patch_json(
-            f"/api/v1/internal/agent-tasks/{task_id}/status",
-            request.model_dump(by_alias=True),
-        )
-
-    def send_task_result(
-        self,
-        task_id: int,
-        request: AgentTaskResultRequest,
+        scan_id: int,
+        request: AnalysisResultCallbackRequest,
     ) -> dict:
         return self.http_client.post_json(
-            f"/api/v1/internal/agent-tasks/{task_id}/result",
+            f"/api/v1/internal/scans/{scan_id}/analysis-results",
             request.model_dump(by_alias=True),
         )

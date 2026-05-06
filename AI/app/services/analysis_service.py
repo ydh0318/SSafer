@@ -224,12 +224,8 @@ def run_analysis_pipeline_from_scan_result(
             "message": str(exc),
         }
 
-    status = "completed"
-    if context.invalid_findings:
-        status = "completed_with_invalid_findings"
-
     return {
-        "status": status,
+        "status": "completed",
         "scan_result_path": scan_result_path,
         "analysis_result_path": str(saved_path),
         "finding_count": len(context.raw_findings),

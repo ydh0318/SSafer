@@ -38,22 +38,26 @@ python -m compileall app tests
 ## 3. 엔드포인트 연결 테스트
 
 현재 추가된 테스트는 실제 Ollama를 호출하지 않고 `/analyze` 핸들러가 분석 파이프라인에 요청 값을 넘기는지 확인합니다.
+Spring/Worker 연동용 camelCase 필드(`taskId`, `rawResultPath`, `analysisResultPath`)가 S3 분석 흐름으로 연결되는지도 함께 확인합니다.
 
 ```bash
 cd /home/eunsu/S14P31B105/AI
 source .venv/bin/activate
-python -m unittest tests.test_analyze_endpoint
+python -m unittest tests.test_analyze_endpoint tests.test_fastapi_client tests.test_worker_processor
 ```
 
 정상 출력:
 
 ```text
-....
+..............
 ----------------------------------------------------------------------
-Ran 4 tests in 0.000s
+Ran 14 tests in 0.000s
 
 OK
 ```
+
+`tests.test_fastapi_client`는 Worker가 FastAPI에 `POST /analyze`를 호출할 때 Spring 계약 payload를 그대로 전송하는지 검증합니다.
+`tests.test_worker_processor`는 RabbitMQ 메시지를 받은 Worker가 `/analyze` 요청을 만들고 최신 Spring 분석 완료 콜백 payload로 변환하는지 검증합니다.
 
 ## 3-1. scan_result DTO 파싱 테스트
 
@@ -130,7 +134,7 @@ curl -X POST http://127.0.0.1:8000/analyze \
 기대 결과:
 
 ```text
-status가 completed 또는 completed_with_invalid_findings
+status가 completed
 analysis_result_path 위치에 analysis_result.json 생성
 result_count가 valid_finding_count와 일치
 ```
@@ -161,11 +165,35 @@ stage: input
 message: scan_result.json file not found ...
 ```
 
-## 7. 현재 확인된 한계
+## 7. Spring/Worker Analyze 계약 수동 확인
+
+FastAPI 서버가 실행 중이고 S3/Ollama 설정이 준비되어 있다면 Spring 또는 curl에서 아래 payload로 `/analyze` 계약을 확인할 수 있습니다.
+
+```bash
+curl -X POST http://127.0.0.1:8000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "taskId": 123,
+    "agentId": 10,
+    "projectId": 2,
+    "scanId": 5,
+    "rawResultPath": "s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
+    "analysisResultPath": "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+  }'
+```
+
+기대 결과:
+
+```text
+HTTP status: 200
+status: completed
+scan_result_path: rawResultPath와 동일
+analysis_result_path: analysisResultPath와 동일
+```
+
+## 8. 현재 확인된 한계
 
 ```text
 LLM timeout/retry 미구현
-S3 analysis_result.json 업로드 미구현
 scanId 기준 로깅 및 처리 시간 측정 미구현
-Spring 연동 스펙은 다음 Story에서 별도 확정 예정
 ```

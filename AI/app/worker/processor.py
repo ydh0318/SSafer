@@ -1,19 +1,18 @@
-import time
 from datetime import datetime, timezone
 
 from app.worker.config import WorkerSettings
 from app.worker.fastapi_client import FastApiClient
 from app.worker.schemas import (
-    AgentTaskResultRequest,
-    AgentTaskStatusUpdateRequest,
+    AnalysisResultCallbackRequest,
     FastApiAnalyzeRequest,
+    FastApiAnalyzeResponse,
     ScanRequestMessage,
 )
 from app.worker.spring_client import SpringClient
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
 
 
 def build_analysis_result_path(
@@ -49,27 +48,8 @@ class ScanTaskProcessor:
         self.settings = settings
 
     def process(self, message: ScanRequestMessage) -> None:
-        started = time.monotonic()
+        started_at = utc_now_iso()
         analysis_result_path = build_analysis_result_path(message, self.settings)
-
-        self.spring_client.update_task_status(
-            message.task_id,
-            AgentTaskStatusUpdateRequest(
-                agentId=message.agent_id,
-                scanId=message.scan_id,
-                status="ACKED",
-                occurredAt=utc_now_iso(),
-            ),
-        )
-        self.spring_client.update_task_status(
-            message.task_id,
-            AgentTaskStatusUpdateRequest(
-                agentId=message.agent_id,
-                scanId=message.scan_id,
-                status="RUNNING",
-                occurredAt=utc_now_iso(),
-            ),
-        )
 
         try:
             response = self.fastapi_client.analyze(
@@ -83,77 +63,75 @@ class ScanTaskProcessor:
                 )
             )
         except Exception as exc:
-            self._send_failed_result(
+            self._send_failed_callback(
                 message=message,
-                duration_ms=self._duration_ms(started),
-                error_code="FASTAPI_ANALYZE_FAILED",
-                error_message=str(exc),
-                stage="ANALYZE_REQUEST",
-                retryable=True,
+                started_at=started_at,
+                failure_reason=f"FastAPI analysis failed: {exc}",
             )
             return
 
-        duration_ms = self._duration_ms(started)
         if response.succeeded:
-            self.spring_client.send_task_result(
-                message.task_id,
-                AgentTaskResultRequest(
-                    agentId=message.agent_id,
-                    scanId=message.scan_id,
-                    status="SUCCEEDED",
-                    analysisResultPath=response.analysis_result_path,
-                    findingCount=response.finding_count,
-                    validFindingCount=response.valid_finding_count,
-                    invalidFindingCount=response.invalid_finding_count,
-                    resultCount=response.result_count,
-                    durationMs=duration_ms,
-                ),
+            self._send_done_callback(
+                message=message,
+                started_at=started_at,
+                analysis_result_path=response.analysis_result_path
+                or analysis_result_path,
             )
             return
 
-        self.spring_client.send_task_result(
-            message.task_id,
-            AgentTaskResultRequest(
-                agentId=message.agent_id,
-                scanId=message.scan_id,
-                status="FAILED",
-                analysisResultPath=response.analysis_result_path,
-                findingCount=response.finding_count,
-                validFindingCount=response.valid_finding_count,
-                invalidFindingCount=response.invalid_finding_count,
-                resultCount=response.result_count,
-                errorCode=response.error_code or "ANALYSIS_FAILED",
-                message=response.message,
-                stage=response.stage,
-                retryable=False,
-                durationMs=duration_ms,
-            ),
+        self._send_failed_callback(
+            message=message,
+            started_at=started_at,
+            failure_reason=self._build_failure_reason(response),
         )
 
-    def _send_failed_result(
+    def _send_done_callback(
         self,
         *,
         message: ScanRequestMessage,
-        duration_ms: int,
-        error_code: str,
-        error_message: str,
-        stage: str,
-        retryable: bool,
+        started_at: str,
+        analysis_result_path: str,
     ) -> None:
-        self.spring_client.send_task_result(
-            message.task_id,
-            AgentTaskResultRequest(
-                agentId=message.agent_id,
-                scanId=message.scan_id,
+        completed_at = utc_now_iso()
+        self.spring_client.send_analysis_result_callback(
+            message.scan_id,
+            AnalysisResultCallbackRequest(
+                taskId=message.task_id,
+                status="DONE",
+                progressStep="analysis_completed",
+                analysisResultPath=analysis_result_path,
+                startedAt=started_at,
+                completedAt=completed_at,
+                lastUpdatedAt=completed_at,
+            ),
+        )
+
+    def _send_failed_callback(
+        self,
+        *,
+        message: ScanRequestMessage,
+        started_at: str,
+        failure_reason: str,
+    ) -> None:
+        completed_at = utc_now_iso()
+        self.spring_client.send_analysis_result_callback(
+            message.scan_id,
+            AnalysisResultCallbackRequest(
+                taskId=message.task_id,
                 status="FAILED",
-                errorCode=error_code,
-                message=error_message,
-                stage=stage,
-                retryable=retryable,
-                durationMs=duration_ms,
+                progressStep="analysis_failed",
+                failureReason=failure_reason,
+                startedAt=started_at,
+                completedAt=completed_at,
+                lastUpdatedAt=completed_at,
             ),
         )
 
     @staticmethod
-    def _duration_ms(started: float) -> int:
-        return int((time.monotonic() - started) * 1000)
+    def _build_failure_reason(response: FastApiAnalyzeResponse) -> str:
+        details = response.message or "Analysis failed."
+        if response.error_code:
+            details = f"{response.error_code}: {details}"
+        if response.stage:
+            details = f"{details} (stage={response.stage})"
+        return f"FastAPI analysis failed: {details}"
