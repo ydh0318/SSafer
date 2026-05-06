@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from botocore.exceptions import ClientError
 
@@ -100,6 +100,27 @@ class S3DownloadTest(unittest.TestCase):
             Key="scans/1/scan_result.json",
         )
 
+    def test_download_scan_result_json_data_retries_transient_error(self):
+        client = Mock()
+        client.get_object.side_effect = [
+            RuntimeError("temporary network error"),
+            {
+                "Body": BytesIO(
+                    b'{"schemaVersion":"0.1","scanId":"a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd","source":"cli","scannedAt":"2026-04-27T00:26:05Z","analysisStatus":"SUCCESS","findings":[]}'
+                )
+            },
+        ]
+
+        with patch("app.services.s3_service.S3_RETRY_BACKOFF_SECONDS", 0):
+            data = download_scan_result_json_data(
+                "scans/1/scan_result.json",
+                settings=build_settings(),
+                s3_client=client,
+            )
+
+        self.assertEqual(data["schemaVersion"], "0.1")
+        self.assertEqual(client.get_object.call_count, 2)
+
     def test_download_scan_result_json_wraps_s3_error(self):
         client = Mock()
         client.download_file.side_effect = ClientError(
@@ -125,6 +146,7 @@ class S3DownloadTest(unittest.TestCase):
         self.assertEqual(context.exception.bucket, "raw-bucket")
         self.assertEqual(context.exception.key, "scans/1/scan_result.json")
         self.assertEqual(context.exception.error_code, "AccessDenied")
+        self.assertEqual(context.exception.attempts, 1)
         self.assertEqual(
             context.exception.s3_uri,
             "s3://raw-bucket/scans/1/scan_result.json",

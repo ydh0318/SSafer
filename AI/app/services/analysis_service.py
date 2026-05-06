@@ -22,6 +22,8 @@ from app.services.result_service import (
     validate_finding_id_mapping,
 )
 from app.services.s3_service import (
+    S3DownloadError,
+    S3UploadError,
     download_scan_result_json_data,
     upload_analysis_result_json_data,
 )
@@ -85,6 +87,12 @@ def build_failed_analysis_result(
     }
 
 
+def get_s3_download_error_code(exc: S3DownloadError) -> str:
+    if exc.error_code in ("NoSuchKey", "NoSuchBucket", "404", "NotFound"):
+        return "RAW_RESULT_NOT_FOUND"
+    return "S3_DOWNLOAD_FAILED"
+
+
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
     if request.raw_result_path is not None:
         result = run_s3_analysis_pipeline(
@@ -112,6 +120,14 @@ def run_s3_analysis_pipeline(
 ) -> dict[str, object]:
     try:
         scan_result = parse_scan_result(download_scan_result_json_data(raw_result_path))
+    except S3DownloadError as exc:
+        return build_failed_analysis_result(
+            stage="input",
+            scan_result_path=raw_result_path,
+            analysis_result_path=analysis_result_path,
+            message=str(exc),
+            error_code=get_s3_download_error_code(exc),
+        )
     except Exception as exc:
         return build_failed_analysis_result(
             stage="input",
@@ -278,6 +294,19 @@ def run_analysis_pipeline_from_scan_result(
             saved_path = upload_analysis_result_json_data(analysis_result, output_path)
         else:
             saved_path = save_analysis_result(analysis_result, output_path)
+    except S3UploadError as exc:
+        return build_failed_analysis_result(
+            stage="output",
+            scan_result_path=scan_result_path,
+            analysis_result_path=output_path,
+            finding_count=len(context.raw_findings),
+            valid_finding_count=len(context.valid_findings),
+            invalid_finding_count=len(context.invalid_findings),
+            invalid_findings=context.invalid_findings,
+            result_count=len(structured_results),
+            message=str(exc),
+            error_code="S3_UPLOAD_FAILED",
+        )
     except Exception as exc:
         return build_failed_analysis_result(
             stage="output",

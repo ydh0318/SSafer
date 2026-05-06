@@ -26,6 +26,8 @@ OLLAMA_RETRY_BACKOFF_SECONDS = _get_float_env(
     "OLLAMA_RETRY_BACKOFF_SECONDS",
     1.0,
 )
+S3_MAX_RETRIES = _get_int_env("S3_MAX_RETRIES", 2)
+S3_RETRY_BACKOFF_SECONDS = _get_float_env("S3_RETRY_BACKOFF_SECONDS", 1.0)
 
 
 class S3ConfigurationError(ValueError):

@@ -384,6 +384,8 @@ TASK_FAILED
 | `SPRING_BASE_URL` | `http://127.0.0.1:8080` | Spring Boot 서버 주소 |
 | `SPRING_WORKER_SECRET` | 없음 | Spring Boot 내부 인증용 secret. 있으면 `X-Worker-Secret` 헤더로 전송 |
 | `APP_ANALYSIS_RESULT_S3_BUCKET` 또는 `AWS_S3_BUCKET` | 없음 | `analysisResultPath` 생성용 bucket |
+| `S3_MAX_RETRIES` | `2` | S3 다운로드/업로드 실패 시 추가 재시도 횟수 |
+| `S3_RETRY_BACKOFF_SECONDS` | `1` | S3 재시도 사이 대기 시간 |
 | `WORKER_ANALYSIS_RESULT_PREFIX` | `analysis` | analysis result key prefix |
 | `WORKER_HTTP_TIMEOUT_SECONDS` | `120` | Spring/FastAPI HTTP 호출 timeout |
 | `OLLAMA_TIMEOUT_SECONDS` | `120` | Ollama LLM 호출 timeout |
