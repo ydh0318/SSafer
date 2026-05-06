@@ -31,7 +31,6 @@ fi
 
 log "DEPLOY_DIR=${DEPLOY_DIR}"
 check_env_key "FASTAPI_IMAGE"
-check_env_key "REDIS_LLM_PASSWORD"
 check_env_key "ANTHROPIC_API_KEY"
 check_env_key "EC2_1_PRIVATE_IP"
 check_env_key "INTERNAL_TOKEN"
