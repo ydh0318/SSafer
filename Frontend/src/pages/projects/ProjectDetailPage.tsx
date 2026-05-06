@@ -58,6 +58,7 @@ function ProjectDetailPage() {
   });
   const [scans, setScans] = useState<ProjectScanListItemData[]>([]);
   const [scanListError, setScanListError] = useState<string | null>(null);
+  const [scanListNotice, setScanListNotice] = useState<string | null>(null);
   const [isScanListLoading, setIsScanListLoading] = useState(true);
   const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
 
@@ -246,6 +247,7 @@ function ProjectDetailPage() {
 
     setDeletingScanIds((current) => [...current, scanId]);
     setScanListError(null);
+    setScanListNotice(null);
 
     try {
       await deleteScanHistory(scanId);
@@ -254,6 +256,7 @@ function ProjectDetailPage() {
         setLastCreatedScan(null);
       }
 
+      setScanListNotice(`Scan #${scanId} was deleted from this project history.`);
       await handleRefreshScans();
     } catch (error) {
       setScanListError(error instanceof Error ? error.message : 'Failed to delete scan history.');
@@ -381,6 +384,8 @@ function ProjectDetailPage() {
       />
 
       {projectError ? <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{projectError}</div> : null}
+
+      {scanListNotice ? <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{scanListNotice}</div> : null}
 
       {lastCreatedScan ? (
         <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
