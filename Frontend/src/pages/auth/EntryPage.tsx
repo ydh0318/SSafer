@@ -6,6 +6,7 @@ import EmailVerificationPanel from '../../features/auth/components/EmailVerifica
 import LoginPanel from '../../features/auth/components/LoginPanel';
 import SignupPanel, { type SignupStage } from '../../features/auth/components/SignupPanel';
 import SignupProfilePanel from '../../features/auth/components/SignupProfilePanel';
+import { SESSION_EXPIRED_STORAGE_KEY } from '../../features/auth/utils/session';
 import { initialSignupFormValues } from '../../features/auth/utils/signup';
 import type { SignupFormValues } from '../../types/auth';
 
@@ -18,7 +19,7 @@ function EntryPage() {
   } | null>(null);
 
   useEffect(() => {
-    const sessionExpiredMessage = window.sessionStorage.getItem('ssafer.sessionExpiredMessage');
+    const sessionExpiredMessage = window.sessionStorage.getItem(SESSION_EXPIRED_STORAGE_KEY);
 
     if (!sessionExpiredMessage) {
       return;
@@ -28,7 +29,7 @@ function EntryPage() {
       tone: 'info',
       message: sessionExpiredMessage,
     });
-    window.sessionStorage.removeItem('ssafer.sessionExpiredMessage');
+    window.sessionStorage.removeItem(SESSION_EXPIRED_STORAGE_KEY);
   }, []);
 
   useEffect(() => {

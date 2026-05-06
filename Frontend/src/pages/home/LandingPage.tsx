@@ -37,10 +37,10 @@ function LandingPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5] text-black">
+    <div className="site-shell-with-nav min-h-screen bg-[#F5F5F5] text-black">
       <SiteHeader showSessionBar={false} />
 
-      <main>
+      <main className="site-shell-main min-w-0 flex-1">
         <section className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-6 pb-20 pt-16 xl:grid-cols-[minmax(0,1.05fr)_420px] xl:items-center">
           <div>
             <h1 className="text-5xl font-black tracking-tight text-black md:text-7xl md:leading-[0.95]">

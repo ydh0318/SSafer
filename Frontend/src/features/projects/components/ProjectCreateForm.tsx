@@ -20,12 +20,12 @@ const scanModeOptions: Array<{ value: ScanMode; label: string; helper: string }>
   {
     value: 'AGENT',
     label: '로컬 에이전트 스캔',
-    helper: '프로젝트를 만든 뒤 로컬 에이전트가 연결된 환경에서 바로 스캔을 시작합니다.',
+    helper: '프로젝트를 먼저 만들고, 로컬 에이전트를 연결한 뒤 스캔을 실행하는 방식입니다.',
   },
   {
     value: 'UPLOAD',
-    label: '파일 업로드 스캔',
-    helper: 'JSON 스캔 결과 파일을 업로드하는 흐름을 기본값으로 사용합니다.',
+    label: '업로드 기반 스캔',
+    helper: 'JSON 스캔 결과 파일을 직접 업로드해 분석하는 방식입니다.',
   },
 ];
 
@@ -39,7 +39,7 @@ function ProjectCreateForm({
   isSubmitting = false,
   errorMessage,
   title = '새 프로젝트 만들기',
-  description = '프로젝트 기본 정보와 기본 스캔 방식을 정하고, 원한다면 첫 번째 스캔 파일도 바로 함께 올릴 수 있습니다.',
+  description = '프로젝트 기본 정보와 기본 스캔 방식을 설정한 뒤, 필요하면 스캔 결과 파일도 함께 업로드할 수 있습니다.',
   submitLabel = '프로젝트 생성',
 }: ProjectCreateFormProps) {
   const setField = <K extends keyof CreateProjectFormValues>(field: K, nextValue: CreateProjectFormValues[K]) => {
@@ -78,7 +78,7 @@ function ProjectCreateForm({
             className="min-h-28 border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
             maxLength={1000}
             onChange={(event) => setField('description', event.target.value)}
-            placeholder="무엇을 점검하는 프로젝트인지 간단히 적어두면 나중에 여러 프로젝트를 구분하기 편합니다."
+            placeholder="이 프로젝트가 다루는 서비스, 저장소, 운영 목적 등을 간단히 적어주세요."
             value={value.description}
           />
         </label>
@@ -113,7 +113,7 @@ function ProjectCreateForm({
             onChange={(event) => setField('monitorEnabled', event.target.checked)}
             type="checkbox"
           />
-          <span className="text-sm font-medium text-neutral-700">이 프로젝트의 상태 추적 기능을 활성화합니다.</span>
+          <span className="text-sm font-medium text-neutral-700">이 프로젝트의 상태 변화를 모니터링에 반영합니다.</span>
         </label>
 
         <section className="border border-dashed border-neutral-300 bg-white p-5">
@@ -122,10 +122,9 @@ function ProjectCreateForm({
               <Upload className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-black text-black">프로젝트 생성과 동시에 첫 스캔 업로드</p>
+              <p className="text-sm font-black text-black">프로젝트 생성과 함께 스캔 결과 업로드</p>
               <p className="mt-2 text-sm leading-7 text-neutral-600">
-                스캔 결과 JSON 파일이 준비되어 있다면 여기에서 함께 선택할 수 있습니다. 파일이 있으면 프로젝트 생성 직후 스캔 등록,
-                업로드, 업로드 완료 보고까지 이어서 진행합니다.
+                스캔 결과 JSON 파일을 바로 업로드할 수 있습니다. 파일이 없으면 프로젝트만 생성되고, 이후 원하는 시점에 별도로 스캔을 실행할 수 있습니다.
               </p>
             </div>
           </div>
@@ -140,12 +139,10 @@ function ProjectCreateForm({
                 type="file"
               />
             </label>
-            <p className="text-xs leading-6 text-neutral-500">
-              파일을 선택하지 않으면 프로젝트만 생성됩니다. 선택하면 첫 스캔이 자동으로 함께 등록됩니다.
-            </p>
+            <p className="text-xs leading-6 text-neutral-500">파일을 선택하지 않으면 프로젝트만 생성됩니다. 선택한 경우 업로드와 스캔 등록이 함께 진행됩니다.</p>
             {selectedUploadFile ? (
               <div className="border border-neutral-200 bg-[#f5f5f5] px-4 py-3 text-sm text-neutral-700">
-                선택된 파일: <strong>{selectedUploadFile.name}</strong> ({Math.ceil(selectedUploadFile.size / 1024)} KB)
+                선택한 파일: <strong>{selectedUploadFile.name}</strong> ({Math.ceil(selectedUploadFile.size / 1024)} KB)
               </div>
             ) : null}
           </div>

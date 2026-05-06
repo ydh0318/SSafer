@@ -57,10 +57,11 @@ function TypingGamePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5] text-black">
+    <div className="site-shell-with-nav min-h-screen bg-[#F5F5F5] text-black">
       <SiteHeader showSessionBar={false} />
 
-      <div className="mx-auto max-w-7xl px-6 py-12">
+      <main className="site-shell-main min-w-0 flex-1">
+        <div className="mx-auto max-w-7xl px-6 py-12">
         <div className="mb-10 flex items-end justify-between">
           <div>
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.32em] text-neutral-500">
@@ -193,7 +194,8 @@ function TypingGamePage() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
