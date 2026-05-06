@@ -22,6 +22,7 @@ docs/6_fix_chain.md
 docs/7_local_model_comparison.md
 docs/8_analyze_api.md
 docs/9_test_guide.md
+docs/10_s3_setup.md
 ```
 
 ## Quick Start

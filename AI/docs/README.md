@@ -15,6 +15,7 @@
 7_local_model_comparison.md
 8_analyze_api.md
 9_test_guide.md
+10_s3_setup.md
 ```
 
 ## 문서 설명
@@ -31,3 +32,4 @@
 | `7_local_model_comparison.md` | 로컬 모델 성능 비교 |
 | `8_analyze_api.md` | `/analyze` API 요청/응답 스펙 |
 | `9_test_guide.md` | 현재 구현 상태 기준 테스트 방법 |
+| `10_s3_setup.md` | FastAPI S3 클라이언트 설정 및 환경변수 |

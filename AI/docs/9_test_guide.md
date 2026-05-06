@@ -165,7 +165,7 @@ message: scan_result.json file not found ...
 
 ```text
 LLM timeout/retry 미구현
-S3 다운로드/업로드 미구현
+S3 analysis_result.json 업로드 미구현
 scanId 기준 로깅 및 처리 시간 측정 미구현
 Spring 연동 스펙은 다음 Story에서 별도 확정 예정
 ```
