@@ -46,7 +46,7 @@ public enum ErrorCode {
   SCAN_STATUS_CONFLICT(
       HttpStatus.CONFLICT,
       "SCAN_STATUS_CONFLICT",
-      "Raw result upload report is not allowed for current scan status"
+      "Operation is not allowed for current scan status"
   ),
   DUPLICATE_RAW_RESULT_UPLOAD(
       HttpStatus.CONFLICT,

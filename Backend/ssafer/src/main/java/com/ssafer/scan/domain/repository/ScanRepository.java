@@ -14,10 +14,11 @@ import org.springframework.data.repository.query.Param;
 public interface ScanRepository extends JpaRepository<Scan, Long>, JpaSpecificationExecutor<Scan> {
 
   Optional<Scan> findByIdAndProjectId(Long id, Long projectId);
+  Optional<Scan> findByIdAndDeletedAtIsNull(Long id);
 
   // 같은 scanId로 완료 보고가 동시에 들어오면 한 트랜잭션씩 순차 처리되도록 row lock 조회를 사용한다.
   @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("select s from Scan s where s.id = :scanId")
+  @Query("select s from Scan s where s.id = :scanId and s.deletedAt is null")
   Optional<Scan> findByIdForUpdate(@Param("scanId") Long scanId);
 
   // 히스토리 API에서 특정 사용자가 요청한 scan을 최신순으로 조회한다.

@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -85,6 +86,9 @@ public class Scan {
 
   @Column(name = "analysis_result_path", length = 500)
   private String analysisResultPath;
+
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
 
   @Column(name = "requested_at", nullable = false)
   private LocalDateTime requestedAt;
@@ -199,5 +203,13 @@ public class Scan {
     this.startedAt = startedAt;
     this.completedAt = null;
     this.lastUpdatedAt = lastUpdatedAt;
+  }
+
+  public boolean isDeleted() {
+    return deletedAt != null;
+  }
+
+  public void softDelete() {
+    this.deletedAt = Instant.now();
   }
 }

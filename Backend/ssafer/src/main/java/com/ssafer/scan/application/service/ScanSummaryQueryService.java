@@ -34,6 +34,7 @@ public class ScanSummaryQueryService {
     // 기본 조회와 동일하게 현재 요청 주체 기준으로 프로젝트 접근 권한을 먼저 확인한다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     Scan scan = scanRepository.findById(scanId)
+        .filter(found -> !found.isDeleted())
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
     projectAuthorizationService.loadAuthorizedProjectOrThrow(scan.getProjectId(), actor);

@@ -90,8 +90,10 @@ public class ScanCompareQueryService {
 
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     Scan baseScan = scanRepository.findById(baseScanId)
+        .filter(found -> !found.isDeleted())
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     Scan targetScan = scanRepository.findById(targetScanId)
+        .filter(found -> !found.isDeleted())
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
     // 결과 비교는 같은 프로젝트 안의 두 스캔만 허용한다.

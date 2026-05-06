@@ -138,6 +138,7 @@ public class HistoryScanQueryService {
     return (root, query, criteriaBuilder) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(root.get("projectId").in(authorizedProjectIds));
+      predicates.add(criteriaBuilder.isNull(root.get("deletedAt")));
       if (status != null) {
         predicates.add(criteriaBuilder.equal(root.get("status"), status));
       }
