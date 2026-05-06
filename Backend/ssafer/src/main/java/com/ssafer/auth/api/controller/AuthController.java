@@ -2,11 +2,15 @@ package com.ssafer.auth.api.controller;
 
 import com.ssafer.auth.api.dto.LoginRequest;
 import com.ssafer.auth.api.dto.LoginResponseData;
+import com.ssafer.auth.api.dto.OAuthLoginRequest;
+import com.ssafer.auth.api.dto.OAuthLoginResponseData;
 import com.ssafer.auth.api.dto.RefreshTokenRequest;
 import com.ssafer.auth.application.service.AuthLoginService;
 import com.ssafer.auth.application.service.AuthLogoutService;
+import com.ssafer.auth.application.service.AuthOAuthLoginService;
 import com.ssafer.auth.application.service.AuthTokenRefreshService;
 import com.ssafer.auth.application.service.AuthTokenResult;
+import com.ssafer.auth.application.service.OAuthProviderUserInfo;
 import com.ssafer.global.api.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -26,19 +30,23 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
   private static final String LOGIN_SUCCESS_MESSAGE = "Login succeeded";
+  private static final String OAUTH_LOGIN_SUCCESS_MESSAGE = "OAuth login preparation succeeded";
   private static final String REFRESH_SUCCESS_MESSAGE = "Token refresh succeeded";
   private static final String LOGOUT_SUCCESS_MESSAGE = "Logout succeeded";
 
   private final AuthLoginService authLoginService;
+  private final AuthOAuthLoginService authOAuthLoginService;
   private final AuthTokenRefreshService authTokenRefreshService;
   private final AuthLogoutService authLogoutService;
 
   public AuthController(
       AuthLoginService authLoginService,
+      AuthOAuthLoginService authOAuthLoginService,
       AuthTokenRefreshService authTokenRefreshService,
       AuthLogoutService authLogoutService
   ) {
     this.authLoginService = authLoginService;
+    this.authOAuthLoginService = authOAuthLoginService;
     this.authTokenRefreshService = authTokenRefreshService;
     this.authLogoutService = authLogoutService;
   }
@@ -73,6 +81,43 @@ public class AuthController {
             tokenResult.accessTokenExpiresAt(),
             tokenResult.refreshToken(),
             tokenResult.refreshTokenExpiresAt()
+        )
+    ));
+  }
+
+  @PostMapping("/oauth/login")
+  @Operation(summary = "OAuth 로그인", description = "provider별 OAuth 인가 코드를 교환해 제공자 사용자 정보를 조회합니다.")
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "OAuth 사용자 정보 조회 성공",
+          content = @Content(schema = @Schema(implementation = OAuthLoginResponseData.class))
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "400",
+          description = "요청값 형식 오류 또는 필수값 누락"
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "500",
+          description = "해당 provider 처리기 미구현 또는 내부 처리 실패"
+      )
+  })
+  public ResponseEntity<ApiResponse<OAuthLoginResponseData>> oauthLogin(
+      @Valid @RequestBody OAuthLoginRequest request
+  ) {
+    OAuthProviderUserInfo userInfo = authOAuthLoginService.login(
+        request.provider(),
+        request.authorizationCode(),
+        request.redirectUri()
+    );
+
+    return ResponseEntity.ok(ApiResponse.success(
+        OAUTH_LOGIN_SUCCESS_MESSAGE,
+        new OAuthLoginResponseData(
+            userInfo.provider(),
+            userInfo.providerUserId(),
+            userInfo.email(),
+            userInfo.displayName()
         )
     ));
   }
