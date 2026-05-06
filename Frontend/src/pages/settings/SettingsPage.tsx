@@ -1,40 +1,552 @@
+import axios from 'axios';
 import { AlertTriangle, BellRing, KeyRound, Lock, LogOut, User } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { getApiFieldErrors } from '../../api/error';
 import PageHero from '../../components/common/PageHero';
-import PixelGoose from '../../components/common/PixelGoose';
+import {
+  changeCurrentUserPassword,
+  checkNicknameAvailability,
+  getCurrentUserProfile,
+  logoutCurrentUser,
+  updateCurrentUserProfile,
+} from '../../features/auth/api/member';
+import { useAuthStore } from '../../store/authStore';
+import type { AuthUser } from '../../types/auth';
+
+type SettingsTab = 'profile' | 'security' | 'notify' | 'token' | 'danger';
+
+type MessageState = {
+  tone: 'success' | 'error' | 'info';
+  text: string;
+};
+
+type PasswordFormValues = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
+
+type PasswordFieldErrors = Partial<Record<keyof PasswordFormValues, string>>;
+
+const tabs: Array<{ id: SettingsTab; label: string; icon: typeof User }> = [
+  { id: 'profile', label: '프로필', icon: User },
+  { id: 'security', label: '보안', icon: Lock },
+  { id: 'notify', label: '알림', icon: BellRing },
+  { id: 'token', label: '토큰', icon: KeyRound },
+  { id: 'danger', label: '위험 구역', icon: AlertTriangle },
+];
+
+const initialPasswordForm: PasswordFormValues = {
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: '',
+};
+
+function validateDisplayName(value: string) {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return '닉네임을 입력해 주세요.';
+  }
+
+  if (normalized.length > 100) {
+    return '닉네임은 100자 이하로 입력해 주세요.';
+  }
+
+  return '';
+}
+
+function validatePasswordForm(values: PasswordFormValues): PasswordFieldErrors {
+  const errors: PasswordFieldErrors = {};
+
+  if (!values.currentPassword) {
+    errors.currentPassword = '현재 비밀번호를 입력해 주세요.';
+  } else if (values.currentPassword.length < 8 || values.currentPassword.length > 72) {
+    errors.currentPassword = '현재 비밀번호는 8자 이상 72자 이하로 입력해 주세요.';
+  }
+
+  if (!values.newPassword) {
+    errors.newPassword = '새 비밀번호를 입력해 주세요.';
+  } else if (values.newPassword.length < 8 || values.newPassword.length > 72) {
+    errors.newPassword = '새 비밀번호는 8자 이상 72자 이하로 입력해 주세요.';
+  }
+
+  if (!values.confirmPassword) {
+    errors.confirmPassword = '새 비밀번호 확인을 입력해 주세요.';
+  } else if (values.newPassword !== values.confirmPassword) {
+    errors.confirmPassword = '새 비밀번호와 동일하게 입력해 주세요.';
+  }
+
+  return errors;
+}
+
+function getProfileErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+
+    if (status === 401) {
+      return '인증이 만료되었습니다. 다시 로그인해 주세요.';
+    }
+
+    if (status === 403) {
+      return '회원 계정만 설정을 확인할 수 있습니다.';
+    }
+
+    if (status === 404) {
+      return '사용자 정보를 찾을 수 없습니다.';
+    }
+  }
+
+  return '설정 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
+function getProfileUpdateErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const code = error.response?.data?.code;
+
+    if (status === 409 || code === 'DUPLICATE_DISPLAY_NAME') {
+      return '이미 사용 중인 닉네임입니다.';
+    }
+
+    if (status === 400) {
+      return '닉네임 입력값을 다시 확인해 주세요.';
+    }
+
+    if (status === 401) {
+      return '인증이 만료되었습니다. 다시 로그인해 주세요.';
+    }
+
+    if (status === 403) {
+      return '회원 계정만 프로필을 수정할 수 있습니다.';
+    }
+  }
+
+  return '프로필을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
+function getNicknameCheckErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+
+    if (status === 400) {
+      return '닉네임 형식을 다시 확인해 주세요.';
+    }
+  }
+
+  return '닉네임 중복 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
+function isCurrentPasswordFailure(error: unknown) {
+  if (!axios.isAxiosError(error)) {
+    return false;
+  }
+
+  const fieldErrors = getApiFieldErrors(error);
+  const code = error.response?.data?.code;
+  const message = String(error.response?.data?.message ?? '').toLowerCase();
+
+  return (
+    code === 'INVALID_CREDENTIALS' ||
+    Boolean(fieldErrors.currentPassword) ||
+    message.includes('current password') ||
+    message.includes('password is incorrect') ||
+    message.includes('password is invalid') ||
+    message.includes('wrong password')
+  );
+}
+
+function getPasswordChangeErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const code = error.response?.data?.code;
+
+    if (code === 'INVALID_CREDENTIALS') {
+      return '현재 비밀번호가 일치하지 않습니다. 다시 입력해 주세요.';
+    }
+
+    if (status === 400) {
+      return '입력한 비밀번호 정보를 다시 확인해 주세요.';
+    }
+
+    if (status === 401) {
+      return '인증이 만료되었습니다. 다시 로그인해 주세요.';
+    }
+
+    if (status === 403) {
+      return '회원 계정만 비밀번호를 변경할 수 있습니다.';
+    }
+
+    if (status === 404) {
+      return '사용자 정보를 찾을 수 없습니다.';
+    }
+  }
+
+  return '비밀번호를 변경하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
 
 function SettingsPage() {
-  const [tab, setTab] = useState('profile');
+  const user = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout);
+  const setUser = useAuthStore((state) => state.setUser);
+  const setTokens = useAuthStore((state) => state.setTokens);
+
+  const [tab, setTab] = useState<SettingsTab>('profile');
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [initialDisplayName, setInitialDisplayName] = useState('');
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isCheckingDisplayName, setIsCheckingDisplayName] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
+  const [profileMessage, setProfileMessage] = useState<MessageState | null>(null);
+  const [isDisplayNameConfirmed, setIsDisplayNameConfirmed] = useState(false);
+
+  const [passwordValues, setPasswordValues] = useState<PasswordFormValues>(initialPasswordForm);
+  const [passwordErrors, setPasswordErrors] = useState<PasswordFieldErrors>({});
+  const [passwordMessage, setPasswordMessage] = useState<MessageState | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isCurrentPasswordRejected, setIsCurrentPasswordRejected] = useState(false);
+
+  const isGuestUser = user?.role === 'GUEST';
+  const isProfileDirty = useMemo(
+    () => displayName.trim() !== initialDisplayName.trim(),
+    [displayName, initialDisplayName],
+  );
+  const isCurrentPasswordReady =
+    passwordValues.currentPassword.trim().length > 0 &&
+    !isCurrentPasswordRejected;
+  const areNewPasswordFieldsLocked = !isCurrentPasswordReady;
+  const isConfirmPasswordMatched =
+    passwordValues.newPassword.length > 0 &&
+    passwordValues.confirmPassword.length > 0 &&
+    passwordValues.newPassword === passwordValues.confirmPassword &&
+    !passwordErrors.confirmPassword;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProfile = async () => {
+      if (isGuestUser) {
+        setIsLoadingProfile(false);
+        setProfileError('회원 계정만 설정을 확인할 수 있습니다.');
+        return;
+      }
+
+      setIsLoadingProfile(true);
+      setProfileError(null);
+      setProfileMessage(null);
+
+      try {
+        const profile = await getCurrentUserProfile();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setEmail(profile.email);
+        setDisplayName(profile.displayName);
+        setInitialDisplayName(profile.displayName);
+        setIsDisplayNameConfirmed(true);
+        setUser({
+          id: user?.id ?? profile.email,
+          email: profile.email,
+          name: profile.displayName,
+          role: user?.role,
+        });
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setProfileError(getProfileErrorMessage(error));
+      } finally {
+        if (isMounted) {
+          setIsLoadingProfile(false);
+        }
+      }
+    };
+
+    void loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isGuestUser, setUser, user?.email, user?.id, user?.role]);
+
+  const handleDisplayNameChange = (value: string) => {
+    setDisplayName(value);
+    setDisplayNameError(null);
+    setProfileMessage(null);
+    setIsDisplayNameConfirmed(value.trim() === initialDisplayName.trim());
+  };
+
+  const handleDisplayNameCheck = async () => {
+    const validationMessage = validateDisplayName(displayName);
+
+    if (validationMessage) {
+      setDisplayNameError(validationMessage);
+      setProfileMessage(null);
+      setIsDisplayNameConfirmed(false);
+      return;
+    }
+
+    if (!isProfileDirty) {
+      setDisplayNameError(null);
+      setIsDisplayNameConfirmed(true);
+      setProfileMessage({
+        tone: 'success',
+        text: '현재 닉네임을 그대로 사용하고 있습니다.',
+      });
+      return;
+    }
+
+    setIsCheckingDisplayName(true);
+    setDisplayNameError(null);
+    setProfileMessage({
+      tone: 'info',
+      text: '닉네임을 확인하고 있습니다.',
+    });
+
+    try {
+      const result = await checkNicknameAvailability(displayName.trim());
+
+      if (result.available) {
+        setIsDisplayNameConfirmed(true);
+        setProfileMessage({
+          tone: 'success',
+          text: '사용 가능한 닉네임입니다.',
+        });
+        return;
+      }
+
+      setIsDisplayNameConfirmed(false);
+      setDisplayNameError('이미 사용 중인 닉네임입니다.');
+      setProfileMessage(null);
+    } catch (error) {
+      const fieldErrors = getApiFieldErrors(error);
+      setIsDisplayNameConfirmed(false);
+      setDisplayNameError(fieldErrors.nickname ?? null);
+      setProfileMessage({
+        tone: 'error',
+        text: getNicknameCheckErrorMessage(error),
+      });
+    } finally {
+      setIsCheckingDisplayName(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    const nextDisplayName = displayName.trim();
+    const validationMessage = validateDisplayName(nextDisplayName);
+
+    if (validationMessage) {
+      setDisplayNameError(validationMessage);
+      setProfileMessage(null);
+      return;
+    }
+
+    if (!isProfileDirty) {
+      setProfileMessage({
+        tone: 'success',
+        text: '변경된 내용이 없습니다.',
+      });
+      return;
+    }
+
+    if (!isDisplayNameConfirmed) {
+      setDisplayNameError('닉네임 중복 확인을 먼저 진행해 주세요.');
+      setProfileMessage(null);
+      return;
+    }
+
+    setIsSavingProfile(true);
+    setDisplayNameError(null);
+    setProfileMessage(null);
+
+    try {
+      const profile = await updateCurrentUserProfile({
+        displayName: nextDisplayName,
+      });
+
+      const nextUser: AuthUser = {
+        id: user?.id ?? profile.email,
+        email: profile.email,
+        name: profile.displayName,
+        role: user?.role,
+      };
+
+      setEmail(profile.email);
+      setDisplayName(profile.displayName);
+      setInitialDisplayName(profile.displayName);
+      setIsDisplayNameConfirmed(true);
+      setUser(nextUser);
+      setProfileMessage({
+        tone: 'success',
+        text: '프로필이 저장되었습니다.',
+      });
+    } catch (error) {
+      const fieldErrors = getApiFieldErrors(error);
+      setDisplayNameError(fieldErrors.displayName ?? null);
+      setProfileMessage({
+        tone: 'error',
+        text: getProfileUpdateErrorMessage(error),
+      });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleCurrentPasswordChange = (value: string) => {
+    setPasswordValues((current) => ({
+      ...current,
+      currentPassword: value,
+      ...(isCurrentPasswordRejected ? { newPassword: '', confirmPassword: '' } : {}),
+    }));
+    setPasswordErrors((current) => ({
+      ...current,
+      currentPassword: undefined,
+      ...(isCurrentPasswordRejected ? { newPassword: undefined, confirmPassword: undefined } : {}),
+    }));
+    setPasswordMessage(null);
+    setIsCurrentPasswordRejected(false);
+  };
+
+  const handleNewPasswordChange = (value: string) => {
+    setPasswordValues((current) => ({ ...current, newPassword: value }));
+    setPasswordErrors((current) => ({
+      ...current,
+      newPassword: undefined,
+      confirmPassword: undefined,
+    }));
+    setPasswordMessage(null);
+  };
+
+  const handleConfirmPasswordChange = (value: string) => {
+    setPasswordValues((current) => ({ ...current, confirmPassword: value }));
+    setPasswordErrors((current) => ({
+      ...current,
+      confirmPassword: undefined,
+    }));
+    setPasswordMessage(null);
+  };
+
+  const handlePasswordChange = async () => {
+    const nextErrors = validatePasswordForm(passwordValues);
+
+    if (areNewPasswordFieldsLocked) {
+      nextErrors.currentPassword = passwordValues.currentPassword.trim().length === 0
+        ? '현재 비밀번호를 먼저 입력해 주세요.'
+        : '현재 비밀번호를 다시 확인해 주세요.';
+    }
+
+    setPasswordErrors(nextErrors);
+    setPasswordMessage(null);
+
+    if (Object.values(nextErrors).some(Boolean)) {
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    try {
+      const tokenData = await changeCurrentUserPassword({
+        currentPassword: passwordValues.currentPassword,
+        newPassword: passwordValues.newPassword,
+      });
+
+      if (tokenData.accessToken) {
+        setTokens({
+          accessToken: tokenData.accessToken,
+          refreshToken: tokenData.refreshToken,
+        });
+      }
+
+      setPasswordValues(initialPasswordForm);
+      setPasswordErrors({});
+      setPasswordMessage({
+        tone: 'success',
+        text: '비밀번호가 변경되었습니다.',
+      });
+      setIsCurrentPasswordRejected(false);
+    } catch (error) {
+      const fieldErrors = getApiFieldErrors(error);
+
+      if (isCurrentPasswordFailure(error)) {
+        setIsCurrentPasswordRejected(true);
+        setPasswordValues((current) => ({
+          ...current,
+          newPassword: '',
+          confirmPassword: '',
+        }));
+        setPasswordErrors({
+          currentPassword:
+            fieldErrors.currentPassword ?? '현재 비밀번호가 일치하지 않습니다. 다시 입력해 주세요.',
+        });
+        setPasswordMessage({
+          tone: 'error',
+          text: '현재 비밀번호를 다시 확인한 뒤 새 비밀번호를 입력해 주세요.',
+        });
+      } else {
+        setPasswordErrors((current) => ({
+          ...current,
+          currentPassword: fieldErrors.currentPassword ?? current.currentPassword,
+          newPassword: fieldErrors.newPassword ?? current.newPassword,
+          confirmPassword: fieldErrors.confirmPassword ?? current.confirmPassword,
+        }));
+        setPasswordMessage({
+          tone: 'error',
+          text: getPasswordChangeErrorMessage(error),
+        });
+      }
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logoutCurrentUser();
+    } catch {
+      // Ignore logout API failures and clear local session.
+    } finally {
+      logout();
+    }
+  };
+
+  const renderMessage = (message: MessageState | null) => {
+    if (!message) {
+      return null;
+    }
+
+    return (
+      <div
+        className={`border px-4 py-3 text-sm ${
+          message.tone === 'success'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            : message.tone === 'info'
+              ? 'border-sky-200 bg-sky-50 text-sky-700'
+              : 'border-rose-200 bg-rose-50 text-rose-700'
+        }`}
+      >
+        {message.text}
+      </div>
+    );
+  };
 
   return (
     <section className="space-y-8">
       <PageHero
-        aside={
-          <div className="border border-neutral-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-neutral-500">ACCOUNT</p>
-                <h2 className="mt-3 text-2xl font-black tracking-tight">송이</h2>
-              </div>
-              <PixelGoose mood="idle" size={76} />
-            </div>
-          </div>
-        }
-        description="프로필, 보안, 토큰, 알림 설정을 한곳에서 관리할 수 있습니다."
+        description={null}
         eyebrow="SETTINGS"
         title="설정"
       />
 
       <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="border border-neutral-200 bg-white">
-          {[
-            { id: 'profile', label: '프로필', icon: User },
-            { id: 'security', label: '보안', icon: Lock },
-            { id: 'notify', label: '알림', icon: BellRing },
-            { id: 'token', label: '토큰', icon: KeyRound },
-            { id: 'danger', label: '계정', icon: AlertTriangle },
-          ].map((item) => {
+          {tabs.map((item) => {
             const Icon = item.icon;
 
             return (
@@ -56,88 +568,163 @@ function SettingsPage() {
         <main>
           {tab === 'profile' ? (
             <div className="space-y-5 border border-neutral-200 bg-white p-8">
-              <div className="flex items-center gap-4">
-                <div className="grid h-20 w-20 place-items-center bg-black text-2xl font-black text-white">SY</div>
-                <button className="border border-neutral-300 px-3 py-1.5 text-sm" type="button">사진 변경</button>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">이메일</span>
-                  <input className="mt-1 block w-full border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm" defaultValue="songyi@ssafer.dev" disabled />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">닉네임</span>
-                  <input className="mt-1 block w-full border border-neutral-300 px-3 py-2 text-sm" defaultValue="송이" />
-                </label>
-              </div>
-              <button className="bg-black px-5 py-2.5 text-sm font-bold text-white" type="button">저장</button>
+              {isLoadingProfile ? (
+                <div className="text-sm text-neutral-600">설정 정보를 불러오는 중입니다.</div>
+              ) : profileError ? (
+                <div className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{profileError}</div>
+              ) : (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">이메일</span>
+                      <input
+                        className="mt-1 block w-full border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm"
+                        disabled
+                        value={email}
+                      />
+                    </label>
+
+                    <div className="block">
+                      <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">닉네임</span>
+                      <div className="mt-1 flex items-stretch">
+                        <input
+                          className={`block w-full border px-3 py-2 text-sm ${
+                            displayNameError ? 'border-rose-500' : 'border-neutral-300'
+                          }`}
+                          maxLength={100}
+                          onChange={(event) => handleDisplayNameChange(event.target.value)}
+                          value={displayName}
+                        />
+                        <button
+                          className="w-[8.5rem] shrink-0 border border-black bg-black px-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={isCheckingDisplayName}
+                          onClick={() => void handleDisplayNameCheck()}
+                          type="button"
+                        >
+                          {isCheckingDisplayName ? '확인 중...' : '중복 확인'}
+                        </button>
+                      </div>
+                      {displayNameError ? <p className="mt-2 text-sm text-rose-600">{displayNameError}</p> : null}
+                    </div>
+                  </div>
+
+                  {renderMessage(profileMessage)}
+
+                  <button
+                    className="bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isSavingProfile || isCheckingDisplayName}
+                    onClick={() => void handleSaveProfile()}
+                    type="button"
+                  >
+                    {isSavingProfile ? '저장 중...' : '저장'}
+                  </button>
+                </>
+              )}
             </div>
           ) : null}
 
           {tab === 'security' ? (
             <div className="space-y-5 border border-neutral-200 bg-white p-8">
-              <h2 className="text-xl font-black tracking-tight">비밀번호 변경</h2>
-              {['현재 비밀번호', '새 비밀번호', '새 비밀번호 확인'].map((label) => (
-                <label className="block" key={label}>
-                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">{label}</span>
-                  <input className="mt-1 block w-full border border-neutral-300 px-3 py-2 text-sm" type="password" />
+              <div className="grid gap-4">
+                <label className="block">
+                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">현재 비밀번호</span>
+                  <input
+                    className={`mt-1 block w-full border px-3 py-2 text-sm ${
+                      passwordErrors.currentPassword ? 'border-rose-500' : 'border-neutral-300'
+                    }`}
+                    onChange={(event) => handleCurrentPasswordChange(event.target.value)}
+                    type="password"
+                    value={passwordValues.currentPassword}
+                  />
+                  {passwordErrors.currentPassword ? (
+                    <p className="mt-2 text-sm text-rose-600">{passwordErrors.currentPassword}</p>
+                  ) : (
+                    <p className="mt-2 text-sm text-neutral-500">
+                      현재 비밀번호를 먼저 입력한 뒤 새 비밀번호를 설정해 주세요.
+                    </p>
+                  )}
                 </label>
-              ))}
-              <button className="bg-black px-5 py-2.5 text-sm font-bold text-white" type="button">비밀번호 변경</button>
+
+                <label className="block">
+                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">새 비밀번호</span>
+                  <input
+                    className={`mt-1 block w-full border px-3 py-2 text-sm ${
+                      passwordErrors.newPassword ? 'border-rose-500' : 'border-neutral-300'
+                    } ${areNewPasswordFieldsLocked ? 'bg-neutral-50 text-neutral-400' : ''}`}
+                    disabled={areNewPasswordFieldsLocked}
+                    onChange={(event) => handleNewPasswordChange(event.target.value)}
+                    type="password"
+                    value={passwordValues.newPassword}
+                  />
+                  {passwordErrors.newPassword ? (
+                    <p className="mt-2 text-sm text-rose-600">{passwordErrors.newPassword}</p>
+                  ) : null}
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">새 비밀번호 확인</span>
+                  <input
+                    className={`mt-1 block w-full border px-3 py-2 text-sm ${
+                      passwordErrors.confirmPassword
+                        ? 'border-rose-500'
+                        : isConfirmPasswordMatched
+                          ? 'border-emerald-500'
+                          : 'border-neutral-300'
+                    } ${areNewPasswordFieldsLocked ? 'bg-neutral-50 text-neutral-400' : ''}`}
+                    disabled={areNewPasswordFieldsLocked}
+                    onChange={(event) => handleConfirmPasswordChange(event.target.value)}
+                    type="password"
+                    value={passwordValues.confirmPassword}
+                  />
+                  {passwordErrors.confirmPassword ? (
+                    <p className="mt-2 text-sm text-rose-600">{passwordErrors.confirmPassword}</p>
+                  ) : isConfirmPasswordMatched ? (
+                    <p className="mt-2 text-sm text-emerald-600">새 비밀번호와 일치합니다.</p>
+                  ) : null}
+                </label>
+              </div>
+
+              {renderMessage(passwordMessage)}
+
+              <button
+                className="bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isChangingPassword}
+                onClick={() => void handlePasswordChange()}
+                type="button"
+              >
+                {isChangingPassword ? '변경 중...' : '비밀번호 변경'}
+              </button>
             </div>
           ) : null}
 
           {tab === 'notify' ? (
-            <div className="space-y-5 border border-neutral-200 bg-white p-8">
-              <h2 className="text-xl font-black tracking-tight">알림 설정</h2>
-              {[
-                { label: '새 CRITICAL finding 발생 시', checked: true },
-                { label: 'Agent OFFLINE 알림', checked: true },
-                { label: '주간 리포트 (월요일)', checked: false },
-                { label: '챌린지 리마인더', checked: false },
-              ].map((item) => (
-                <label className="flex items-center justify-between border-b border-neutral-100 pb-3" key={item.label}>
-                  <span className="text-sm">{item.label}</span>
-                  <input className="h-4 w-4 accent-black" defaultChecked={item.checked} type="checkbox" />
-                </label>
-              ))}
+            <div className="border border-neutral-200 bg-white p-8 text-sm text-neutral-600">
+              알림 설정은 준비 중입니다.
             </div>
           ) : null}
 
           {tab === 'token' ? (
-            <div className="space-y-5 border border-neutral-200 bg-white p-8">
-              <h2 className="text-xl font-black tracking-tight">CLI / Agent 토큰</h2>
-              <p className="text-sm text-neutral-600">CLI와 Local Agent 연결 시 사용하는 토큰입니다.</p>
-              <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
-                <span>ssafer_pat_xxxxxxxxxxxxxxxxxxxxxxxx</span>
-                <span className="text-neutral-500">copy</span>
-              </div>
-              <div className="flex gap-3">
-                <button className="bg-black px-4 py-2 text-sm font-bold text-white" type="button">재발급</button>
-                <button className="border border-neutral-300 px-4 py-2 text-sm" type="button">폐기</button>
-              </div>
+            <div className="border border-neutral-200 bg-white p-8 text-sm text-neutral-600">
+              토큰 설정은 준비 중입니다.
             </div>
           ) : null}
 
           {tab === 'danger' ? (
             <div className="space-y-4 border-2 border-[#E63946] bg-white p-8">
-              <h2 className="text-xl font-black tracking-tight text-[#E63946]">위험 영역</h2>
+              <h2 className="text-xl font-black tracking-tight text-[#E63946]">위험 구역</h2>
               <div className="flex items-center justify-between border-t border-neutral-200 pt-4">
                 <div>
                   <div className="font-bold">로그아웃</div>
-                  <div className="mt-1 text-xs text-neutral-500">모든 기기에서 현재 세션을 종료합니다.</div>
+                  <div className="mt-1 text-xs text-neutral-500">현재 로그인된 세션을 종료합니다.</div>
                 </div>
-                <button className="inline-flex items-center gap-1.5 border border-neutral-300 px-4 py-2 text-sm" type="button">
+                <button
+                  className="inline-flex items-center gap-1.5 border border-neutral-300 px-4 py-2 text-sm"
+                  onClick={() => void handleLogout()}
+                  type="button"
+                >
                   <LogOut className="h-3.5 w-3.5" />
                   로그아웃
                 </button>
-              </div>
-              <div className="flex items-center justify-between border-t border-neutral-200 pt-4">
-                <div>
-                  <div className="font-bold text-[#E63946]">회원 탈퇴</div>
-                  <div className="mt-1 text-xs text-neutral-500">계정은 INACTIVE 상태로 전환됩니다.</div>
-                </div>
-                <button className="bg-[#E63946] px-4 py-2 text-sm font-bold text-white" type="button">탈퇴</button>
               </div>
             </div>
           ) : null}

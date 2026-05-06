@@ -1,5 +1,5 @@
 import { RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import PageHero from '../../components/common/PageHero';
@@ -38,13 +38,16 @@ function HistoryPage() {
   const isGuestSession = user?.role === 'GUEST' || isStoredGuestSession();
   const hasMemberSession =
     Boolean(refreshToken) || user?.role === 'USER' || user?.role === 'ADMIN' || hasStoredMemberSession();
+  const canAccessHistory = isAuthenticated && hasMemberSession && !isGuestSession;
 
   const [historyData, setHistoryData] = useState<HistoryScanListResponseData>(emptyHistoryData);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated || !hasMemberSession || isGuestSession) {
+    if (!canAccessHistory) {
+      setHistoryData(emptyHistoryData);
+      setErrorMessage(null);
       return;
     }
 
@@ -81,10 +84,10 @@ function HistoryPage() {
     return () => {
       isMounted = false;
     };
-  }, [hasMemberSession, isAuthenticated, isGuestSession]);
+  }, [canAccessHistory]);
 
   const handleRefresh = async () => {
-    if (!isAuthenticated || !hasMemberSession || isGuestSession) {
+    if (!canAccessHistory) {
       return;
     }
 
@@ -102,13 +105,13 @@ function HistoryPage() {
     }
   };
 
-  const hasHistoryItems = historyData.items.length > 0;
+  const hasHistoryItems = useMemo(() => historyData.items.length > 0, [historyData.items.length]);
 
   return (
     <section className="space-y-8">
       <PageHero
         actions={
-          hasMemberSession && !isGuestSession ? (
+          canAccessHistory ? (
             <button
               className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
               onClick={() => void handleRefresh()}
@@ -124,7 +127,7 @@ function HistoryPage() {
         title="히스토리"
       />
 
-      {!hasMemberSession || isGuestSession ? (
+      {!canAccessHistory ? (
         <div className="border border-dashed border-neutral-300 bg-white p-10">
           <h2 className="text-3xl font-black tracking-tight text-black">로그인이 필요합니다.</h2>
           <div className="mt-5">
