@@ -116,6 +116,28 @@ class ScanCompareQueryServiceTest {
   }
 
   @Test
+  void compareWhenRetainedFindingHasSameSeverityDoesNotCreateSeverityChangedItem() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Scan baseScan = createScan(1001L, 101L, ScanStatus.DONE);
+    Scan targetScan = createScan(1002L, 101L, ScanStatus.DONE);
+    ScanFinding baseFinding = createFinding(11L, 1001L, "sha256:retained", Severity.HIGH, "Retained finding");
+    ScanFinding targetFinding = createFinding(21L, 1002L, "sha256:retained", Severity.HIGH, "Retained finding");
+
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(scanRepository.findById(1001L)).willReturn(Optional.of(baseScan));
+    given(scanRepository.findById(1002L)).willReturn(Optional.of(targetScan));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1001L)).willReturn(List.of(baseFinding));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1002L)).willReturn(List.of(targetFinding));
+
+    ScanCompareResponse response = scanCompareQueryService.compare(1001L, 1002L);
+
+    assertThat(response.summary().retainedCount()).isEqualTo(1);
+    assertThat(response.summary().severityChangedCount()).isZero();
+    assertThat(response.retainedFindings()).extracting(ScanCompareFindingResponse::findingId).containsExactly(21L);
+    assertThat(response.severityChangedFindings()).isEmpty();
+  }
+
+  @Test
   void loadCompareContextReturnsFindingsIndexedByFingerprint() {
     AuthenticatedActor actor = AuthenticatedActor.member(1L);
     Scan baseScan = createScan(1001L, 101L, ScanStatus.DONE);

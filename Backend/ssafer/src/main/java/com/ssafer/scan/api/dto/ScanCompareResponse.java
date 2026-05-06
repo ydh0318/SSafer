@@ -17,7 +17,7 @@ public record ScanCompareResponse(
     ScanStatus baseStatus,
     @Schema(description = "대상 스캔 상태", example = "DONE")
     ScanStatus targetStatus,
-    @Schema(description = "비교 결과 summary")
+    @Schema(description = "비교 결과 요약")
     ScanCompareSummaryResponse summary,
     @Schema(description = "대상 스캔에서 새로 발생한 취약점 목록")
     List<ScanCompareFindingResponse> newFindings,

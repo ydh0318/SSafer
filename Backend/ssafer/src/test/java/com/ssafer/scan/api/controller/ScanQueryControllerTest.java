@@ -152,6 +152,32 @@ class ScanQueryControllerTest {
   }
 
   @Test
+  void compareScansWhenScanMissingReturnsNotFound() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanCompareQueryService.compare(1001L, 9999L))
+        .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
+
+    mockMvc.perform(get("/api/v1/scans/compare")
+            .param("baseScanId", "1001")
+            .param("targetScanId", "9999"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+  }
+
+  @Test
+  void compareScansWhenScanStatusIsNotDoneReturnsBadRequest() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(scanCompareQueryService.compare(1001L, 1002L))
+        .thenThrow(new BusinessException(ErrorCode.INVALID_PARAMETER));
+
+    mockMvc.perform(get("/api/v1/scans/compare")
+            .param("baseScanId", "1001")
+            .param("targetScanId", "1002"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+  }
+
+  @Test
   void getScanBasicReturnsOkResponse() throws Exception {
     MockMvc mockMvc = buildMockMvc();
     LocalDateTime requestedAt = LocalDateTime.of(2026, 4, 23, 9, 0);
