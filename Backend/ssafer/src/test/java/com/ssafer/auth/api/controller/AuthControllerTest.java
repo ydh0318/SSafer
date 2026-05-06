@@ -12,11 +12,12 @@ import com.ssafer.auth.application.service.AuthLogoutService;
 import com.ssafer.auth.application.service.AuthOAuthLoginService;
 import com.ssafer.auth.application.service.AuthTokenRefreshService;
 import com.ssafer.auth.application.service.AuthTokenResult;
-import com.ssafer.auth.application.service.OAuthProviderUserInfo;
+import com.ssafer.auth.application.service.OAuthLoginResult;
 import com.ssafer.auth.domain.enums.OAuthProvider;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
+import com.ssafer.user.domain.enums.AccountStatus;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -137,16 +138,19 @@ class AuthControllerTest {
   }
 
   @Test
-  void oauthLoginReturnsProviderUserInfoWhenRequestIsValid() throws Exception {
+  void oauthLoginReturnsProviderUserInfoAndExistingUserMatchWhenRequestIsValid() throws Exception {
     given(authOAuthLoginService.login(
         OAuthProvider.GOOGLE,
         "auth-code",
         "http://localhost:3000/oauth/callback"
-    )).willReturn(new OAuthProviderUserInfo(
+    )).willReturn(new OAuthLoginResult(
         OAuthProvider.GOOGLE,
         "google-user-123",
         "user@ssafer.co.kr",
-        "싸피맨"
+        "싸피맨",
+        true,
+        1L,
+        AccountStatus.ACTIVE
     ));
 
     mockMvc.perform(post("/api/v1/auth/oauth/login")
@@ -163,7 +167,10 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.data.provider").value("GOOGLE"))
         .andExpect(jsonPath("$.data.providerUserId").value("google-user-123"))
         .andExpect(jsonPath("$.data.email").value("user@ssafer.co.kr"))
-        .andExpect(jsonPath("$.data.displayName").value("싸피맨"));
+        .andExpect(jsonPath("$.data.displayName").value("싸피맨"))
+        .andExpect(jsonPath("$.data.existingUserMatched").value(true))
+        .andExpect(jsonPath("$.data.existingUserId").value(1L))
+        .andExpect(jsonPath("$.data.existingUserAccountStatus").value("ACTIVE"));
 
     then(authOAuthLoginService).should().login(
         OAuthProvider.GOOGLE,
