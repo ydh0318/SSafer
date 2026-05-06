@@ -7,9 +7,9 @@ import com.ssafer.global.security.CurrentActorProvider;
 import com.ssafer.project.application.service.ProjectAuthorizationService;
 import com.ssafer.scan.api.dto.ScanCompareResponse;
 import com.ssafer.scan.domain.entity.Scan;
-import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +69,37 @@ public class ScanCompareQueryService {
         indexByComparisonKey(baseFindings),
         indexByComparisonKey(targetFindings)
     );
+  }
+
+  @Transactional(readOnly = true)
+  public ScanCompareClassificationResult classify(Long baseScanId, Long targetScanId) {
+    return classify(loadCompareContext(baseScanId, targetScanId));
+  }
+
+  public ScanCompareClassificationResult classify(ScanCompareContext context) {
+    List<ScanCompareFindingCandidate> newFindings = new ArrayList<>();
+    List<ScanCompareFindingCandidate> resolvedFindings = new ArrayList<>();
+    List<ScanCompareMatchedFinding> retainedFindings = new ArrayList<>();
+
+    for (ScanCompareFindingCandidate targetFinding : context.targetFindings()) {
+      ScanCompareFindingCandidate matchedBaseFinding =
+          context.baseFindingsByComparisonKey().get(targetFinding.comparisonKey());
+
+      if (matchedBaseFinding == null) {
+        newFindings.add(targetFinding);
+        continue;
+      }
+
+      retainedFindings.add(new ScanCompareMatchedFinding(matchedBaseFinding, targetFinding));
+    }
+
+    for (ScanCompareFindingCandidate baseFinding : context.baseFindings()) {
+      if (!context.targetFindingsByComparisonKey().containsKey(baseFinding.comparisonKey())) {
+        resolvedFindings.add(baseFinding);
+      }
+    }
+
+    return new ScanCompareClassificationResult(newFindings, resolvedFindings, retainedFindings);
   }
 
   private List<ScanCompareFindingCandidate> loadCompareFindingCandidates(Long scanId) {

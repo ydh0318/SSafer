@@ -137,6 +137,35 @@ class ScanCompareQueryServiceTest {
   }
 
   @Test
+  void classifySplitsNewResolvedAndRetainedFindings() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Scan baseScan = createScan(1001L, 101L, ScanStatus.DONE);
+    Scan targetScan = createScan(1002L, 101L, ScanStatus.DONE);
+    ScanFinding resolvedFinding = createFinding(11L, 1001L, "sha256:resolved", Severity.HIGH, "Resolved finding");
+    ScanFinding retainedBaseFinding = createFinding(12L, 1001L, "sha256:retained", Severity.HIGH, "Retained base");
+    ScanFinding retainedTargetFinding = createFinding(21L, 1002L, "sha256:retained", Severity.LOW, "Retained target");
+    ScanFinding newFinding = createFinding(22L, 1002L, "sha256:new", Severity.MEDIUM, "New finding");
+
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(scanRepository.findById(1001L)).willReturn(Optional.of(baseScan));
+    given(scanRepository.findById(1002L)).willReturn(Optional.of(targetScan));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1001L))
+        .willReturn(List.of(resolvedFinding, retainedBaseFinding));
+    given(scanFindingRepository.findAllByScanIdOrderByIdAsc(1002L))
+        .willReturn(List.of(retainedTargetFinding, newFinding));
+
+    ScanCompareClassificationResult result = scanCompareQueryService.classify(1001L, 1002L);
+
+    assertThat(result.newFindings()).extracting(ScanCompareFindingCandidate::findingId)
+        .containsExactly(22L);
+    assertThat(result.resolvedFindings()).extracting(ScanCompareFindingCandidate::findingId)
+        .containsExactly(11L);
+    assertThat(result.retainedFindings()).hasSize(1);
+    assertThat(result.retainedFindings().getFirst().baseFinding().findingId()).isEqualTo(12L);
+    assertThat(result.retainedFindings().getFirst().targetFinding().findingId()).isEqualTo(21L);
+  }
+
+  @Test
   void compareWhenSameScanIdsThrowsInvalidParameter() {
     assertThatThrownBy(() -> scanCompareQueryService.compare(1001L, 1001L))
         .isInstanceOf(BusinessException.class)
