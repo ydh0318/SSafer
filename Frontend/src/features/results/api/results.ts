@@ -34,18 +34,35 @@ export async function getScanSummary(scanId: string | number) {
 
 export async function getScanFindings(scanId: string | number, query: ScanFindingListQuery = {}) {
   try {
+    const params: Record<string, string | number> = {
+      page: query.page ?? 0,
+      size: query.size ?? 20,
+    };
+
+    if (query.severity) {
+      params.severity = query.severity;
+    }
+
+    if (typeof query.category === 'string' && query.category.trim() !== '') {
+      params.category = query.category.trim();
+    }
+
+    if (query.resolutionStatus) {
+      params.resolutionStatus = query.resolutionStatus;
+    }
+
+    if (query.sourceType) {
+      params.sourceType = query.sourceType;
+    }
+
+    if (typeof query.scanNodeId === 'number') {
+      params.scanNodeId = query.scanNodeId;
+    }
+
     const response = await apiClient.get<ApiSuccessResponse<ScanFindingListResponseData>>(
       `/scans/${scanId}/findings`,
       {
-        params: {
-          severity: query.severity,
-          category: query.category || undefined,
-          resolutionStatus: query.resolutionStatus,
-          sourceType: query.sourceType,
-          scanNodeId: query.scanNodeId,
-          page: query.page ?? 0,
-          size: query.size ?? 20,
-        },
+        params,
       },
     );
 

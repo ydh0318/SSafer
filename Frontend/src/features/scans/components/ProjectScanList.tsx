@@ -159,12 +159,18 @@ function ProjectScanList({
                       결과 보기
                     </Link>
                   ) : (
-                    <span className="inline-flex cursor-not-allowed items-center bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-500">
+                    <span
+                      className="inline-flex cursor-not-allowed items-center bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-500"
+                      title="스캔이 완료된 뒤 결과 페이지를 열 수 있습니다."
+                    >
                       결과 대기 중
                     </span>
                   )}
                 </div>
               </div>
+              {scan.status !== 'DONE' ? (
+                <p className="mt-3 text-xs text-neutral-500">스캔이 완료되면 결과 보기 버튼이 활성화됩니다.</p>
+              ) : null}
             </article>
           ))}
         </div>
