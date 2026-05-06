@@ -55,7 +55,7 @@ class WorkerSecretAuthenticationFilterTest {
 
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
     assertThat(authentication).isNotNull();
-    assertThat(authentication.getPrincipal()).isEqualTo("worker");
+    assertThat(authentication.getPrincipal()).isEqualTo(WorkerPrincipal.callbackWorker());
     assertThat(authentication.getAuthorities())
         .extracting("authority")
         .containsExactly("ROLE_WORKER");

@@ -62,7 +62,7 @@ public class WorkerSecretAuthenticationFilter extends OncePerRequestFilter {
     }
 
     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-        "worker",
+        WorkerPrincipal.callbackWorker(),
         null,
         List.of(new SimpleGrantedAuthority("ROLE_WORKER"))
     );

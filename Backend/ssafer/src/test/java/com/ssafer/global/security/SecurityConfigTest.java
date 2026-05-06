@@ -151,6 +151,32 @@ class SecurityConfigTest {
   }
 
   @Test
+  void internalApisRejectInvalidWorkerSecretHeader() throws Exception {
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
+            .header(WorkerSecretAuthenticationFilter.WORKER_SECRET_HEADER, "wrong-secret")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+  }
+
+  @Test
+  void internalApisDoNotAcceptMemberAuthenticationWithoutWorkerSecret() throws Exception {
+    UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+        AuthenticatedActor.member(1L),
+        null,
+        List.of(new SimpleGrantedAuthority("ROLE_MEMBER"))
+    );
+
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
+            .with(authentication(authenticationToken))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+  }
+
+  @Test
   void internalAgentApisRequireBearerToken() throws Exception {
     mockMvc.perform(get("/api/v1/internal/agents/1/tasks"))
         .andExpect(status().isUnauthorized())
