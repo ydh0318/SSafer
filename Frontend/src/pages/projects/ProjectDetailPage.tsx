@@ -12,6 +12,7 @@ import AgentStatusCard from '../../features/agents/components/AgentStatusCard';
 import { getProjectDetail } from '../../features/projects/api/projects';
 import {
   createScanRequest,
+  deleteScanHistory,
   getProjectScans,
   reportUploadedScanResult,
   uploadScanResultFile,
@@ -58,6 +59,7 @@ function ProjectDetailPage() {
   const [scans, setScans] = useState<ProjectScanListItemData[]>([]);
   const [scanListError, setScanListError] = useState<string | null>(null);
   const [isScanListLoading, setIsScanListLoading] = useState(true);
+  const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
 
   const [scanRequestForm, setScanRequestForm] = useState<CreateScanRequestPayload>(initialScanRequestForm);
   const [scanRequestMethod, setScanRequestMethod] = useState<ScanRequestMethod>('AGENT');
@@ -228,6 +230,35 @@ function ProjectDetailPage() {
       setScanListError(error instanceof Error ? error.message : '스캔 목록을 불러오지 못했습니다.');
     } finally {
       setIsScanListLoading(false);
+    }
+  };
+
+  const handleDeleteScan = async (scanId: number) => {
+    if (!projectId) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Delete scan #${scanId} from history?`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setDeletingScanIds((current) => [...current, scanId]);
+    setScanListError(null);
+
+    try {
+      await deleteScanHistory(scanId);
+
+      if (lastCreatedScan?.scanId === scanId) {
+        setLastCreatedScan(null);
+      }
+
+      await handleRefreshScans();
+    } catch (error) {
+      setScanListError(error instanceof Error ? error.message : 'Failed to delete scan history.');
+    } finally {
+      setDeletingScanIds((current) => current.filter((value) => value !== scanId));
     }
   };
 
@@ -451,9 +482,11 @@ function ProjectDetailPage() {
       />
 
       <ProjectScanList
+        deletingScanIds={deletingScanIds}
         errorMessage={scanListError}
         filters={scanFilters}
         isLoading={isScanListLoading}
+        onDeleteScan={(scanId) => void handleDeleteScan(scanId)}
         onFilterChange={setScanFilters}
         onRefresh={() => void handleRefreshScans()}
         projectId={projectId}

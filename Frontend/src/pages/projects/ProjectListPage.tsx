@@ -186,6 +186,10 @@ function ProjectListPage() {
     [projects, selectedProjectId],
   );
 
+  const navigateToProjectDetail = (projectId: string) => {
+    navigate(ROUTES.projectDetail.replace(':projectId', projectId));
+  };
+
   const completedProjectEntries = useMemo(
     () =>
       projects
@@ -386,7 +390,14 @@ function ProjectListPage() {
                     isSelected ? 'bg-[#111111] text-white' : 'bg-white text-black hover:bg-neutral-50'
                   }`}
                   key={project.id}
-                  onClick={() => setSelectedProjectId(project.id)}
+                  onClick={() => {
+                    if (isSelected) {
+                      navigateToProjectDetail(project.id);
+                      return;
+                    }
+
+                    setSelectedProjectId(project.id);
+                  }}
                   type="button"
                 >
                   <span>{project.name}</span>
