@@ -14,11 +14,13 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 public class AuthOAuthLoginService {
 
   private static final int MAX_DISPLAY_NAME_LENGTH = 100;
@@ -62,6 +64,7 @@ public class AuthOAuthLoginService {
 
     OAuthLoginProviderHandler handler = handlers.get(provider);
     if (handler == null) {
+      log.error("OAuth 로그인 핸들러를 찾을 수 없습니다. provider={}", provider);
       throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 
@@ -178,6 +181,11 @@ public class AuthOAuthLoginService {
       }
     }
 
+    log.error(
+        "OAuth 신규 회원 생성에 실패했습니다. 사용 가능한 닉네임 후보를 모두 소진했습니다. provider={}, email={}",
+        userInfo.provider(),
+        email
+    );
     throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
   }
 
@@ -196,11 +204,13 @@ public class AuthOAuthLoginService {
 
   private String normalizeEmail(String rawEmail) {
     if (rawEmail == null) {
+      log.error("OAuth 로그인 처리 중 이메일이 비어 있습니다.");
       throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 
     String normalized = rawEmail.trim().toLowerCase(Locale.ROOT);
     if (normalized.isBlank() || !normalized.contains("@")) {
+      log.error("OAuth 로그인 처리 중 이메일 형식이 올바르지 않습니다. email={}", rawEmail);
       throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
     return normalized;
@@ -243,6 +253,7 @@ public class AuthOAuthLoginService {
         return candidate;
       }
     }
+    log.error("OAuth 재가입 처리에 실패했습니다. 사용 가능한 닉네임 후보를 모두 소진했습니다. userId={}", userId);
     throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
   }
 
