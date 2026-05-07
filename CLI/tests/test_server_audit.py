@@ -191,6 +191,68 @@ def test_server_audit_trivy_rootfs_retries_with_sudo_when_allowed(monkeypatch):
     assert any(command[:3] == ["sudo", "-n", "trivy"] for command in commands)
 
 
+def test_server_audit_trivy_rootfs_adds_summary_finding(monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    monkeypatch.setattr(audit_module.shutil, "which", lambda name: "/usr/bin/trivy" if name == "trivy" else None)
+
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["trivy", "--version"]:
+            return CommandResult(command, 0, "Version: 0.69.3")
+        if command[:3] == ["trivy", "rootfs", "--scanners"]:
+            return CommandResult(
+                command,
+                0,
+                json.dumps(
+                    {
+                        "Results": [
+                            {
+                                "Target": "/",
+                                "Vulnerabilities": [
+                                    {"VulnerabilityID": "CVE-1", "Severity": "CRITICAL"},
+                                    {"VulnerabilityID": "CVE-2", "Severity": "HIGH"},
+                                    {"VulnerabilityID": "CVE-3", "Severity": "HIGH"},
+                                ],
+                            }
+                        ]
+                    }
+                ),
+            )
+        raise AssertionError(command)
+
+    result = run_server_audit(
+        checks=["os-packages"],
+        include_os_packages=True,
+        runner=fake_runner,
+    )
+
+    assert result.warnings == []
+    assert result.findings[0].ruleId == "SERVER_OS_PACKAGE_VULNERABILITY"
+    assert result.findings[0].severity == "CRITICAL"
+    assert result.findings[0].evidence == "CRITICAL=1, HIGH=2"
+    assert [artifact.type for artifact in result.artifacts] == ["command-output", "trivy-rootfs-json"]
+
+
+def test_server_audit_trivy_permission_failure_suggests_allow_sudo(monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    monkeypatch.setattr(audit_module.shutil, "which", lambda name: "/usr/bin/trivy" if name == "trivy" else None)
+
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["trivy", "--version"]:
+            return CommandResult(command, 0, "Version: 0.69.3")
+        return CommandResult(command, 1, stderr="open /opt/app/secret.jar: permission denied")
+
+    result = run_server_audit(
+        checks=["os-packages"],
+        include_os_packages=True,
+        runner=fake_runner,
+    )
+
+    assert "Retry with --allow-sudo" in result.warnings[0]
+    assert result.artifacts[-1].target == "trivy rootfs"
+
+
 def test_save_server_audit_result_writes_json_and_marker(tmp_path: Path):
     result = run_server_audit(checks=["ports"], runner=lambda command: CommandResult(command, 0, ""))
 

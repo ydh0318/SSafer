@@ -870,12 +870,14 @@ def _print_server_audit_details(result: object) -> None:
         artifact_table.add_row(
             getattr(artifact, "type", "-"),
             getattr(artifact, "target", "-"),
-            _summarize_server_artifact(getattr(artifact, "content", None)),
+            _summarize_server_artifact(getattr(artifact, "content", None), artifact_type=getattr(artifact, "type", None)),
         )
     console.print(artifact_table)
 
 
-def _summarize_server_artifact(content: object) -> str:
+def _summarize_server_artifact(content: object, *, artifact_type: object = None) -> str:
+    if artifact_type == "trivy-rootfs-json" and isinstance(content, dict):
+        return _summarize_trivy_rootfs_content(content)
     if isinstance(content, list):
         return f"{len(content)} items"
     if isinstance(content, dict):
@@ -893,6 +895,22 @@ def _summarize_server_artifact(content: object) -> str:
     return text[: _REPORT_EVIDENCE_MAX - 3] + "..."
 
 
+def _summarize_trivy_rootfs_content(content: dict) -> str:
+    counts: dict[str, int] = {}
+    for scan_result in content.get("Results", []) or []:
+        for vulnerability in scan_result.get("Vulnerabilities", []) or []:
+            severity = str(vulnerability.get("Severity") or "UNKNOWN").upper()
+            counts[severity] = counts.get(severity, 0) + 1
+    total = sum(counts.values())
+    if total == 0:
+        return "0 vulnerabilities"
+    order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+    parts = [f"{severity}={counts[severity]}" for severity in order if counts.get(severity, 0) > 0]
+    extra = sorted(severity for severity in counts if severity not in order)
+    parts.extend(f"{severity}={counts[severity]}" for severity in extra)
+    return f"{total} vulnerabilities ({', '.join(parts)})"
+
+
 def _format_server_rule_id(rule_id: object) -> str:
     text = str(rule_id)
     prefix = "SERVER_"
@@ -903,6 +921,7 @@ def _format_server_rule_id(rule_id: object) -> str:
         "SSH_ROOT_LOGIN": "SSH_ROOT_LOGIN",
         "SSH_PASSWORD_AUTH": "SSH_PASSWORD_AUTH",
         "FIREWALL_INACTIVE": "FIREWALL_INACTIVE",
+        "OS_PACKAGE_VULNERABILITY": "OS_VULN",
     }
     return known.get(text, text)
 
