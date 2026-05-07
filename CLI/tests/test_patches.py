@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from ssafer.core.patches import (
     apply_patch_candidate,
     apply_patch_candidates,
     extract_patch_candidates,
+    find_default_analysis_result,
 )
 from ssafer.main import app
 
@@ -223,6 +225,27 @@ def test_apply_command_uses_default_analysis_result_and_interactive_selection(tm
     assert "P2" in result.output
     assert first.read_text(encoding="utf-8") == "USER root\n"
     assert second.read_text(encoding="utf-8") == "TOKEN=your_token_here\n"
+
+
+def test_find_default_analysis_result_uses_ai_data_path(tmp_path: Path):
+    analysis_dir = tmp_path / "AI" / "data"
+    analysis_dir.mkdir(parents=True)
+    analysis_result = analysis_dir / "analysis_result.json"
+    analysis_result.write_text(json.dumps({"results": []}), encoding="utf-8")
+
+    assert find_default_analysis_result(tmp_path) == analysis_result
+
+
+def test_find_default_analysis_result_discovers_latest_result(tmp_path: Path):
+    older = tmp_path / ".ssafer" / "downloads" / "analysis_result_old.json"
+    newer = tmp_path / ".ssafer" / "downloads" / "analysis_result_new.json"
+    older.parent.mkdir(parents=True)
+    older.write_text(json.dumps({"results": []}), encoding="utf-8")
+    newer.write_text(json.dumps({"results": []}), encoding="utf-8")
+    os.utime(older, (1_700_000_000, 1_700_000_000))
+    os.utime(newer, (1_700_000_100, 1_700_000_100))
+
+    assert find_default_analysis_result(tmp_path) == newer
 
 
 def test_apply_command_interactive_all_selection(tmp_path: Path):

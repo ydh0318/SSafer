@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import os
 import threading
 import time
 from pathlib import Path
@@ -234,6 +236,7 @@ def apply_fix(
             raise PatchError(
                 "analysis_result.json not found. Use --analysis-result or place it under .ssafer/analysis_result.json."
             )
+        console.print(f"[dim]Analysis result: {analysis_path}[/dim]")
 
         candidates = load_patch_candidates_from_file(analysis_path)
         selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
@@ -278,13 +281,88 @@ def apply_fix(
     console.print(result_table)
 
 
+@app.command("agent-watch")
+def agent_watch(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root where patches are applied."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL."),
+    agent_id: Optional[int] = typer.Option(None, "--agent-id", help="Local agent ID issued by the backend."),
+    project_id: Optional[int] = typer.Option(None, "--project-id", help="Project ID bound to the local agent."),
+    agent_token: Optional[str] = typer.Option(None, "--agent-token", help="Agent bearer token issued by the backend."),
+    interval: float = typer.Option(5.0, "--interval", help="Polling interval in seconds."),
+    once: bool = typer.Option(False, "--once", help="Connect, fetch pending tasks once, then exit."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch tasks without modifying files."),
+) -> None:
+    """Connect a local agent and apply pending PATCH_APPLY tasks."""
+    from ssafer.core.agent import AgentTaskResult, watch_agent
+    from ssafer.core.auth import load_endpoint
+
+    effective_url = api_url or load_endpoint()
+    effective_agent_id = agent_id or _load_int_env("SSAFER_AGENT_ID", "agent ID")
+    effective_project_id = project_id or _load_int_env("SSAFER_PROJECT_ID", "project ID")
+    effective_agent_token = agent_token or os.getenv("SSAFER_AGENT_TOKEN")
+    if not effective_agent_token:
+        console.print("[red]Agent token is required. Use --agent-token or SSAFER_AGENT_TOKEN.[/red]")
+        raise typer.Exit(code=1)
+    project_root = path.resolve()
+
+    def on_event(event_type: str, payload: object) -> None:
+        if event_type == "connected":
+            console.print(f"[green]Agent connected.[/green] {payload}")
+            return
+        if event_type == "ping":
+            console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
+            return
+        if isinstance(payload, AgentTaskResult):
+            console.print(
+                f"[cyan]Task {payload.task_id}[/cyan] {payload.task_type}: "
+                f"{payload.status} - {payload.message}"
+            )
+            for patch_result in payload.patch_results:
+                console.print(
+                    f"  - {patch_result.patch_id} {patch_result.status} "
+                    f"{patch_result.file_path}: {patch_result.message}"
+                )
+
+    try:
+        asyncio.run(
+            watch_agent(
+                api_url=effective_url,
+                agent_id=effective_agent_id,
+                project_id=effective_project_id,
+                agent_token=effective_agent_token,
+                project_root=project_root,
+                interval_seconds=interval,
+                once=once,
+                dry_run=dry_run,
+                on_event=on_event,
+            )
+        )
+    except KeyboardInterrupt:
+        console.print("[yellow]Agent watch stopped.[/yellow]")
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Agent watch failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+def _load_int_env(name: str, label: str) -> int:
+    value = os.getenv(name)
+    if not value:
+        console.print(f"[red]Agent {label} is required. Use --{name.lower().removeprefix('ssafer_').replace('_', '-')} or {name}.[/red]")
+        raise typer.Exit(code=1)
+    try:
+        return int(value)
+    except ValueError as exc:
+        console.print(f"[red]{name} must be an integer.[/red]")
+        raise typer.Exit(code=1) from exc
+
+
 def _select_patch_candidates(
     candidates: list["PatchCandidate"],
     *,
     patch_id: str | None,
     yes: bool,
 ) -> list["PatchCandidate"]:
-    table = Table(title="Patch candidates")
+    table = Table(title="Applicable patch candidates")
     table.add_column("No.", justify="right")
     table.add_column("Patch ID")
     table.add_column("Finding ID")
@@ -299,7 +377,7 @@ def _select_patch_candidates(
             candidate.operation,
         )
     if len(candidates) > 1 and patch_id is None:
-        table.add_row(str(len(candidates) + 1), "ALL", "-", "All patch candidates", "-")
+        table.add_row(str(len(candidates) + 1), "ALL", "-", "Apply all patch candidates", "-")
     console.print(table)
 
     if patch_id is not None or yes or len(candidates) == 1:
