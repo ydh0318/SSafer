@@ -34,7 +34,8 @@ check_env_key() {
   log "env ${key}=SET"
 }
 
-check_env_present() {
+# Allows placeholder values. Use only for keys that are intentionally dummy during staged rollout.
+check_env_present_allow_placeholder() {
   local key="$1"
   local value="${!key:-}"
 
@@ -68,7 +69,7 @@ fi
 log "DEPLOY_DIR=${DEPLOY_DIR}"
 missing_env=0
 check_env_key "FASTAPI_IMAGE" || missing_env=1
-check_env_present "ANTHROPIC_API_KEY" || missing_env=1
+check_env_present_allow_placeholder "ANTHROPIC_API_KEY" || missing_env=1
 check_env_key "SPRING_CALLBACK_URL" || missing_env=1
 check_env_key "INTERNAL_TOKEN" || missing_env=1
 check_env_key "AWS_ACCESS_KEY_ID" || missing_env=1
