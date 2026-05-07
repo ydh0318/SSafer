@@ -8,6 +8,8 @@ import type {
   CheckNicknameAvailabilityData,
   LoginRequest,
   LogoutRequest,
+  OAuthLoginData,
+  OAuthLoginRequest,
   PasswordResetCompleteRequest,
   PasswordResetSendCodeRequest,
   PasswordResetVerifyCodeData,
@@ -16,6 +18,9 @@ import type {
   RegisterUserData,
   RegisterUserRequest,
   SendEmailVerificationCodeRequest,
+  SocialAccount,
+  SocialAccountsData,
+  SocialConnectRequest,
   UpdateUserProfileRequest,
   UserProfileData,
   VerifyEmailCodeRequest,
@@ -29,6 +34,43 @@ export async function loginWithEmail(payload: LoginRequest) {
 export async function refreshAuthTokens(payload: RefreshTokenRequest) {
   const response = await apiClient.post<ApiSuccessResponse<AuthTokenData>>('/auth/refresh', payload);
   return response.data.data;
+}
+
+export async function loginWithOAuth(payload: OAuthLoginRequest) {
+  const response = await publicApiClient.post<ApiSuccessResponse<OAuthLoginData>>(
+    '/auth/oauth/login',
+    payload,
+  );
+  return response.data.data;
+}
+
+export async function getConnectedSocialAccounts() {
+  const response = await apiClient.get<ApiSuccessResponse<SocialAccountsData>>('/users/me/socials');
+  return response.data.data;
+}
+
+export async function connectGoogleSocialAccount(payload: SocialConnectRequest) {
+  const response = await apiClient.post<ApiSuccessResponse<SocialAccount>>(
+    '/users/me/socials/google',
+    payload,
+  );
+  return response.data.data;
+}
+
+export async function disconnectGoogleSocialAccount() {
+  await apiClient.delete<ApiSuccessResponse<null>>('/users/me/socials/google');
+}
+
+export async function connectGithubSocialAccount(payload: SocialConnectRequest) {
+  const response = await apiClient.post<ApiSuccessResponse<SocialAccount>>(
+    '/users/me/socials/github',
+    payload,
+  );
+  return response.data.data;
+}
+
+export async function disconnectGithubSocialAccount() {
+  await apiClient.delete<ApiSuccessResponse<null>>('/users/me/socials/github');
 }
 
 export async function logoutCurrentUser() {
