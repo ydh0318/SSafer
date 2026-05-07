@@ -223,6 +223,13 @@ public class GlobalExceptionHandler {
       case EMAIL_VERIFICATION_REQUEST_TOO_FREQUENT -> "Email verification requests are too frequent.";
       case EMAIL_DELIVERY_FAILED -> "Email delivery failed.";
       case INVALID_PARAMETER -> "Request parameter format is invalid.";
+      case FILE_COUNT_EXCEEDED -> "Upload file count exceeded.";
+      case UNSUPPORTED_FILE_TYPE -> "Unsupported upload file type.";
+      case PAYLOAD_TOO_LARGE -> "Payload too large.";
+      case SCAN_EXECUTION_BUSY -> "Scan execution is busy.";
+      case SCAN_EXECUTION_FAILED -> "Scan execution failed.";
+      case RAW_RESULT_UPLOAD_FAILED -> "Raw result upload failed.";
+      case ANALYSIS_QUEUE_PUBLISH_FAILED -> "Analysis queue publish failed.";
       case INVALID_PAYLOAD_HASH -> "payloadHash format is invalid.";
       case RAW_RESULT_NOT_FOUND -> "Raw result object was not found.";
       case SCAN_STATUS_CONFLICT -> "Operation is not allowed for the current scan status.";
