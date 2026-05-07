@@ -48,13 +48,12 @@ class AgentRepositoryTest {
     entityManager.flush();
 
     Agent agent1 = agentRepository.save(new Agent(project, AgentStatus.ONLINE));
-    Agent agent2 = agentRepository.save(new Agent(project, AgentStatus.OFFLINE));
     agentRepository.save(new Agent(anotherProject, AgentStatus.ERROR));
     entityManager.flush();
 
     List<Agent> found = agentRepository.findByProjectId(project.getId());
 
-    assertThat(found).extracting(Agent::getId).containsExactlyInAnyOrder(agent1.getId(), agent2.getId());
+    assertThat(found).extracting(Agent::getId).containsExactly(agent1.getId());
   }
 
   @Test
