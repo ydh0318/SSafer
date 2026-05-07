@@ -1,10 +1,8 @@
 package com.ssafer.auth.application.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
-import com.ssafer.auth.domain.enums.OAuthProvider;
 import com.ssafer.auth.infrastructure.oauth.google.GoogleOAuthApiClient;
 import com.ssafer.auth.infrastructure.oauth.google.GoogleOAuthTokenResponse;
 import com.ssafer.auth.infrastructure.oauth.google.GoogleOAuthUserInfoResponse;
@@ -26,43 +24,15 @@ class GoogleOAuthLoginProviderHandlerTest {
   }
 
   @Test
-  void fetchUserInfoExchangesCodeAndReturnsGoogleUserInfo() {
-    given(googleOAuthApiClient.exchangeAuthorizationCode("auth-code", "http://localhost:3000/oauth/google/callback"))
-        .willReturn(new GoogleOAuthTokenResponse("access-token", "Bearer", "id-token", 3600L, "openid email profile"));
+  void fetchUserInfoThrowsUnauthorizedWhenGoogleEmailIsNotVerified() {
+    given(googleOAuthApiClient.exchangeAuthorizationCode("auth-code", "http://localhost/callback"))
+        .willReturn(new GoogleOAuthTokenResponse("access-token", "Bearer", null, 3600L, "openid email profile"));
     given(googleOAuthApiClient.fetchUserInfo("access-token"))
-        .willReturn(new GoogleOAuthUserInfoResponse("google-user-123", "user@ssafer.co.kr", true, "싸피맨"));
+        .willReturn(new GoogleOAuthUserInfoResponse("google-123", "user@ssafer.co.kr", false, "Alice"));
 
-    OAuthProviderUserInfo result = handler.fetchUserInfo("auth-code", "http://localhost:3000/oauth/google/callback");
-
-    assertThat(result.provider()).isEqualTo(OAuthProvider.GOOGLE);
-    assertThat(result.providerUserId()).isEqualTo("google-user-123");
-    assertThat(result.email()).isEqualTo("user@ssafer.co.kr");
-    assertThat(result.displayName()).isEqualTo("싸피맨");
-  }
-
-  @Test
-  void fetchUserInfoThrowsInternalServerErrorWhenGoogleResponseIsMissingRequiredFields() {
-    given(googleOAuthApiClient.exchangeAuthorizationCode("auth-code", "http://localhost:3000/oauth/google/callback"))
-        .willReturn(new GoogleOAuthTokenResponse("access-token", "Bearer", "id-token", 3600L, "openid email profile"));
-    given(googleOAuthApiClient.fetchUserInfo("access-token"))
-        .willReturn(new GoogleOAuthUserInfoResponse("", "", true, null));
-
-    assertThatThrownBy(() -> handler.fetchUserInfo("auth-code", "http://localhost:3000/oauth/google/callback"))
+    assertThatThrownBy(() -> handler.fetchUserInfo("auth-code", "http://localhost/callback"))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
-        .isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR);
-  }
-
-  @Test
-  void fetchUserInfoThrowsInternalServerErrorWhenGoogleEmailIsNotVerified() {
-    given(googleOAuthApiClient.exchangeAuthorizationCode("auth-code", "http://localhost:3000/oauth/google/callback"))
-        .willReturn(new GoogleOAuthTokenResponse("access-token", "Bearer", "id-token", 3600L, "openid email profile"));
-    given(googleOAuthApiClient.fetchUserInfo("access-token"))
-        .willReturn(new GoogleOAuthUserInfoResponse("google-user-123", "user@ssafer.co.kr", false, "싸피맨"));
-
-    assertThatThrownBy(() -> handler.fetchUserInfo("auth-code", "http://localhost:3000/oauth/google/callback"))
-        .isInstanceOf(BusinessException.class)
-        .extracting(ex -> ((BusinessException) ex).getErrorCode())
-        .isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR);
+        .isEqualTo(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
   }
 }

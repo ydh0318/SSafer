@@ -28,6 +28,16 @@ public enum ErrorCode {
       "REJOIN_REQUIRED",
       "Rejoin confirmation is required for the withdrawn account"
   ),
+  OAUTH_AUTHENTICATION_FAILED(
+      HttpStatus.UNAUTHORIZED,
+      "OAUTH_AUTHENTICATION_FAILED",
+      "OAuth authentication failed"
+  ),
+  OAUTH_PROVIDER_UNAVAILABLE(
+      HttpStatus.BAD_GATEWAY,
+      "OAUTH_PROVIDER_UNAVAILABLE",
+      "OAuth provider is unavailable"
+  ),
   INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect"),
   EMAIL_VERIFICATION_REQUIRED(
       HttpStatus.BAD_REQUEST,

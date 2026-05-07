@@ -212,6 +212,8 @@ public class GlobalExceptionHandler {
       case SOCIAL_ACCOUNT_NOT_LINKED -> "Social account is not linked.";
       case SOCIAL_ACCOUNT_DISCONNECT_NOT_ALLOWED -> "Cannot disconnect the last available sign-in method.";
       case REJOIN_REQUIRED -> "Rejoin confirmation is required for the withdrawn account.";
+      case OAUTH_AUTHENTICATION_FAILED -> "OAuth authentication failed.";
+      case OAUTH_PROVIDER_UNAVAILABLE -> "OAuth provider is unavailable.";
       case INVALID_CREDENTIALS -> "Email or password is incorrect.";
       case EMAIL_VERIFICATION_REQUIRED -> "Verified email is required before registration.";
       case EMAIL_VERIFICATION_CODE_INVALID -> "Email verification code is invalid or expired.";

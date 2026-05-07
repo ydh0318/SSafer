@@ -228,7 +228,7 @@ class AuthOAuthLoginServiceTest {
 
   @Test
   void rejoinReactivatesInactiveLinkedSocialAccountUsingRejoinToken() {
-    User linkedUser = new User("user@ssafer.co.kr", "Alice", null, AccountStatus.INACTIVE);
+    User linkedUser = new User("user@ssafer.co.kr", "Alice", "encoded-password", AccountStatus.INACTIVE);
     setUserId(linkedUser, 9L);
     AuthTokenResult tokenResult = new AuthTokenResult(
         "access-token",
@@ -261,6 +261,7 @@ class AuthOAuthLoginServiceTest {
     assertThat(result.userId()).isEqualTo(9L);
     assertThat(result.accountStatus()).isEqualTo(AccountStatus.ACTIVE);
     assertThat(linkedUser.getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
+    assertThat(linkedUser.getPasswordHash()).isEqualTo("encoded-password");
     then(userRepository).should().flush();
     then(authTokenProvider).should().issueTokens(9L);
   }

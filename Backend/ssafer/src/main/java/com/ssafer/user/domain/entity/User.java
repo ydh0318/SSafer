@@ -89,7 +89,6 @@ public class User {
 
   public void deactivate() {
     this.accountStatus = AccountStatus.INACTIVE;
-    this.passwordHash = null;
   }
 
   public void reactivate(String displayName, String passwordHash) {

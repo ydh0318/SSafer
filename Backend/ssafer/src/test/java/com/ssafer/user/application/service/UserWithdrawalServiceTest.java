@@ -39,7 +39,7 @@ class UserWithdrawalServiceTest {
     userWithdrawalService.withdrawCurrentUser(AuthenticatedActor.member(1L));
 
     assertThat(user.getAccountStatus()).isEqualTo(AccountStatus.INACTIVE);
-    assertThat(user.getPasswordHash()).isNull();
+    assertThat(user.getPasswordHash()).isEqualTo("encoded-password");
     then(refreshTokenStore).should().delete(1L);
   }
 
