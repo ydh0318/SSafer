@@ -260,8 +260,8 @@ def _audit_firewall(result: ServerAuditResult, runner: Runner, *, allow_sudo: bo
     ufw = runner(["ufw", "status"])
     iptables = runner(["iptables", "-S"])
     if allow_sudo and _looks_like_permission_error(ufw, iptables):
-        ufw = runner(["sudo", "ufw", "status"])
-        iptables = runner(["sudo", "iptables", "-S"])
+        ufw = runner(["sudo", "-n", "ufw", "status"])
+        iptables = runner(["sudo", "-n", "iptables", "-S"])
     result.artifacts.append(ServerArtifact("command-output", "ufw status", asdict(ufw)))
     result.artifacts.append(ServerArtifact("command-output", "iptables -S", asdict(iptables)))
     if ufw.exit_code == 0 and "Status: inactive" in ufw.stdout:
@@ -326,7 +326,7 @@ def _audit_os_packages(result: ServerAuditResult, runner: Runner, *, include_os_
     command = ["trivy", "rootfs", "--scanners", "vuln", "--format", "json", "--quiet", "/"]
     command_result = runner(command)
     if allow_sudo and _looks_like_permission_error(command_result):
-        command_result = runner(["sudo", *command])
+        command_result = runner(["sudo", "-n", *command])
     if command_result.exit_code != 0:
         result.warnings.append(f"Trivy OS package vulnerability scan failed: {_short_command_error(command_result)}")
         result.artifacts.append(ServerArtifact("command-output", "trivy rootfs", asdict(command_result)))

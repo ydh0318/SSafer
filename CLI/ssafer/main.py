@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -121,18 +122,29 @@ def server_audit(
         "--include-os-packages",
         help="Run Trivy rootfs OS package vulnerability scan. This can be slow and may require privileges.",
     ),
+    allow_sudo_option: bool = typer.Option(
+        False,
+        "--allow-sudo",
+        help="Retry privileged server checks with sudo without asking for confirmation.",
+    ),
 ) -> None:
     """Audit runtime security state from inside a server."""
     from ssafer.server.audit import run_server_audit, save_server_audit_result
 
     selected_checks = [item.strip() for item in checks.split(",") if item.strip()] if checks else None
     needs_sudo_prompt = include_os_packages or selected_checks is None or "firewall" in selected_checks
-    allow_sudo = False
-    if needs_sudo_prompt:
-        allow_sudo = typer.confirm(
-            "일부 서버 점검은 sudo 권한이 필요할 수 있습니다. 필요한 명령에만 sudo를 사용하시겠습니까?",
-            default=False,
-        )
+    allow_sudo = allow_sudo_option
+    if needs_sudo_prompt and not allow_sudo:
+        if not _can_prompt_for_sudo():
+            console.print(
+                "[yellow]Some server checks may require sudo. Non-interactive session detected; "
+                "continuing without sudo. Use --allow-sudo to retry privileged checks.[/yellow]"
+            )
+        else:
+            allow_sudo = typer.confirm(
+                "일부 서버 점검은 sudo 권한이 필요할 수 있습니다. 필요한 명령에만 sudo를 사용하시겠습니까?",
+                default=False,
+            )
     result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
     output_root = path.resolve() if path is not None else Path.home()
     output_path = save_server_audit_result(output_root, result)
@@ -151,6 +163,10 @@ def server_audit(
     if details:
         _print_server_audit_details(result)
     console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
+
+
+def _can_prompt_for_sudo() -> bool:
+    return bool(getattr(sys.stdin, "isatty", lambda: False)())
 
 
 @app.command()
