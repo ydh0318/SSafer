@@ -88,15 +88,18 @@ public class User {
   }
 
   public void deactivate() {
-    // 탈퇴한 계정은 비활성화하고, 재활성화 전까지 기존 비밀번호는 사용할 수 없게 한다.
     this.accountStatus = AccountStatus.INACTIVE;
     this.passwordHash = null;
   }
 
   public void reactivate(String displayName, String passwordHash) {
-    // 같은 이메일로 다시 가입하면 기존 계정을 활성화하고 새 비밀번호를 저장한다.
     this.displayName = displayName;
     this.passwordHash = passwordHash;
+    this.accountStatus = AccountStatus.ACTIVE;
+  }
+
+  public void reactivateForOAuth(String displayName) {
+    this.displayName = displayName;
     this.accountStatus = AccountStatus.ACTIVE;
   }
 

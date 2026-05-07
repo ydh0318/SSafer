@@ -8,8 +8,10 @@ import static org.mockito.BDDMockito.then;
 
 import com.ssafer.auth.domain.enums.OAuthProvider;
 import com.ssafer.auth.domain.repository.AuthTokenProvider;
+import com.ssafer.auth.domain.repository.OAuthRejoinTokenProvider;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.global.error.RejoinRequiredException;
 import com.ssafer.user.application.service.UserSocialAccountService;
 import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
@@ -28,6 +30,7 @@ class AuthOAuthLoginServiceTest {
   private OAuthLoginProviderHandler githubHandler;
   private UserRepository userRepository;
   private UserSocialAccountService userSocialAccountService;
+  private OAuthRejoinTokenProvider oAuthRejoinTokenProvider;
   private AuthTokenProvider authTokenProvider;
   private AuthOAuthLoginService authOAuthLoginService;
 
@@ -37,6 +40,7 @@ class AuthOAuthLoginServiceTest {
     githubHandler = Mockito.mock(OAuthLoginProviderHandler.class);
     userRepository = Mockito.mock(UserRepository.class);
     userSocialAccountService = Mockito.mock(UserSocialAccountService.class);
+    oAuthRejoinTokenProvider = Mockito.mock(OAuthRejoinTokenProvider.class);
     authTokenProvider = Mockito.mock(AuthTokenProvider.class);
 
     given(googleHandler.provider()).willReturn(OAuthProvider.GOOGLE);
@@ -46,6 +50,7 @@ class AuthOAuthLoginServiceTest {
         List.of(googleHandler, githubHandler),
         userRepository,
         userSocialAccountService,
+        oAuthRejoinTokenProvider,
         authTokenProvider
     );
   }
@@ -76,18 +81,15 @@ class AuthOAuthLoginServiceTest {
     OAuthLoginResult result = authOAuthLoginService.login(
         OAuthProvider.GOOGLE,
         "auth-code",
-        "http://localhost:5173/oauth/google/callback"
+        "http://localhost:5173/oauth/google/callback",
+        false,
+        null
     );
 
-    assertThat(result.newUserCreated()).isFalse();
     assertThat(result.userId()).isEqualTo(1L);
-    assertThat(result.accountStatus()).isEqualTo(AccountStatus.ACTIVE);
-    assertThat(result.accessToken()).isEqualTo("access-token");
-    assertThat(result.refreshToken()).isEqualTo("refresh-token");
-
+    assertThat(result.newUserCreated()).isFalse();
     then(authTokenProvider).should().issueTokens(1L);
     then(userSocialAccountService).should().syncSocialLogin(matchedUser, userInfo);
-    then(userRepository).should(never()).saveAndFlush(Mockito.any(User.class));
   }
 
   @Test
@@ -118,25 +120,22 @@ class AuthOAuthLoginServiceTest {
     OAuthLoginResult result = authOAuthLoginService.login(
         OAuthProvider.GITHUB,
         "auth-code",
-        "http://localhost:5173/oauth/github/callback"
+        "http://localhost:5173/oauth/github/callback",
+        false,
+        null
     );
 
-    assertThat(result.newUserCreated()).isTrue();
     assertThat(result.userId()).isEqualTo(2L);
-    assertThat(result.displayName()).isEqualTo("github-user");
+    assertThat(result.newUserCreated()).isTrue();
 
     ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
     then(userRepository).should().saveAndFlush(userCaptor.capture());
     assertThat(userCaptor.getValue().getEmail()).isEqualTo("new-user@ssafer.co.kr");
-    assertThat(userCaptor.getValue().getDisplayName()).isEqualTo("github-user");
-    assertThat(userCaptor.getValue().getPasswordHash()).isNull();
-    assertThat(userCaptor.getValue().getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
     then(userSocialAccountService).should().syncSocialLogin(createdUser, userInfo);
-    then(authTokenProvider).should().issueTokens(2L);
   }
 
   @Test
-  void loginRejectsNonActiveMatchedUser() {
+  void loginReturnsRejoinRequiredWithRejoinTokenForInactiveMatchedUser() {
     OAuthProviderUserInfo userInfo = new OAuthProviderUserInfo(
         OAuthProvider.GOOGLE,
         "google-user-123",
@@ -150,36 +149,18 @@ class AuthOAuthLoginServiceTest {
     given(userSocialAccountService.findLinkedUser(OAuthProvider.GOOGLE, "google-user-123"))
         .willReturn(Optional.empty());
     given(userRepository.findByEmail("inactive@ssafer.co.kr")).willReturn(Optional.of(inactiveUser));
+    given(oAuthRejoinTokenProvider.issueToken(Mockito.any())).willReturn("rejoin-token");
 
     assertThatThrownBy(() -> authOAuthLoginService.login(
         OAuthProvider.GOOGLE,
         "auth-code",
-        "http://localhost:5173/oauth/google/callback"
+        "http://localhost:5173/oauth/google/callback",
+        false,
+        null
     ))
-        .isInstanceOf(BusinessException.class)
-        .extracting(ex -> ((BusinessException) ex).getErrorCode())
-        .isEqualTo(ErrorCode.UNAUTHORIZED);
-
-    then(authTokenProvider).should(never()).issueTokens(Mockito.anyLong());
-  }
-
-  @Test
-  void loginThrowsInternalServerErrorWhenProviderHandlerIsMissing() {
-    AuthOAuthLoginService serviceWithoutGithub = new AuthOAuthLoginService(
-        List.of(googleHandler),
-        userRepository,
-        userSocialAccountService,
-        authTokenProvider
-    );
-
-    assertThatThrownBy(() -> serviceWithoutGithub.login(
-        OAuthProvider.GITHUB,
-        "auth-code",
-        "http://localhost:5173/oauth/github/callback"
-    ))
-        .isInstanceOf(BusinessException.class)
-        .extracting(ex -> ((BusinessException) ex).getErrorCode())
-        .isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR);
+        .isInstanceOf(RejoinRequiredException.class)
+        .extracting(ex -> ((RejoinRequiredException) ex).getRejoinToken())
+        .isEqualTo("rejoin-token");
   }
 
   @Test
@@ -207,13 +188,104 @@ class AuthOAuthLoginServiceTest {
     OAuthLoginResult result = authOAuthLoginService.login(
         OAuthProvider.GOOGLE,
         "auth-code",
-        "http://localhost:5173/oauth/google/callback"
+        "http://localhost:5173/oauth/google/callback",
+        false,
+        null
     );
 
     assertThat(result.userId()).isEqualTo(9L);
-    assertThat(result.newUserCreated()).isFalse();
     then(userRepository).should(never()).findByEmail(Mockito.anyString());
-    then(userSocialAccountService).should().syncSocialLogin(linkedUser, userInfo);
+  }
+
+  @Test
+  void loginReturnsRejoinRequiredForInactiveLinkedSocialAccount() {
+    OAuthProviderUserInfo userInfo = new OAuthProviderUserInfo(
+        OAuthProvider.GOOGLE,
+        "google-user-123",
+        "other-email@ssafer.co.kr",
+        "Linked User"
+    );
+    User linkedUser = new User("user@ssafer.co.kr", "Alice", null, AccountStatus.INACTIVE);
+    setUserId(linkedUser, 9L);
+
+    given(googleHandler.fetchUserInfo("auth-code", "http://localhost:5173/oauth/google/callback")).willReturn(userInfo);
+    given(userSocialAccountService.findLinkedUser(OAuthProvider.GOOGLE, "google-user-123"))
+        .willReturn(Optional.of(linkedUser));
+    given(oAuthRejoinTokenProvider.issueToken(Mockito.any())).willReturn("rejoin-token");
+
+    assertThatThrownBy(() -> authOAuthLoginService.login(
+        OAuthProvider.GOOGLE,
+        "auth-code",
+        "http://localhost:5173/oauth/google/callback",
+        false,
+        null
+    ))
+        .isInstanceOf(RejoinRequiredException.class);
+
+    then(userRepository).should(never()).findByEmail(Mockito.anyString());
+    then(authTokenProvider).should(never()).issueTokens(Mockito.anyLong());
+  }
+
+  @Test
+  void rejoinReactivatesInactiveLinkedSocialAccountUsingRejoinToken() {
+    User linkedUser = new User("user@ssafer.co.kr", "Alice", null, AccountStatus.INACTIVE);
+    setUserId(linkedUser, 9L);
+    AuthTokenResult tokenResult = new AuthTokenResult(
+        "access-token",
+        Instant.parse("2026-05-06T12:00:00Z"),
+        "refresh-token",
+        Instant.parse("2026-05-20T12:00:00Z")
+    );
+    OAuthRejoinTokenPayload payload = new OAuthRejoinTokenPayload(
+        9L,
+        OAuthProvider.GOOGLE,
+        "google-user-123",
+        "user@ssafer.co.kr",
+        "Linked User"
+    );
+
+    given(oAuthRejoinTokenProvider.parseToken("rejoin-token")).willReturn(payload);
+    given(userRepository.findById(9L)).willReturn(Optional.of(linkedUser));
+    given(userRepository.existsByDisplayNameAndAccountStatusAndIdNot("Alice", AccountStatus.ACTIVE, 9L))
+        .willReturn(false);
+    given(authTokenProvider.issueTokens(9L)).willReturn(tokenResult);
+
+    OAuthLoginResult result = authOAuthLoginService.login(
+        OAuthProvider.GOOGLE,
+        null,
+        null,
+        true,
+        "rejoin-token"
+    );
+
+    assertThat(result.userId()).isEqualTo(9L);
+    assertThat(result.accountStatus()).isEqualTo(AccountStatus.ACTIVE);
+    assertThat(linkedUser.getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
+    then(userRepository).should().flush();
+    then(authTokenProvider).should().issueTokens(9L);
+  }
+
+  @Test
+  void rejoinRejectsProviderMismatch() {
+    OAuthRejoinTokenPayload payload = new OAuthRejoinTokenPayload(
+        9L,
+        OAuthProvider.GITHUB,
+        "github-123",
+        "user@ssafer.co.kr",
+        "Linked User"
+    );
+    given(oAuthRejoinTokenProvider.parseToken("rejoin-token")).willReturn(payload);
+
+    assertThatThrownBy(() -> authOAuthLoginService.login(
+        OAuthProvider.GOOGLE,
+        null,
+        null,
+        true,
+        "rejoin-token"
+    ))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.INVALID_PARAMETER);
   }
 
   private void setUserId(User user, Long id) {

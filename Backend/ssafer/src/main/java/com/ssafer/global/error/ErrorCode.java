@@ -23,6 +23,11 @@ public enum ErrorCode {
       "SOCIAL_ACCOUNT_DISCONNECT_NOT_ALLOWED",
       "Cannot disconnect the last available sign-in method"
   ),
+  REJOIN_REQUIRED(
+      HttpStatus.CONFLICT,
+      "REJOIN_REQUIRED",
+      "Rejoin confirmation is required for the withdrawn account"
+  ),
   INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect"),
   EMAIL_VERIFICATION_REQUIRED(
       HttpStatus.BAD_REQUEST,

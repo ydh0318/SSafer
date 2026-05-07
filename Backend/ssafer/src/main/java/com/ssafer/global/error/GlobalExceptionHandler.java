@@ -25,6 +25,21 @@ public class GlobalExceptionHandler {
 
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+  @ExceptionHandler(RejoinRequiredException.class)
+  public ResponseEntity<ApiErrorResponse> handleRejoinRequiredException(
+      HttpServletRequest request,
+      RejoinRequiredException ex
+  ) {
+    ErrorCode code = ex.getErrorCode();
+    ApiLogContext.markFailure(
+        request,
+        "Business validation",
+        code.code() + ": " + describeErrorCode(code)
+    );
+    return ResponseEntity.status(code.status())
+        .body(ApiErrorResponse.of(code.code(), code.message(), Map.of("rejoinToken", ex.getRejoinToken())));
+  }
+
   @ExceptionHandler(BusinessException.class)
   public ResponseEntity<ApiErrorResponse> handleBusinessException(
       HttpServletRequest request,
@@ -196,6 +211,7 @@ public class GlobalExceptionHandler {
       case SOCIAL_ACCOUNT_ALREADY_LINKED -> "Social account is already linked.";
       case SOCIAL_ACCOUNT_NOT_LINKED -> "Social account is not linked.";
       case SOCIAL_ACCOUNT_DISCONNECT_NOT_ALLOWED -> "Cannot disconnect the last available sign-in method.";
+      case REJOIN_REQUIRED -> "Rejoin confirmation is required for the withdrawn account.";
       case INVALID_CREDENTIALS -> "Email or password is incorrect.";
       case EMAIL_VERIFICATION_REQUIRED -> "Verified email is required before registration.";
       case EMAIL_VERIFICATION_CODE_INVALID -> "Email verification code is invalid or expired.";
