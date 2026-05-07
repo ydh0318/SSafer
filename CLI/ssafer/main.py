@@ -234,6 +234,7 @@ def apply_fix(
             raise PatchError(
                 "analysis_result.json not found. Use --analysis-result or place it under .ssafer/analysis_result.json."
             )
+        console.print(f"[dim]Analysis result: {analysis_path}[/dim]")
 
         candidates = load_patch_candidates_from_file(analysis_path)
         selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
@@ -284,7 +285,7 @@ def _select_patch_candidates(
     patch_id: str | None,
     yes: bool,
 ) -> list["PatchCandidate"]:
-    table = Table(title="Patch candidates")
+    table = Table(title="Applicable patch candidates")
     table.add_column("No.", justify="right")
     table.add_column("Patch ID")
     table.add_column("Finding ID")
@@ -299,7 +300,7 @@ def _select_patch_candidates(
             candidate.operation,
         )
     if len(candidates) > 1 and patch_id is None:
-        table.add_row(str(len(candidates) + 1), "ALL", "-", "All patch candidates", "-")
+        table.add_row(str(len(candidates) + 1), "ALL", "-", "Apply all patch candidates", "-")
     console.print(table)
 
     if patch_id is not None or yes or len(candidates) == 1:

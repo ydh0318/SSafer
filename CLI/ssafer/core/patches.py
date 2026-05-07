@@ -37,15 +37,46 @@ class PatchApplyResult:
 def find_default_analysis_result(project_root: Path) -> Path | None:
     candidates = [
         project_root / ".ssafer" / "analysis_result.json",
+        project_root / ".ssafer" / "analysis" / "analysis_result.json",
         project_root / ".ssafer" / "results" / "analysis_result.json",
         project_root / "analysis_result.json",
+        project_root / "AI" / "data" / "analysis_result.json",
     ]
-    return next((candidate for candidate in candidates if candidate.exists()), None)
+    discovered = [
+        *[candidate for candidate in candidates if candidate.exists()],
+        *_iter_analysis_result_candidates(project_root),
+    ]
+    unique = list(dict.fromkeys(discovered))
+    if not unique:
+        return None
+    return max(unique, key=lambda path: path.stat().st_mtime)
 
 
 def load_patch_candidates_from_file(path: Path) -> list[PatchCandidate]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     return extract_patch_candidates(payload)
+
+
+def _iter_analysis_result_candidates(project_root: Path) -> list[Path]:
+    ignored_dirs = {
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        ".venv",
+        "build",
+        "dist",
+        "node_modules",
+        "venv",
+    }
+    candidates: list[Path] = []
+    for path in project_root.rglob("analysis_result*.json"):
+        if any(part in ignored_dirs for part in path.relative_to(project_root).parts):
+            continue
+        if path.is_file():
+            candidates.append(path)
+    return candidates
 
 
 def extract_patch_candidates(payload: dict[str, Any]) -> list[PatchCandidate]:
