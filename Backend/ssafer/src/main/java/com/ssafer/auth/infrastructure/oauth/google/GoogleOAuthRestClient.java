@@ -48,10 +48,12 @@ public class GoogleOAuthRestClient implements GoogleOAuthApiClient {
       return Objects.requireNonNull(response);
     } catch (RestClientResponseException ex) {
       log.error("Google OAuth token exchange failed. status={}, response={}", ex.getStatusCode(), ex.getResponseBodyAsString());
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw translateProviderResponse(ex);
+    } catch (BusinessException ex) {
+      throw ex;
     } catch (Exception ex) {
       log.error("Google OAuth token exchange request failed", ex);
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
     }
   }
 
@@ -66,10 +68,12 @@ public class GoogleOAuthRestClient implements GoogleOAuthApiClient {
       return Objects.requireNonNull(response);
     } catch (RestClientResponseException ex) {
       log.error("Google OAuth user info fetch failed. status={}, response={}", ex.getStatusCode(), ex.getResponseBodyAsString());
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw translateProviderResponse(ex);
+    } catch (BusinessException ex) {
+      throw ex;
     } catch (Exception ex) {
       log.error("Google OAuth user info request failed", ex);
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
     }
   }
 
@@ -81,5 +85,12 @@ public class GoogleOAuthRestClient implements GoogleOAuthApiClient {
 
   private boolean isBlank(String value) {
     return value == null || value.isBlank();
+  }
+
+  private BusinessException translateProviderResponse(RestClientResponseException ex) {
+    if (ex.getStatusCode().is4xxClientError()) {
+      return new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
+    }
+    return new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
   }
 }

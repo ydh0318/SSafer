@@ -186,6 +186,19 @@ class AuthenticationFlowTest {
           usersById.put(userId, user);
           return user;
         });
+    given(userRepository.saveAndFlush(any(User.class)))
+        .willAnswer(invocation -> {
+          User user = invocation.getArgument(0);
+          if (user.getId() == null) {
+            Long userId = sequence.getAndIncrement();
+            ReflectionTestUtils.setField(user, "id", userId);
+            usersById.put(userId, user);
+          } else {
+            usersById.put(user.getId(), user);
+          }
+          usersByEmail.put(user.getEmail(), user);
+          return user;
+        });
   }
 
   private static class InMemoryRefreshTokenStore implements RefreshTokenStore {

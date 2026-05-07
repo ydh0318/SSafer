@@ -24,7 +24,7 @@ public class GoogleOAuthLoginProviderHandler implements OAuthLoginProviderHandle
   public OAuthProviderUserInfo fetchUserInfo(String authorizationCode, String redirectUri) {
     GoogleOAuthTokenResponse tokenResponse = googleOAuthApiClient.exchangeAuthorizationCode(authorizationCode, redirectUri);
     if (tokenResponse.accessToken() == null || tokenResponse.accessToken().isBlank()) {
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
     }
 
     GoogleOAuthUserInfoResponse userInfo = googleOAuthApiClient.fetchUserInfo(tokenResponse.accessToken());
@@ -34,7 +34,7 @@ public class GoogleOAuthLoginProviderHandler implements OAuthLoginProviderHandle
         || userInfo.email() == null
         || userInfo.email().isBlank()
         || !Boolean.TRUE.equals(userInfo.emailVerified())) {
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
     }
 
     return new OAuthProviderUserInfo(

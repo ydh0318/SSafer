@@ -8,6 +8,36 @@ public enum ErrorCode {
   NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "Resource not found"),
   DUPLICATE_EMAIL(HttpStatus.CONFLICT, "DUPLICATE_EMAIL", "Email is already registered"),
   DUPLICATE_DISPLAY_NAME(HttpStatus.CONFLICT, "DUPLICATE_DISPLAY_NAME", "Nickname is already in use"),
+  SOCIAL_ACCOUNT_ALREADY_LINKED(
+      HttpStatus.CONFLICT,
+      "SOCIAL_ACCOUNT_ALREADY_LINKED",
+      "Social account is already linked"
+  ),
+  SOCIAL_ACCOUNT_NOT_LINKED(
+      HttpStatus.NOT_FOUND,
+      "SOCIAL_ACCOUNT_NOT_LINKED",
+      "Social account is not linked"
+  ),
+  SOCIAL_ACCOUNT_DISCONNECT_NOT_ALLOWED(
+      HttpStatus.CONFLICT,
+      "SOCIAL_ACCOUNT_DISCONNECT_NOT_ALLOWED",
+      "Cannot disconnect the last available sign-in method"
+  ),
+  REJOIN_REQUIRED(
+      HttpStatus.CONFLICT,
+      "REJOIN_REQUIRED",
+      "Rejoin confirmation is required for the withdrawn account"
+  ),
+  OAUTH_AUTHENTICATION_FAILED(
+      HttpStatus.UNAUTHORIZED,
+      "OAUTH_AUTHENTICATION_FAILED",
+      "OAuth authentication failed"
+  ),
+  OAUTH_PROVIDER_UNAVAILABLE(
+      HttpStatus.BAD_GATEWAY,
+      "OAUTH_PROVIDER_UNAVAILABLE",
+      "OAuth provider is unavailable"
+  ),
   INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect"),
   EMAIL_VERIFICATION_REQUIRED(
       HttpStatus.BAD_REQUEST,

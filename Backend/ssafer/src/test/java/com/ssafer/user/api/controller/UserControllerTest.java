@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssafer.auth.application.service.AuthTokenResult;
+import com.ssafer.auth.domain.enums.OAuthProvider;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
@@ -20,8 +21,11 @@ import com.ssafer.user.application.service.UserPasswordService;
 import com.ssafer.user.application.service.UserProfileResult;
 import com.ssafer.user.application.service.UserProfileService;
 import com.ssafer.user.application.service.UserRegistrationService;
+import com.ssafer.user.application.service.UserSocialAccountResult;
+import com.ssafer.user.application.service.UserSocialAccountService;
 import com.ssafer.user.application.service.UserWithdrawalService;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -36,6 +40,7 @@ class UserControllerTest {
   private UserRegistrationService userRegistrationService;
   private UserProfileService userProfileService;
   private UserPasswordService userPasswordService;
+  private UserSocialAccountService userSocialAccountService;
   private UserWithdrawalService userWithdrawalService;
 
   @BeforeEach
@@ -44,12 +49,14 @@ class UserControllerTest {
     userRegistrationService = Mockito.mock(UserRegistrationService.class);
     userProfileService = Mockito.mock(UserProfileService.class);
     userPasswordService = Mockito.mock(UserPasswordService.class);
+    userSocialAccountService = Mockito.mock(UserSocialAccountService.class);
     userWithdrawalService = Mockito.mock(UserWithdrawalService.class);
     UserController controller = new UserController(
         currentActorProvider,
         userRegistrationService,
         userProfileService,
         userPasswordService,
+        userSocialAccountService,
         userWithdrawalService
     );
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
@@ -209,6 +216,117 @@ class UserControllerTest {
         .andExpect(jsonPath("$.message").value("User profile retrieval succeeded"))
         .andExpect(jsonPath("$.data.email").value("user@ssafer.co.kr"))
         .andExpect(jsonPath("$.data.displayName").value("Alice"));
+  }
+
+  @Test
+  void getCurrentUserSocialAccountsReturnsProviderStatuses() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(userSocialAccountService.getCurrentUserSocialAccounts(actor)).willReturn(List.of(
+        new UserSocialAccountResult(
+            OAuthProvider.GOOGLE,
+            true,
+            "user@gmail.com",
+            Instant.parse("2026-05-07T00:00:00Z")
+        ),
+        new UserSocialAccountResult(OAuthProvider.GITHUB, false, null, null)
+    ));
+
+    mockMvc.perform(get("/api/v1/users/me/socials"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Connected social accounts retrieval succeeded"))
+        .andExpect(jsonPath("$.data.socials[0].provider").value("GOOGLE"))
+        .andExpect(jsonPath("$.data.socials[0].connected").value(true))
+        .andExpect(jsonPath("$.data.socials[0].email").value("user@gmail.com"))
+        .andExpect(jsonPath("$.data.socials[1].provider").value("GITHUB"))
+        .andExpect(jsonPath("$.data.socials[1].connected").value(false));
+  }
+
+  @Test
+  void connectGoogleSocialAccountReturnsConnectedAccount() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(userSocialAccountService.connectCurrentUserSocialAccount(
+        actor,
+        OAuthProvider.GOOGLE,
+        "google-code",
+        "http://localhost:5173/oauth/google/callback"
+    )).willReturn(new UserSocialAccountResult(
+        OAuthProvider.GOOGLE,
+        true,
+        "user@gmail.com",
+        Instant.parse("2026-05-07T00:00:00Z")
+    ));
+
+    mockMvc.perform(post("/api/v1/users/me/socials/google")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "authorizationCode": "google-code",
+                  "redirectUri": "http://localhost:5173/oauth/google/callback"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Social account connection succeeded"))
+        .andExpect(jsonPath("$.data.provider").value("GOOGLE"))
+        .andExpect(jsonPath("$.data.connected").value(true))
+        .andExpect(jsonPath("$.data.email").value("user@gmail.com"));
+  }
+
+  @Test
+  void connectGoogleSocialAccountWithoutBodyReturnsInvalidParameter() throws Exception {
+    mockMvc.perform(post("/api/v1/users/me/socials/google")
+            .contentType(APPLICATION_JSON))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+  }
+
+  @Test
+  void connectGithubSocialAccountReturnsConflictWhenAlreadyLinked() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(userSocialAccountService.connectCurrentUserSocialAccount(
+        actor,
+        OAuthProvider.GITHUB,
+        "github-code",
+        "http://localhost:5173/oauth/github/callback"
+    )).willThrow(new BusinessException(ErrorCode.SOCIAL_ACCOUNT_ALREADY_LINKED));
+
+    mockMvc.perform(post("/api/v1/users/me/socials/github")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "authorizationCode": "github-code",
+                  "redirectUri": "http://localhost:5173/oauth/github/callback"
+                }
+                """))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("SOCIAL_ACCOUNT_ALREADY_LINKED"));
+  }
+
+  @Test
+  void disconnectGithubSocialAccountReturnsSuccess() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+
+    mockMvc.perform(delete("/api/v1/users/me/socials/github"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Social account disconnection succeeded"));
+
+    then(userSocialAccountService).should().disconnectCurrentUserSocialAccount(actor, OAuthProvider.GITHUB);
+  }
+
+  @Test
+  void disconnectGoogleSocialAccountReturnsConflictWhenLastSignInMethod() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    Mockito.doThrow(new BusinessException(ErrorCode.SOCIAL_ACCOUNT_DISCONNECT_NOT_ALLOWED))
+        .when(userSocialAccountService)
+        .disconnectCurrentUserSocialAccount(actor, OAuthProvider.GOOGLE);
+
+    mockMvc.perform(delete("/api/v1/users/me/socials/google"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("SOCIAL_ACCOUNT_DISCONNECT_NOT_ALLOWED"));
   }
 
   @Test
