@@ -58,9 +58,17 @@ pipeline {
             steps {
                 script { FAILED_STAGE = 'Build Images' }
                 sh '''
+                    set -a
+                    . "$DEPLOY_ROOT/Infra/docker/ec2-1/prod/.env"
+                    set +a
                     docker build -f Infra/docker/dockerfiles/Dockerfile.spring -t "$SPRING_IMAGE" .
                     docker build -f Infra/docker/dockerfiles/Dockerfile.fastapi -t "$FASTAPI_IMAGE" .
-                    docker build -f Infra/docker/dockerfiles/nginx/Dockerfile -t "$NGINX_IMAGE" .
+                    : "${VITE_GOOGLE_CLIENT_ID:?VITE_GOOGLE_CLIENT_ID is required for frontend OAuth build}"
+                    : "${VITE_GITHUB_CLIENT_ID:?VITE_GITHUB_CLIENT_ID is required for frontend OAuth build}"
+                    docker build -f Infra/docker/dockerfiles/nginx/Dockerfile \
+                      --build-arg VITE_GOOGLE_CLIENT_ID="$VITE_GOOGLE_CLIENT_ID" \
+                      --build-arg VITE_GITHUB_CLIENT_ID="$VITE_GITHUB_CLIENT_ID" \
+                      -t "$NGINX_IMAGE" .
                 '''
             }
         }
