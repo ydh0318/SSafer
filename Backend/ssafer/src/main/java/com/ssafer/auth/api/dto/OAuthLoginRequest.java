@@ -12,9 +12,9 @@ public record OAuthLoginRequest(
     String authorizationCode,
     @Schema(description = "OAuth redirect URI", example = "http://localhost:5173/oauth/google/callback")
     String redirectUri,
-    @Schema(description = "Confirm rejoin for a withdrawn account", example = "false")
+    @Schema(description = "REJOIN_REQUIRED 응답 이후 재가입을 확정할 때만 true로 보냅니다.", example = "false")
     Boolean confirmRejoin,
-    @Schema(description = "Rejoin token issued when REJOIN_REQUIRED is returned")
+    @Schema(description = "REJOIN_REQUIRED 응답에서 발급되며 계정 재활성화 확인에 사용하는 짧은 수명의 토큰입니다.")
     String rejoinToken
 ) {
 }

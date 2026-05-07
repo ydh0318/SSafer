@@ -80,22 +80,36 @@ public class AuthController {
 
   @PostMapping("/oauth/login")
   @Operation(
-      summary = "OAuth login",
-      description = "Fetch OAuth user info from the provider, then create, match, or rejoin a user and issue tokens."
+      summary = "OAuth 로그인",
+      description = """
+          OAuth 인가 코드를 제공자 사용자 정보로 교환한 뒤, 기존 계정을 매칭하거나 신규 계정을 생성해 로그인합니다.
+          탈퇴한 계정에 연결된 소셜 계정이면 먼저 REJOIN_REQUIRED와 rejoinToken을 반환합니다.
+          이후 confirmRejoin=true와 rejoinToken으로 같은 API를 다시 호출하면 해당 계정을 재활성화합니다.
+          """
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "OAuth login succeeded",
+          description = "OAuth 로그인 성공",
           content = @Content(schema = @Schema(implementation = OAuthLoginResponseData.class))
       ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request payload"),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "OAuth authentication failed"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 본문이 올바르지 않습니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "401",
+          description = "OAuth 인증에 실패했거나 제공자에서 검증 가능한 사용자 식별 정보를 주지 않았습니다."
+      ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "409",
-          description = "Rejoin confirmation is required for the withdrawn account"
+          description = "탈퇴한 계정이므로 재가입 확인이 필요합니다."
       ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "OAuth provider or server error")
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "502",
+          description = "OAuth 제공자 장애 또는 외부 서버 오류가 발생했습니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "500",
+          description = "예상하지 못한 서버 내부 오류가 발생했습니다."
+      )
   })
   public ResponseEntity<ApiResponse<OAuthLoginResponseData>> oauthLogin(@Valid @RequestBody OAuthLoginRequest request) {
     boolean confirmRejoin = Boolean.TRUE.equals(request.confirmRejoin());
@@ -166,12 +180,14 @@ public class AuthController {
 
   private void validateOAuthLoginRequest(OAuthLoginRequest request, boolean confirmRejoin) {
     if (confirmRejoin) {
+      // 재가입 확인 단계에서는 OAuth 인가 코드를 재사용하지 않고 짧은 수명의 rejoinToken만 사용한다.
       if (request.rejoinToken() == null || request.rejoinToken().isBlank()) {
         throw new BusinessException(ErrorCode.INVALID_PARAMETER);
       }
       return;
     }
 
+    // 최초 OAuth 로그인 시도에는 새 authorization code와 redirect URI가 반드시 포함돼야 한다.
     if (request.authorizationCode() == null
         || request.authorizationCode().isBlank()
         || request.redirectUri() == null

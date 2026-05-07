@@ -199,6 +199,20 @@ public class UserController {
   }
 
   @GetMapping("/me/socials")
+  @Operation(
+      summary = "연결된 소셜 계정 조회",
+      description = "현재 로그인한 회원의 Google, GitHub 연결 상태를 조회합니다."
+  )
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "연결된 소셜 계정 조회 성공",
+          content = @Content(schema = @Schema(implementation = SocialAccountsResponseData.class))
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요합니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "게스트 계정은 회원 소셜 계정을 관리할 수 없습니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "현재 활성 회원 정보를 찾을 수 없습니다.")
+  })
   public ResponseEntity<ApiResponse<SocialAccountsResponseData>> getCurrentUserSocialAccounts() {
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     SocialAccountsResponseData responseData = new SocialAccountsResponseData(
@@ -213,6 +227,21 @@ public class UserController {
   }
 
   @PostMapping("/me/socials/google")
+  @Operation(
+      summary = "Google 계정 연결",
+      description = "OAuth 인가 코드를 사용해 현재 로그인한 회원 계정에 Google 계정을 연결합니다."
+  )
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "Google 계정 연결 성공",
+          content = @Content(schema = @Schema(implementation = SocialAccountResponseData.class))
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "인가 코드 또는 redirect URI 요청값이 올바르지 않습니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요하거나 Google 인증에 실패했습니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 연결된 Google 계정이거나 다른 회원에게 연결된 계정입니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "502", description = "Google OAuth 제공자를 사용할 수 없습니다.")
+  })
   public ResponseEntity<ApiResponse<SocialAccountResponseData>> connectGoogleSocialAccount(
       @Valid @RequestBody(required = false) SocialAccountConnectRequest request
   ) {
@@ -220,11 +249,36 @@ public class UserController {
   }
 
   @DeleteMapping("/me/socials/google")
+  @Operation(
+      summary = "Google 계정 연결 해제",
+      description = "현재 로그인한 회원 계정에서 Google 계정 연결을 해제합니다."
+  )
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Google 계정 연결 해제 성공"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요합니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "연결된 Google 계정이 없습니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "마지막 로그인 수단은 해제할 수 없습니다.")
+  })
   public ResponseEntity<ApiResponse<Void>> disconnectGoogleSocialAccount() {
     return disconnectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GOOGLE);
   }
 
   @PostMapping("/me/socials/github")
+  @Operation(
+      summary = "GitHub 계정 연결",
+      description = "OAuth 인가 코드를 사용해 현재 로그인한 회원 계정에 GitHub 계정을 연결합니다."
+  )
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "GitHub 계정 연결 성공",
+          content = @Content(schema = @Schema(implementation = SocialAccountResponseData.class))
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "인가 코드 또는 redirect URI 요청값이 올바르지 않습니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요하거나 GitHub 인증에 실패했습니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 연결된 GitHub 계정이거나 다른 회원에게 연결된 계정입니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "502", description = "GitHub OAuth 제공자를 사용할 수 없습니다.")
+  })
   public ResponseEntity<ApiResponse<SocialAccountResponseData>> connectGithubSocialAccount(
       @Valid @RequestBody(required = false) SocialAccountConnectRequest request
   ) {
@@ -232,6 +286,16 @@ public class UserController {
   }
 
   @DeleteMapping("/me/socials/github")
+  @Operation(
+      summary = "GitHub 계정 연결 해제",
+      description = "현재 로그인한 회원 계정에서 GitHub 계정 연결을 해제합니다."
+  )
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "GitHub 계정 연결 해제 성공"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요합니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "연결된 GitHub 계정이 없습니다."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "마지막 로그인 수단은 해제할 수 없습니다.")
+  })
   public ResponseEntity<ApiResponse<Void>> disconnectGithubSocialAccount() {
     return disconnectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GITHUB);
   }
@@ -371,6 +435,7 @@ public class UserController {
       com.ssafer.auth.domain.enums.OAuthProvider provider,
       SocialAccountConnectRequest request
   ) {
+    // 소셜 계정 연결은 이미 로그인된 회원 세션에서만 수행한다.
     if (request == null || request.authorizationCode() == null || request.redirectUri() == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -391,6 +456,7 @@ public class UserController {
   private ResponseEntity<ApiResponse<Void>> disconnectSocialAccount(
       com.ssafer.auth.domain.enums.OAuthProvider provider
   ) {
+    // 계정을 사용할 수 없는 상태로 만들지 않도록 마지막 로그인 수단 해제는 막는다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     userSocialAccountService.disconnectCurrentUserSocialAccount(actor, provider);
     return ResponseEntity.ok(ApiResponse.success(SOCIAL_ACCOUNT_DISCONNECT_SUCCESS_MESSAGE, null));

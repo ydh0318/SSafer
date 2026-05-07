@@ -69,6 +69,7 @@ public class UserSocialAccountService {
       throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_ALREADY_LINKED);
     }
 
+    // 제공자에서 확인한 소셜 사용자 정보를 현재 로그인한 회원 계정에 연결한다.
     OAuthProviderUserInfo userInfo = fetchUserInfo(provider, authorizationCode, redirectUri);
     UserSocialAccount linkedAccount = createSocialAccountLink(user, userInfo);
     return toResult(provider, linkedAccount);
@@ -80,6 +81,7 @@ public class UserSocialAccountService {
     UserSocialAccount linkedAccount = userSocialAccountRepository.findByUserIdAndProvider(user.getId(), provider)
         .orElseThrow(() -> new BusinessException(ErrorCode.SOCIAL_ACCOUNT_NOT_LINKED));
 
+    // 비밀번호 또는 다른 소셜 계정 중 하나는 남아 있어야 하므로 마지막 로그인 수단 해제는 막는다.
     if (!user.hasPasswordCredential() && userSocialAccountRepository.countByUserId(user.getId()) <= 1) {
       throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_DISCONNECT_NOT_ALLOWED);
     }
@@ -100,6 +102,7 @@ public class UserSocialAccountService {
         .orElse(null);
 
     if (existingByProvider != null) {
+      // 같은 provider에 다른 providerUserId가 들어오면 다른 사용자 소유 계정으로 본다.
       if (!existingByProvider.getProviderUserId().equals(userInfo.providerUserId())) {
         throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_ALREADY_LINKED);
       }

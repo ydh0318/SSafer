@@ -56,6 +56,7 @@ public class AuthOAuthLoginService {
       String rejoinToken
   ) {
     if (confirmRejoin) {
+      // 재가입 확인 단계에서는 같은 OAuth 인가 코드를 두 번 소비하지 않도록 rejoinToken만 사용한다.
       return rejoin(provider, rejoinToken);
     }
 
@@ -67,6 +68,8 @@ public class AuthOAuthLoginService {
     OAuthProviderUserInfo userInfo = handler.fetchUserInfo(authorizationCode, redirectUri);
     String normalizedEmail = normalizeEmail(userInfo.email());
 
+    // 소셜 링크를 가장 먼저 신뢰하고, 그다음 이메일로 기존 계정을 찾고,
+    // 둘 다 없을 때만 신규 회원을 생성한다.
     ResolvedOAuthUser resolvedUser = resolveOrCreateUser(userInfo, normalizedEmail, userInfo.displayName());
     User user = resolvedUser.user();
     if (user.getAccountStatus() != AccountStatus.ACTIVE) {
@@ -184,6 +187,7 @@ public class AuthOAuthLoginService {
       baseDisplayName = normalizeDisplayNameCandidate(providerDisplayName, email);
     }
 
+    // 재가입 시 기존 계정 자체는 유지하면서, 휴면 기간 중 생긴 닉네임 충돌만 해소한다.
     String resolvedDisplayName = resolveRejoinDisplayName(user.getId(), baseDisplayName);
     user.reactivateForOAuth(resolvedDisplayName);
     userRepository.flush();
