@@ -67,6 +67,46 @@ export interface AuthTokenData {
   refreshTokenExpiresAt?: string;
 }
 
+export type OAuthProvider = 'GOOGLE' | 'GITHUB';
+
+export interface OAuthLoginRequest {
+  provider: OAuthProvider;
+  authorizationCode?: string;
+  redirectUri?: string;
+  confirmRejoin?: boolean;
+  rejoinToken?: string;
+}
+
+export interface OAuthLoginData extends AuthTokenData {
+  provider: OAuthProvider;
+  providerUserId: string;
+  email: string;
+  displayName: string;
+  newUserCreated: boolean;
+  userId: number | string;
+  accountStatus: string;
+}
+
+export interface RejoinRequiredData {
+  rejoinToken: string;
+}
+
+export interface SocialAccount {
+  provider: OAuthProvider;
+  connected: boolean;
+  email: string | null;
+  connectedAt: string | null;
+}
+
+export interface SocialAccountsData {
+  socials: SocialAccount[];
+}
+
+export interface SocialConnectRequest {
+  authorizationCode: string;
+  redirectUri: string;
+}
+
 export interface RefreshTokenRequest {
   refreshToken: string;
 }

@@ -1,44 +1,20 @@
 import { LoaderCircle } from 'lucide-react';
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import AppBrand from '../../../components/common/AppBrand';
 import ThemeToggleButton from '../../../components/common/ThemeToggleButton';
 import { ROUTES } from '../../../constants/routes';
-import { useAuthStore } from '../../../store/authStore';
-import { enterGuestMode } from '../api/guest';
+import useGuestEntry from '../hooks/useGuestEntry';
 
 function AuthTopNav() {
   const navigate = useNavigate();
-  const login = useAuthStore((state) => state.login);
-  const [isGuestPending, setIsGuestPending] = useState(false);
-  const [guestErrorMessage, setGuestErrorMessage] = useState<string | null>(null);
+  const { errorMessage: guestErrorMessage, isPending: isGuestPending, startGuestEntry } = useGuestEntry();
 
   const handleGuestEntry = async () => {
-    setIsGuestPending(true);
-    setGuestErrorMessage(null);
+    const succeeded = await startGuestEntry();
 
-    try {
-      const session = await enterGuestMode();
-
-      login({
-        accessToken: session.guestAccessToken,
-        refreshToken: null,
-        user: {
-          id: `guest:${session.expiresAt}`,
-          email: 'guest@ssafer.local',
-          name: 'Guest User',
-          role: 'GUEST',
-        },
-      });
-
+    if (succeeded) {
       navigate(ROUTES.root);
-    } catch (error) {
-      setGuestErrorMessage(
-        error instanceof Error ? error.message : '게스트 모드 진입에 실패했습니다. 잠시 후 다시 시도해 주세요.',
-      );
-    } finally {
-      setIsGuestPending(false);
     }
   };
 
@@ -57,7 +33,7 @@ function AuthTopNav() {
             type="button"
           >
             {isGuestPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-            <span className="site-header-link-label hidden sm:inline">게스트 모드로 이용</span>
+            <span className="site-header-link-label hidden sm:inline">게스트 모드로 시작</span>
             <span className="site-header-link-label sm:hidden">게스트</span>
           </button>
         </nav>

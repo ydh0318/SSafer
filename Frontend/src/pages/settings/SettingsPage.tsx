@@ -11,6 +11,7 @@ import {
   logoutCurrentUser,
   updateCurrentUserProfile,
 } from '../../features/auth/api/member';
+import SocialAccountsPanel from '../../features/auth/components/SocialAccountsPanel';
 import { useAuthStore } from '../../store/authStore';
 import type { AuthUser } from '../../types/auth';
 
@@ -30,11 +31,11 @@ type PasswordFormValues = {
 type PasswordFieldErrors = Partial<Record<keyof PasswordFormValues, string>>;
 
 const tabs: Array<{ id: SettingsTab; label: string; icon: typeof User }> = [
-  { id: 'profile', label: '프로필', icon: User },
-  { id: 'security', label: '보안', icon: Lock },
-  { id: 'notify', label: '알림', icon: BellRing },
-  { id: 'token', label: '토큰', icon: KeyRound },
-  { id: 'danger', label: '위험 구역', icon: AlertTriangle },
+  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'security', label: 'Security', icon: Lock },
+  { id: 'notify', label: 'Notifications', icon: BellRing },
+  { id: 'token', label: 'Social', icon: KeyRound },
+  { id: 'danger', label: 'Danger Zone', icon: AlertTriangle },
 ];
 
 const initialPasswordForm: PasswordFormValues = {
@@ -73,9 +74,9 @@ function validatePasswordForm(values: PasswordFormValues): PasswordFieldErrors {
   }
 
   if (!values.confirmPassword) {
-    errors.confirmPassword = '새 비밀번호 확인을 입력해 주세요.';
+    errors.confirmPassword = '새 비밀번호 확인 값을 입력해 주세요.';
   } else if (values.newPassword !== values.confirmPassword) {
-    errors.confirmPassword = '새 비밀번호와 동일하게 입력해 주세요.';
+    errors.confirmPassword = '새 비밀번호와 확인 값이 일치하지 않습니다.';
   }
 
   return errors;
@@ -86,19 +87,19 @@ function getProfileErrorMessage(error: unknown) {
     const status = error.response?.status;
 
     if (status === 401) {
-      return '인증이 만료되었습니다. 다시 로그인해 주세요.';
+      return '로그인이 필요하거나 세션이 만료되었습니다.';
     }
 
     if (status === 403) {
-      return '회원 계정만 설정을 확인할 수 있습니다.';
+      return '게스트 계정은 회원 프로필을 조회할 수 없습니다.';
     }
 
     if (status === 404) {
-      return '사용자 정보를 찾을 수 없습니다.';
+      return '회원 정보를 찾을 수 없습니다.';
     }
   }
 
-  return '설정 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  return '프로필을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
 function getProfileUpdateErrorMessage(error: unknown) {
@@ -111,31 +112,27 @@ function getProfileUpdateErrorMessage(error: unknown) {
     }
 
     if (status === 400) {
-      return '닉네임 입력값을 다시 확인해 주세요.';
+      return '닉네임 값이 올바르지 않습니다.';
     }
 
     if (status === 401) {
-      return '인증이 만료되었습니다. 다시 로그인해 주세요.';
+      return '로그인이 필요하거나 세션이 만료되었습니다.';
     }
 
     if (status === 403) {
-      return '회원 계정만 프로필을 수정할 수 있습니다.';
+      return '프로필을 수정할 수 없는 계정입니다.';
     }
   }
 
-  return '프로필을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  return '프로필 저장 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
 function getNicknameCheckErrorMessage(error: unknown) {
-  if (axios.isAxiosError(error)) {
-    const status = error.response?.status;
-
-    if (status === 400) {
-      return '닉네임 형식을 다시 확인해 주세요.';
-    }
+  if (axios.isAxiosError(error) && error.response?.status === 400) {
+    return '닉네임 형식을 다시 확인해 주세요.';
   }
 
-  return '닉네임 중복 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+  return '닉네임 중복 확인 중 문제가 발생했습니다.';
 }
 
 function isCurrentPasswordFailure(error: unknown) {
@@ -163,27 +160,47 @@ function getPasswordChangeErrorMessage(error: unknown) {
     const code = error.response?.data?.code;
 
     if (code === 'INVALID_CREDENTIALS') {
-      return '현재 비밀번호가 일치하지 않습니다. 다시 입력해 주세요.';
+      return '현재 비밀번호가 올바르지 않습니다.';
     }
 
     if (status === 400) {
-      return '입력한 비밀번호 정보를 다시 확인해 주세요.';
+      return '비밀번호 입력값을 다시 확인해 주세요.';
     }
 
     if (status === 401) {
-      return '인증이 만료되었습니다. 다시 로그인해 주세요.';
+      return '로그인이 필요하거나 세션이 만료되었습니다.';
     }
 
     if (status === 403) {
-      return '회원 계정만 비밀번호를 변경할 수 있습니다.';
+      return '비밀번호를 변경할 수 없는 계정입니다.';
     }
 
     if (status === 404) {
-      return '사용자 정보를 찾을 수 없습니다.';
+      return '회원 정보를 찾을 수 없습니다.';
     }
   }
 
-  return '비밀번호를 변경하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  return '비밀번호 변경 중 문제가 발생했습니다.';
+}
+
+function renderMessage(message: MessageState | null) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <div
+      className={`border px-4 py-3 text-sm ${
+        message.tone === 'success'
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          : message.tone === 'info'
+            ? 'border-sky-200 bg-sky-50 text-sky-700'
+            : 'border-rose-200 bg-rose-50 text-rose-700'
+      }`}
+    >
+      {message.text}
+    </div>
+  );
 }
 
 function SettingsPage() {
@@ -216,8 +233,7 @@ function SettingsPage() {
     [displayName, initialDisplayName],
   );
   const isCurrentPasswordReady =
-    passwordValues.currentPassword.trim().length > 0 &&
-    !isCurrentPasswordRejected;
+    passwordValues.currentPassword.trim().length > 0 && !isCurrentPasswordRejected;
   const areNewPasswordFieldsLocked = !isCurrentPasswordReady;
   const isConfirmPasswordMatched =
     passwordValues.newPassword.length > 0 &&
@@ -231,7 +247,7 @@ function SettingsPage() {
     const loadProfile = async () => {
       if (isGuestUser) {
         setIsLoadingProfile(false);
-        setProfileError('회원 계정만 설정을 확인할 수 있습니다.');
+        setProfileError('게스트 계정은 회원 프로필을 조회할 수 없습니다.');
         return;
       }
 
@@ -298,7 +314,7 @@ function SettingsPage() {
       setIsDisplayNameConfirmed(true);
       setProfileMessage({
         tone: 'success',
-        text: '현재 닉네임을 그대로 사용하고 있습니다.',
+        text: '현재 닉네임을 그대로 사용 중입니다.',
       });
       return;
     }
@@ -307,7 +323,7 @@ function SettingsPage() {
     setDisplayNameError(null);
     setProfileMessage({
       tone: 'info',
-      text: '닉네임을 확인하고 있습니다.',
+      text: '닉네임 중복 여부를 확인하고 있습니다.',
     });
 
     try {
@@ -437,9 +453,10 @@ function SettingsPage() {
     const nextErrors = validatePasswordForm(passwordValues);
 
     if (areNewPasswordFieldsLocked) {
-      nextErrors.currentPassword = passwordValues.currentPassword.trim().length === 0
-        ? '현재 비밀번호를 먼저 입력해 주세요.'
-        : '현재 비밀번호를 다시 확인해 주세요.';
+      nextErrors.currentPassword =
+        passwordValues.currentPassword.trim().length === 0
+          ? '현재 비밀번호를 먼저 입력해 주세요.'
+          : '현재 비밀번호를 다시 확인해 주세요.';
     }
 
     setPasswordErrors(nextErrors);
@@ -482,8 +499,7 @@ function SettingsPage() {
           confirmPassword: '',
         }));
         setPasswordErrors({
-          currentPassword:
-            fieldErrors.currentPassword ?? '현재 비밀번호가 일치하지 않습니다. 다시 입력해 주세요.',
+          currentPassword: fieldErrors.currentPassword ?? '현재 비밀번호가 올바르지 않습니다.',
         });
         setPasswordMessage({
           tone: 'error',
@@ -516,33 +532,9 @@ function SettingsPage() {
     }
   };
 
-  const renderMessage = (message: MessageState | null) => {
-    if (!message) {
-      return null;
-    }
-
-    return (
-      <div
-        className={`border px-4 py-3 text-sm ${
-          message.tone === 'success'
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-            : message.tone === 'info'
-              ? 'border-sky-200 bg-sky-50 text-sky-700'
-              : 'border-rose-200 bg-rose-50 text-rose-700'
-        }`}
-      >
-        {message.text}
-      </div>
-    );
-  };
-
   return (
     <section className="space-y-8">
-      <PageHero
-        description={null}
-        eyebrow="SETTINGS"
-        title="설정"
-      />
+      <PageHero description={null} eyebrow="SETTINGS" title="설정" />
 
       <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="border border-neutral-200 bg-white">
@@ -569,14 +561,14 @@ function SettingsPage() {
           {tab === 'profile' ? (
             <div className="theme-settings-panel space-y-5 border border-neutral-200 bg-white p-8">
               {isLoadingProfile ? (
-                <div className="text-sm text-neutral-600">설정 정보를 불러오는 중입니다.</div>
+                <div className="text-sm text-neutral-600">프로필을 불러오는 중입니다.</div>
               ) : profileError ? (
                 <div className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{profileError}</div>
               ) : (
                 <>
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="block">
-                      <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">이메일</span>
+                      <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">EMAIL</span>
                       <input
                         className="theme-settings-input mt-1 block w-full border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm"
                         disabled
@@ -585,7 +577,7 @@ function SettingsPage() {
                     </label>
 
                     <div className="block">
-                      <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">닉네임</span>
+                      <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">DISPLAY NAME</span>
                       <div className="mt-1 flex items-stretch">
                         <input
                           className={`theme-settings-input block w-full border px-3 py-2 text-sm ${
@@ -601,7 +593,7 @@ function SettingsPage() {
                           onClick={() => void handleDisplayNameCheck()}
                           type="button"
                         >
-                          {isCheckingDisplayName ? '확인 중...' : '중복 확인'}
+                          {isCheckingDisplayName ? 'Checking...' : 'Check'}
                         </button>
                       </div>
                       {displayNameError ? <p className="mt-2 text-sm text-rose-600">{displayNameError}</p> : null}
@@ -616,7 +608,7 @@ function SettingsPage() {
                     onClick={() => void handleSaveProfile()}
                     type="button"
                   >
-                    {isSavingProfile ? '저장 중...' : '저장'}
+                    {isSavingProfile ? 'Saving...' : 'Save'}
                   </button>
                 </>
               )}
@@ -627,7 +619,7 @@ function SettingsPage() {
             <div className="theme-settings-panel space-y-5 border border-neutral-200 bg-white p-8">
               <div className="grid gap-4">
                 <label className="block">
-                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">현재 비밀번호</span>
+                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CURRENT PASSWORD</span>
                   <input
                     className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
                       passwordErrors.currentPassword ? 'border-rose-500' : 'border-neutral-300'
@@ -640,13 +632,13 @@ function SettingsPage() {
                     <p className="mt-2 text-sm text-rose-600">{passwordErrors.currentPassword}</p>
                   ) : (
                     <p className="mt-2 text-sm text-neutral-500">
-                      현재 비밀번호를 먼저 입력한 뒤 새 비밀번호를 설정해 주세요.
+                      현재 비밀번호가 맞아야 새 비밀번호 입력 필드가 정상적으로 열립니다.
                     </p>
                   )}
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">새 비밀번호</span>
+                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">NEW PASSWORD</span>
                   <input
                     className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
                       passwordErrors.newPassword ? 'border-rose-500' : 'border-neutral-300'
@@ -662,7 +654,7 @@ function SettingsPage() {
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">새 비밀번호 확인</span>
+                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CONFIRM PASSWORD</span>
                   <input
                     className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
                       passwordErrors.confirmPassword
@@ -679,7 +671,7 @@ function SettingsPage() {
                   {passwordErrors.confirmPassword ? (
                     <p className="mt-2 text-sm text-rose-600">{passwordErrors.confirmPassword}</p>
                   ) : isConfirmPasswordMatched ? (
-                    <p className="mt-2 text-sm text-emerald-600">새 비밀번호와 일치합니다.</p>
+                    <p className="mt-2 text-sm text-emerald-600">새 비밀번호가 일치합니다.</p>
                   ) : null}
                 </label>
               </div>
@@ -692,30 +684,26 @@ function SettingsPage() {
                 onClick={() => void handlePasswordChange()}
                 type="button"
               >
-                {isChangingPassword ? '변경 중...' : '비밀번호 변경'}
+                {isChangingPassword ? 'Updating...' : 'Change Password'}
               </button>
             </div>
           ) : null}
 
           {tab === 'notify' ? (
             <div className="border border-neutral-200 bg-white p-8 text-sm text-neutral-600">
-              알림 설정은 준비 중입니다.
+              알림 설정 영역은 아직 연결 전입니다.
             </div>
           ) : null}
 
-          {tab === 'token' ? (
-            <div className="border border-neutral-200 bg-white p-8 text-sm text-neutral-600">
-              토큰 설정은 준비 중입니다.
-            </div>
-          ) : null}
+          {tab === 'token' ? <SocialAccountsPanel /> : null}
 
           {tab === 'danger' ? (
             <div className="space-y-4 border-2 border-[#E63946] bg-white p-8">
-              <h2 className="text-xl font-black tracking-tight text-[#E63946]">위험 구역</h2>
+              <h2 className="text-xl font-black tracking-tight text-[#E63946]">Danger Zone</h2>
               <div className="flex items-center justify-between border-t border-neutral-200 pt-4">
                 <div>
                   <div className="font-bold">로그아웃</div>
-                  <div className="mt-1 text-xs text-neutral-500">현재 로그인된 세션을 종료합니다.</div>
+                  <div className="mt-1 text-xs text-neutral-500">현재 로그인 세션을 종료합니다.</div>
                 </div>
                 <button
                   className="inline-flex items-center gap-1.5 border border-neutral-300 px-4 py-2 text-sm"

@@ -1,6 +1,8 @@
 export const ROUTES = {
   root: '/',
   login: '/login',
+  oauthGoogleCallback: '/oauth/google/callback',
+  oauthGithubCallback: '/oauth/github/callback',
   dashboard: '/dashboard',
   projects: '/projects',
   projectDetail: '/projects/:projectId',
