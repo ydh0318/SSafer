@@ -1,28 +1,59 @@
 # EC2 #2 prod: 분석 서버 (private IP만 사용, 외부 직접 접근 불가)
 # EC2 #1 Spring이 http://{EC2_2_PUBLIC_IP}:8000 으로 분석 요청
-# FastAPI가 http://${EC2_1_PRIVATE_IP}:8080/api/v1/internal/callback 으로 결과 콜백
-# NOTE: 변수명은 EC2_1_PRIVATE_IP지만, 계정/VPC 분리 환경에서는 EC2 #1 public IP를 넣는다.
+# FastAPI가 ${SPRING_CALLBACK_URL} 으로 결과 콜백
 #
 # UFW 설정 (1회):
 #   sudo ufw allow 22/tcp
 #   sudo ufw allow from <EC2_1_PUBLIC_IP> to any port 8000 proto tcp
 #   sudo ufw enable
 
-name: ssafer-ec2-prod
+name: ${COMPOSE_PROJECT_NAME:-ssafer-ec2-prod}
 
 services:
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    container_name: ${OLLAMA_CONTAINER_NAME:-ssafer-ollama}
+    restart: ${RESTART_POLICY:-always}
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - ec2-internal
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  ollama-pull:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    container_name: ${OLLAMA_PULL_CONTAINER_NAME:-ssafer-ollama-pull}
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: ${OLLAMA_BASE_URL:-http://ollama:11434}
+    command: ["pull", "${OLLAMA_MODEL:-qwen2.5:3b}"]
+    networks:
+      - ec2-internal
+
   fastapi:
     image: ${FASTAPI_IMAGE}
-    container_name: ssafer-fastapi
-    restart: always
+    container_name: ${FASTAPI_CONTAINER_NAME:-ssafer-fastapi}
+    restart: ${RESTART_POLICY:-always}
     env_file:
-      - .env
+      - path: ${FASTAPI_ENV_FILE:-.env}
+        required: true
     environment:
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.1}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-120}
+      OLLAMA_MAX_RETRIES: ${OLLAMA_MAX_RETRIES:-2}
+      OLLAMA_RETRY_BACKOFF_SECONDS: ${OLLAMA_RETRY_BACKOFF_SECONDS:-1}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      SPRING_CALLBACK_URL: http://${EC2_1_PRIVATE_IP}:8080/api/v1/internal/callback
+      SPRING_CALLBACK_URL: ${SPRING_CALLBACK_URL}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -30,11 +61,18 @@ services:
       AWS_S3_BUCKET: ${AWS_S3_BUCKET}
       APP_SCAN_RAW_S3_BUCKET: ${APP_SCAN_RAW_S3_BUCKET}
       APP_ANALYSIS_RESULT_S3_BUCKET: ${APP_ANALYSIS_RESULT_S3_BUCKET}
+      S3_MAX_RETRIES: ${S3_MAX_RETRIES:-2}
+      S3_RETRY_BACKOFF_SECONDS: ${S3_RETRY_BACKOFF_SECONDS:-1}
       HASDATA_API_KEY: ${HASDATA_API_KEY}
     ports:
-      - "8000:8000"
+      - "${FASTAPI_HOST_PORT:-8000}:8000"
     networks:
       - ec2-internal
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -46,6 +84,11 @@ services:
       retries: 3
       start_period: 45s
 
+volumes:
+  ollama-data:
+    name: ${OLLAMA_VOLUME_NAME:-ssafer-ollama-data}
+
 networks:
   ec2-internal:
+    name: ${EC2_INTERNAL_NETWORK_NAME:-ssafer-ec2-prod-internal}
     driver: bridge
