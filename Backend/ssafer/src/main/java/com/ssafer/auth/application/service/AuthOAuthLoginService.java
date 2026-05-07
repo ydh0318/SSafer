@@ -4,6 +4,7 @@ import com.ssafer.auth.domain.enums.OAuthProvider;
 import com.ssafer.auth.domain.repository.AuthTokenProvider;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.user.application.service.UserSocialAccountService;
 import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
@@ -23,11 +24,13 @@ public class AuthOAuthLoginService {
 
   private final Map<OAuthProvider, OAuthLoginProviderHandler> handlers;
   private final UserRepository userRepository;
+  private final UserSocialAccountService userSocialAccountService;
   private final AuthTokenProvider authTokenProvider;
 
   public AuthOAuthLoginService(
       List<OAuthLoginProviderHandler> handlers,
       UserRepository userRepository,
+      UserSocialAccountService userSocialAccountService,
       AuthTokenProvider authTokenProvider
   ) {
     this.handlers = new EnumMap<>(OAuthProvider.class);
@@ -35,6 +38,7 @@ public class AuthOAuthLoginService {
       this.handlers.put(handler.provider(), handler);
     }
     this.userRepository = userRepository;
+    this.userSocialAccountService = userSocialAccountService;
     this.authTokenProvider = authTokenProvider;
   }
 
@@ -49,11 +53,12 @@ public class AuthOAuthLoginService {
     OAuthProviderUserInfo userInfo = handler.fetchUserInfo(authorizationCode, redirectUri);
     String normalizedEmail = normalizeEmail(userInfo.email());
 
-    ResolvedOAuthUser resolvedUser = resolveOrCreateUser(normalizedEmail, userInfo.displayName());
+    ResolvedOAuthUser resolvedUser = resolveOrCreateUser(userInfo, normalizedEmail, userInfo.displayName());
     if (resolvedUser.user().getAccountStatus() != AccountStatus.ACTIVE) {
       throw new BusinessException(ErrorCode.UNAUTHORIZED);
     }
 
+    userSocialAccountService.syncSocialLogin(resolvedUser.user(), userInfo);
     AuthTokenResult tokenResult = authTokenProvider.issueTokens(resolvedUser.user().getId());
     return new OAuthLoginResult(
         userInfo.provider(),
@@ -70,7 +75,17 @@ public class AuthOAuthLoginService {
     );
   }
 
-  private ResolvedOAuthUser resolveOrCreateUser(String email, String providerDisplayName) {
+  private ResolvedOAuthUser resolveOrCreateUser(
+      OAuthProviderUserInfo userInfo,
+      String email,
+      String providerDisplayName
+  ) {
+    User linkedUser = userSocialAccountService.findLinkedUser(userInfo.provider(), userInfo.providerUserId())
+        .orElse(null);
+    if (linkedUser != null) {
+      return new ResolvedOAuthUser(linkedUser, false);
+    }
+
     User existingUser = userRepository.findByEmail(email).orElse(null);
     if (existingUser != null) {
       return new ResolvedOAuthUser(existingUser, false);

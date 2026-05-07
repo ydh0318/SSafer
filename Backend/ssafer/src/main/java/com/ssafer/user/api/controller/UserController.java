@@ -13,6 +13,9 @@ import com.ssafer.user.api.dto.CheckNicknameRequest;
 import com.ssafer.user.api.dto.CheckNicknameResponseData;
 import com.ssafer.user.api.dto.RegisterUserRequest;
 import com.ssafer.user.api.dto.RegisterUserResponseData;
+import com.ssafer.user.api.dto.SocialAccountConnectRequest;
+import com.ssafer.user.api.dto.SocialAccountResponseData;
+import com.ssafer.user.api.dto.SocialAccountsResponseData;
 import com.ssafer.user.api.dto.UpdatePasswordRequest;
 import com.ssafer.user.api.dto.UpdateUserProfileRequest;
 import com.ssafer.user.api.dto.UserProfileResponseData;
@@ -20,6 +23,8 @@ import com.ssafer.user.application.service.UserPasswordService;
 import com.ssafer.user.application.service.UserProfileResult;
 import com.ssafer.user.application.service.UserProfileService;
 import com.ssafer.user.application.service.UserRegistrationService;
+import com.ssafer.user.application.service.UserSocialAccountResult;
+import com.ssafer.user.application.service.UserSocialAccountService;
 import com.ssafer.user.application.service.UserWithdrawalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -50,11 +55,15 @@ public class UserController {
   private static final String PROFILE_UPDATE_SUCCESS_MESSAGE = "User profile update succeeded";
   private static final String PASSWORD_CHANGE_SUCCESS_MESSAGE = "Password change succeeded";
   private static final String WITHDRAWAL_SUCCESS_MESSAGE = "User withdrawal succeeded";
+  private static final String SOCIAL_ACCOUNTS_RETRIEVE_SUCCESS_MESSAGE = "Connected social accounts retrieval succeeded";
+  private static final String SOCIAL_ACCOUNT_CONNECT_SUCCESS_MESSAGE = "Social account connection succeeded";
+  private static final String SOCIAL_ACCOUNT_DISCONNECT_SUCCESS_MESSAGE = "Social account disconnection succeeded";
 
   private final CurrentActorProvider currentActorProvider;
   private final UserRegistrationService userRegistrationService;
   private final UserProfileService userProfileService;
   private final UserPasswordService userPasswordService;
+  private final UserSocialAccountService userSocialAccountService;
   private final UserWithdrawalService userWithdrawalService;
 
   public UserController(
@@ -62,12 +71,14 @@ public class UserController {
       UserRegistrationService userRegistrationService,
       UserProfileService userProfileService,
       UserPasswordService userPasswordService,
+      UserSocialAccountService userSocialAccountService,
       UserWithdrawalService userWithdrawalService
   ) {
     this.currentActorProvider = currentActorProvider;
     this.userRegistrationService = userRegistrationService;
     this.userProfileService = userProfileService;
     this.userPasswordService = userPasswordService;
+    this.userSocialAccountService = userSocialAccountService;
     this.userWithdrawalService = userWithdrawalService;
   }
 
@@ -185,6 +196,44 @@ public class UserController {
         PROFILE_RETRIEVE_SUCCESS_MESSAGE,
         new UserProfileResponseData(profile.email(), profile.displayName())
     ));
+  }
+
+  @GetMapping("/me/socials")
+  public ResponseEntity<ApiResponse<SocialAccountsResponseData>> getCurrentUserSocialAccounts() {
+    AuthenticatedActor actor = currentActorProvider.getCurrentActor();
+    SocialAccountsResponseData responseData = new SocialAccountsResponseData(
+        userSocialAccountService.getCurrentUserSocialAccounts(actor).stream()
+            .map(this::toResponseData)
+            .toList()
+    );
+    return ResponseEntity.ok(ApiResponse.success(
+        SOCIAL_ACCOUNTS_RETRIEVE_SUCCESS_MESSAGE,
+        responseData
+    ));
+  }
+
+  @PostMapping("/me/socials/google")
+  public ResponseEntity<ApiResponse<SocialAccountResponseData>> connectGoogleSocialAccount(
+      @Valid @RequestBody(required = false) SocialAccountConnectRequest request
+  ) {
+    return connectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GOOGLE, request);
+  }
+
+  @DeleteMapping("/me/socials/google")
+  public ResponseEntity<ApiResponse<Void>> disconnectGoogleSocialAccount() {
+    return disconnectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GOOGLE);
+  }
+
+  @PostMapping("/me/socials/github")
+  public ResponseEntity<ApiResponse<SocialAccountResponseData>> connectGithubSocialAccount(
+      @Valid @RequestBody(required = false) SocialAccountConnectRequest request
+  ) {
+    return connectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GITHUB, request);
+  }
+
+  @DeleteMapping("/me/socials/github")
+  public ResponseEntity<ApiResponse<Void>> disconnectGithubSocialAccount() {
+    return disconnectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GITHUB);
   }
 
   @PatchMapping("/me/profile")
@@ -316,5 +365,43 @@ public class UserController {
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     userWithdrawalService.withdrawCurrentUser(actor);
     return ResponseEntity.ok(ApiResponse.success(WITHDRAWAL_SUCCESS_MESSAGE, null));
+  }
+
+  private ResponseEntity<ApiResponse<SocialAccountResponseData>> connectSocialAccount(
+      com.ssafer.auth.domain.enums.OAuthProvider provider,
+      SocialAccountConnectRequest request
+  ) {
+    if (request == null || request.authorizationCode() == null || request.redirectUri() == null) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
+    AuthenticatedActor actor = currentActorProvider.getCurrentActor();
+    UserSocialAccountResult result = userSocialAccountService.connectCurrentUserSocialAccount(
+        actor,
+        provider,
+        request.authorizationCode(),
+        request.redirectUri()
+    );
+    return ResponseEntity.ok(ApiResponse.success(
+        SOCIAL_ACCOUNT_CONNECT_SUCCESS_MESSAGE,
+        toResponseData(result)
+    ));
+  }
+
+  private ResponseEntity<ApiResponse<Void>> disconnectSocialAccount(
+      com.ssafer.auth.domain.enums.OAuthProvider provider
+  ) {
+    AuthenticatedActor actor = currentActorProvider.getCurrentActor();
+    userSocialAccountService.disconnectCurrentUserSocialAccount(actor, provider);
+    return ResponseEntity.ok(ApiResponse.success(SOCIAL_ACCOUNT_DISCONNECT_SUCCESS_MESSAGE, null));
+  }
+
+  private SocialAccountResponseData toResponseData(UserSocialAccountResult result) {
+    return new SocialAccountResponseData(
+        result.provider(),
+        result.connected(),
+        result.email(),
+        result.connectedAt()
+    );
   }
 }

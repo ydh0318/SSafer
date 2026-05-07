@@ -104,6 +104,10 @@ public class User {
     return passwordHash;
   }
 
+  public boolean hasPasswordCredential() {
+    return passwordHash != null && !passwordHash.isBlank();
+  }
+
   public AccountStatus getAccountStatus() {
     return accountStatus;
   }

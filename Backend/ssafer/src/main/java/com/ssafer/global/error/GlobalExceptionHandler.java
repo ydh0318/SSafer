@@ -33,7 +33,7 @@ public class GlobalExceptionHandler {
     ErrorCode code = ex.getErrorCode();
     ApiLogContext.markFailure(
         request,
-        "비즈니스 규칙 검증",
+        "Business validation",
         code.code() + ": " + describeErrorCode(code)
     );
     return ResponseEntity.status(code.status())
@@ -49,8 +49,8 @@ public class GlobalExceptionHandler {
     Map<String, String> fieldErrors = extractFieldErrors(ex.getBindingResult().getFieldErrors());
     ApiLogContext.markFailure(
         request,
-        "요청 본문 검증",
-        "입력값 검증 실패: " + fieldErrors
+        "Request body validation",
+        "Validation failed: " + fieldErrors
     );
     return ResponseEntity.status(code.status())
         .body(ApiErrorResponse.of(code.code(), code.message(), Map.of("fieldErrors", fieldErrors)));
@@ -65,8 +65,8 @@ public class GlobalExceptionHandler {
     Map<String, String> fieldErrors = extractFieldErrors(ex.getBindingResult().getFieldErrors());
     ApiLogContext.markFailure(
         request,
-        "요청 파라미터 바인딩",
-        "쿼리 또는 폼 파라미터 바인딩 실패: " + fieldErrors
+        "Request parameter binding",
+        "Binding failed: " + fieldErrors
     );
     return ResponseEntity.status(code.status())
         .body(ApiErrorResponse.of(code.code(), code.message(), Map.of("fieldErrors", fieldErrors)));
@@ -100,8 +100,8 @@ public class GlobalExceptionHandler {
 
     ApiLogContext.markFailure(
         request,
-        "메서드 파라미터 검증",
-        "메서드 파라미터 검증 실패: " + fieldErrors
+        "Method parameter validation",
+        "Validation failed: " + fieldErrors
     );
     return ResponseEntity.status(code.status())
         .body(ApiErrorResponse.of(code.code(), code.message(), Map.of("fieldErrors", fieldErrors)));
@@ -113,11 +113,11 @@ public class GlobalExceptionHandler {
       MissingServletRequestParameterException ex
   ) {
     ErrorCode code = ErrorCode.INVALID_PARAMETER;
-    Map<String, String> fieldErrors = Map.of(ex.getParameterName(), "필수 요청 파라미터입니다.");
+    Map<String, String> fieldErrors = Map.of(ex.getParameterName(), "Required request parameter is missing");
     ApiLogContext.markFailure(
         request,
-        "필수 파라미터 검증",
-        "필수 요청 파라미터가 없습니다: " + ex.getParameterName()
+        "Required request parameter",
+        "Missing parameter: " + ex.getParameterName()
     );
     return ResponseEntity.status(code.status())
         .body(ApiErrorResponse.of(code.code(), code.message(), Map.of("fieldErrors", fieldErrors)));
@@ -135,8 +135,8 @@ public class GlobalExceptionHandler {
         : ex.getMessage();
     ApiLogContext.markFailure(
         request,
-        "요청 본문 파싱",
-        "요청 본문을 해석할 수 없습니다: " + reason
+        "Request body parsing",
+        "Request body could not be parsed: " + reason
     );
     return ResponseEntity.status(code.status())
         .body(ApiErrorResponse.of(code.code(), code.message()));
@@ -150,7 +150,7 @@ public class GlobalExceptionHandler {
     String message = ex.getReason() != null ? ex.getReason() : ex.getStatusCode().toString();
     ApiLogContext.markFailure(
         request,
-        "컨트롤러 응답 상태 예외",
+        "Controller status exception",
         message
     );
     return ResponseEntity.status(ex.getStatusCode())
@@ -165,11 +165,11 @@ public class GlobalExceptionHandler {
     ErrorCode code = ErrorCode.INTERNAL_SERVER_ERROR;
     ApiLogContext.markFailure(
         request,
-        "서버 내부 예외",
+        "Unhandled exception",
         ex.getClass().getSimpleName() + ": " + ex.getMessage()
     );
     log.error(
-        "[서버 내부 예외] 요청ID={} 예외={}",
+        "[Unhandled exception] requestId={} error={}",
         ApiLogContext.getRequestId(request),
         ex.getMessage(),
         ex
@@ -187,27 +187,29 @@ public class GlobalExceptionHandler {
   }
 
   private String describeErrorCode(ErrorCode code) {
-    // 운영 로그는 비개발자도 바로 읽을 수 있게 한글 설명을 따로 붙인다.
     return switch (code) {
-      case UNAUTHORIZED -> "인증 정보가 없거나 토큰이 유효하지 않습니다.";
-      case FORBIDDEN -> "요청한 자원에 접근할 권한이 없습니다.";
-      case NOT_FOUND -> "요청한 데이터를 찾을 수 없습니다.";
-      case DUPLICATE_EMAIL -> "이미 가입된 이메일입니다.";
-      case DUPLICATE_DISPLAY_NAME -> "이미 사용 중인 닉네임입니다.";
-      case INVALID_CREDENTIALS -> "이메일 또는 비밀번호가 올바르지 않습니다.";
-      case EMAIL_VERIFICATION_REQUIRED -> "회원가입 전에 이메일 인증이 필요합니다.";
-      case EMAIL_VERIFICATION_CODE_INVALID -> "이메일 인증 코드가 올바르지 않거나 만료되었습니다.";
-      case PASSWORD_RESET_CODE_INVALID -> "비밀번호 재설정 인증 코드가 올바르지 않거나 만료되었습니다.";
-      case PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED -> "비밀번호 재설정 인증 코드 시도 가능 횟수를 초과했습니다.";
-      case PASSWORD_RESET_TOKEN_INVALID -> "비밀번호 재설정 토큰이 올바르지 않거나 만료되었습니다.";
-      case EMAIL_VERIFICATION_REQUEST_TOO_FREQUENT -> "이메일 인증 코드 요청이 너무 자주 발생했습니다.";
-      case EMAIL_DELIVERY_FAILED -> "이메일 발송에 실패했습니다.";
-      case INVALID_PARAMETER -> "요청 파라미터 형식이 올바르지 않습니다.";
-      case INVALID_PAYLOAD_HASH -> "payloadHash 형식이 올바르지 않습니다.";
-      case RAW_RESULT_NOT_FOUND -> "원본 스캔 결과 파일을 찾을 수 없습니다.";
-      case SCAN_STATUS_CONFLICT -> "현재 스캔 상태에서는 원본 결과 업로드 보고를 처리할 수 없습니다.";
-      case DUPLICATE_RAW_RESULT_UPLOAD -> "원본 결과 업로드 보고가 이미 접수되었습니다.";
-      case INTERNAL_SERVER_ERROR -> "서버 내부 오류가 발생했습니다.";
+      case UNAUTHORIZED -> "Authentication is required or token is invalid.";
+      case FORBIDDEN -> "You do not have permission to access this resource.";
+      case NOT_FOUND -> "Requested resource was not found.";
+      case DUPLICATE_EMAIL -> "Email is already registered.";
+      case DUPLICATE_DISPLAY_NAME -> "Nickname is already in use.";
+      case SOCIAL_ACCOUNT_ALREADY_LINKED -> "Social account is already linked.";
+      case SOCIAL_ACCOUNT_NOT_LINKED -> "Social account is not linked.";
+      case SOCIAL_ACCOUNT_DISCONNECT_NOT_ALLOWED -> "Cannot disconnect the last available sign-in method.";
+      case INVALID_CREDENTIALS -> "Email or password is incorrect.";
+      case EMAIL_VERIFICATION_REQUIRED -> "Verified email is required before registration.";
+      case EMAIL_VERIFICATION_CODE_INVALID -> "Email verification code is invalid or expired.";
+      case PASSWORD_RESET_CODE_INVALID -> "Password reset verification code is invalid or expired.";
+      case PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED -> "Password reset verification attempts exceeded.";
+      case PASSWORD_RESET_TOKEN_INVALID -> "Password reset token is invalid or expired.";
+      case EMAIL_VERIFICATION_REQUEST_TOO_FREQUENT -> "Email verification requests are too frequent.";
+      case EMAIL_DELIVERY_FAILED -> "Email delivery failed.";
+      case INVALID_PARAMETER -> "Request parameter format is invalid.";
+      case INVALID_PAYLOAD_HASH -> "payloadHash format is invalid.";
+      case RAW_RESULT_NOT_FOUND -> "Raw result object was not found.";
+      case SCAN_STATUS_CONFLICT -> "Operation is not allowed for the current scan status.";
+      case DUPLICATE_RAW_RESULT_UPLOAD -> "Raw result upload report was already submitted.";
+      case INTERNAL_SERVER_ERROR -> "Internal server error.";
     };
   }
 }
