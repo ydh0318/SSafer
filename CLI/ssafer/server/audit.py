@@ -123,6 +123,22 @@ def save_server_audit_result(project_root: Path, result: ServerAuditResult) -> P
     return output_path
 
 
+def load_last_server_audit(project_root: Path) -> dict | None:
+    output_dir = project_root / ".ssafer" / "server-audit"
+    marker = output_dir / "last_audit.txt"
+    if marker.exists():
+        audit_path = output_dir / marker.read_text(encoding="utf-8").strip()
+    else:
+        candidates = sorted(
+            p for p in (output_dir.glob("*.json") if output_dir.exists() else [])
+            if p.name != "last_audit.txt"
+        )
+        audit_path = candidates[-1] if candidates else None
+    if not audit_path or not audit_path.exists():
+        return None
+    return json.loads(audit_path.read_text(encoding="utf-8"))
+
+
 def to_jsonable(result: ServerAuditResult) -> dict:
     payload = asdict(result)
     payload["findings"] = [asdict(finding) for finding in result.findings]

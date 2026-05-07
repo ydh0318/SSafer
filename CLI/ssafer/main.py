@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 import threading
 import time
@@ -19,7 +20,7 @@ from rich.text import Text
 from ssafer import __version__
 from ssafer.core.doctor import collect_doctor_status, install_trivy_with_winget
 from ssafer.core.result_store import load_last_scan, run_scan
-from ssafer.core.upload import upload_last_scan
+from ssafer.core.upload import upload_last_scan, upload_last_server_audit
 
 app = typer.Typer(help="SSAfer security configuration CLI.")
 console = Console()
@@ -51,6 +52,29 @@ _GOOSE_RIGHT = [
 _TRACK_W = 36
 _GOOSE_W = 8
 _REPORT_EVIDENCE_MAX = 80
+
+_REPORT_RULE_DISPLAY = {
+    "COMPOSE_EXPOSED_DB_PORT": "COMPOSE_DB_PORT",
+    "COMPOSE_HARDCODED_SECRET": "COMPOSE_SECRET",
+    "COMPOSE_PRIVILEGED_MODE": "COMPOSE_PRIVILEGED",
+    "COMPOSE_HOST_NETWORK": "COMPOSE_HOST_NET",
+    "COMPOSE_LATEST_TAG": "COMPOSE_LATEST",
+    "COMPOSE_ROOT_USER": "COMPOSE_ROOT",
+    "COMPOSE_NO_MEMORY_LIMIT": "COMPOSE_NO_MEM_LIMIT",
+    "ENV_PLAIN_SECRET": "ENV_SECRET",
+    "DS-0002": "DOCKER_ROOT_USER",
+    "DS-0026": "DOCKER_HEALTHCHECK",
+}
+
+_TRIVY_TITLE_KO = {
+    "DS-0002": "Dockerfile이 root 사용자로 실행됨",
+    "DS-0026": "Dockerfile에 HEALTHCHECK가 없음",
+}
+
+_TRIVY_EVIDENCE_KO = {
+    "DS-0002": "USER root 또는 non-root USER 미지정",
+    "DS-0026": "HEALTHCHECK 명령어 미정의",
+}
 
 
 def _walking_panel(pos: int, direction: int, frame: int, step: str) -> Panel:
@@ -111,6 +135,8 @@ def install_tools() -> None:
 @app.command("server-audit")
 def server_audit(
     path: Optional[Path] = typer.Option(None, "--path", "-p", help="Output root for .ssafer server-audit files."),
+    upload: bool = typer.Option(False, "--upload", help="Upload the generated server audit package."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL for --upload."),
     checks: Optional[str] = typer.Option(
         None,
         "--checks",
@@ -162,6 +188,9 @@ def server_audit(
             console.print(f"  - {warning}")
     if details:
         _print_server_audit_details(result)
+    if upload:
+        response = _upload_server_audit_or_exit(output_root, api_url=api_url)
+        _print_upload_response(response)
     console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
 
 
@@ -603,7 +632,7 @@ def _print_scan_summary(scan: dict) -> None:
     if warnings:
         console.print("[yellow]경고 목록[/yellow]")
         for warning in warnings:
-            console.print(f"  - {warning}")
+            console.print(f"  - {_format_scan_warning(warning)}")
 
 
 def _print_scan_details(scan: dict, project_root: Path) -> None:
@@ -727,10 +756,11 @@ def _print_findings(scan: dict) -> None:
 def _group_report_findings(findings: list[dict]) -> list[dict[str, str | int]]:
     groups: dict[tuple[str, str, str, str], dict[str, object]] = {}
     for finding in findings:
-        rule_id = str(finding.get("ruleId") or "-")
+        raw_rule_id = str(finding.get("ruleId") or "-")
+        rule_id = _format_report_rule_id(raw_rule_id)
         severity = str(finding.get("severity") or "-")
-        title = str(finding.get("title") or "-")
-        evidence = _format_report_evidence(finding.get("maskedEvidence"))
+        title = _format_report_title(finding)
+        evidence = _format_report_finding_evidence(finding)
         key = (rule_id, severity, title, evidence)
         group = groups.setdefault(
             key,
@@ -802,6 +832,46 @@ def _format_report_evidence(value: object) -> str:
     if len(text) <= _REPORT_EVIDENCE_MAX:
         return text
     return text[: _REPORT_EVIDENCE_MAX - 3] + "..."
+
+
+def _format_report_rule_id(rule_id: str) -> str:
+    return _REPORT_RULE_DISPLAY.get(rule_id, rule_id)
+
+
+def _format_report_title(finding: dict) -> str:
+    rule_id = str(finding.get("ruleId") or "")
+    source = str(finding.get("source") or "")
+    if source == "trivy" and rule_id in _TRIVY_TITLE_KO:
+        return _TRIVY_TITLE_KO[rule_id]
+    return str(finding.get("title") or "-")
+
+
+def _format_report_finding_evidence(finding: dict) -> str:
+    rule_id = str(finding.get("ruleId") or "")
+    source = str(finding.get("source") or "")
+    if source == "trivy" and rule_id in _TRIVY_EVIDENCE_KO:
+        return _TRIVY_EVIDENCE_KO[rule_id]
+    return _format_report_evidence(finding.get("maskedEvidence"))
+
+
+def _format_scan_warning(warning: object) -> str:
+    text = str(warning).replace("\r\n", "\n").strip()
+    if not text:
+        return "-"
+
+    missing_vars = list(dict.fromkeys(re.findall(r'The \\?"([^"\\]+)\\?" variable is not set', text)))
+    if missing_vars:
+        return f"Docker Compose 환경변수 미설정: {_join_compact(missing_vars, max_items=8)}"
+
+    env_file_match = re.search(r"env file (.+?) not found", text)
+    if env_file_match:
+        return f"Compose env 파일을 찾을 수 없음: {env_file_match.group(1)}"
+
+    service_match = re.search(r'service "([^"]+)" has neither an image nor a build context specified', text)
+    if service_match:
+        return f"Compose 서비스 '{service_match.group(1)}'에 image/build 설정이 없어 분석하지 못함"
+
+    return _format_report_evidence(text)
 
 
 def _count_trivy_artifact_findings(content: dict) -> int:
@@ -945,6 +1015,35 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
         raise typer.Exit(code=1)
     try:
         return upload_last_scan(path, api_url=effective_url, token=token)
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Upload failed:[/red] {exc}")
+    except RuntimeError as exc:
+        console.print(f"[red]Upload failed:[/red] {exc}")
+    raise typer.Exit(code=1)
+
+
+def _upload_server_audit_or_exit(path: Path, api_url: str | None) -> dict:
+    from ssafer.core.auth import load_endpoint, load_token
+    from ssafer.core.config import load_project_config
+
+    config_warnings: list[str] = []
+    project_config = load_project_config(path, config_warnings)
+    for warning in config_warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
+
+    token = load_token(project_config.upload.token_env)
+    effective_url = api_url or project_config.upload.endpoint or load_endpoint()
+    if token is None:
+        console.print(
+            "[yellow]?氇勳瑔 ?膦応矙???雴侂捒?雿堧枎. 鐧掛嚤? [bold]ssafer login[/bold]???銋诫痪?靹嶊祬??n"
+            "  ?靹嶊紞韫偮€??SSAFER_TOKEN???銋检牂?靹応江??[/yellow]"
+        )
+        raise typer.Exit(code=1)
+    try:
+        return upload_last_server_audit(path, api_url=effective_url, token=token)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")

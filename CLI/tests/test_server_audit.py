@@ -350,3 +350,35 @@ def test_server_audit_command_details_prints_findings_and_artifacts(tmp_path: Pa
     assert "IPv4" in result.output
     assert "서버 점검 산출물" in result.output
     assert "listening-ports" in result.output
+
+
+def test_server_audit_command_uploads_saved_result(tmp_path: Path, monkeypatch):
+    from ssafer.server import audit as audit_module
+    import ssafer.main as main_module
+
+    monkeypatch.setattr(
+        audit_module,
+        "run_command",
+        lambda command: CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:5432 0.0.0.0:*"),
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_upload(path: Path, api_url: str | None = None):
+        captured["path"] = path
+        captured["api_url"] = api_url
+        return {"scanId": 777}
+
+    monkeypatch.setattr(main_module, "_upload_server_audit_or_exit", fake_upload)
+
+    result = CliRunner().invoke(
+        app,
+        ["server-audit", "--path", str(tmp_path), "--checks", "ports", "--upload", "--api-url", "https://api.example.com"],
+    )
+
+    assert result.exit_code == 0
+    assert captured == {
+        "path": tmp_path,
+        "api_url": "https://api.example.com",
+    }
+    assert "777" in result.output
