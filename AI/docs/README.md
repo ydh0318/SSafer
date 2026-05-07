@@ -16,6 +16,7 @@
 8_analyze_api.md
 9_test_guide.md
 10_s3_setup.md
+11_spring_fastapi_interface.md
 ```
 
 ## 문서 설명
@@ -33,3 +34,4 @@
 | `8_analyze_api.md` | `/analyze` API 요청/응답 스펙 |
 | `9_test_guide.md` | 현재 구현 상태 기준 테스트 방법 |
 | `10_s3_setup.md` | FastAPI S3 클라이언트 설정 및 환경변수 |
+| `11_spring_fastapi_interface.md` | Spring Boot, Worker, FastAPI 연동 API 명세 |

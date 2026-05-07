@@ -567,7 +567,7 @@ function SettingsPage() {
 
         <main>
           {tab === 'profile' ? (
-            <div className="space-y-5 border border-neutral-200 bg-white p-8">
+            <div className="theme-settings-panel space-y-5 border border-neutral-200 bg-white p-8">
               {isLoadingProfile ? (
                 <div className="text-sm text-neutral-600">설정 정보를 불러오는 중입니다.</div>
               ) : profileError ? (
@@ -578,7 +578,7 @@ function SettingsPage() {
                     <label className="block">
                       <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">이메일</span>
                       <input
-                        className="mt-1 block w-full border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm"
+                        className="theme-settings-input mt-1 block w-full border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm"
                         disabled
                         value={email}
                       />
@@ -588,7 +588,7 @@ function SettingsPage() {
                       <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">닉네임</span>
                       <div className="mt-1 flex items-stretch">
                         <input
-                          className={`block w-full border px-3 py-2 text-sm ${
+                          className={`theme-settings-input block w-full border px-3 py-2 text-sm ${
                             displayNameError ? 'border-rose-500' : 'border-neutral-300'
                           }`}
                           maxLength={100}
@@ -624,12 +624,12 @@ function SettingsPage() {
           ) : null}
 
           {tab === 'security' ? (
-            <div className="space-y-5 border border-neutral-200 bg-white p-8">
+            <div className="theme-settings-panel space-y-5 border border-neutral-200 bg-white p-8">
               <div className="grid gap-4">
                 <label className="block">
                   <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">현재 비밀번호</span>
                   <input
-                    className={`mt-1 block w-full border px-3 py-2 text-sm ${
+                    className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
                       passwordErrors.currentPassword ? 'border-rose-500' : 'border-neutral-300'
                     }`}
                     onChange={(event) => handleCurrentPasswordChange(event.target.value)}
@@ -648,7 +648,7 @@ function SettingsPage() {
                 <label className="block">
                   <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">새 비밀번호</span>
                   <input
-                    className={`mt-1 block w-full border px-3 py-2 text-sm ${
+                    className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
                       passwordErrors.newPassword ? 'border-rose-500' : 'border-neutral-300'
                     } ${areNewPasswordFieldsLocked ? 'bg-neutral-50 text-neutral-400' : ''}`}
                     disabled={areNewPasswordFieldsLocked}
@@ -664,7 +664,7 @@ function SettingsPage() {
                 <label className="block">
                   <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">새 비밀번호 확인</span>
                   <input
-                    className={`mt-1 block w-full border px-3 py-2 text-sm ${
+                    className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
                       passwordErrors.confirmPassword
                         ? 'border-rose-500'
                         : isConfirmPasswordMatched

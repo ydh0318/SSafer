@@ -23,6 +23,8 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
 
   List<ScanFinding> findAllByScanId(Long scanId);
 
+  List<ScanFinding> findAllByScanIdOrderByIdAsc(Long scanId);
+
   // 히스토리 목록 item에서 현재 페이지에 포함된 scanId들만 대상으로 위험도 분포를 집계한다.
   // page size가 20이면 여기도 그 20건만 대상으로 count를 계산해 불필요한 전체 집계를 막는다.
   @Query("""
@@ -40,6 +42,7 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
       from ScanFinding f, Scan s
       where f.scanId = s.id
         and s.projectId in :projectIds
+        and s.deletedAt is null
         and (:status is null or s.status = :status)
         and (:scanMode is null or s.scanMode = :scanMode)
       group by f.severity

@@ -23,3 +23,11 @@ export function getApiFieldErrors(error: unknown) {
 
   return error.response?.data?.data?.fieldErrors ?? {};
 }
+
+export function getApiErrorCode(error: unknown) {
+  if (!axios.isAxiosError<ApiErrorResponse>(error)) {
+    return null;
+  }
+
+  return error.response?.data?.code ?? null;
+}

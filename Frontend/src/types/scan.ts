@@ -211,6 +211,54 @@ export interface HistoryScanListQuery {
   scanMode?: ScanMode;
 }
 
+export interface DeleteScanHistoryResponseData {
+  scanId: number;
+  deletedAt: string;
+}
+
+export interface ScanCompareSummaryData {
+  baseFindingCount: number;
+  targetFindingCount: number;
+  newCount: number;
+  resolvedCount: number;
+  retainedCount: number;
+  severityChangedCount: number;
+}
+
+export interface ScanCompareFindingData {
+  findingId: number;
+  scanId: number;
+  comparisonKey: string;
+  fingerprint: string | null;
+  sourceType: FindingSourceType;
+  severity: FindingSeverity;
+  category: string;
+  title: string;
+  filePath: string | null;
+  lineNumber: number | null;
+  ruleCode: string;
+}
+
+export interface ScanCompareSeverityChangedFindingData {
+  baseFinding: ScanCompareFindingData;
+  targetFinding: ScanCompareFindingData;
+  baseSeverity: FindingSeverity;
+  targetSeverity: FindingSeverity;
+}
+
+export interface ScanCompareResponseData {
+  baseScanId: number;
+  targetScanId: number;
+  projectId: number;
+  baseStatus: ScanStatus;
+  targetStatus: ScanStatus;
+  summary: ScanCompareSummaryData;
+  newFindings: ScanCompareFindingData[];
+  resolvedFindings: ScanCompareFindingData[];
+  retainedFindings: ScanCompareFindingData[];
+  severityChangedFindings: ScanCompareSeverityChangedFindingData[];
+}
+
 export interface AgentStatusResponseData {
   agentId: number;
   status: AgentStatus;

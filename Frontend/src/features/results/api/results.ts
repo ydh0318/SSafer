@@ -3,6 +3,7 @@ import { getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
   ScanBasicData,
+  ScanCompareResponseData,
   ScanFindingDetailData,
   ScanFindingListQuery,
   ScanFindingListResponseData,
@@ -10,9 +11,10 @@ import type {
 } from '../../../types/scan';
 
 const GET_SCAN_BASIC_ERROR = '스캔 기본 정보를 불러오지 못했습니다.';
-const GET_SCAN_SUMMARY_ERROR = '스캔 결과 요약을 불러오지 못했습니다.';
-const GET_SCAN_FINDINGS_ERROR = '스캔 결과 목록을 불러오지 못했습니다.';
+const GET_SCAN_SUMMARY_ERROR = '스캔 요약 정보를 불러오지 못했습니다.';
+const GET_SCAN_FINDINGS_ERROR = '스캔 취약점 목록을 불러오지 못했습니다.';
 const GET_SCAN_FINDING_DETAIL_ERROR = '취약점 상세 정보를 불러오지 못했습니다.';
+const GET_SCAN_COMPARE_ERROR = '스캔 비교 결과를 불러오지 못했습니다.';
 
 export async function getScanBasic(scanId: string | number) {
   try {
@@ -61,9 +63,7 @@ export async function getScanFindings(scanId: string | number, query: ScanFindin
 
     const response = await apiClient.get<ApiSuccessResponse<ScanFindingListResponseData>>(
       `/scans/${scanId}/findings`,
-      {
-        params,
-      },
+      { params },
     );
 
     return response.data.data;
@@ -80,5 +80,20 @@ export async function getScanFindingDetail(scanId: string | number, findingId: s
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, GET_SCAN_FINDING_DETAIL_ERROR));
+  }
+}
+
+export async function getScanCompare(baseScanId: string | number, targetScanId: string | number) {
+  try {
+    const response = await apiClient.get<ApiSuccessResponse<ScanCompareResponseData>>('/scans/compare', {
+      params: {
+        baseScanId,
+        targetScanId,
+      },
+    });
+
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, GET_SCAN_COMPARE_ERROR));
   }
 }

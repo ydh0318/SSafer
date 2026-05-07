@@ -2,6 +2,8 @@
 
 이 문서는 현재 구현된 FastAPI `/analyze` 엔드포인트 스펙을 정리합니다.
 
+Spring Boot, RabbitMQ Worker 연동 전체 계약은 `11_spring_fastapi_interface.md`를 함께 참고합니다.
+
 ## 1. Endpoint
 
 ```text
@@ -43,6 +45,9 @@ API 응답 반환
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=qwen2.5:3b
 OLLAMA_TEMPERATURE=0.1
+OLLAMA_TIMEOUT_SECONDS=120
+OLLAMA_MAX_RETRIES=2
+OLLAMA_RETRY_BACKOFF_SECONDS=1
 ```
 
 ## 3. Request
@@ -59,7 +64,13 @@ Body:
 {
   "scan_result_path": "data/scan_result.json",
   "analysis_result_path": "data/analysis_result.json",
-  "scan_result": null
+  "scan_result": null,
+  "taskId": null,
+  "agentId": null,
+  "projectId": null,
+  "scanId": null,
+  "rawResultPath": null,
+  "analysisResultPath": null
 }
 ```
 
@@ -70,10 +81,36 @@ Body:
 | `scan_result_path` | string | 아니오 | `data/scan_result.json` | 분석할 scan_result.json 경로 |
 | `analysis_result_path` | string | 아니오 | `data/analysis_result.json` | 저장할 analysis_result.json 경로 |
 | `scan_result` | object 또는 null | 아니오 | `null` | 요청 본문에 직접 전달하는 scan_result.json 객체 |
+| `taskId` | number 또는 null | Worker 연동 시 예 | `null` | Spring Boot `agent_tasks.id` |
+| `agentId` | number 또는 null | Worker 연동 시 예 | `null` | 작업을 처리하는 agent ID |
+| `projectId` | number 또는 null | Worker 연동 시 예 | `null` | scan이 속한 project ID |
+| `scanId` | number 또는 null | Worker 연동 시 예 | `null` | Spring Boot `scans.id` |
+| `rawResultPath` | string 또는 null | Worker 연동 시 예 | `null` | 분석할 raw result S3 URI |
+| `analysisResultPath` | string 또는 null | Worker 연동 시 예 | `null` | analysis result 업로드 대상 S3 URI |
 
 상대 경로는 AI 서버 실행 위치 기준으로 해석됩니다.
 
 `scan_result`가 있으면 파일 경로 대신 요청 본문의 객체를 분석합니다. 이 경우 `scan_result_path`는 응답과 로깅에서 입력 출처를 표시하는 값으로 사용됩니다.
+
+현재 구현은 기존 로컬 파일/inline 분석 흐름과의 호환을 위해 `scan_result_path`, `analysis_result_path`, `scan_result`를 계속 지원합니다.
+Worker 연동 필드는 Spring Boot 상태/결과 콜백과 로깅에 필요한 메타데이터입니다.
+`rawResultPath`가 있으면 FastAPI는 해당 S3 객체를 로컬 파일로 저장하지 않고 메모리에서 JSON으로 파싱한 뒤 분석합니다.
+`analysisResultPath`가 있으면 생성된 `analysis_result.json`도 임시 파일 없이 해당 S3 경로로 업로드합니다.
+
+Worker 연동 요청 예시:
+
+```json
+{
+  "taskId": 123,
+  "agentId": 10,
+  "projectId": 2,
+  "scanId": 5,
+  "rawResultPath": "s3://ssafer-scan-storage-dev/raw/5/71b37aca-1468-419d-af27-75a56ab97b5e/scan_result.json",
+  "analysisResultPath": "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+}
+```
+
+주의: Worker 연동 요청의 `scanId`는 Spring Boot `scans.id`입니다. raw `scan_result.json` 내부의 `scanId`는 CLI 원본 UUID이므로 같은 값으로 취급하지 않습니다.
 
 ## 3-1. scan_result DTO
 
@@ -151,11 +188,27 @@ Inline 요청 예시:
 }
 ```
 
-일부 finding이 유효하지 않아 제외되었지만 valid finding 분석은 완료된 경우:
+응답 필드:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `status` | string | 성공 시 `completed` |
+| `message` | string 또는 null | 성공 시 보통 `null` |
+| `stage` | string 또는 null | 성공 시 `null` |
+| `finding_id` | string 또는 null | 성공 시 `null` |
+| `scan_result_path` | string | 입력 scan result 경로 또는 출처 |
+| `analysis_result_path` | string 또는 null | 저장된 analysis result 경로 |
+| `finding_count` | number | raw finding 전체 개수 |
+| `valid_finding_count` | number | 분석 대상 finding 개수 |
+| `invalid_finding_count` | number | 검증 실패로 제외된 finding 개수 |
+| `result_count` | number | 생성된 분석 결과 개수 |
+| `invalid_findings` | array | 제외된 finding 목록 |
+
+일부 finding이 유효하지 않아 제외되었지만 valid finding 분석은 완료된 경우에도 `status`는 `completed`를 유지하고, 제외 목록만 `invalid_findings`에 기록합니다.
 
 ```json
 {
-  "status": "completed_with_invalid_findings",
+  "status": "completed",
   "message": null,
   "stage": null,
   "finding_id": null,

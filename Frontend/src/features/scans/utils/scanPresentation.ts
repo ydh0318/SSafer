@@ -3,7 +3,7 @@ import type { AgentStatus, AgentTaskStatus, ScanMode, ScanStatus } from '../../.
 const scanStatusLabelMap: Record<ScanStatus, string> = {
   REQUESTED: '요청됨',
   QUEUED: '대기 중',
-  RUNNING: '실행 중',
+  RUNNING: '진행 중',
   RAW_UPLOADED: '원본 업로드 완료',
   DONE: '완료',
   FAILED: '실패',
@@ -11,7 +11,7 @@ const scanStatusLabelMap: Record<ScanStatus, string> = {
 };
 
 const agentStatusLabelMap: Record<AgentStatus, string> = {
-  ONLINE: '온라인',
+  ONLINE: '정상',
   OFFLINE: '오프라인',
   ERROR: '오류',
 };
@@ -19,8 +19,8 @@ const agentStatusLabelMap: Record<AgentStatus, string> = {
 const taskStatusLabelMap: Record<AgentTaskStatus, string> = {
   PENDING: '대기',
   SENT: '전송됨',
-  ACKED: '수신 확인',
-  RUNNING: '실행 중',
+  ACKED: '확인됨',
+  RUNNING: '진행 중',
   DONE: '완료',
   FAILED: '실패',
   CANCELED: '취소됨',
@@ -133,18 +133,34 @@ export function getTaskStatusClassName(status: AgentTaskStatus) {
 
 export function getScanModeLabel(scanMode: ScanMode) {
   if (scanMode === 'AGENT') {
-    return 'Local Agent';
+    return '로컬 에이전트';
   }
 
   if (scanMode === 'CLI') {
     return 'CLI';
   }
 
-  return '웹 업로드';
+  return '파일 업로드';
 }
 
 export function isTerminalScanStatus(status: ScanStatus) {
   return status === 'DONE' || status === 'FAILED' || status === 'CANCELED';
+}
+
+export function canDeleteScanHistory(status: ScanStatus) {
+  return status === 'REQUESTED' || status === 'DONE' || status === 'FAILED' || status === 'CANCELED';
+}
+
+export function getDeleteBlockedReason(status: ScanStatus) {
+  if (canDeleteScanHistory(status)) {
+    return null;
+  }
+
+  if (status === 'QUEUED' || status === 'RUNNING' || status === 'RAW_UPLOADED') {
+    return '스캔이 아직 진행 중이어서 삭제할 수 없습니다.';
+  }
+
+  return '현재 상태에서는 이 스캔을 삭제할 수 없습니다.';
 }
 
 export function getInternalAgentWebSocketUrl() {

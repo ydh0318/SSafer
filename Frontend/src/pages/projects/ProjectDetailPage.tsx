@@ -12,6 +12,7 @@ import AgentStatusCard from '../../features/agents/components/AgentStatusCard';
 import { getProjectDetail } from '../../features/projects/api/projects';
 import {
   createScanRequest,
+  deleteScanHistory,
   getProjectScans,
   reportUploadedScanResult,
   uploadScanResultFile,
@@ -57,7 +58,9 @@ function ProjectDetailPage() {
   });
   const [scans, setScans] = useState<ProjectScanListItemData[]>([]);
   const [scanListError, setScanListError] = useState<string | null>(null);
+  const [scanListNotice, setScanListNotice] = useState<string | null>(null);
   const [isScanListLoading, setIsScanListLoading] = useState(true);
+  const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
 
   const [scanRequestForm, setScanRequestForm] = useState<CreateScanRequestPayload>(initialScanRequestForm);
   const [scanRequestMethod, setScanRequestMethod] = useState<ScanRequestMethod>('AGENT');
@@ -231,6 +234,38 @@ function ProjectDetailPage() {
     }
   };
 
+  const handleDeleteScan = async (scanId: number) => {
+    if (!projectId) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(`스캔 #${scanId} 이력을 삭제하시겠습니까?`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setDeletingScanIds((current) => [...current, scanId]);
+    setScanListError(null);
+    setScanListNotice(null);
+
+    try {
+      await deleteScanHistory(scanId);
+
+      if (lastCreatedScan?.scanId === scanId) {
+        setLastCreatedScan(null);
+      }
+
+      setScanListNotice(`스캔 #${scanId} 이력이 프로젝트 목록에서 삭제되었습니다.`);
+      await handleRefreshScans();
+    } catch (error) {
+      setScanListError(error instanceof Error ? error.message : 'Failed to delete scan history.');
+      setScanListNotice(null);
+    } finally {
+      setDeletingScanIds((current) => current.filter((value) => value !== scanId));
+    }
+  };
+
   const handleSubmitScanRequest = async () => {
     if (!projectDetail) {
       return;
@@ -351,6 +386,10 @@ function ProjectDetailPage() {
 
       {projectError ? <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{projectError}</div> : null}
 
+      {!scanListError && scanListNotice ? (
+        <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{scanListNotice}</div>
+      ) : null}
+
       {lastCreatedScan ? (
         <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
           스캔 #{lastCreatedScan.scanId} 이(가) 등록되었습니다. 상태 화면으로 이동해 진행 상황을 확인할 수 있습니다.
@@ -451,9 +490,11 @@ function ProjectDetailPage() {
       />
 
       <ProjectScanList
+        deletingScanIds={deletingScanIds}
         errorMessage={scanListError}
         filters={scanFilters}
         isLoading={isScanListLoading}
+        onDeleteScan={(scanId) => void handleDeleteScan(scanId)}
         onFilterChange={setScanFilters}
         onRefresh={() => void handleRefreshScans()}
         projectId={projectId}

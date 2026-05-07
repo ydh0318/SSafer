@@ -1,22 +1,18 @@
-import { Filter, RefreshCw } from 'lucide-react';
+import { Filter, RefreshCw, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import SectionPanel from '../../../components/common/SectionPanel';
 import { ROUTES } from '../../../constants/routes';
 import type { ProjectScanListItemData, ProjectScanListQuery, ScanMode, ScanStatus } from '../../../types/scan';
-import { formatCompactDateTime, getScanModeLabel } from '../utils/scanPresentation';
+import {
+  canDeleteScanHistory,
+  formatCompactDateTime,
+  getDeleteBlockedReason,
+  getScanModeLabel,
+} from '../utils/scanPresentation';
 import ScanStatusBadge from './ScanStatusBadge';
 
-const scanStatuses: Array<ScanStatus> = [
-  'REQUESTED',
-  'QUEUED',
-  'RUNNING',
-  'RAW_UPLOADED',
-  'DONE',
-  'FAILED',
-  'CANCELED',
-];
-
+const scanStatuses: Array<ScanStatus> = ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED', 'DONE', 'FAILED', 'CANCELED'];
 const scanModes: Array<ScanMode> = ['AGENT', 'UPLOAD'];
 
 type ProjectScanListProps = {
@@ -25,7 +21,9 @@ type ProjectScanListProps = {
   filters: ProjectScanListQuery;
   isLoading: boolean;
   errorMessage: string | null;
+  deletingScanIds: number[];
   onFilterChange: (nextValue: ProjectScanListQuery) => void;
+  onDeleteScan: (scanId: number) => void;
   onRefresh: () => void;
 };
 
@@ -35,7 +33,9 @@ function ProjectScanList({
   filters,
   isLoading,
   errorMessage,
+  deletingScanIds,
   onFilterChange,
+  onDeleteScan,
   onRefresh,
 }: ProjectScanListProps) {
   return (
@@ -47,16 +47,16 @@ function ProjectScanList({
           type="button"
         >
           <RefreshCw className="h-4 w-4" />
-          목록 새로고침
+          새로고침
         </button>
       }
-      description="프로젝트의 실제 스캔 목록을 확인하고, 완료된 스캔만 결과 페이지로 이동할 수 있습니다."
-      eyebrow="SCAN HISTORY"
-      title="프로젝트 스캔 목록"
+      description="프로젝트의 스캔 진행 상황을 확인하고, 완료된 결과를 열거나 상태에 따라 스캔 이력을 삭제할 수 있습니다."
+      eyebrow="스캔 히스토리"
+      title="프로젝트 스캔"
     >
       <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <label className="block space-y-2">
-          <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">
+          <span className="inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.24em] text-neutral-500">
             <Filter className="h-3.5 w-3.5" />
             상태
           </span>
@@ -80,7 +80,7 @@ function ProjectScanList({
         </label>
 
         <label className="block space-y-2">
-          <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">
+          <span className="inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.24em] text-neutral-500">
             <Filter className="h-3.5 w-3.5" />
             스캔 방식
           </span>
@@ -105,74 +105,102 @@ function ProjectScanList({
       </div>
 
       {isLoading ? (
-        <div className="border border-neutral-200 bg-[#fafafa] px-4 py-5 text-sm text-neutral-600">
-          스캔 목록을 불러오는 중입니다...
-        </div>
+        <div className="border border-neutral-200 bg-[#fafafa] px-4 py-5 text-sm text-neutral-600">스캔 목록을 불러오는 중입니다...</div>
       ) : errorMessage ? (
         <div className="border border-rose-200 bg-rose-50 px-4 py-5 text-sm text-rose-700">{errorMessage}</div>
       ) : scans.length === 0 ? (
-        <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-6 text-sm text-neutral-600">
-          조건에 맞는 스캔이 없습니다.
+        <div className="theme-dark-soft-card border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-6 text-sm text-neutral-600">
+          현재 필터에 해당하는 스캔이 없습니다.
         </div>
       ) : (
         <div className="space-y-3">
-          {scans.map((scan) => (
-            <article className="border border-neutral-200 bg-white p-4 shadow-sm" key={scan.scanId}>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ScanStatusBadge status={scan.status} />
-                    <span className="inline-flex rounded-full border border-neutral-200 bg-[#f5f5f5] px-2.5 py-1 text-xs font-bold text-neutral-700">
-                      {getScanModeLabel(scan.scanMode)}
-                    </span>
-                    <span className="inline-flex rounded-full bg-black px-2.5 py-1 text-xs font-bold text-white">
-                      Scan #{scan.scanId}
-                    </span>
+          {scans.map((scan) => {
+            const isDeleting = deletingScanIds.includes(scan.scanId);
+            const isDeleteAllowed = canDeleteScanHistory(scan.status);
+            const deleteBlockedReason = getDeleteBlockedReason(scan.status);
+
+            return (
+              <article className="border border-neutral-200 bg-white p-4 shadow-sm" key={scan.scanId}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ScanStatusBadge status={scan.status} />
+                      <span className="inline-flex rounded-full border border-neutral-200 bg-[#f5f5f5] px-2.5 py-1 text-xs font-bold text-neutral-700">
+                        {getScanModeLabel(scan.scanMode)}
+                      </span>
+                      <span className="inline-flex rounded-full bg-black px-2.5 py-1 text-xs font-bold text-white">
+                        스캔 #{scan.scanId}
+                      </span>
+                    </div>
+
+                    <dl className="grid gap-3 text-sm text-neutral-600 md:grid-cols-2">
+                      <div>
+                        <dt className="text-[11px] font-bold tracking-[0.24em] text-neutral-400">요청 시각</dt>
+                        <dd className="mt-1 font-semibold text-black">{formatCompactDateTime(scan.requestedAt)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[11px] font-bold tracking-[0.24em] text-neutral-400">완료 시각</dt>
+                        <dd className="mt-1 font-semibold text-black">{formatCompactDateTime(scan.completedAt)}</dd>
+                      </div>
+                    </dl>
                   </div>
 
-                  <dl className="grid gap-3 text-sm text-neutral-600 md:grid-cols-2">
-                    <div>
-                      <dt className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">요청 시각</dt>
-                      <dd className="mt-1 font-semibold text-black">{formatCompactDateTime(scan.requestedAt)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">완료 시각</dt>
-                      <dd className="mt-1 font-semibold text-black">{formatCompactDateTime(scan.completedAt)}</dd>
-                    </div>
-                  </dl>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    className="border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:border-black hover:text-black"
-                    state={{ projectId }}
-                    to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
-                  >
-                    진행 현황
-                  </Link>
-                  {scan.status === 'DONE' ? (
+                  <div className="flex flex-wrap gap-2">
                     <Link
-                      className="bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+                      className="border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:border-black hover:text-black"
                       state={{ projectId }}
-                      to={ROUTES.resultDetail.replace(':scanId', String(scan.scanId))}
+                      to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
                     >
-                      결과 보기
+                      진행 상황 보기
                     </Link>
-                  ) : (
-                    <span
-                      className="inline-flex cursor-not-allowed items-center bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-500"
-                      title="스캔이 완료된 뒤 결과 페이지를 열 수 있습니다."
+                    {scan.status === 'DONE' ? (
+                      <>
+                        <Link
+                          className="bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+                          state={{ projectId }}
+                          to={ROUTES.resultDetail.replace(':scanId', String(scan.scanId))}
+                        >
+                          결과 보기
+                        </Link>
+                        <button
+                          aria-disabled="true"
+                          className="border border-dashed border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-400"
+                          title="결과 삭제 기능은 아직 연결되지 않았습니다."
+                          type="button"
+                        >
+                          결과 삭제 준비 중
+                        </button>
+                      </>
+                    ) : (
+                      <span
+                        className="inline-flex cursor-not-allowed items-center bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-500"
+                        title="스캔이 완료되면 결과 페이지를 열 수 있습니다."
+                      >
+                        결과 대기 중
+                      </span>
+                    )}
+                    <button
+                      className={
+                        isDeleteAllowed && !isDeleting
+                          ? 'inline-flex items-center gap-2 border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-400 hover:bg-rose-50'
+                          : 'inline-flex cursor-not-allowed items-center gap-2 border border-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-400'
+                      }
+                      disabled={!isDeleteAllowed || isDeleting}
+                      onClick={() => onDeleteScan(scan.scanId)}
+                      title={isDeleteAllowed ? undefined : deleteBlockedReason ?? undefined}
+                      type="button"
                     >
-                      결과 대기 중
-                    </span>
-                  )}
+                      <Trash2 className="h-4 w-4" />
+                      {isDeleting ? '삭제 중...' : '이력 삭제'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-              {scan.status !== 'DONE' ? (
-                <p className="mt-3 text-xs text-neutral-500">스캔이 완료되면 결과 보기 버튼이 활성화됩니다.</p>
-              ) : null}
-            </article>
-          ))}
+                {scan.status !== 'DONE' ? (
+                  <p className="mt-3 text-xs text-neutral-500">스캔이 종료 상태가 되면 결과 페이지를 확인할 수 있습니다.</p>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
       )}
     </SectionPanel>
