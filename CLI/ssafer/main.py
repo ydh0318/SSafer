@@ -105,6 +105,51 @@ def install_tools() -> None:
     raise typer.Exit(code=1)
 
 
+@app.command("server-audit")
+def server_audit(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root for .ssafer output."),
+    checks: Optional[str] = typer.Option(
+        None,
+        "--checks",
+        help="Comma-separated checks: ports,processes,docker,ssh,firewall,nginx,os-packages.",
+    ),
+    details: bool = typer.Option(False, "--details", "-d", help="Print findings, warnings, and artifacts."),
+    include_os_packages: bool = typer.Option(
+        False,
+        "--include-os-packages",
+        help="Run Trivy rootfs OS package vulnerability scan. This can be slow and may require privileges.",
+    ),
+) -> None:
+    """Audit runtime security state from inside a server."""
+    from ssafer.server.audit import run_server_audit, save_server_audit_result
+
+    selected_checks = [item.strip() for item in checks.split(",") if item.strip()] if checks else None
+    needs_sudo_prompt = include_os_packages or selected_checks is None or "firewall" in selected_checks
+    allow_sudo = False
+    if needs_sudo_prompt:
+        allow_sudo = typer.confirm(
+            "일부 서버 점검은 sudo 권한이 필요할 수 있습니다. 필요한 명령에만 sudo를 사용하시겠습니까?",
+            default=False,
+        )
+    result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
+    output_path = save_server_audit_result(path.resolve(), result)
+
+    table = Table(title="서버 점검 결과")
+    table.add_column("항목")
+    table.add_column("수량", justify="right")
+    table.add_row("Findings", str(len(result.findings)))
+    table.add_row("Warnings", str(len(result.warnings)))
+    table.add_row("Artifacts", str(len(result.artifacts)))
+    console.print(table)
+    if result.warnings:
+        console.print("[yellow]경고 목록[/yellow]")
+        for warning in result.warnings:
+            console.print(f"  - {warning}")
+    if details:
+        _print_server_audit_details(result)
+    console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
+
+
 @app.command()
 def run(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to scan."),
@@ -168,34 +213,35 @@ def upload(
 @app.command("apply")
 def apply_fix(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to patch."),
-    analysis_result: Path = typer.Option(..., "--analysis-result", help="Worker analysis_result.json with patch payloads."),
+    analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="Worker analysis_result.json with patch payloads."),
     patch_id: Optional[str] = typer.Option(None, "--patch-id", help="Apply only one patch ID."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch payloads without modifying files."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirmation prompt."),
 ) -> None:
     """Apply approved patch payloads to local project files."""
-    from ssafer.core.patches import PatchError, apply_patch_candidates, load_patch_candidates_from_file
+    from ssafer.core.patches import (
+        PatchCandidate,
+        PatchError,
+        apply_patch_candidates,
+        find_default_analysis_result,
+        load_patch_candidates_from_file,
+    )
 
     try:
-        candidates = load_patch_candidates_from_file(analysis_result)
+        project_root = path.resolve()
+        analysis_path = analysis_result or find_default_analysis_result(project_root)
+        if analysis_path is None:
+            raise PatchError(
+                "analysis_result.json not found. Use --analysis-result or place it under .ssafer/analysis_result.json."
+            )
+
+        candidates = load_patch_candidates_from_file(analysis_path)
         selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
         if not selected:
             console.print("[yellow]No applicable patch payloads found.[/yellow]")
             raise typer.Exit(code=1)
 
-        table = Table(title="Patch candidates")
-        table.add_column("Patch ID")
-        table.add_column("Finding ID")
-        table.add_column("File", overflow="fold")
-        table.add_column("Operation")
-        for candidate in selected:
-            table.add_row(
-                candidate.patch_id,
-                candidate.finding_id or "-",
-                candidate.file_path,
-                candidate.operation,
-            )
-        console.print(table)
+        selected = _select_patch_candidates(selected, patch_id=patch_id, yes=yes)
 
         if not dry_run and not yes:
             confirmed = typer.confirm("Apply selected patches?")
@@ -203,7 +249,14 @@ def apply_fix(
                 console.print("[yellow]Patch apply canceled.[/yellow]")
                 raise typer.Exit(code=1)
 
-        results = apply_patch_candidates(path.resolve(), candidates, patch_id=patch_id, dry_run=dry_run)
+        selected_patch_id = selected[0].patch_id if len(selected) == 1 else None
+        selected_candidates = selected if selected_patch_id is None else candidates
+        results = apply_patch_candidates(
+            project_root,
+            selected_candidates,
+            patch_id=selected_patch_id,
+            dry_run=dry_run,
+        )
     except (OSError, ValueError, PatchError, RuntimeError) as exc:
         console.print(f"[red]Patch apply failed:[/red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -223,6 +276,46 @@ def apply_fix(
             result.backup_path or "-",
         )
     console.print(result_table)
+
+
+def _select_patch_candidates(
+    candidates: list["PatchCandidate"],
+    *,
+    patch_id: str | None,
+    yes: bool,
+) -> list["PatchCandidate"]:
+    table = Table(title="Patch candidates")
+    table.add_column("No.", justify="right")
+    table.add_column("Patch ID")
+    table.add_column("Finding ID")
+    table.add_column("File", overflow="fold")
+    table.add_column("Operation")
+    for index, candidate in enumerate(candidates, start=1):
+        table.add_row(
+            str(index),
+            candidate.patch_id,
+            candidate.finding_id or "-",
+            candidate.file_path,
+            candidate.operation,
+        )
+    if len(candidates) > 1 and patch_id is None:
+        table.add_row(str(len(candidates) + 1), "ALL", "-", "All patch candidates", "-")
+    console.print(table)
+
+    if patch_id is not None or yes or len(candidates) == 1:
+        return candidates
+
+    choice = typer.prompt("Select patch number")
+    try:
+        selected = int(choice)
+    except ValueError as exc:
+        raise PatchError("Patch selection must be a number.") from exc
+
+    if selected == len(candidates) + 1:
+        return candidates
+    if selected < 1 or selected > len(candidates):
+        raise PatchError(f"Patch selection is out of range: {selected}")
+    return [candidates[selected - 1]]
 
 
 @app.command()
@@ -636,6 +729,87 @@ def _print_upload_response(response: dict) -> None:
     console.print(f"스캔 ID: {response.get('scanId', 'unknown')}")
     if response.get("viewUrl"):
         console.print(f"결과 보기: {response['viewUrl']}")
+
+
+def _print_server_audit_details(result: object) -> None:
+    findings = getattr(result, "findings", [])
+    warnings = getattr(result, "warnings", [])
+    artifacts = getattr(result, "artifacts", [])
+
+    finding_table = Table(title="서버 점검 Findings", show_lines=True)
+    finding_table.add_column("ID")
+    finding_table.add_column("Severity")
+    finding_table.add_column("Rule")
+    finding_table.add_column("Target", overflow="fold")
+    finding_table.add_column("Title", overflow="fold")
+    finding_table.add_column("Evidence", overflow="fold")
+    if not findings:
+        finding_table.add_row("-", "-", "-", "-", "-", "-")
+    for finding in findings:
+        finding_table.add_row(
+            getattr(finding, "id", "-"),
+            getattr(finding, "severity", "-"),
+            _format_server_rule_id(getattr(finding, "ruleId", "-")),
+            getattr(finding, "target", "-"),
+            getattr(finding, "title", "-"),
+            getattr(finding, "evidence", "-"),
+        )
+    console.print(finding_table)
+
+    warning_table = Table(title="서버 점검 경고", show_lines=True)
+    warning_table.add_column("번호", justify="right")
+    warning_table.add_column("메시지", overflow="fold")
+    if not warnings:
+        warning_table.add_row("-", "-")
+    for index, warning in enumerate(warnings, start=1):
+        warning_table.add_row(str(index), str(warning))
+    console.print(warning_table)
+
+    artifact_table = Table(title="서버 점검 산출물", show_lines=True)
+    artifact_table.add_column("Type")
+    artifact_table.add_column("Target", overflow="fold")
+    artifact_table.add_column("Summary", overflow="fold")
+    if not artifacts:
+        artifact_table.add_row("-", "-", "-")
+    for artifact in artifacts:
+        artifact_table.add_row(
+            getattr(artifact, "type", "-"),
+            getattr(artifact, "target", "-"),
+            _summarize_server_artifact(getattr(artifact, "content", None)),
+        )
+    console.print(artifact_table)
+
+
+def _summarize_server_artifact(content: object) -> str:
+    if isinstance(content, list):
+        return f"{len(content)} items"
+    if isinstance(content, dict):
+        if {"command", "exit_code"}.issubset(content):
+            command = " ".join(content.get("command") or [])
+            return f"{command} (exit {content.get('exit_code')})"
+        return f"{len(content)} keys"
+    if content is None:
+        return "-"
+    text = str(content).replace("\r", " ").replace("\n", " ").strip()
+    if not text:
+        return "-"
+    if len(text) <= _REPORT_EVIDENCE_MAX:
+        return text
+    return text[: _REPORT_EVIDENCE_MAX - 3] + "..."
+
+
+def _format_server_rule_id(rule_id: object) -> str:
+    text = str(rule_id)
+    prefix = "SERVER_"
+    if text.startswith(prefix):
+        text = text[len(prefix):]
+    known = {
+        "PUBLIC_SENSITIVE_PORT": "PUBLIC_PORT",
+        "SSH_ROOT_LOGIN": "SSH_ROOT_LOGIN",
+        "SSH_PASSWORD_AUTH": "SSH_PASSWORD_AUTH",
+        "FIREWALL_INACTIVE": "FIREWALL_INACTIVE",
+    }
+    return known.get(text, text)
 
 
 def _upload_or_exit(path: Path, api_url: str | None) -> dict:

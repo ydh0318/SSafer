@@ -34,6 +34,15 @@ class PatchApplyResult:
     backup_path: str | None = None
 
 
+def find_default_analysis_result(project_root: Path) -> Path | None:
+    candidates = [
+        project_root / ".ssafer" / "analysis_result.json",
+        project_root / ".ssafer" / "results" / "analysis_result.json",
+        project_root / "analysis_result.json",
+    ]
+    return next((candidate for candidate in candidates if candidate.exists()), None)
+
+
 def load_patch_candidates_from_file(path: Path) -> list[PatchCandidate]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     return extract_patch_candidates(payload)
