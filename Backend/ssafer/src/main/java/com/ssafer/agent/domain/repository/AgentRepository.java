@@ -18,4 +18,7 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
   Optional<Agent> findByAuthTokenHash(String authTokenHash);
 
   List<Agent> findByStatusAndLastSeenAtBefore(AgentStatus status, Instant before);
+
+  // scan-options API에서 "해당 프로젝트에 ONLINE Local Agent가 있는지" 빠르게 판단할 때 사용한다.
+  boolean existsByProjectIdAndStatus(Long projectId, AgentStatus status);
 }
