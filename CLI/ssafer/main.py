@@ -109,7 +109,7 @@ def install_tools() -> None:
 
 @app.command("server-audit")
 def server_audit(
-    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root for .ssafer output."),
+    path: Optional[Path] = typer.Option(None, "--path", "-p", help="Output root for .ssafer server-audit files."),
     checks: Optional[str] = typer.Option(
         None,
         "--checks",
@@ -134,7 +134,8 @@ def server_audit(
             default=False,
         )
     result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
-    output_path = save_server_audit_result(path.resolve(), result)
+    output_root = path.resolve() if path is not None else Path.home()
+    output_path = save_server_audit_result(output_root, result)
 
     table = Table(title="서버 점검 결과")
     table.add_column("항목")
