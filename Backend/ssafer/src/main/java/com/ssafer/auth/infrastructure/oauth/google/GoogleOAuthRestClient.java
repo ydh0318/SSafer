@@ -79,6 +79,11 @@ public class GoogleOAuthRestClient implements GoogleOAuthApiClient {
 
   private void validateConfigured() {
     if (isBlank(properties.getClientId()) || isBlank(properties.getClientSecret())) {
+      log.error(
+          "Google OAuth 설정이 누락되었습니다. clientIdConfigured={}, clientSecretConfigured={}",
+          !isBlank(properties.getClientId()),
+          !isBlank(properties.getClientSecret())
+      );
       throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
   }
