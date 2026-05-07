@@ -134,8 +134,8 @@ def test_server_audit_firewall_uses_sudo_when_allowed():
     result = run_server_audit(checks=["firewall"], runner=fake_runner, allow_sudo=True)
 
     assert result.warnings == []
-    assert ["sudo", "ufw", "status"] in commands
-    assert ["sudo", "iptables", "-S"] in commands
+    assert ["sudo", "-n", "ufw", "status"] in commands
+    assert ["sudo", "-n", "iptables", "-S"] in commands
 
 
 def test_server_audit_nginx_falls_back_to_docker_container():
@@ -188,7 +188,69 @@ def test_server_audit_trivy_rootfs_retries_with_sudo_when_allowed(monkeypatch):
     )
 
     assert result.warnings == []
-    assert any(command[:2] == ["sudo", "trivy"] for command in commands)
+    assert any(command[:3] == ["sudo", "-n", "trivy"] for command in commands)
+
+
+def test_server_audit_trivy_rootfs_adds_summary_finding(monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    monkeypatch.setattr(audit_module.shutil, "which", lambda name: "/usr/bin/trivy" if name == "trivy" else None)
+
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["trivy", "--version"]:
+            return CommandResult(command, 0, "Version: 0.69.3")
+        if command[:3] == ["trivy", "rootfs", "--scanners"]:
+            return CommandResult(
+                command,
+                0,
+                json.dumps(
+                    {
+                        "Results": [
+                            {
+                                "Target": "/",
+                                "Vulnerabilities": [
+                                    {"VulnerabilityID": "CVE-1", "Severity": "CRITICAL"},
+                                    {"VulnerabilityID": "CVE-2", "Severity": "HIGH"},
+                                    {"VulnerabilityID": "CVE-3", "Severity": "HIGH"},
+                                ],
+                            }
+                        ]
+                    }
+                ),
+            )
+        raise AssertionError(command)
+
+    result = run_server_audit(
+        checks=["os-packages"],
+        include_os_packages=True,
+        runner=fake_runner,
+    )
+
+    assert result.warnings == []
+    assert result.findings[0].ruleId == "SERVER_OS_PACKAGE_VULNERABILITY"
+    assert result.findings[0].severity == "CRITICAL"
+    assert result.findings[0].evidence == "CRITICAL=1, HIGH=2"
+    assert [artifact.type for artifact in result.artifacts] == ["command-output", "trivy-rootfs-json"]
+
+
+def test_server_audit_trivy_permission_failure_suggests_allow_sudo(monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    monkeypatch.setattr(audit_module.shutil, "which", lambda name: "/usr/bin/trivy" if name == "trivy" else None)
+
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["trivy", "--version"]:
+            return CommandResult(command, 0, "Version: 0.69.3")
+        return CommandResult(command, 1, stderr="open /opt/app/secret.jar: permission denied")
+
+    result = run_server_audit(
+        checks=["os-packages"],
+        include_os_packages=True,
+        runner=fake_runner,
+    )
+
+    assert "Retry with --allow-sudo" in result.warnings[0]
+    assert result.artifacts[-1].target == "trivy rootfs"
 
 
 def test_save_server_audit_result_writes_json_and_marker(tmp_path: Path):
@@ -230,6 +292,46 @@ def test_server_audit_command_saves_result(tmp_path: Path, monkeypatch):
     assert (tmp_path / ".ssafer" / "server-audit" / "last_audit.txt").exists()
 
 
+def test_server_audit_command_noninteractive_skips_sudo_prompt(tmp_path: Path, monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    commands: list[list[str]] = []
+
+    def fake_runner(command: list[str]) -> CommandResult:
+        commands.append(command)
+        return CommandResult(command, 1, stderr="Permission denied")
+
+    monkeypatch.setattr(audit_module, "run_command", fake_runner)
+
+    result = CliRunner().invoke(app, ["server-audit", "--path", str(tmp_path), "--checks", "firewall"])
+
+    assert result.exit_code == 0
+    assert "Non-interactive session detected" in result.output
+    assert ["sudo", "-n", "ufw", "status"] not in commands
+    assert ["sudo", "-n", "iptables", "-S"] not in commands
+
+
+def test_server_audit_command_allow_sudo_retries_without_prompt(tmp_path: Path, monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    commands: list[list[str]] = []
+
+    def fake_runner(command: list[str]) -> CommandResult:
+        commands.append(command)
+        if command[0] == "sudo":
+            return CommandResult(command, 0, "Status: active")
+        return CommandResult(command, 1, stderr="Permission denied")
+
+    monkeypatch.setattr(audit_module, "run_command", fake_runner)
+
+    result = CliRunner().invoke(app, ["server-audit", "--path", str(tmp_path), "--checks", "firewall", "--allow-sudo"])
+
+    assert result.exit_code == 0
+    assert "Non-interactive session detected" not in result.output
+    assert ["sudo", "-n", "ufw", "status"] in commands
+    assert ["sudo", "-n", "iptables", "-S"] in commands
+
+
 def test_server_audit_command_details_prints_findings_and_artifacts(tmp_path: Path, monkeypatch):
     from ssafer.server import audit as audit_module
 
@@ -248,3 +350,35 @@ def test_server_audit_command_details_prints_findings_and_artifacts(tmp_path: Pa
     assert "IPv4" in result.output
     assert "서버 점검 산출물" in result.output
     assert "listening-ports" in result.output
+
+
+def test_server_audit_command_uploads_saved_result(tmp_path: Path, monkeypatch):
+    from ssafer.server import audit as audit_module
+    import ssafer.main as main_module
+
+    monkeypatch.setattr(
+        audit_module,
+        "run_command",
+        lambda command: CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:5432 0.0.0.0:*"),
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_upload(path: Path, api_url: str | None = None):
+        captured["path"] = path
+        captured["api_url"] = api_url
+        return {"scanId": 777}
+
+    monkeypatch.setattr(main_module, "_upload_server_audit_or_exit", fake_upload)
+
+    result = CliRunner().invoke(
+        app,
+        ["server-audit", "--path", str(tmp_path), "--checks", "ports", "--upload", "--api-url", "https://api.example.com"],
+    )
+
+    assert result.exit_code == 0
+    assert captured == {
+        "path": tmp_path,
+        "api_url": "https://api.example.com",
+    }
+    assert "777" in result.output

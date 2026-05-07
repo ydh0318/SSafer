@@ -123,6 +123,22 @@ def save_server_audit_result(project_root: Path, result: ServerAuditResult) -> P
     return output_path
 
 
+def load_last_server_audit(project_root: Path) -> dict | None:
+    output_dir = project_root / ".ssafer" / "server-audit"
+    marker = output_dir / "last_audit.txt"
+    if marker.exists():
+        audit_path = output_dir / marker.read_text(encoding="utf-8").strip()
+    else:
+        candidates = sorted(
+            p for p in (output_dir.glob("*.json") if output_dir.exists() else [])
+            if p.name != "last_audit.txt"
+        )
+        audit_path = candidates[-1] if candidates else None
+    if not audit_path or not audit_path.exists():
+        return None
+    return json.loads(audit_path.read_text(encoding="utf-8"))
+
+
 def to_jsonable(result: ServerAuditResult) -> dict:
     payload = asdict(result)
     payload["findings"] = [asdict(finding) for finding in result.findings]
@@ -260,8 +276,8 @@ def _audit_firewall(result: ServerAuditResult, runner: Runner, *, allow_sudo: bo
     ufw = runner(["ufw", "status"])
     iptables = runner(["iptables", "-S"])
     if allow_sudo and _looks_like_permission_error(ufw, iptables):
-        ufw = runner(["sudo", "ufw", "status"])
-        iptables = runner(["sudo", "iptables", "-S"])
+        ufw = runner(["sudo", "-n", "ufw", "status"])
+        iptables = runner(["sudo", "-n", "iptables", "-S"])
     result.artifacts.append(ServerArtifact("command-output", "ufw status", asdict(ufw)))
     result.artifacts.append(ServerArtifact("command-output", "iptables -S", asdict(iptables)))
     if ufw.exit_code == 0 and "Status: inactive" in ufw.stdout:
@@ -318,17 +334,19 @@ def _audit_os_packages(result: ServerAuditResult, runner: Runner, *, include_os_
             "Run 'ssafer install-tools' on this server, then retry with '--include-os-packages'."
         )
         return
+    version = runner(["trivy", "--version"])
+    result.artifacts.append(ServerArtifact("command-output", "trivy --version", asdict(version)))
     if not include_os_packages:
         result.warnings.append("OS package vulnerability scan skipped. Use --include-os-packages to run Trivy rootfs scan.")
-        version = runner(["trivy", "--version"])
-        result.artifacts.append(ServerArtifact("command-output", "trivy --version", asdict(version)))
         return
     command = ["trivy", "rootfs", "--scanners", "vuln", "--format", "json", "--quiet", "/"]
     command_result = runner(command)
+    retried_with_sudo = False
     if allow_sudo and _looks_like_permission_error(command_result):
-        command_result = runner(["sudo", *command])
+        retried_with_sudo = True
+        command_result = runner(["sudo", "-n", *command])
     if command_result.exit_code != 0:
-        result.warnings.append(f"Trivy OS package vulnerability scan failed: {_short_command_error(command_result)}")
+        result.warnings.append(_trivy_scan_warning(command_result, retried_with_sudo=retried_with_sudo))
         result.artifacts.append(ServerArtifact("command-output", "trivy rootfs", asdict(command_result)))
         return
     try:
@@ -336,6 +354,7 @@ def _audit_os_packages(result: ServerAuditResult, runner: Runner, *, include_os_
     except json.JSONDecodeError:
         content = {"raw": command_result.stdout}
     result.artifacts.append(ServerArtifact("trivy-rootfs-json", "rootfs:/", content))
+    _add_trivy_rootfs_findings(result, content)
 
 
 def _is_public_host(host: str) -> bool:
@@ -355,6 +374,50 @@ def _format_public_interfaces(hosts: set[str]) -> str:
     return ", ".join(sorted(hosts))
 
 
+def _add_trivy_rootfs_findings(result: ServerAuditResult, content: object) -> None:
+    if not isinstance(content, dict):
+        return
+    counts = _count_trivy_vulnerabilities_by_severity(content)
+    total = sum(counts.values())
+    if total == 0:
+        return
+
+    severity = "MEDIUM"
+    if counts.get("CRITICAL", 0) > 0:
+        severity = "CRITICAL"
+    elif counts.get("HIGH", 0) > 0:
+        severity = "HIGH"
+
+    result.findings.append(
+        ServerFinding(
+            id="",
+            ruleId="SERVER_OS_PACKAGE_VULNERABILITY",
+            source="server-audit",
+            severity=severity,
+            target="rootfs:/",
+            title="OS 패키지 취약점이 발견됨",
+            evidence=_format_trivy_vulnerability_counts(counts),
+        )
+    )
+
+
+def _count_trivy_vulnerabilities_by_severity(content: dict) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for scan_result in content.get("Results", []) or []:
+        for vulnerability in scan_result.get("Vulnerabilities", []) or []:
+            severity = str(vulnerability.get("Severity") or "UNKNOWN").upper()
+            counts[severity] = counts.get(severity, 0) + 1
+    return counts
+
+
+def _format_trivy_vulnerability_counts(counts: dict[str, int]) -> str:
+    order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+    parts = [f"{severity}={counts[severity]}" for severity in order if counts.get(severity, 0) > 0]
+    extra = sorted(severity for severity in counts if severity not in order)
+    parts.extend(f"{severity}={counts[severity]}" for severity in extra)
+    return ", ".join(parts) if parts else "0 vulnerabilities"
+
+
 def _firewall_warning(ufw: CommandResult, iptables: CommandResult) -> str:
     if _looks_like_permission_error(ufw, iptables):
         return (
@@ -367,6 +430,24 @@ def _firewall_warning(ufw: CommandResult, iptables: CommandResult) -> str:
         "ufw 또는 iptables로 방화벽 상태를 수집하지 못했습니다. "
         "이 서버는 호스트 방화벽 대신 AWS Security Group에 의존할 수 있습니다."
     )
+
+
+def _trivy_scan_warning(result: CommandResult, *, retried_with_sudo: bool) -> str:
+    error = _short_command_error(result)
+    lower_error = error.casefold()
+    if "permission denied" in lower_error or "operation not permitted" in lower_error:
+        return (
+            "Trivy OS package vulnerability scan failed because some files require elevated privileges. "
+            "Retry with --allow-sudo if OS package details are needed."
+        )
+    if "password is required" in lower_error or "a password is required" in lower_error:
+        return (
+            "Trivy OS package vulnerability scan failed because sudo requires a password in non-interactive mode. "
+            "Run from an interactive shell with sudo permission, or configure passwordless sudo for this check."
+        )
+    if retried_with_sudo:
+        return f"Trivy OS package vulnerability scan failed after sudo retry: {error}"
+    return f"Trivy OS package vulnerability scan failed: {error}"
 
 
 def _extract_nginx_containers(output: str) -> list[str]:
