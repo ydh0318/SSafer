@@ -9,6 +9,13 @@ from app.core.llm import (
     get_ollama_llm,
     invoke_llm_with_retry,
 )
+from app.core.llm_provider import (
+    AnthropicProvider,
+    GmsProvider,
+    LLMConfigurationError,
+    OllamaProvider,
+    get_llm_provider,
+)
 
 
 class FakeRunnable:
@@ -75,6 +82,25 @@ class LLMRetryTest(unittest.TestCase):
         llm = get_ollama_llm()
 
         self.assertEqual(llm.sync_client_kwargs["timeout"], 7)
+
+    def test_get_llm_provider_returns_ollama_provider(self):
+        provider = get_llm_provider("ollama")
+
+        self.assertIsInstance(provider, OllamaProvider)
+
+    def test_get_llm_provider_returns_anthropic_provider(self):
+        provider = get_llm_provider("anthropic")
+
+        self.assertIsInstance(provider, AnthropicProvider)
+
+    def test_get_llm_provider_returns_gms_provider(self):
+        provider = get_llm_provider("gms")
+
+        self.assertIsInstance(provider, GmsProvider)
+
+    def test_get_llm_provider_rejects_unknown_provider(self):
+        with self.assertRaises(LLMConfigurationError):
+            get_llm_provider("unknown")
 
 
 if __name__ == "__main__":

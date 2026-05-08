@@ -2,16 +2,17 @@ import argparse
 import json
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from langchain_core.output_parsers import StrOutputParser
-from langchain_ollama import ChatOllama
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
-from app.core.config import OLLAMA_BASE_URL, OLLAMA_TEMPERATURE  # noqa: E402
+from app.core.config import ANTHROPIC_MODEL, GMS_MODEL  # noqa: E402
+from app.core.llm_provider import create_llm_provider  # noqa: E402
 from app.loaders.scan_loader import (  # noqa: E402
     extract_findings,
     load_scan_result,
@@ -25,17 +26,30 @@ from app.services.fix_service import parse_fix_response  # noqa: E402
 from app.services.input_service import format_finding_for_llm  # noqa: E402
 
 
-DEFAULT_MODELS = ("llama3.2:3b", "qwen2.5:3b")
+DEFAULT_MODELS = ("ollama:llama3.2:3b", "ollama:qwen2.5:3b")
 DEFAULT_OUTPUT_PATH = "data/model_comparison_result.json"
 
 
-def _create_llm(model: str, response_format: str | None = None) -> ChatOllama:
-    return ChatOllama(
-        model=model,
-        base_url=OLLAMA_BASE_URL,
-        temperature=OLLAMA_TEMPERATURE,
-        format=response_format,
-    )
+@dataclass(frozen=True)
+class ModelTarget:
+    provider: str
+    model: str
+
+    @property
+    def name(self) -> str:
+        return f"{self.provider}:{self.model}"
+
+
+def _parse_model_target(value: str) -> ModelTarget:
+    provider, separator, model = value.partition(":")
+    if separator and provider in {"ollama", "anthropic", "gms"}:
+        return ModelTarget(provider=provider, model=model)
+    return ModelTarget(provider="ollama", model=value)
+
+
+def _create_llm(target: ModelTarget, response_format: str | None = None) -> Any:
+    provider = create_llm_provider(target.provider, model=target.model)
+    return provider.create_chat_model(response_format=response_format)
 
 
 def _load_valid_findings(scan_result_path: str, limit: int) -> list[dict[str, Any]]:
@@ -54,8 +68,8 @@ def _elapsed_ms(started_at: float) -> int:
     return int((time.perf_counter() - started_at) * 1000)
 
 
-def _evaluate_explanation(model: str, finding: dict[str, Any]) -> dict[str, Any]:
-    chain = EXPLAIN_PROMPT | _create_llm(model) | StrOutputParser()
+def _evaluate_explanation(target: ModelTarget, finding: dict[str, Any]) -> dict[str, Any]:
+    chain = EXPLAIN_PROMPT | _create_llm(target) | StrOutputParser()
     started_at = time.perf_counter()
 
     try:
@@ -76,8 +90,8 @@ def _evaluate_explanation(model: str, finding: dict[str, Any]) -> dict[str, Any]
     }
 
 
-def _evaluate_fix(model: str, finding: dict[str, Any]) -> dict[str, Any]:
-    chain = FIX_PROMPT | _create_llm(model, response_format="json") | StrOutputParser()
+def _evaluate_fix(target: ModelTarget, finding: dict[str, Any]) -> dict[str, Any]:
+    chain = FIX_PROMPT | _create_llm(target, response_format="json") | StrOutputParser()
     started_at = time.perf_counter()
 
     try:
@@ -139,8 +153,9 @@ def compare_models(
     findings = _load_valid_findings(scan_result_path, limit)
     model_results: list[dict[str, Any]] = []
 
-    for model in models:
-        print(f"Evaluating model: {model}")
+    for model_spec in models:
+        target = _parse_model_target(model_spec)
+        print(f"Evaluating model: {target.name}")
         finding_results: list[dict[str, Any]] = []
 
         for finding in findings:
@@ -149,14 +164,16 @@ def compare_models(
             finding_results.append(
                 {
                     "findingId": finding_id,
-                    "explanation": _evaluate_explanation(model, finding),
-                    "fix": _evaluate_fix(model, finding),
+                    "explanation": _evaluate_explanation(target, finding),
+                    "fix": _evaluate_fix(target, finding),
                 }
             )
 
         model_results.append(
             {
-                "model": model,
+                "provider": target.provider,
+                "model": target.model,
+                "target": target.name,
                 "summary": _summarize_model(finding_results),
                 "findings": finding_results,
             }
@@ -171,13 +188,26 @@ def compare_models(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Compare local Ollama models for AI analysis quality."
+        description="Compare Ollama, Anthropic Claude, and GMS models."
     )
     parser.add_argument(
         "--models",
         nargs="+",
         default=list(DEFAULT_MODELS),
-        help="Ollama model names to evaluate.",
+        help=(
+            "Model specs to evaluate. Use plain Ollama names like qwen2.5:3b "
+            "or provider-prefixed specs like gms:claude-haiku-4-5-20251001."
+        ),
+    )
+    parser.add_argument(
+        "--include-claude",
+        action="store_true",
+        help=f"Also evaluate anthropic:{ANTHROPIC_MODEL}.",
+    )
+    parser.add_argument(
+        "--include-gms",
+        action="store_true",
+        help=f"Also evaluate gms:{GMS_MODEL}.",
     )
     parser.add_argument(
         "--scan-result-path",
@@ -196,9 +226,14 @@ def main() -> None:
         help="Path to write JSON comparison results.",
     )
     args = parser.parse_args()
+    models = list(args.models)
+    if args.include_claude:
+        models.append(f"anthropic:{ANTHROPIC_MODEL}")
+    if args.include_gms:
+        models.append(f"gms:{GMS_MODEL}")
 
     result = compare_models(
-        models=args.models,
+        models=models,
         scan_result_path=args.scan_result_path,
         limit=args.limit,
     )

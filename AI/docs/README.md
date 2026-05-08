@@ -17,6 +17,7 @@
 9_test_guide.md
 10_s3_setup.md
 11_spring_fastapi_interface.md
+12_external_model_comparison.md
 ```
 
 ## 문서 설명
@@ -35,3 +36,4 @@
 | `9_test_guide.md` | 현재 구현 상태 기준 테스트 방법 |
 | `10_s3_setup.md` | FastAPI S3 클라이언트 설정 및 환경변수 |
 | `11_spring_fastapi_interface.md` | Spring Boot, Worker, FastAPI 연동 API 명세 |
+| `12_external_model_comparison.md` | Claude API, GMS gateway, Ollama 품질 비교 방법 |
