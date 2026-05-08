@@ -3,5 +3,6 @@ uvicorn[standard]
 langchain
 langchain-ollama
 langchain-anthropic
+langchain-openai
 boto3
 pika

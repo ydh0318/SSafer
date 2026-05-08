@@ -11,6 +11,7 @@ from app.core.llm import (
 )
 from app.core.llm_provider import (
     AnthropicProvider,
+    GmsProvider,
     LLMConfigurationError,
     OllamaProvider,
     get_llm_provider,
@@ -91,6 +92,11 @@ class LLMRetryTest(unittest.TestCase):
         provider = get_llm_provider("anthropic")
 
         self.assertIsInstance(provider, AnthropicProvider)
+
+    def test_get_llm_provider_returns_gms_provider(self):
+        provider = get_llm_provider("gms")
+
+        self.assertIsInstance(provider, GmsProvider)
 
     def test_get_llm_provider_rejects_unknown_provider(self):
         with self.assertRaises(LLMConfigurationError):

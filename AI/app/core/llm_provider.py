@@ -9,6 +9,12 @@ from app.core.config import (
     ANTHROPIC_MODEL,
     ANTHROPIC_TEMPERATURE,
     ANTHROPIC_TIMEOUT_SECONDS,
+    GMS_API_KEY,
+    GMS_BASE_URL,
+    GMS_FORCE_JSON_RESPONSE_FORMAT,
+    GMS_MODEL,
+    GMS_TEMPERATURE,
+    GMS_TIMEOUT_SECONDS,
     LLM_PROVIDER,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
@@ -128,15 +134,92 @@ class AnthropicProvider(LLMProvider):
         return True
 
 
+class GmsProvider(LLMProvider):
+    provider_name = "gms"
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None = GMS_API_KEY,
+        model: str = GMS_MODEL,
+        base_url: str = GMS_BASE_URL,
+        temperature: float = GMS_TEMPERATURE,
+        timeout_seconds: float = GMS_TIMEOUT_SECONDS,
+        force_json_response_format: bool = GMS_FORCE_JSON_RESPONSE_FORMAT,
+    ) -> None:
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url
+        self.temperature = temperature
+        self.timeout_seconds = timeout_seconds
+        self.force_json_response_format = force_json_response_format
+
+    def create_chat_model(self, response_format: str | None = None) -> Any:
+        try:
+            from langchain.chat_models import init_chat_model
+        except ImportError as exc:
+            raise LLMConfigurationError(
+                "langchain must be installed to use GmsProvider."
+            ) from exc
+
+        import os
+
+        api_key = self.api_key or os.getenv("GMS_API_KEY") or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise LLMConfigurationError("GMS_API_KEY or OPENAI_API_KEY must be set.")
+
+        os.environ["OPENAI_API_KEY"] = api_key
+        os.environ["OPENAI_API_BASE"] = self.base_url
+        os.environ["OPENAI_BASE_URL"] = self.base_url
+
+        model_kwargs: dict[str, Any] = {
+            "temperature": self.temperature,
+            "timeout": self.timeout_seconds,
+        }
+        if response_format == "json" and self.force_json_response_format:
+            model_kwargs["response_format"] = {"type": "json_object"}
+
+        return init_chat_model(
+            self.model,
+            model_provider="openai",
+            **model_kwargs,
+        )
+
+    def get_model_name(self) -> str:
+        return self.model
+
+    def is_available(self) -> bool:
+        import os
+
+        return bool(
+            self.api_key
+            or os.getenv("GMS_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+        )
+
+
+def create_llm_provider(
+    provider_name: str,
+    *,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> LLMProvider:
+    selected_provider = provider_name.strip().lower()
+
+    if selected_provider == "ollama":
+        return OllamaProvider(model=model or OLLAMA_MODEL)
+    if selected_provider == "anthropic":
+        return AnthropicProvider(api_key=api_key, model=model or ANTHROPIC_MODEL)
+    if selected_provider == "gms":
+        return GmsProvider(api_key=api_key, model=model or GMS_MODEL)
+
+    raise LLMConfigurationError(
+        f"Unsupported LLM provider: {selected_provider}. "
+        "Expected one of: ollama, anthropic, gms."
+    )
+
+
 def get_llm_provider(provider_name: str | None = None) -> LLMProvider:
     selected_provider = (provider_name or LLM_PROVIDER).strip().lower()
 
-    if selected_provider == "ollama":
-        return OllamaProvider()
-    if selected_provider == "anthropic":
-        return AnthropicProvider()
-
-    raise LLMConfigurationError(
-        f"Unsupported LLM_PROVIDER: {selected_provider}. "
-        "Expected one of: ollama, anthropic."
-    )
+    return create_llm_provider(selected_provider)
