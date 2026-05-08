@@ -45,9 +45,9 @@ const modeCards: Array<{
   id: ScanModeOption;
   title: string;
 }> = [
-  { id: 'UPLOAD', icon: Upload, title: '파일 업로드', description: 'raw 결과 JSON을 올려 바로 스캔을 시작합니다.' },
-  { id: 'CLI', icon: Terminal, title: 'CLI', description: 'CLI 결과를 연결해 빠르게 다음 단계로 넘깁니다.' },
-  { id: 'AGENT', icon: Server, title: 'Agent', description: '서버 Agent가 프로젝트를 직접 수집하도록 요청합니다.' },
+  { id: 'UPLOAD', icon: Upload, title: '파일 업로드', description: 'raw 결과 JSON을 업로드해서 바로 스캔을 시작할 수 있습니다.' },
+  { id: 'CLI', icon: Terminal, title: 'CLI', description: 'CLI 실행 결과를 업로드하거나 CI 흐름과 연결해 점검을 이어갈 수 있습니다.' },
+  { id: 'AGENT', icon: Server, title: 'Agent', description: '설치된 Agent가 연결되어 있으면 원격 점검 흐름을 시작할 수 있습니다.' },
 ];
 
 function getAgentTone(project: ProjectSummary, isSelected: boolean) {
@@ -92,7 +92,7 @@ function ProjectListPage() {
     targetProject,
   } = useProjectDeleteFlow({
     onDeleted: (project) => {
-      setProjectActionNotice(`${project.name} 프로젝트가 삭제되었습니다.`);
+      setProjectActionNotice(`${project.name} 프로젝트를 삭제했습니다.`);
     },
   });
 
@@ -106,12 +106,16 @@ function ProjectListPage() {
       try {
         const data = await getProjects();
 
-        if (isMounted) {
-          setProjectsFromList(data.items, data.totalElements, data.totalPages);
+        if (!isMounted) {
+          return;
         }
+
+        setProjectsFromList(data.items, data.totalElements, data.totalPages);
       } catch (error) {
+        console.error('Failed to load projects.', error);
+
         if (isMounted) {
-          setLoadError(error instanceof Error ? error.message : '프로젝트 목록을 불러오지 못했습니다.');
+          setLoadError('프로젝트 목록을 불러오지 못했습니다.');
         }
       } finally {
         if (isMounted) {
@@ -187,7 +191,9 @@ function ProjectListPage() {
         }, {});
 
         setLatestCompletedScans(nextMap);
-      } catch {
+      } catch (error) {
+        console.error('Failed to load latest completed scans.', error);
+
         if (isMounted) {
           setLatestCompletedScans({});
         }
@@ -290,7 +296,7 @@ function ProjectListPage() {
           const scanData = await createScanRequest({
             projectName,
             source: 'CLI',
-            scanName: `${projectName} 초기 스캔`,
+            scanName: `${projectName} 첫 스캔`,
             includeLogs: false,
           });
 
@@ -302,20 +308,19 @@ function ProjectListPage() {
           });
           return;
         } catch (error) {
+          console.error('Failed to start initial scan after project creation.', error);
           setCreateNotice({
             tone: 'warning',
-            message:
-              error instanceof Error
-                ? `프로젝트는 생성됐지만 첫 스캔 시작에는 실패했습니다. ${error.message}`
-                : '프로젝트는 생성됐지만 첫 스캔 시작에는 실패했습니다.',
+            message: '프로젝트는 생성되었지만 첫 스캔 시작에는 실패했습니다. 다시 시도해 주세요.',
           });
           return;
         }
       }
 
-      setCreateNotice({ tone: 'success', message: '프로젝트가 생성되었습니다.' });
+      setCreateNotice({ tone: 'success', message: '프로젝트를 생성했습니다.' });
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : '프로젝트 생성 중 오류가 발생했습니다.');
+      console.error('Failed to create project.', error);
+      setCreateError('프로젝트를 생성하지 못했습니다.');
     } finally {
       setIsCreating(false);
     }
@@ -323,7 +328,7 @@ function ProjectListPage() {
 
   const handleStartScan = async () => {
     if (!selectedProject) {
-      setScanError('스캔할 프로젝트를 먼저 선택해주세요.');
+      setScanError('프로젝트를 먼저 선택해 주세요.');
       return;
     }
 
@@ -356,7 +361,8 @@ function ProjectListPage() {
         state: { autoOpenedFromScanRequest: true, projectId: selectedProject.id },
       });
     } catch (error) {
-      setScanError(error instanceof Error ? error.message : '스캔 시작 중 오류가 발생했습니다.');
+      console.error('Failed to start scan.', error);
+      setScanError('스캔을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setIsStartingScan(false);
     }
@@ -364,11 +370,9 @@ function ProjectListPage() {
 
   return (
     <section className="space-y-10">
-      <header className="flex items-start justify-between gap-6">
+      <header className="flex items-start justify-between gap-6 pt-4">
         <div className="min-w-0">
-          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">
-            뭐 스캔할까요?
-          </h1>
+          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">뭐 스캔할까요 ? </h1>
         </div>
         <div className="shrink-0">
           <PixelGoose mood="idle" size={92} />
@@ -466,15 +470,17 @@ function ProjectListPage() {
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-sm text-neutral-500">최근 결과</div>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-[#080B16]">status 카드</h2>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-[#080B16]">최근 완료된 스캔</h2>
           </div>
-          <p className="text-sm text-neutral-500">완료된 프로젝트 카드에서도 같은 삭제 모달을 그대로 사용합니다.</p>
+          <p className="text-sm text-neutral-500">완료된 스캔 결과를 바로 확인할 수 있습니다.</p>
         </div>
 
         {isLoadingCompletedScans ? (
           <div className="border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500">최근 결과를 불러오는 중입니다.</div>
         ) : completedProjectEntries.length === 0 ? (
-          <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600">완료된 스캔이 있는 프로젝트가 아직 없습니다.</div>
+          <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600">
+            완료된 스캔이 있는 프로젝트가 아직 없습니다.
+          </div>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
             {completedProjectEntries.map(({ project, latestCompleted }) => {
@@ -493,9 +499,7 @@ function ProjectListPage() {
                       <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">Latest Result</div>
                       <h3 className="mt-2 text-2xl font-black tracking-tight text-black">{project.name}</h3>
                     </div>
-                    <span className="rounded-full bg-black px-2.5 py-1 text-xs font-bold text-white">
-                      Scan #{latestCompleted.scan.scanId}
-                    </span>
+                    <span className="rounded-full bg-black px-2.5 py-1 text-xs font-bold text-white">Scan #{latestCompleted.scan.scanId}</span>
                   </div>
 
                   <div className="grid gap-3 text-sm text-neutral-600 md:grid-cols-2">
@@ -512,7 +516,7 @@ function ProjectListPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center bg-[#D4FC64] px-3 py-2 text-sm font-bold text-black">결과 보기</span>
+                    <span className="inline-flex items-center bg-[#D4FC64] px-3 py-2 text-sm font-bold text-black">결과 보러 가기</span>
                     <button
                       className="border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 transition hover:border-black hover:text-black"
                       onClick={(event) => {
@@ -542,7 +546,7 @@ function ProjectListPage() {
       </section>
 
       <section>
-        <div className="mb-5 text-sm text-neutral-500">방식 선택</div>
+        <div className="mb-5 text-sm text-neutral-500">스캔 방식 선택</div>
         <div className="grid gap-3 lg:grid-cols-3">
           {modeCards.map((mode) => {
             const Icon = mode.icon;
@@ -588,10 +592,10 @@ function ProjectListPage() {
             }}
           >
             <PixelGoose mood={isDragOver ? 'alert' : 'idle'} size={72} />
-            <h2 className="mt-8 text-3xl font-black tracking-tight">JSON 파일을 끌어다 놓으세요</h2>
+            <h2 className="mt-8 text-3xl font-black tracking-tight">JSON 파일을 이곳에 올려주세요</h2>
             <p className="mt-3 text-sm text-neutral-500">raw 결과 JSON 1개, 최대 {SCAN_UPLOAD_FILE_SIZE_LIMIT_MB}MB</p>
             <label className="mt-8 cursor-pointer text-base text-neutral-700 underline underline-offset-4 hover:text-black">
-              컴퓨터에서 파일 선택
+              파일 선택
               <input
                 accept="application/json,.json"
                 className="sr-only"
@@ -602,7 +606,7 @@ function ProjectListPage() {
             {selectedUploadFile ? (
               <div className="mt-8 flex items-center gap-3 bg-[#111111] px-4 py-3 text-sm text-white">
                 <span className="font-mono">{selectedUploadFile.name}</span>
-                <button aria-label="업로드 파일 제거" onClick={() => handleUploadFileChange(null)} type="button">
+                <button aria-label="선택한 파일 제거" onClick={() => handleUploadFileChange(null)} type="button">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -612,12 +616,12 @@ function ProjectListPage() {
           <div className="min-h-[360px] bg-white p-10">
             <p className="font-mono text-[11px] tracking-[0.24em] text-neutral-400">{selectedMode}</p>
             <h2 className="mt-4 text-3xl font-black tracking-tight">
-              {selectedMode === 'CLI' ? 'CLI 결과 업로드 흐름으로 진행합니다.' : 'Agent가 프로젝트를 직접 수집하도록 요청합니다.'}
+              {selectedMode === 'CLI' ? 'CLI 흐름으로 스캔을 시작합니다.' : 'Agent 연결 상태로 스캔을 시작합니다.'}
             </h2>
             <p className="mt-4 max-w-xl text-sm leading-7 text-neutral-600">
               {selectedMode === 'CLI'
-                ? '로컬이나 CI에서 수집한 결과를 업로드하는 구조에 맞춰 빠르게 다음 단계로 넘길 수 있습니다.'
-                : '프로젝트에서 Agent가 활성화되어 있으면 서버 쪽 수집 흐름으로 바로 이어서 스캔을 시작할 수 있습니다.'}
+                ? 'CLI 결과 파일을 업로드하거나 자동화된 실행 흐름과 연결해 스캔을 이어갈 수 있습니다.'
+                : '프로젝트에 Agent가 연결되어 있으면 원격 점검 흐름을 바로 시작할 수 있습니다.'}
             </p>
             <div className="mt-8 bg-neutral-950 p-5 font-mono text-sm text-[#D4FC64]">
               {selectedMode === 'CLI'
@@ -630,11 +634,13 @@ function ProjectListPage() {
         <aside className="space-y-4">
           <div className="bg-white p-8">
             <Lock className="h-6 w-6" />
-            <h3 className="mt-7 text-xl font-black">보안상 중요한 입력</h3>
-            <p className="mt-4 text-sm leading-7 text-neutral-500">업로드 파일 형식과 프로젝트 설정이 맞는지 먼저 확인하고 시작하는 것이 가장 안전합니다.</p>
+            <h3 className="mt-7 text-xl font-black">업로드 전에 한 번 더 확인해 주세요</h3>
+            <p className="mt-4 text-sm leading-7 text-neutral-500">
+              파일 형식과 프로젝트 선택 상태를 확인한 뒤 스캔을 시작하면 더 안정적으로 결과를 확인할 수 있습니다.
+            </p>
           </div>
           <div className="bg-[#111111] p-8 text-white">
-            <p className="font-mono text-[11px] tracking-[0.24em] text-[#D4FC64]">평균 응답 속도</p>
+            <p className="font-mono text-[11px] tracking-[0.24em] text-[#D4FC64]">평균 첫 결과 확인</p>
             <div className="mt-6 text-5xl font-black tracking-tight">~30초</div>
             <p className="mt-4 text-sm text-neutral-500">P95 기준</p>
           </div>

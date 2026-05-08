@@ -27,7 +27,7 @@ class S3ConfigTest(unittest.TestCase):
         settings = load_s3_settings(
             {
                 "AWS_S3_BUCKET": "default-bucket",
-                "APP_SCAN_RAW_S3_BUCKET": "raw-bucket",
+                "APP_SCAN_RESULT_S3_BUCKET": "raw-bucket",
                 "APP_ANALYSIS_RESULT_S3_BUCKET": "analysis-bucket",
             }
         )
@@ -35,6 +35,16 @@ class S3ConfigTest(unittest.TestCase):
         self.assertEqual(settings.region, "ap-northeast-2")
         self.assertEqual(settings.raw_scan_bucket, "raw-bucket")
         self.assertEqual(settings.analysis_result_bucket, "analysis-bucket")
+
+    def test_load_s3_settings_accepts_legacy_raw_bucket_name(self):
+        settings = load_s3_settings(
+            {
+                "APP_SCAN_RAW_S3_BUCKET": "legacy-raw-bucket",
+                "APP_ANALYSIS_RESULT_S3_BUCKET": "analysis-bucket",
+            }
+        )
+
+        self.assertEqual(settings.raw_scan_bucket, "legacy-raw-bucket")
 
     def test_load_s3_settings_rejects_missing_bucket(self):
         with self.assertRaisesRegex(S3ConfigurationError, "AWS_S3_BUCKET"):

@@ -10,11 +10,13 @@ import { getHistoryScans } from '../../features/history/api/history';
 import { getScanCompare } from '../../features/results/api/results';
 import { deleteScanHistory } from '../../features/scans/api/scans';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
+import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
 import {
   canDeleteScanHistory,
   formatDateTime,
   getDeleteBlockedReason,
   getScanModeLabel,
+  getSafeScanType,
 } from '../../features/scans/utils/scanPresentation';
 import { useAuthStore } from '../../store/authStore';
 import type {
@@ -101,7 +103,7 @@ function HistoryPage() {
   const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
 
   const doneHistoryItems = useMemo(
-    () => historyData.items.filter((item) => item.status === 'DONE'),
+    () => historyData.items.filter((item) => item.status === 'DONE' && getSafeScanType(item.scanType) === 'PROJECT_SCAN'),
     [historyData.items],
   );
   const hasHistoryItems = useMemo(() => historyData.items.length > 0, [historyData.items.length]);
@@ -495,6 +497,7 @@ function HistoryPage() {
                         <div className="space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <ScanStatusBadge status={item.status} />
+                            <ScanTypeBadge scanType={item.scanType} />
                             <span className="inline-flex rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-xs font-bold text-neutral-700">
                               {getScanModeLabel(item.scanMode)}
                             </span>

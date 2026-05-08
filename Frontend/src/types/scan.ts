@@ -1,5 +1,7 @@
 export type ScanRequestSource = 'CLI';
 
+export type ScanType = 'PROJECT_SCAN' | 'SERVER_AUDIT';
+
 export type ScanMode = 'UPLOAD' | 'CLI' | 'AGENT';
 
 export type ScanStatus =
@@ -19,6 +21,7 @@ export type AgentTaskType = string;
 
 export interface CreateScanRequestPayload {
   projectName: string;
+  scanType?: ScanType;
   source?: ScanRequestSource;
   scanName?: string;
   targetPath?: string;
@@ -28,6 +31,7 @@ export interface CreateScanRequestPayload {
 export interface CreateScanResponseData {
   scanId: number;
   projectId: number;
+  scanType?: ScanType;
   status: ScanStatus;
   rawResultPath: string;
   rawUploadUrl: string;
@@ -41,6 +45,7 @@ export interface RawScanUploadReportData {
 
 export interface ProjectScanListItemData {
   scanId: number;
+  scanType?: ScanType;
   status: ScanStatus;
   scanMode: ScanMode;
   requestedAt: string;
@@ -58,12 +63,14 @@ export interface ProjectScanListResponseData {
 export interface ProjectScanListQuery {
   page?: number;
   size?: number;
+  scanType?: ScanType | '';
   status?: ScanStatus | '';
   scanMode?: ScanMode | '';
 }
 
 export interface ScanProgressStatusData {
   scanId: number;
+  scanType?: ScanType;
   status: ScanStatus;
   progressStep: string | null;
   requestedAt: string;
@@ -81,6 +88,7 @@ export type FindingSourceType = 'TRIVY' | 'CUSTOM_RULE' | 'AI';
 export interface ScanBasicData {
   scanId: number;
   projectId: number;
+  scanType?: ScanType;
   scanMode: ScanMode;
   status: ScanStatus;
   progressStep: string | null;
@@ -95,6 +103,7 @@ export interface ScanBasicData {
 export interface ScanSummaryData {
   scanId: number;
   projectId: number;
+  scanType?: ScanType;
   totalFindings: number;
   nodeCount: number;
   criticalCount: number;
@@ -182,6 +191,7 @@ export interface HistoryScanSummaryData {
 export interface HistoryScanListItemData {
   scanId: number;
   projectId: number;
+  scanType?: ScanType;
   status: ScanStatus;
   scanMode: ScanMode;
   totalFindingCount: number;
@@ -207,6 +217,7 @@ export interface HistoryScanListQuery {
   page?: number;
   size?: number;
   projectId?: number;
+  scanType?: ScanType;
   status?: ScanStatus;
   scanMode?: ScanMode;
 }
@@ -257,6 +268,57 @@ export interface ScanCompareResponseData {
   resolvedFindings: ScanCompareFindingData[];
   retainedFindings: ScanCompareFindingData[];
   severityChangedFindings: ScanCompareSeverityChangedFindingData[];
+}
+
+export interface ServerAuditActionViewModel {
+  title: string;
+  description: string;
+  command?: string | null;
+  impact?: string | null;
+  priority: 'IMMEDIATE' | 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+export interface ServerAuditArtifactViewModel {
+  name: string;
+  kind: string;
+  description: string;
+  value?: string | null;
+}
+
+export interface ServerAuditWarningViewModel {
+  code: string;
+  title: string;
+  message: string;
+  severity: FindingSeverity;
+}
+
+export interface ServerAuditFindingViewModel {
+  findingId: number;
+  title: string;
+  severity: FindingSeverity;
+  category: string;
+  target: string;
+  summary: string;
+  evidence?: string | null;
+  observedAt?: string | null;
+  recommendation: string;
+  relatedWarnings: ServerAuditWarningViewModel[];
+  relatedArtifacts: ServerAuditArtifactViewModel[];
+  actions: ServerAuditActionViewModel[];
+}
+
+export interface ServerAuditResultViewModel {
+  scanId: number;
+  projectId: number;
+  scanType: 'SERVER_AUDIT';
+  status: ScanStatus;
+  targetLabel: string;
+  hostLabel: string;
+  findings: ServerAuditFindingViewModel[];
+  warnings: ServerAuditWarningViewModel[];
+  artifacts: ServerAuditArtifactViewModel[];
+  actions: ServerAuditActionViewModel[];
+  generatedAt: string;
 }
 
 export interface AgentStatusResponseData {

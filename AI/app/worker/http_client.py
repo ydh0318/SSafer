@@ -5,7 +5,18 @@ from urllib.request import Request, urlopen
 
 
 class JsonHttpClientError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        response_body: str | None = None,
+        response_json: dict[str, Any] | None = None,
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_body = response_body
+        self.response_json = response_json
 
 
 class JsonHttpClient:
@@ -45,8 +56,18 @@ class JsonHttpClient:
                 response_body = response.read()
         except HTTPError as exc:
             response_body = exc.read().decode("utf-8", errors="replace")
+            response_json = None
+            try:
+                decoded = json.loads(response_body)
+                if isinstance(decoded, dict):
+                    response_json = decoded
+            except json.JSONDecodeError:
+                pass
             raise JsonHttpClientError(
-                f"{method} {url} failed with HTTP {exc.code}: {response_body}"
+                f"{method} {url} failed with HTTP {exc.code}: {response_body}",
+                status_code=exc.code,
+                response_body=response_body,
+                response_json=response_json,
             ) from exc
         except URLError as exc:
             raise JsonHttpClientError(f"{method} {url} failed: {exc.reason}") from exc

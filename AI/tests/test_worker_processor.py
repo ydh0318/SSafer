@@ -15,7 +15,7 @@ def build_settings() -> WorkerSettings:
         scan_request_queue="ssafer.agent.scan.request",
         fastapi_base_url="http://127.0.0.1:8000",
         spring_base_url="http://127.0.0.1:8080",
-        spring_worker_secret=None,
+        spring_api_secret=None,
         analysis_result_bucket="ssafer-scan-storage-dev",
         analysis_result_prefix="analysis",
         http_timeout_seconds=120,

@@ -2,7 +2,6 @@ import {
   ArrowRight,
   ChevronRight,
   Filter,
-  FolderGit2,
   Plus,
   RefreshCw,
   ScanSearch,
@@ -19,6 +18,7 @@ import { ROUTES } from '../../constants/routes';
 import { getProjects } from '../../features/projects/api/projects';
 import { getScanSummary } from '../../features/results/api/results';
 import { getProjectScans } from '../../features/scans/api/scans';
+import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
 import type { ProjectListItemData } from '../../types/project';
 import type { ProjectScanListItemData, ScanMode, ScanStatus, ScanSummaryData } from '../../types/scan';
 
@@ -26,6 +26,15 @@ type DashboardScan = ProjectScanListItemData & {
   projectId: number;
   projectName: string;
   summary: ScanSummaryData | null;
+};
+
+type DashboardMonitorStatus = 'ONLINE' | 'OFFLINE' | 'ERROR' | 'UNKNOWN';
+
+type DashboardMonitorProject = {
+  projectId: number;
+  projectName: string;
+  status: DashboardMonitorStatus;
+  lastSeenAt: string | null;
 };
 
 const severityColors = {
@@ -63,7 +72,7 @@ function formatRelativeDate(value: string | null) {
   const diffMinutes = Math.round((Date.now() - date.getTime()) / 60000);
 
   if (diffMinutes < 1) {
-    return '방금';
+    return '방금 전';
   }
 
   if (diffMinutes < 60) {
@@ -116,6 +125,53 @@ async function buildDashboardScans(projects: ProjectListItemData[]) {
   }));
 }
 
+function buildDashboardMonitorProjects(
+  projects: ProjectListItemData[],
+  monitorStatuses: Array<{ projectId: number; status: DashboardMonitorStatus; lastSeenAt: string | null }> = [],
+) {
+  const monitorStatusMap = new Map(monitorStatuses.map((item) => [item.projectId, item]));
+
+  return projects
+    .filter((project) => project.monitorEnabled)
+    .map<DashboardMonitorProject>((project) => {
+      const status = monitorStatusMap.get(project.projectId);
+
+      return {
+        projectId: project.projectId,
+        projectName: project.name,
+        status: status?.status ?? 'UNKNOWN',
+        lastSeenAt: status?.lastSeenAt ?? null,
+      };
+    });
+}
+
+function getDashboardMonitorStatusLabel(status: DashboardMonitorStatus) {
+  switch (status) {
+    case 'ONLINE':
+      return '연결됨';
+    case 'OFFLINE':
+      return '끊김';
+    case 'ERROR':
+      return '오류';
+    case 'UNKNOWN':
+    default:
+      return '상태 대기';
+  }
+}
+
+function getDashboardMonitorStatusClassName(status: DashboardMonitorStatus) {
+  switch (status) {
+    case 'ONLINE':
+      return 'font-bold text-[#0A8F4E]';
+    case 'ERROR':
+      return 'font-bold text-[#E63946]';
+    case 'OFFLINE':
+    case 'UNKNOWN':
+    default:
+      return 'font-bold text-neutral-500';
+  }
+}
+
 function DashboardPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -148,7 +204,8 @@ function DashboardPage() {
           return;
         }
 
-        setErrorMessage(error instanceof Error ? error.message : '대시보드 데이터를 불러오지 못했습니다.');
+        console.error('Failed to load dashboard data.', error);
+        setErrorMessage(error instanceof Error ? error.message : '대시보드 정보를 불러오지 못했습니다.');
         setProjects([]);
         setScans([]);
       } finally {
@@ -168,10 +225,8 @@ function DashboardPage() {
   const filteredScans = useMemo(
     () =>
       scans.filter((scan) => {
-        const matchesSearch =
-          searchTerm.trim().length === 0 ||
-          scan.projectName.toLowerCase().includes(searchTerm.trim().toLowerCase()) ||
-          String(scan.scanId).includes(searchTerm.trim());
+        const query = searchTerm.trim().toLowerCase();
+        const matchesSearch = query.length === 0 || scan.projectName.toLowerCase().includes(query) || String(scan.scanId).includes(query);
         const matchesStatus = statusFilter === 'ALL' || scan.status === statusFilter;
         return matchesSearch && matchesStatus;
       }),
@@ -199,10 +254,11 @@ function DashboardPage() {
     () => scans.find((scan) => (scan.summary?.criticalCount ?? 0) > 0) ?? recentDoneScan,
     [recentDoneScan, scans],
   );
+  const monitorProjects = useMemo(() => buildDashboardMonitorProjects(projects), [projects]);
 
   const displayErrorMessage =
     errorMessage && errorMessage.includes('Authentication is required or token is invalid')
-      ? '세션이 만료되었거나 인증 정보가 유효하지 않습니다. 다시 로그인한 뒤 새로고침해 주세요.'
+      ? '로그인이 만료되어 대시보드 정보를 불러오지 못했습니다. 다시 로그인해 주세요.'
       : errorMessage;
 
   const navigateToScan = (scan: DashboardScan) => {
@@ -223,23 +279,33 @@ function DashboardPage() {
       <section className="border-b border-neutral-200 pb-12">
         <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-lg text-neutral-700">아직 안 고친 거</p>
+            <p className="text-lg text-neutral-700">현재 열려 있는 취약점 수</p>
             <div className="mt-6 flex flex-wrap items-end gap-6">
               <div className="theme-accent-card bg-[#D4FC64] px-8 py-4 text-black">
                 <span className="text-8xl font-black leading-none tabular-nums text-black md:text-[10rem]">{unresolvedCount}</span>
               </div>
               <div className="pb-2">
-                <div className="text-4xl font-black text-neutral-400">개</div>
-                <div className="mt-5 font-mono text-xs tracking-[0.32em] text-neutral-500">전 주 대비 -23</div>
+                <div className="text-4xl font-black text-neutral-400">건</div>
+                <div className="mt-5 font-mono text-xs tracking-[0.32em] text-neutral-500">LIVE SNAPSHOT</div>
               </div>
             </div>
           </div>
 
           <div className="flex flex-col items-start gap-3 xl:items-end">
             <PixelGoose mood={totals.critical > 0 ? 'alert' : 'working'} size={116} />
-            <p className="max-w-[220px] text-left text-sm leading-7 text-neutral-500 xl:text-right">
-              {totals.critical > 0 ? `"Critical ${totals.critical}개부터 보세요. 진짜로."` : '"오늘은 차분합니다. 그래도 최근 스캔은 확인해요."'}
-            </p>
+            <div className="flex flex-col text-left text-sm leading-7 text-neutral-500 xl:items-end xl:text-right">
+              {totals.critical > 0 ? (
+                <>
+                  <span className="w-fit">{`Critical ${totals.critical}건이 남아 있습니다.`}</span>
+                  <span className="w-fit">우선순위가 높은 스캔부터 확인해 주세요.</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-fit">현재 치명적인 이슈는 보이지 않습니다.</span>
+                  <span className="w-fit">최근 스캔 결과를 계속 확인해 주세요.</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -263,14 +329,14 @@ function DashboardPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="bg-white">
           <div className="flex flex-col gap-4 border-b border-neutral-200 px-6 py-6 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-3xl font-black tracking-tight">최근</h2>
+            <h2 className="text-3xl font-black tracking-tight">최근 스캔</h2>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <label className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
                 <input
                   className="w-full border border-neutral-200 py-2 pl-8 pr-3 text-sm sm:w-56"
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="프로젝트명 또는 scanId"
+                  placeholder="프로젝트 이름 또는 scanId"
                   value={searchTerm}
                 />
               </label>
@@ -281,7 +347,7 @@ function DashboardPage() {
                   onChange={(event) => setStatusFilter(event.target.value as 'ALL' | ScanStatus)}
                   value={statusFilter}
                 >
-                  <option value="ALL">전체</option>
+                  <option value="ALL">전체 상태</option>
                   {searchableStatuses.map((status) => (
                     <option key={status} value={status}>
                       {status}
@@ -294,14 +360,14 @@ function DashboardPage() {
                 onClick={() => navigate(ROUTES.projects)}
                 type="button"
               >
-                새로 스캔
+                프로젝트 보기
                 <Plus className="h-4 w-4" />
               </button>
             </div>
           </div>
 
           {isLoading ? (
-            <div className="px-6 py-16 text-center text-sm text-neutral-500">데이터를 불러오는 중입니다.</div>
+            <div className="px-6 py-16 text-center text-sm text-neutral-500">대시보드 정보를 불러오는 중입니다.</div>
           ) : filteredScans.length === 0 ? (
             <div className="px-6 py-16 text-center text-sm text-neutral-500">조건에 맞는 스캔이 없습니다.</div>
           ) : (
@@ -319,6 +385,7 @@ function DashboardPage() {
                       <span>#{scan.scanId}</span>
                       <span>·</span>
                       <ScanModeBadge scanMode={scan.scanMode} />
+                      <ScanTypeBadge scanType={scan.scanType} />
                       <span>·</span>
                       <span>{formatRelativeDate(scan.completedAt || scan.requestedAt)}</span>
                     </div>
@@ -335,7 +402,7 @@ function DashboardPage() {
                     ) : (
                       <span className="inline-flex items-center gap-1.5 text-sm text-neutral-500">
                         <RefreshCw className={scan.status === 'RUNNING' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
-                        {scan.status === 'DONE' ? '결과 없음' : '진행 중'}
+                        {scan.status === 'DONE' ? '요약 대기 중' : '진행 중'}
                       </span>
                     )}
                   </div>
@@ -358,21 +425,25 @@ function DashboardPage() {
             }}
             type="button"
           >
-            <div className="text-[11px] font-mono tracking-[0.32em] text-[#D4FC64]">아직 안 고친 거</div>
+            <div className="text-[11px] font-mono tracking-[0.32em] text-[#D4FC64]">PRIORITY SCAN</div>
             <div className="mt-6 text-2xl font-black leading-tight">
               {highlightedScan ? (
                 <>
-                  {highlightedScan.projectName}에
+                  {highlightedScan.projectName}
                   <br />
-                  Critical {highlightedScan.summary?.criticalCount ?? 0}개.
+                  {`Critical ${highlightedScan.summary?.criticalCount ?? 0}건`}
                 </>
               ) : (
-                <>완료된 스캔을 기다리는 중.</>
+                <>
+                  우선 확인할 스캔이 아직
+                  <br />
+                  없습니다.
+                </>
               )}
             </div>
-            <p className="mt-5 text-sm text-neutral-400">어제부터 그대로예요.</p>
+            <p className="mt-5 text-sm text-neutral-400">가장 시급한 결과로 바로 이동합니다.</p>
             <div className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-[#D4FC64]">
-              지금 보기
+              결과 보러 가기
               <ArrowRight className="h-4 w-4" />
             </div>
             <PixelGoose className="absolute bottom-8 right-8 opacity-90" mood="alert" size={64} />
@@ -380,20 +451,25 @@ function DashboardPage() {
 
           <div className="bg-white p-8">
             <div className="text-sm text-neutral-500">Local Agent</div>
-            <div className="mt-7 space-y-5 text-sm">
-              {[
-                { name: 'shopping-mall', online: true },
-                { name: 'auth-service', online: true },
-                { name: 'admin-dash', online: false },
-              ].map((agent) => (
-                <div className="flex items-center justify-between" key={agent.name}>
-                  <span className="font-mono">{agent.name}</span>
-                  <span className={agent.online ? 'font-bold text-[#0A8F4E]' : 'font-bold text-neutral-500'}>
-                    {agent.online ? '● 연결됨' : '○ 끊김'}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {monitorProjects.length === 0 ? (
+              <div className="mt-7 rounded-sm border border-dashed border-neutral-200 px-4 py-5 text-sm text-neutral-500">
+                모니터링이 활성화된 프로젝트가 없습니다.
+              </div>
+            ) : (
+              <div className="mt-7 space-y-5 text-sm">
+                {monitorProjects.map((project) => (
+                  <div className="flex items-center justify-between gap-4" key={project.projectId}>
+                    <div className="min-w-0">
+                      <div className="truncate font-mono">{project.projectName}</div>
+                      <div className="mt-1 text-xs text-neutral-400">
+                        {project.lastSeenAt ? `최근 확인 ${project.lastSeenAt}` : '연결 상태 API 대기 중'}
+                      </div>
+                    </div>
+                    <span className={getDashboardMonitorStatusClassName(project.status)}>{getDashboardMonitorStatusLabel(project.status)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <button
               className="mt-7 w-full border-t border-neutral-100 pt-5 text-sm text-neutral-500 hover:text-black"
               onClick={() => navigate(ROUTES.monitor)}
@@ -409,7 +485,7 @@ function DashboardPage() {
             type="button"
           >
             <div>
-              <div className="font-mono text-[11px] tracking-[0.24em]">오늘의 챌린지</div>
+              <div className="font-mono text-[11px] tracking-[0.24em]">MINI GAME</div>
               <div className="mt-2 text-lg font-black">USER node 한 줄</div>
             </div>
             <Trophy className="h-6 w-6" />
