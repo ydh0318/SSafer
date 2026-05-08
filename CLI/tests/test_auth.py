@@ -13,10 +13,13 @@ import ssafer.core.upload as upload_module
 import ssafer.main as main_module
 from ssafer.core.auth import (
     clear_token,
+    issue_project_agent_token,
+    load_agent_config,
     load_endpoint,
     load_token,
     login_with_credentials,
     register_user,
+    save_agent_config,
     save_auth_tokens,
     save_token,
     send_email_verification_code,
@@ -116,6 +119,58 @@ def test_save_auth_tokens_writes_backend_login_response(monkeypatch, tmp_path):
     assert data["upload"]["refreshToken"] == "refresh-token"
     assert data["upload"]["endpoint"] == "https://api.example.com"
     assert "token" not in data["upload"]
+
+
+def test_issue_project_agent_token_posts_to_backend(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            captured["timeout"] = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def post(self, url: str, headers: dict[str, str]):
+            captured["url"] = url
+            captured["headers"] = headers
+            request = httpx.Request("POST", url)
+            return httpx.Response(
+                200,
+                json={"data": {"agentId": 3, "projectId": 10, "agentToken": "raw-agent-token"}},
+                request=request,
+            )
+
+    monkeypatch.setattr(auth_module.httpx, "Client", FakeClient)
+
+    data = issue_project_agent_token("https://api.example.com/", 10, "access-token")
+
+    assert captured == {
+        "timeout": 30,
+        "url": "https://api.example.com/api/v1/projects/10/agent/token",
+        "headers": {"Authorization": "Bearer access-token"},
+    }
+    assert data["agentToken"] == "raw-agent-token"
+
+
+def test_save_and_load_agent_config(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+
+    save_agent_config(
+        {"agentId": 3, "projectId": 10, "agentToken": "raw-agent-token"},
+        endpoint="https://api.example.com",
+    )
+
+    assert load_agent_config() == {
+        "agentId": 3,
+        "projectId": 10,
+        "agentToken": "raw-agent-token",
+        "endpoint": "https://api.example.com",
+    }
 
 
 def test_login_with_credentials_posts_to_backend_auth_login(monkeypatch):
@@ -342,6 +397,45 @@ def test_send_email_code_command_requests_backend_email_code(monkeypatch):
         "endpoint": "https://api.example.com",
         "email": "user@example.com",
     }
+
+
+def test_agent_init_command_issues_and_saves_agent_token(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(auth_module, "load_endpoint", lambda: "https://api.example.com")
+    monkeypatch.setattr(auth_module, "load_token", lambda: "access-token")
+
+    def fake_issue(endpoint: str, project_id: int, access_token: str) -> dict[str, Any]:
+        captured["issue"] = {
+            "endpoint": endpoint,
+            "project_id": project_id,
+            "access_token": access_token,
+        }
+        return {"agentId": 3, "projectId": 10, "agentToken": "raw-agent-token"}
+
+    def fake_save(agent_data: dict[str, Any], endpoint: str | None = None) -> None:
+        captured["save"] = {
+            "agent_data": agent_data,
+            "endpoint": endpoint,
+        }
+
+    monkeypatch.setattr(auth_module, "issue_project_agent_token", fake_issue)
+    monkeypatch.setattr(auth_module, "save_agent_config", fake_save)
+
+    result = CliRunner().invoke(app, ["agent-init", "--project-id", "10"])
+
+    assert result.exit_code == 0
+    assert captured["issue"] == {
+        "endpoint": "https://api.example.com",
+        "project_id": 10,
+        "access_token": "access-token",
+    }
+    assert captured["save"] == {
+        "agent_data": {"agentId": 3, "projectId": 10, "agentToken": "raw-agent-token"},
+        "endpoint": "https://api.example.com",
+    }
+    assert "Agent token saved." in result.output
+    assert "agentId: 3" in result.output
 
 
 def test_verify_email_command_verifies_backend_email_code(monkeypatch):

@@ -352,37 +352,199 @@ def agent_watch(
     interval: float = typer.Option(5.0, "--interval", help="Polling interval in seconds."),
     once: bool = typer.Option(False, "--once", help="Connect, fetch pending tasks once, then exit."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch tasks without modifying files."),
+    reconnect: bool = typer.Option(True, "--reconnect/--no-reconnect", help="Reconnect automatically when the agent connection drops."),
+    max_retries: Optional[int] = typer.Option(None, "--max-retries", help="Maximum reconnect attempts. Omit for unlimited retries."),
+    reconnect_max_delay: float = typer.Option(30.0, "--reconnect-max-delay", help="Maximum reconnect backoff delay in seconds."),
 ) -> None:
     """Connect a local agent and apply pending PATCH_APPLY tasks."""
-    from ssafer.core.agent import AgentTaskResult, watch_agent
+    _run_agent_watch(
+        path=path,
+        api_url=api_url,
+        agent_id=agent_id,
+        project_id=project_id,
+        agent_token=agent_token,
+        interval=interval,
+        once=once,
+        dry_run=dry_run,
+        reconnect=reconnect,
+        max_retries=max_retries,
+        reconnect_max_delay=reconnect_max_delay,
+    )
+
+
+@app.command("agent")
+def agent(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root where patches are applied."),
+) -> None:
+    """Initialize the local agent if needed, then keep it running."""
+    from ssafer.core.auth import load_agent_config, load_endpoint
+
+    agent_config = load_agent_config()
+    if not _has_saved_agent_config(agent_config):
+        endpoint = load_endpoint()
+        project_id = typer.prompt("Project ID", type=int)
+        agent_config = _issue_and_save_agent_token(project_id, endpoint, "Agent setup")
+        console.print("[green]Agent setup complete.[/green]")
+    _run_agent_watch(
+        path=path,
+        api_url=None,
+        agent_id=None,
+        project_id=None,
+        agent_token=None,
+        interval=5.0,
+        once=False,
+        dry_run=False,
+        reconnect=True,
+        max_retries=None,
+        reconnect_max_delay=30.0,
+        agent_config=agent_config,
+    )
+
+
+@app.command("agent-init")
+def agent_init(
+    project_id: int = typer.Option(..., "--project-id", help="Project ID to issue a local-agent token for."),
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL."),
+) -> None:
+    """Issue and save a local-agent token for a project."""
     from ssafer.core.auth import load_endpoint
 
-    effective_url = api_url or load_endpoint()
-    effective_agent_id = agent_id or _load_int_env("SSAFER_AGENT_ID", "agent ID")
-    effective_project_id = project_id or _load_int_env("SSAFER_PROJECT_ID", "project ID")
-    effective_agent_token = agent_token or os.getenv("SSAFER_AGENT_TOKEN")
-    if not effective_agent_token:
-        console.print("[red]Agent token is required. Use --agent-token or SSAFER_AGENT_TOKEN.[/red]")
+    effective_endpoint = endpoint or load_endpoint()
+    agent_data = _issue_and_save_agent_token(project_id, effective_endpoint, "Agent init")
+
+    console.print("[green]Agent token saved.[/green]")
+    console.print(f"agentId: {agent_data.get('agentId')}")
+    console.print(f"projectId: {agent_data.get('projectId')}")
+    console.print("[dim]Run ssafer agent to start watching pending tasks.[/dim]")
+
+
+def _has_saved_agent_config(config: dict) -> bool:
+    return bool(config.get("agentId") and config.get("projectId") and config.get("agentToken"))
+
+
+def _issue_and_save_agent_token(project_id: int, endpoint: str, label: str) -> dict:
+    from ssafer.core.auth import issue_project_agent_token, load_token, save_agent_config
+
+    access_token = load_token()
+    if access_token is None:
+        console.print("[red]Login token is required. Run ssafer login first.[/red]")
         raise typer.Exit(code=1)
+
+    try:
+        agent_data = issue_project_agent_token(endpoint, project_id, access_token)
+        save_agent_config(agent_data, endpoint)
+        return agent_data
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]{label} failed:[/red] {_format_http_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(f"[red]{label} failed:[/red] {_format_http_transport_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except ValueError as exc:
+        console.print(f"[red]{label} failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+def _run_agent_watch(
+    *,
+    path: Path,
+    api_url: Optional[str],
+    agent_id: Optional[int],
+    project_id: Optional[int],
+    agent_token: Optional[str],
+    interval: float,
+    once: bool,
+    dry_run: bool,
+    reconnect: bool,
+    max_retries: Optional[int],
+    reconnect_max_delay: float,
+    agent_config: Optional[dict] = None,
+) -> None:
+    from ssafer.core.agent import AgentTaskResult, watch_agent
+    from ssafer.core.auth import load_agent_config, load_endpoint
+
+    config = agent_config if agent_config is not None else load_agent_config()
+    effective_url = api_url or config.get("endpoint") or load_endpoint()
+    effective_agent_id = agent_id or _load_int_config_or_env(config, "agentId", "SSAFER_AGENT_ID", "agent ID")
+    effective_project_id = project_id or _load_int_config_or_env(config, "projectId", "SSAFER_PROJECT_ID", "project ID")
+    effective_agent_token = agent_token or os.getenv("SSAFER_AGENT_TOKEN") or config.get("agentToken")
+    if not effective_agent_token:
+        console.print("[red]Agent token is required. Run ssafer agent, or use --agent-token/SSAFER_AGENT_TOKEN.[/red]")
+        raise typer.Exit(code=1)
+
     project_root = path.resolve()
+    console.print(
+        f"[cyan]Starting local agent.[/cyan] agentId={effective_agent_id}, "
+        f"projectId={effective_project_id}, path={project_root}"
+    )
+    if once:
+        console.print("[dim]Mode: fetch pending tasks once, then exit.[/dim]")
+    else:
+        console.print(f"[dim]Mode: watching for pending tasks every {interval:g}s.[/dim]")
+        if reconnect:
+            retry_label = "unlimited" if max_retries is None else str(max_retries)
+            console.print(
+                f"[dim]Reconnect: enabled, max retries={retry_label}, "
+                f"max delay={reconnect_max_delay:g}s.[/dim]"
+            )
+        else:
+            console.print("[yellow]Reconnect: disabled. Agent exits when the connection drops.[/yellow]")
+    if dry_run:
+        console.print("[yellow]Dry-run mode: files will not be modified.[/yellow]")
 
     def on_event(event_type: str, payload: object) -> None:
         if event_type == "connected":
             console.print(f"[green]Agent connected.[/green] {payload}")
             return
+        if event_type == "checking_tasks":
+            console.print("[cyan]Checking pending tasks...[/cyan]")
+            return
+        if event_type == "tasks_found":
+            tasks = payload if isinstance(payload, list) else []
+            if not tasks:
+                if once:
+                    console.print("[dim]No pending tasks.[/dim]")
+                else:
+                    console.print("[dim]No pending tasks. Agent is watching.[/dim]")
+                return
+            task_types = ", ".join(str(getattr(task, "task_type", "UNKNOWN")) for task in tasks)
+            console.print(f"[cyan]Found {len(tasks)} pending task(s).[/cyan] {task_types}")
+            return
+        if event_type == "watching":
+            interval_seconds = "-"
+            if isinstance(payload, dict):
+                interval_seconds = str(payload.get("intervalSeconds", "-"))
+            console.print(f"[dim]Waiting for next task check in {interval_seconds}s.[/dim]")
+            return
+        if event_type == "disconnected":
+            error = "-"
+            attempt = "-"
+            if isinstance(payload, dict):
+                error = str(payload.get("error", "-"))
+                attempt = str(payload.get("attempt", "-"))
+            console.print(f"[yellow]Agent connection lost.[/yellow] attempt={attempt}, error={error}")
+            return
+        if event_type == "reconnecting":
+            attempt = "-"
+            delay = "-"
+            if isinstance(payload, dict):
+                attempt = str(payload.get("attempt", "-"))
+                delay = str(payload.get("delaySeconds", "-"))
+            console.print(f"[cyan]Reconnecting agent...[/cyan] attempt={attempt}, next retry in {delay}s")
+            return
+        if event_type == "reconnect_gave_up":
+            attempt = "-"
+            error = "-"
+            if isinstance(payload, dict):
+                attempt = str(payload.get("attempt", "-"))
+                error = str(payload.get("error", "-"))
+            console.print(f"[red]Agent reconnect attempts exhausted.[/red] attempts={attempt}, error={error}")
+            return
         if event_type == "ping":
             console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
             return
         if isinstance(payload, AgentTaskResult):
-            console.print(
-                f"[cyan]Task {payload.task_id}[/cyan] {payload.task_type}: "
-                f"{payload.status} - {payload.message}"
-            )
-            for patch_result in payload.patch_results:
-                console.print(
-                    f"  - {patch_result.patch_id} {patch_result.status} "
-                    f"{patch_result.file_path}: {patch_result.message}"
-                )
+            _print_agent_task_result(payload)
 
     try:
         asyncio.run(
@@ -395,6 +557,9 @@ def agent_watch(
                 interval_seconds=interval,
                 once=once,
                 dry_run=dry_run,
+                reconnect=reconnect,
+                max_retries=max_retries,
+                reconnect_max_delay_seconds=reconnect_max_delay,
                 on_event=on_event,
             )
         )
@@ -415,6 +580,39 @@ def _load_int_env(name: str, label: str) -> int:
     except ValueError as exc:
         console.print(f"[red]{name} must be an integer.[/red]")
         raise typer.Exit(code=1) from exc
+
+
+def _load_int_config_or_env(config: dict, key: str, env_name: str, label: str) -> int:
+    value = config.get(key)
+    if value is not None:
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            console.print(f"[red]Saved agent {label} must be an integer.[/red]")
+            raise typer.Exit(code=1) from exc
+    return _load_int_env(env_name, label)
+
+
+def _print_agent_task_result(result: "AgentTaskResult") -> None:
+    table = Table(title=f"Agent task #{result.task_id} result")
+    table.add_column("Task Type")
+    table.add_column("Patch ID")
+    table.add_column("Status")
+    table.add_column("File", overflow="fold")
+    table.add_column("Message", overflow="fold")
+
+    if not result.patch_results:
+        table.add_row(result.task_type, "-", result.status, "-", result.message)
+    else:
+        for patch_result in result.patch_results:
+            table.add_row(
+                result.task_type,
+                patch_result.patch_id,
+                patch_result.status,
+                patch_result.file_path,
+                patch_result.message,
+            )
+    console.print(table)
 
 
 def _select_patch_candidates(
