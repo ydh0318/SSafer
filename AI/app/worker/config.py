@@ -27,7 +27,7 @@ class WorkerSettings:
     scan_request_queue: str
     fastapi_base_url: str
     spring_base_url: str
-    spring_worker_secret: str | None
+    spring_api_secret: str | None
     analysis_result_bucket: str | None
     analysis_result_prefix: str
     http_timeout_seconds: int
@@ -51,7 +51,7 @@ def load_worker_settings(env: Mapping[str, str] | None = None) -> WorkerSettings
         or "http://127.0.0.1:8000",
         spring_base_url=_get_optional_env(env, "SPRING_BASE_URL")
         or "http://127.0.0.1:8080",
-        spring_worker_secret=_get_optional_env(env, "SPRING_WORKER_SECRET"),
+        spring_api_secret=_get_optional_env(env, "SPRING_API_SECRET"),
         analysis_result_bucket=(
             _get_optional_env(env, "APP_ANALYSIS_RESULT_S3_BUCKET") or default_bucket
         ),

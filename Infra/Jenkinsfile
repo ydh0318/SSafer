@@ -28,6 +28,29 @@ pipeline {
             steps {
                 script { FAILED_STAGE = 'Checkout' }
                 checkout scm
+                script {
+                    def changes = sh(script: '''
+                        BASE_COMMIT="${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-${GIT_PREVIOUS_COMMIT:-HEAD~1}}"
+                        if git rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
+                          git diff --name-only "$BASE_COMMIT" HEAD
+                        elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+                          git diff --name-only HEAD~1 HEAD
+                        else
+                          echo ""
+                        fi
+                    ''', returnStdout: true).trim()
+                    env.AUTO_DEPLOY_EC2_2 = (
+                        changes.contains('AI/') ||
+                        changes.contains('Infra/docker/ec2-2/') ||
+                        changes.contains('Infra/docker/dockerfiles/Dockerfile.fastapi') ||
+                        changes.contains('Infra/scripts/deploy-ec2-2.sh')
+                    ) ? 'true' : 'false'
+                    if (env.AUTO_DEPLOY_EC2_2 == 'true') {
+                        echo "EC2 #2 related changes detected. Auto deploy enabled."
+                    } else {
+                        echo "No EC2 #2 related changes detected. EC2 #2 deploy skipped unless DEPLOY_EC2_2=true."
+                    }
+                }
             }
         }
 
@@ -35,9 +58,17 @@ pipeline {
             steps {
                 script { FAILED_STAGE = 'Build Images' }
                 sh '''
+                    ENV_FILE="$DEPLOY_ROOT/Infra/docker/ec2-1/prod/.env"
+                    VITE_GOOGLE_CLIENT_ID=$(grep '^VITE_GOOGLE_CLIENT_ID=' "$ENV_FILE" | cut -d'=' -f2-)
+                    VITE_GITHUB_CLIENT_ID=$(grep '^VITE_GITHUB_CLIENT_ID=' "$ENV_FILE" | cut -d'=' -f2-)
+                    : "${VITE_GOOGLE_CLIENT_ID:?VITE_GOOGLE_CLIENT_ID is required for frontend OAuth build}"
+                    : "${VITE_GITHUB_CLIENT_ID:?VITE_GITHUB_CLIENT_ID is required for frontend OAuth build}"
                     docker build -f Infra/docker/dockerfiles/Dockerfile.spring -t "$SPRING_IMAGE" .
                     docker build -f Infra/docker/dockerfiles/Dockerfile.fastapi -t "$FASTAPI_IMAGE" .
-                    docker build -f Infra/docker/dockerfiles/nginx/Dockerfile -t "$NGINX_IMAGE" .
+                    docker build -f Infra/docker/dockerfiles/nginx/Dockerfile \
+                      --build-arg VITE_GOOGLE_CLIENT_ID="$VITE_GOOGLE_CLIENT_ID" \
+                      --build-arg VITE_GITHUB_CLIENT_ID="$VITE_GITHUB_CLIENT_ID" \
+                      -t "$NGINX_IMAGE" .
                 '''
             }
         }
@@ -82,7 +113,7 @@ pipeline {
 
         stage('Sync EC2 #2 Deploy Files') {
             when {
-                expression { return params.DEPLOY_EC2_2 }
+                expression { return params.DEPLOY_EC2_2 || env.AUTO_DEPLOY_EC2_2 == 'true' }
             }
             steps {
                 script { FAILED_STAGE = 'Sync EC2 #2 Deploy Files' }
@@ -107,7 +138,7 @@ pipeline {
 
         stage('Deploy EC2 #2') {
             when {
-                expression { return params.DEPLOY_EC2_2 }
+                expression { return params.DEPLOY_EC2_2 || env.AUTO_DEPLOY_EC2_2 == 'true' }
             }
             steps {
                 script { FAILED_STAGE = 'Deploy EC2 #2' }

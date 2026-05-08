@@ -34,6 +34,23 @@ check_env_key() {
   log "env ${key}=SET"
 }
 
+# Allows placeholder values. Use only for keys that are intentionally dummy during staged rollout.
+check_env_present_allow_placeholder() {
+  local key="$1"
+  local value="${!key:-}"
+
+  if [[ -z "${value}" ]] && grep -Eq "^${key}=" "${ENV_FILE}"; then
+    value="$(grep -E "^${key}=" "${ENV_FILE}" | tail -n 1 | cut -d '=' -f 2-)"
+  fi
+
+  if [[ -z "${value// }" ]]; then
+    log "env ${key}=MISSING"
+    return 1
+  fi
+
+  log "env ${key}=SET"
+}
+
 print_diagnostics() {
   log "Docker compose ps:"
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" ps || true
@@ -52,8 +69,8 @@ fi
 log "DEPLOY_DIR=${DEPLOY_DIR}"
 missing_env=0
 check_env_key "FASTAPI_IMAGE" || missing_env=1
-check_env_key "ANTHROPIC_API_KEY" || missing_env=1
-check_env_key "EC2_1_PRIVATE_IP" || missing_env=1
+check_env_present_allow_placeholder "ANTHROPIC_API_KEY" || missing_env=1
+check_env_key "SPRING_CALLBACK_URL" || missing_env=1
 check_env_key "INTERNAL_TOKEN" || missing_env=1
 check_env_key "AWS_ACCESS_KEY_ID" || missing_env=1
 check_env_key "AWS_SECRET_ACCESS_KEY" || missing_env=1
