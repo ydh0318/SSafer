@@ -35,8 +35,7 @@ Before deploying the NGINX image that uses `ssafer.co.kr`, issue a certificate o
 ```bash
 sudo certbot certonly --webroot \
   -w /var/www/certbot \
-  -d ssafer.co.kr \
-  -d www.ssafer.co.kr
+  -d ssafer.co.kr
 ```
 
 Expected paths:
@@ -54,7 +53,7 @@ sudo certbot renew --dry-run --cert-name ssafer.co.kr
 
 ## NGINX Policy
 
-- HTTP requests for `ssafer.co.kr`, `www.ssafer.co.kr`, and `k14b105.p.ssafy.io` redirect directly to `https://ssafer.co.kr`.
+- HTTP requests for `ssafer.co.kr` and `k14b105.p.ssafy.io` redirect directly to `https://ssafer.co.kr`.
 - `https://ssafer.co.kr` serves the React app and proxies `/api/`, `/n8n/`, and `/jenkins/`.
 - `https://k14b105.p.ssafy.io` keeps its own certificate and redirects to `https://ssafer.co.kr`.
 
