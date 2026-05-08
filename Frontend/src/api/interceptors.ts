@@ -5,7 +5,6 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
-import { SESSION_EXPIRED_MESSAGE, SESSION_EXPIRED_STORAGE_KEY } from '../features/auth/utils/session';
 import { useAuthStore } from '../store/authStore';
 import type { ApiSuccessResponse } from '../types/api';
 import type { AuthTokenData, RefreshTokenRequest } from '../types/auth';
@@ -108,10 +107,8 @@ export const setupInterceptors = (client: AxiosInstance) => {
         useAuthStore.getState().logout();
 
         if (typeof window !== 'undefined') {
-          window.sessionStorage.setItem(SESSION_EXPIRED_STORAGE_KEY, SESSION_EXPIRED_MESSAGE);
-
-          if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
-            window.location.assign('/login');
+          if (window.location.pathname !== '/') {
+            window.location.assign('/');
           }
         }
 
