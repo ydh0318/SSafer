@@ -133,7 +133,9 @@ def _upload_result(
             headers=headers,
         )
         callback_response.raise_for_status()
-        return callback_response.json()
+        callback_data = _response_data(callback_response.json())
+        callback_data.setdefault("scanId", remote_scan_id)
+        return callback_data
 
 
 def _build_create_scan_payload(

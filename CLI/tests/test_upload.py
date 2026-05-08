@@ -4,10 +4,12 @@ from typing import Any
 
 import httpx
 import pytest
+from typer.testing import CliRunner
 
 from security_samples import scan_payload_with_trivy_secret, sanitized_scan_payload_with_trivy_secret
 import ssafer.main as main_module
 from ssafer.core import upload
+from ssafer.main import app
 
 
 def _write_scan(project_root: Path, scan: dict[str, Any]) -> None:
@@ -206,6 +208,16 @@ def test_upload_error_request_url_hides_s3_presigned_url():
     )
 
 
+def test_upload_command_prints_progress_before_upload(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(main_module, "_upload_or_exit", lambda path, api_url=None: {"scanId": 1001})
+
+    result = CliRunner().invoke(app, ["upload", "--path", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert "Uploading scan result..." in result.output
+    assert "1001" in result.output
+
+
 def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
     scan = {"scanId": "local-scan-test", "artifacts": []}
     _write_scan(tmp_path, scan)
@@ -250,6 +262,93 @@ def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
         "https://k14b105.p.ssafy.io/api/v1/scans",
         "https://k14b105.p.ssafy.io/api/v1/scans/1001/raw-results",
     ]
+
+
+def test_upload_last_scan_returns_scan_id_from_registration_when_callback_omits_it(tmp_path: Path, monkeypatch):
+    scan = {"scanId": "local-scan-test", "artifacts": []}
+    _write_scan(tmp_path, scan)
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            request = httpx.Request("POST", url)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(200, json={"data": {"status": "RAW_UPLOADED"}}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    response = upload.upload_last_scan(tmp_path)
+
+    assert response["scanId"] == 1001
+    assert response["status"] == "RAW_UPLOADED"
+
+
+def test_upload_last_scan_unwraps_backend_callback_data_response(tmp_path: Path, monkeypatch):
+    scan = {"scanId": "local-scan-test", "artifacts": []}
+    _write_scan(tmp_path, scan)
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            request = httpx.Request("POST", url)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(
+                200,
+                json={"message": "CLI raw upload reported", "data": {"scanId": 1001, "status": "QUEUED", "resultCount": 2}},
+                request=request,
+            )
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    response = upload.upload_last_scan(tmp_path)
+
+    assert response == {"scanId": 1001, "status": "QUEUED", "resultCount": 2}
 
 
 def test_upload_last_scan_uses_project_config_endpoint(tmp_path: Path, monkeypatch):

@@ -124,7 +124,9 @@ def doctor() -> None:
 @app.command("install-tools")
 def install_tools() -> None:
     """Install optional local tools used by SSAfer."""
-    ok, message = install_trivy_with_winget()
+    console.print("[cyan]Installing Trivy. This can take a few minutes...[/cyan]")
+    with console.status("[cyan]Running installer...[/cyan]", spinner="dots"):
+        ok, message = install_trivy_with_winget()
     if ok:
         console.print(f"[green]{message}[/green]")
         return
@@ -171,7 +173,12 @@ def server_audit(
                 "일부 서버 점검은 sudo 권한이 필요할 수 있습니다. 필요한 명령에만 sudo를 사용하시겠습니까?",
                 default=False,
             )
-    result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
+    if include_os_packages:
+        console.print("[cyan]Running server audit. OS package scan can take several minutes...[/cyan]")
+    else:
+        console.print("[cyan]Running server audit...[/cyan]")
+    with console.status("[cyan]Collecting server runtime data...[/cyan]", spinner="dots"):
+        result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
     output_root = path.resolve() if path is not None else Path.home()
     output_path = save_server_audit_result(output_root, result)
 
@@ -189,7 +196,9 @@ def server_audit(
     if details:
         _print_server_audit_details(result)
     if upload:
-        response = _upload_server_audit_or_exit(output_root, api_url=api_url)
+        console.print("[cyan]Uploading server audit result...[/cyan]")
+        with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+            response = _upload_server_audit_or_exit(output_root, api_url=api_url)
         _print_upload_response(response)
     console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
 
@@ -244,7 +253,9 @@ def run(
 
     _print_scan_summary(result_ref[0])
     if upload:
-        response = _upload_or_exit(path.resolve(), api_url=api_url)
+        console.print("[cyan]Uploading scan result...[/cyan]")
+        with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+            response = _upload_or_exit(path.resolve(), api_url=api_url)
         _print_upload_response(response)
 
 
@@ -254,7 +265,9 @@ def upload(
     api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL."),
 ) -> None:
     """Upload the last local scan package."""
-    response = _upload_or_exit(path.resolve(), api_url=api_url)
+    console.print("[cyan]Uploading scan result...[/cyan]")
+    with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+        response = _upload_or_exit(path.resolve(), api_url=api_url)
     _print_upload_response(response)
 
 
@@ -858,6 +871,11 @@ def _format_scan_warning(warning: object) -> str:
     text = str(warning).replace("\r\n", "\n").strip()
     if not text:
         return "-"
+
+    standalone_compose_match = re.search(r"(.+?)을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다\.", text)
+    if standalone_compose_match:
+        compose_path = Path(standalone_compose_match.group(1))
+        return f"기본 Compose 없이 단독 분석: {compose_path.name}"
 
     missing_vars = list(dict.fromkeys(re.findall(r'The \\?"([^"\\]+)\\?" variable is not set', text)))
     if missing_vars:
