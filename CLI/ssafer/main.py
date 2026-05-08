@@ -859,6 +859,11 @@ def _format_scan_warning(warning: object) -> str:
     if not text:
         return "-"
 
+    standalone_compose_match = re.search(r"(.+?)을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다\.", text)
+    if standalone_compose_match:
+        compose_path = Path(standalone_compose_match.group(1))
+        return f"기본 Compose 없이 단독 분석: {compose_path.name}"
+
     missing_vars = list(dict.fromkeys(re.findall(r'The \\?"([^"\\]+)\\?" variable is not set', text)))
     if missing_vars:
         return f"Docker Compose 환경변수 미설정: {_join_compact(missing_vars, max_items=8)}"
