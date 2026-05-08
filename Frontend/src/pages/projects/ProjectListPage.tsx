@@ -2,9 +2,11 @@ import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Trash2, Up
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import PageBanner from '../../components/common/PageBanner';
 import ModalFrame from '../../components/common/ModalFrame';
 import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
+import { useToast } from '../../features/feedback/useToast';
 import { createProject, getProjects } from '../../features/projects/api/projects';
 import ProjectCreateForm from '../../features/projects/components/ProjectCreateForm';
 import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
@@ -63,14 +65,14 @@ function ProjectListPage() {
   const projects = useProjectStore((state) => state.projects);
   const setProjectsFromList = useProjectStore((state) => state.setProjectsFromList);
   const addProject = useProjectStore((state) => state.addProject);
+  const toast = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createNotice, setCreateNotice] = useState<{ message: string; tone: 'success' | 'warning' } | null>(null);
-  const [projectActionNotice, setProjectActionNotice] = useState<string | null>(null);
+  const [createNotice, setCreateNotice] = useState<{ message: string; tone: 'warning' } | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<ScanModeOption>('UPLOAD');
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
@@ -92,7 +94,7 @@ function ProjectListPage() {
     targetProject,
   } = useProjectDeleteFlow({
     onDeleted: (project) => {
-      setProjectActionNotice(`${project.name} 프로젝트를 삭제했습니다.`);
+      toast.success(`${project.name} 프로젝트를 삭제했습니다.`);
     },
   });
 
@@ -256,7 +258,6 @@ function ProjectListPage() {
   const handleCreateProject = async () => {
     setCreateError(null);
     setCreateNotice(null);
-    setProjectActionNotice(null);
 
     if (createUploadFile) {
       const validationError = validateScanUploadFile(createUploadFile);
@@ -317,7 +318,7 @@ function ProjectListPage() {
         }
       }
 
-      setCreateNotice({ tone: 'success', message: '프로젝트를 생성했습니다.' });
+      toast.success('프로젝트를 생성했습니다.');
     } catch (error) {
       console.error('Failed to create project.', error);
       setCreateError('프로젝트를 생성하지 못했습니다.');
@@ -372,28 +373,14 @@ function ProjectListPage() {
     <section className="space-y-10">
       <header className="flex items-start justify-between gap-6 pt-4">
         <div className="min-w-0">
-          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">뭐 스캔할까요 ? </h1>
+          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">뭐 스캔할까요 ?</h1>
         </div>
         <div className="shrink-0">
           <PixelGoose mood="idle" size={92} />
         </div>
       </header>
 
-      {createNotice ? (
-        <div
-          className={`border px-5 py-4 text-sm ${
-            createNotice.tone === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-              : 'border-amber-200 bg-amber-50 text-amber-900'
-          }`}
-        >
-          {createNotice.message}
-        </div>
-      ) : null}
-
-      {projectActionNotice ? (
-        <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{projectActionNotice}</div>
-      ) : null}
+      {createNotice ? <PageBanner message={createNotice.message} tone={createNotice.tone} /> : null}
 
       <section className="space-y-4 pt-12">
         <div className="text-sm text-neutral-500">프로젝트</div>
@@ -401,7 +388,7 @@ function ProjectListPage() {
         {isLoading ? (
           <div className="bg-white px-5 py-4 text-sm text-neutral-500">프로젝트 목록을 불러오는 중입니다.</div>
         ) : loadError ? (
-          <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{loadError}</div>
+          <PageBanner message={loadError} tone="error" />
         ) : (
           <div className="flex flex-wrap items-stretch gap-3">
             {projects.map((project) => {
@@ -414,8 +401,6 @@ function ProjectListPage() {
                   }`}
                   key={project.id}
                   onClick={() => {
-                    setProjectActionNotice(null);
-
                     if (isSelected) {
                       navigate(ROUTES.projectDetail.replace(':projectId', project.id));
                       return;
@@ -656,7 +641,7 @@ function ProjectListPage() {
         </aside>
       </section>
 
-      {scanError ? <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{scanError}</div> : null}
+      {scanError ? <PageBanner message={scanError} tone="error" /> : null}
 
       {isCreateOpen ? (
         <ModalFrame
