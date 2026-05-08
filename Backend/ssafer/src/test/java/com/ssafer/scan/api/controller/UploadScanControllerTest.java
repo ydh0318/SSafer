@@ -12,6 +12,7 @@ import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
 import com.ssafer.scan.application.service.UploadScanResult;
 import com.ssafer.scan.application.service.UploadScanService;
+import com.ssafer.scan.domain.enums.ScanFailureReason;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,7 @@ class UploadScanControllerTest {
   private UploadScanController uploadScanController;
 
   @Test
-  void requestUploadScanReturnsCreated() throws Exception {
+  void requestUploadScanReturnsCreatedWhenQueued() throws Exception {
     MockMvc mockMvc = buildMockMvc();
 
     MockMultipartFile file = new MockMultipartFile(
@@ -50,14 +51,42 @@ class UploadScanControllerTest {
     );
 
     when(uploadScanService.requestUploadScan(eq(101L), eq("scan-a"), any()))
-        .thenReturn(new UploadScanResult(1001L, ScanStatus.REQUESTED));
+        .thenReturn(new UploadScanResult(1001L, ScanStatus.QUEUED, null, null));
 
     mockMvc.perform(multipart("/api/v1/projects/101/scans/upload")
             .file(file)
             .file(scanNamePart))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.data.scanId").value(1001L))
-        .andExpect(jsonPath("$.data.status").value("REQUESTED"));
+        .andExpect(jsonPath("$.data.status").value("QUEUED"));
+  }
+
+  @Test
+  void requestUploadScanReturns500WhenQueuePublishFailsAfterCreation() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+
+    MockMultipartFile file = new MockMultipartFile(
+        "files",
+        ".env",
+        "text/plain",
+        "A".getBytes(StandardCharsets.UTF_8)
+    );
+
+    when(uploadScanService.requestUploadScan(eq(101L), eq(null), any()))
+        .thenReturn(new UploadScanResult(
+            1001L,
+            ScanStatus.RAW_UPLOADED,
+            ScanFailureReason.ANALYSIS_QUEUE_PUBLISH_FAILED,
+            ErrorCode.ANALYSIS_QUEUE_PUBLISH_FAILED
+        ));
+
+    mockMvc.perform(multipart("/api/v1/projects/101/scans/upload")
+            .file(file))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.code").value("ANALYSIS_QUEUE_PUBLISH_FAILED"))
+        .andExpect(jsonPath("$.data.scanId").value(1001L))
+        .andExpect(jsonPath("$.data.status").value("RAW_UPLOADED"))
+        .andExpect(jsonPath("$.data.failureReason").value("ANALYSIS_QUEUE_PUBLISH_FAILED"));
   }
 
   @Test

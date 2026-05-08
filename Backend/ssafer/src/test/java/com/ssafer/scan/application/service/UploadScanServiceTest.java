@@ -16,6 +16,7 @@ import com.ssafer.project.application.service.ProjectAuthorizationService;
 import com.ssafer.project.domain.entity.Project;
 import com.ssafer.project.domain.enums.ScanMode;
 import com.ssafer.scan.domain.entity.Scan;
+import com.ssafer.scan.domain.enums.ScanFailureReason;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.nio.charset.StandardCharsets;
@@ -52,7 +53,7 @@ class UploadScanServiceTest {
   private UploadScanService uploadScanService;
 
   @Test
-  void requestUploadScanCreatesRequestedScanAndCallsProcessor() {
+  void requestUploadScanCreatesRequestedScanAndReturnsQueued() {
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
     Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
     ReflectionTestUtils.setField(project, "id", 2001L);
@@ -72,11 +73,14 @@ class UploadScanServiceTest {
       ReflectionTestUtils.setField(scan, "id", 3001L);
       return scan;
     });
+    when(webUploadScanProcessor.process(any())).thenReturn(UploadScanProcessingResult.queued());
 
     UploadScanResult result = uploadScanService.requestUploadScan(2001L, "scan-1", List.of(file));
 
     assertThat(result.scanId()).isEqualTo(3001L);
-    assertThat(result.status()).isEqualTo(ScanStatus.REQUESTED);
+    assertThat(result.status()).isEqualTo(ScanStatus.QUEUED);
+    assertThat(result.failureReason()).isNull();
+    assertThat(result.errorCode()).isNull();
 
     ArgumentCaptor<Scan> scanCaptor = ArgumentCaptor.forClass(Scan.class);
     verify(scanRepository).save(scanCaptor.capture());
@@ -85,8 +89,6 @@ class UploadScanServiceTest {
     assertThat(saved.getRequestedByUserId()).isEqualTo(10L);
     assertThat(saved.getScanMode()).isEqualTo(com.ssafer.scan.domain.enums.ScanMode.UPLOAD);
     assertThat(saved.getStatus()).isEqualTo(ScanStatus.REQUESTED);
-
-    verify(webUploadScanProcessor).process(any(UploadScanProcessingCommand.class));
     verify(scanExecutionPermit).release();
   }
 
@@ -142,5 +144,42 @@ class UploadScanServiceTest {
     verify(scanExecutionPermit, never()).tryAcquire();
     verify(scanRepository, never()).save(any());
     verify(webUploadScanProcessor, never()).process(any());
+  }
+
+  @Test
+  void requestUploadScanWhenProcessingFailsAfterCreationReturnsFailurePayload() {
+    AuthenticatedActor actor = AuthenticatedActor.member(10L);
+    Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
+    ReflectionTestUtils.setField(project, "id", 2001L);
+    MockMultipartFile file = new MockMultipartFile(
+        "files",
+        ".env",
+        "text/plain",
+        "A".getBytes(StandardCharsets.UTF_8)
+    );
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(2001L, actor)).thenReturn(project);
+    when(scanExecutionPermit.tryAcquire()).thenReturn(true);
+    when(objectMapper.writeValueAsString(any())).thenReturn("{\"scanName\":\"scan-1\"}");
+    when(scanRepository.save(any(Scan.class))).thenAnswer(invocation -> {
+      Scan scan = invocation.getArgument(0);
+      ReflectionTestUtils.setField(scan, "id", 3001L);
+      return scan;
+    });
+    when(webUploadScanProcessor.process(any())).thenReturn(
+        UploadScanProcessingResult.rawUploadedFailed(
+            ScanFailureReason.ANALYSIS_QUEUE_PUBLISH_FAILED,
+            ErrorCode.ANALYSIS_QUEUE_PUBLISH_FAILED
+        )
+    );
+
+    UploadScanResult result = uploadScanService.requestUploadScan(2001L, "scan-1", List.of(file));
+
+    assertThat(result.scanId()).isEqualTo(3001L);
+    assertThat(result.status()).isEqualTo(ScanStatus.RAW_UPLOADED);
+    assertThat(result.failureReason()).isEqualTo(ScanFailureReason.ANALYSIS_QUEUE_PUBLISH_FAILED);
+    assertThat(result.errorCode()).isEqualTo(ErrorCode.ANALYSIS_QUEUE_PUBLISH_FAILED);
+    verify(scanExecutionPermit).release();
   }
 }

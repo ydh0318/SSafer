@@ -1,5 +1,6 @@
 package com.ssafer.scan.api.controller;
 
+import com.ssafer.global.api.ApiErrorResponse;
 import com.ssafer.global.api.ApiResponse;
 import com.ssafer.scan.api.dto.UploadScanResponseData;
 import com.ssafer.scan.application.service.UploadScanResult;
@@ -7,7 +8,9 @@ import com.ssafer.scan.application.service.UploadScanService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -25,7 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Tag(name = "업로드 점검 요청", description = "웹 업로드 기반 점검 요청 API")
 public class UploadScanController {
 
-  private static final String REQUEST_UPLOAD_SCAN_SUCCESS_MESSAGE = "업로드 기반 점검 요청 접수 성공";
+  private static final String REQUEST_UPLOAD_SCAN_SUCCESS_MESSAGE = "업로드 기반 점검 요청 성공";
 
   private final UploadScanService uploadScanService;
 
@@ -34,16 +37,30 @@ public class UploadScanController {
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE
   )
   @Operation(summary = "업로드 기반 점검 요청", description = "웹 업로드 파일로 점검 요청을 접수합니다.")
-  public ResponseEntity<ApiResponse<UploadScanResponseData>> requestUploadScan(
+  public ResponseEntity<?> requestUploadScan(
       @Parameter(description = "프로젝트 ID", example = "101")
       @PathVariable Long projectId,
       @RequestPart(value = "files", required = false) List<MultipartFile> files,
       @RequestPart(value = "scanName", required = false) String scanName
   ) {
-    // 태스크1 범위: 요청 접수/검증 이후 REQUESTED 상태 Scan 생성까지 수행한다.
     UploadScanResult result = uploadScanService.requestUploadScan(projectId, scanName, files);
-    UploadScanResponseData data = new UploadScanResponseData(result.scanId(), result.status());
-    return ResponseEntity.status(HttpStatus.CREATED)
-        .body(ApiResponse.success(REQUEST_UPLOAD_SCAN_SUCCESS_MESSAGE, data));
+    UploadScanResponseData data = new UploadScanResponseData(
+        result.scanId(),
+        result.status(),
+        result.failureReason()
+    );
+
+    if (result.isSuccess()) {
+      return ResponseEntity.status(HttpStatus.CREATED)
+          .body(ApiResponse.success(REQUEST_UPLOAD_SCAN_SUCCESS_MESSAGE, data));
+    }
+
+    Map<String, Object> errorData = new LinkedHashMap<>();
+    errorData.put("scanId", result.scanId());
+    errorData.put("status", result.status());
+    errorData.put("failureReason", result.failureReason());
+
+    return ResponseEntity.status(result.errorCode().status())
+        .body(ApiErrorResponse.of(result.errorCode().code(), result.errorCode().message(), errorData));
   }
 }

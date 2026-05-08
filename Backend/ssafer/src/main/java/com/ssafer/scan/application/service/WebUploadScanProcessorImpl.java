@@ -1,6 +1,5 @@
 package com.ssafer.scan.application.service;
 
-import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.scan.domain.enums.ScanFailureReason;
 import java.nio.file.Path;
@@ -19,12 +18,14 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
   private final CustomRuleScanner customRuleScanner;
   private final TrivyScanExecutor trivyScanExecutor;
   private final ScanResultJsonBuilder scanResultJsonBuilder;
+  private final UploadScanRawResultUploader uploadScanRawResultUploader;
+  private final UploadScanAnalysisTaskDispatcher uploadScanAnalysisTaskDispatcher;
   private final UploadScanStatusUpdater uploadScanStatusUpdater;
 
   @Override
-  public void process(UploadScanProcessingCommand command) {
-    // 업로드 파일 기반 1차 점검 실행 흐름:
-    // temp 저장 -> custom rule + trivy -> scan_result.json 생성 -> cleanup
+  public UploadScanProcessingResult process(UploadScanProcessingCommand command) {
+    // 업로드 스캔 처리 순서:
+    // temp 저장 -> 1차 점검 -> scan_result.json 생성 -> S3 저장 -> MQ 발행 -> 상태 전이
     Path workspace = null;
     try {
       workspace = tempWorkspaceManager.createWorkspace(command.scanId());
@@ -34,27 +35,55 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
       findings.addAll(customRuleScanner.scan(savedFiles));
       findings.addAll(trivyScanExecutor.scan(savedFiles));
 
-      // 태스크2 범위: 로컬에서 scan_result.json 생성까지 수행한다.
       Path resultPath = scanResultJsonBuilder.writeScanResultJson(workspace, command.scanId(), findings);
+      String rawResultPath = uploadScanRawResultUploader.upload(command.scanId(), resultPath);
+      uploadScanStatusUpdater.markRawUploaded(command.scanId(), rawResultPath);
+
+      uploadScanAnalysisTaskDispatcher.dispatch(command.scanId(), command.projectId(), rawResultPath);
+      uploadScanStatusUpdater.markQueued(command.scanId());
+
       log.info(
-          "Upload scan execution completed in local workspace: scanId={}, projectId={}, resultPath={}",
+          "Upload scan processing completed and queued: scanId={}, projectId={}, rawResultPath={}",
           command.scanId(),
           command.projectId(),
-          resultPath
+          rawResultPath
       );
+      return UploadScanProcessingResult.queued();
     } catch (Exception ex) {
-      // 실행 실패 시 scan 상태를 FAILED로 반영하고 공통 에러코드로 변환한다.
-      uploadScanStatusUpdater.markExecutionFailed(command.scanId(), ScanFailureReason.SCAN_EXECUTION_FAILED);
-      log.error(
-          "Upload scan execution failed: scanId={}, projectId={}",
-          command.scanId(),
-          command.projectId(),
-          ex
-      );
-      throw new BusinessException(ErrorCode.SCAN_EXECUTION_FAILED);
+      return handleFailure(command, ex);
     } finally {
-      // 임시 파일은 항상 정리한다.
       tempWorkspaceManager.cleanup(workspace);
     }
+  }
+
+  private UploadScanProcessingResult handleFailure(UploadScanProcessingCommand command, Exception ex) {
+    // 실패 원인별 DB 상태/응답 코드를 고정해 API 정책과 맞춘다.
+    if (ex instanceof UploadScanS3UploadException) {
+      uploadScanStatusUpdater.markUploadFailed(command.scanId(), ScanFailureReason.RAW_RESULT_UPLOAD_FAILED);
+      log.error("Upload scan S3 upload failed: scanId={}, projectId={}", command.scanId(), command.projectId(), ex);
+      return UploadScanProcessingResult.failed(
+          ScanFailureReason.RAW_RESULT_UPLOAD_FAILED,
+          ErrorCode.RAW_RESULT_UPLOAD_FAILED
+      );
+    }
+
+    if (ex instanceof UploadScanQueuePublishException) {
+      uploadScanStatusUpdater.markQueuePublishFailed(
+          command.scanId(),
+          ScanFailureReason.ANALYSIS_QUEUE_PUBLISH_FAILED
+      );
+      log.error("Upload scan queue publish failed: scanId={}, projectId={}", command.scanId(), command.projectId(), ex);
+      return UploadScanProcessingResult.rawUploadedFailed(
+          ScanFailureReason.ANALYSIS_QUEUE_PUBLISH_FAILED,
+          ErrorCode.ANALYSIS_QUEUE_PUBLISH_FAILED
+      );
+    }
+
+    uploadScanStatusUpdater.markExecutionFailed(command.scanId(), ScanFailureReason.SCAN_EXECUTION_FAILED);
+    log.error("Upload scan execution failed: scanId={}, projectId={}", command.scanId(), command.projectId(), ex);
+    return UploadScanProcessingResult.failed(
+        ScanFailureReason.SCAN_EXECUTION_FAILED,
+        ErrorCode.SCAN_EXECUTION_FAILED
+    );
   }
 }

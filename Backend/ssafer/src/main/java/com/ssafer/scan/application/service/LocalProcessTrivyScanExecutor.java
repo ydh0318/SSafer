@@ -1,6 +1,8 @@
 package com.ssafer.scan.application.service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -8,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,7 +28,7 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
   @Value("${APP_SCAN_UPLOAD_TRIVY_COMMAND:trivy}")
   private String trivyCommand;
 
-  @Value("${APP_SCAN_UPLOAD_SCAN_TIMEOUT_SECONDS:30}")
+  @Value("${APP_SCAN_UPLOAD_SCAN_TIMEOUT_SECONDS:120}")
   private long timeoutSeconds;
 
   @Override
@@ -97,28 +100,58 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
 
   private JsonNode runTrivyConfig(Path targetFile) {
     // 외부 프로세스로 Trivy를 실행하고 JSON 결과를 파싱한다.
+    // compose 파일 내부 상대 경로(Dockerfile 등)를 위해 실행 기준 디렉토리를 업로드 폴더로 맞춘다.
+    Path parentDirectory = targetFile.toAbsolutePath().getParent();
+    String targetPath = targetFile.toAbsolutePath().toString();
+
     List<String> command = List.of(
         trivyCommand,
         "config",
         "--quiet",
         "--format",
         "json",
-        targetFile.toAbsolutePath().toString()
+        targetPath
     );
     ProcessBuilder processBuilder = new ProcessBuilder(command).redirectErrorStream(true);
+    if (parentDirectory != null) {
+      processBuilder.directory(parentDirectory.toFile());
+    }
 
     try {
       Process process = processBuilder.start();
+      ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
+      AtomicReference<Throwable> readFailure = new AtomicReference<>();
+
+      Thread outputReader = Thread.startVirtualThread(() -> {
+        try (var inputStream = process.getInputStream()) {
+          inputStream.transferTo(outputBuffer);
+        } catch (IOException ex) {
+          readFailure.set(ex);
+        } catch (RuntimeException ex) {
+          readFailure.set(ex);
+        }
+      });
+
       boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
       if (!finished) {
         // timeout 초과 시 프로세스를 강제 종료한다.
         process.destroyForcibly();
+        outputReader.join(1000);
         throw new IllegalStateException(
             "Trivy execution timed out after " + Duration.ofSeconds(timeoutSeconds)
         );
       }
 
-      String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+      outputReader.join();
+      Throwable outputReadFailure = readFailure.get();
+      if (outputReadFailure != null) {
+        if (outputReadFailure instanceof IOException ioEx) {
+          throw new IllegalStateException("Failed to read Trivy output", ioEx);
+        }
+        throw new IllegalStateException("Failed to read Trivy output", outputReadFailure);
+      }
+
+      String output = outputBuffer.toString(StandardCharsets.UTF_8);
       if (process.exitValue() != 0) {
         throw new IllegalStateException("Trivy execution failed: " + abbreviate(output));
       }
@@ -133,6 +166,8 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
     } catch (InterruptedException ex) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException("Trivy execution was interrupted", ex);
+    } catch (UncheckedIOException ex) {
+      throw new IllegalStateException("Failed to read Trivy output", ex.getCause());
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to parse Trivy output", ex);
     }
