@@ -8,16 +8,17 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 /**
- * 워커가 분석 완료 또는 실패를 백엔드에 알릴 때 사용하는 내부 콜백 요청이다.
- * 성공 콜백이면 analysisResultPath를 보내고, 실패 콜백이면 failureReason을 보낸다.
+ * 워커가 분석 진행 상태 또는 최종 결과를 백엔드에 알릴 때 사용하는 내부 콜백 요청이다.
+ * RUNNING 콜백은 "작업을 받아 실제 분석을 시작했다"는 뜻이고,
+ * DONE/FAILED 콜백은 최종 결과를 의미한다.
  */
 public record WorkerAnalysisResultCallbackRequest(
     @Schema(description = "완료 처리할 agent task ID", example = "123")
     @NotNull(message = "taskId is required")
     Long taskId,
-    @Schema(description = "워커 분석 결과 상태", example = "DONE")
+    @Schema(description = "워커 분석 상태", example = "RUNNING")
     ScanStatus status,
-    @Schema(description = "워커가 전달하는 현재 처리 단계", example = "analysis_completed")
+    @Schema(description = "워커가 전달하는 현재 처리 단계", example = "analysis_started")
     @Size(max = 100) String progressStep,
     @Schema(description = "실패 시 기록할 사유", example = "worker analysis failed")
     String failureReason,
@@ -33,7 +34,7 @@ public record WorkerAnalysisResultCallbackRequest(
 
   @AssertTrue(message = "DONE status requires analysisResultPath")
   public boolean hasAnalysisResultPathForSuccess() {
-    return !isSuccessStatus(status) || hasText(analysisResultPath);
+    return status != ScanStatus.DONE || hasText(analysisResultPath);
   }
 
   @AssertTrue(message = "FAILED status requires failureReason")
@@ -41,19 +42,14 @@ public record WorkerAnalysisResultCallbackRequest(
     return status != ScanStatus.FAILED || hasText(failureReason);
   }
 
-  @AssertTrue(message = "status only supports DONE or FAILED")
+  @AssertTrue(message = "status only supports RUNNING, DONE or FAILED")
   public boolean hasSupportedStatus() {
-    return status == null || status == ScanStatus.DONE || status == ScanStatus.FAILED;
+    return status == null || status == ScanStatus.RUNNING || status == ScanStatus.DONE || status == ScanStatus.FAILED;
   }
 
   @AssertTrue(message = "startedAt must be before or equal to completedAt")
   public boolean isTimeRangeValid() {
     return startedAt == null || completedAt == null || !startedAt.isAfter(completedAt);
-  }
-
-  private boolean isSuccessStatus(ScanStatus status) {
-    // status를 생략하면 워커 분석 성공 콜백으로 해석한다.
-    return status == null || status == ScanStatus.DONE;
   }
 
   private boolean hasText(String value) {

@@ -144,6 +144,21 @@ public class Scan {
     this.lastUpdatedAt = lastUpdatedAt;
   }
 
+  // 워커가 작업을 받아 실제 분석을 시작했을 때 RUNNING 상태를 기록한다.
+  public void markAnalysisRunning(
+      String progressStep,
+      LocalDateTime startedAt,
+      LocalDateTime lastUpdatedAt
+  ) {
+    this.status.assertTransitionAllowed(ScanStatus.RUNNING);
+    this.status = ScanStatus.RUNNING;
+    this.progressStep = progressStep;
+    this.failureReason = null;
+    this.startedAt = startedAt;
+    this.completedAt = null;
+    this.lastUpdatedAt = lastUpdatedAt;
+  }
+
   // 적재가 최종 완료되면 DONE 상태와 완료 시각을 남긴다.
   public void markAnalysisCompleted(
       String progressStep,
