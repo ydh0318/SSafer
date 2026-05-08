@@ -124,7 +124,9 @@ def doctor() -> None:
 @app.command("install-tools")
 def install_tools() -> None:
     """Install optional local tools used by SSAfer."""
-    ok, message = install_trivy_with_winget()
+    console.print("[cyan]Installing Trivy. This can take a few minutes...[/cyan]")
+    with console.status("[cyan]Running installer...[/cyan]", spinner="dots"):
+        ok, message = install_trivy_with_winget()
     if ok:
         console.print(f"[green]{message}[/green]")
         return

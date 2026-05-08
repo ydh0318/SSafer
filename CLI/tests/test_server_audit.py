@@ -8,6 +8,9 @@ from typer.testing import CliRunner
 from ssafer.main import app
 from ssafer.server.audit import (
     CommandResult,
+    DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    TRIVY_ROOTFS_TIMEOUT_SECONDS,
+    _command_timeout_seconds,
     parse_ssh_settings,
     parse_ss_listening_ports,
     run_server_audit,
@@ -30,6 +33,18 @@ tcp   LISTEN 0      4096            [::]:22           [::]:*    users:(("sshd",p
         {"protocol": "tcp", "host": "127.0.0.1", "port": 6379, "raw": 'tcp   LISTEN 0      4096       127.0.0.1:6379      0.0.0.0:*    users:(("redis",pid=2,fd=3))'},
         {"protocol": "tcp", "host": "::", "port": 22, "raw": 'tcp   LISTEN 0      4096            [::]:22           [::]:*    users:(("sshd",pid=3,fd=3))'},
     ]
+
+
+def test_trivy_rootfs_uses_longer_command_timeout():
+    assert _command_timeout_seconds(["ss", "-tulpen"]) == DEFAULT_COMMAND_TIMEOUT_SECONDS
+    assert (
+        _command_timeout_seconds(["trivy", "rootfs", "--scanners", "vuln", "/"])
+        == TRIVY_ROOTFS_TIMEOUT_SECONDS
+    )
+    assert (
+        _command_timeout_seconds(["sudo", "-n", "trivy", "rootfs", "--scanners", "vuln", "/"])
+        == TRIVY_ROOTFS_TIMEOUT_SECONDS
+    )
 
 
 def test_server_audit_reports_public_sensitive_port():

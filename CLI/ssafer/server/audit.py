@@ -21,6 +21,9 @@ SENSITIVE_PORTS = {
     15672: ("RabbitMQ management", "MEDIUM"),
 }
 
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 30
+TRIVY_ROOTFS_TIMEOUT_SECONDS = 600
+
 
 @dataclass(frozen=True)
 class CommandResult:
@@ -100,7 +103,7 @@ def run_command(command: list[str]) -> CommandResult:
             check=False,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=_command_timeout_seconds(command),
         )
     except FileNotFoundError as exc:
         return CommandResult(command=command, exit_code=127, stderr=str(exc))
@@ -112,6 +115,13 @@ def run_command(command: list[str]) -> CommandResult:
         stdout=completed.stdout,
         stderr=completed.stderr,
     )
+
+
+def _command_timeout_seconds(command: list[str]) -> int:
+    command_without_sudo = command[2:] if command[:2] == ["sudo", "-n"] else command
+    if command_without_sudo[:2] == ["trivy", "rootfs"]:
+        return TRIVY_ROOTFS_TIMEOUT_SECONDS
+    return DEFAULT_COMMAND_TIMEOUT_SECONDS
 
 
 def save_server_audit_result(project_root: Path, result: ServerAuditResult) -> Path:
