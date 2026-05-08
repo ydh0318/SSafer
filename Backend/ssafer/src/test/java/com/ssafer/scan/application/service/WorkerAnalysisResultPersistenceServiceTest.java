@@ -33,6 +33,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,7 +41,7 @@ class WorkerAnalysisResultPersistenceServiceTest {
 
   private static final String ANALYSIS_RESULT_JSON = """
       {
-        "schemaVersion": "0.1",
+        "schemaVersion": "0.2",
         "scanId": "a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd",
         "source": "cli",
         "scannedAt": "2026-04-27T00:26:05Z",
@@ -63,7 +64,23 @@ class WorkerAnalysisResultPersistenceServiceTest {
               "recommendedActions": ["action-1", "action-2"],
               "codeGuidance": "code guidance 1",
               "verification": "verification 1",
-              "cautions": ["caution-1"]
+              "cautions": ["caution-1"],
+              "patches": [
+                {
+                  "patchId": "PATCH-0001",
+                  "targetFile": ".env",
+                  "operation": "replace",
+                  "oldText": "DB_PASSWORD=plain-text",
+                  "newText": "DB_PASSWORD=${DB_PASSWORD}",
+                  "expectedFileHash": "sha256:abc123...",
+                  "requiresApproval": true,
+                  "rollback": {
+                    "operation": "replace",
+                    "oldText": "DB_PASSWORD=${DB_PASSWORD}",
+                    "newText": "DB_PASSWORD=plain-text"
+                  }
+                }
+              ]
             }
           },
           {
@@ -138,7 +155,7 @@ class WorkerAnalysisResultPersistenceServiceTest {
   }
 
   @Test
-  void persistSavesNodeAndFindingsAndMarksDone() {
+  void persistSavesNodeAndFindingsAndMarksDone() throws Exception {
     Scan scan = runningScan();
     AgentTask task = ackedTask(scan);
     WorkerAnalysisResultIngestionRequestedEvent event = event();
@@ -169,6 +186,10 @@ class WorkerAnalysisResultPersistenceServiceTest {
     assertThat(findingsCaptor.getValue())
         .extracting(ScanFinding::getFingerprint)
         .containsExactly("FND-0001", "FND-0002", "FND-0003");
+    JsonNode patchPayload = new ObjectMapper().readTree(findingsCaptor.getValue().getFirst().getPatchPayloadJson());
+    assertThat(patchPayload.path("patches")).hasSize(1);
+    assertThat(patchPayload.path("patches").get(0).path("patchId").asText()).isEqualTo("PATCH-0001");
+    assertThat(findingsCaptor.getValue().get(1).getPatchPayloadJson()).isNull();
     assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SUCCEEDED);
     assertThat(scan.getStatus()).isEqualTo(ScanStatus.DONE);
     assertThat(scan.getProgressStep()).isEqualTo(WorkerAnalysisResultPersistenceService.COMPLETED_PROGRESS_STEP);
@@ -231,6 +252,50 @@ class WorkerAnalysisResultPersistenceServiceTest {
     assertThat(findingsCaptor.getValue())
         .extracting(ScanFinding::getFingerprint)
         .containsExactly("FND-0002", "FND-0003");
+    assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SUCCEEDED);
+    assertThat(scan.getStatus()).isEqualTo(ScanStatus.DONE);
+  }
+
+  @Test
+  void persistRetryBackfillsPatchPayloadForExistingFinding() {
+    Scan scan = runningScan();
+    AgentTask task = runningTask(scan);
+    ScanNode existingNode = ScanNode.builder()
+        .id(200L)
+        .scanId(scan.getId())
+        .nodeKey("a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd")
+        .nodeName("cli")
+        .nodeType("ANALYSIS_RESULT")
+        .metadataJson("{}")
+        .createdAt(LocalDateTime.now())
+        .build();
+    ScanFinding existingFinding = ScanFinding.builder()
+        .id(300L)
+        .scanId(scan.getId())
+        .scanNodeId(existingNode.getId())
+        .sourceType(com.ssafer.scan.domain.enums.FindingSourceType.CUSTOM_RULE)
+        .fingerprint("FND-0001")
+        .severity(com.ssafer.scan.domain.enums.Severity.HIGH)
+        .category("CUSTOM_RULE")
+        .title("기존 finding")
+        .rawSnippetJson("{\"maskedEvidence\":\"DB_PASSWORD=***MASKED***\"}")
+        .resolutionStatus(com.ssafer.scan.domain.enums.ResolutionStatus.OPEN)
+        .createdAt(LocalDateTime.now())
+        .build();
+
+    when(scanRepository.findByIdForUpdate(scan.getId())).thenReturn(Optional.of(scan));
+    when(agentTaskRepository.findByIdAndScanId(task.getId(), scan.getId())).thenReturn(Optional.of(task));
+    when(analysisResultObjectReader.read(scan.getAnalysisResultPath())).thenReturn(ANALYSIS_RESULT_JSON);
+    when(scanNodeRepository.findByScanIdAndNodeKey(scan.getId(), "a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd"))
+        .thenReturn(Optional.of(existingNode));
+    when(scanFindingRepository.findAllByScanId(scan.getId())).thenReturn(List.of(existingFinding));
+    when(scanFindingRepository.countByScanId(scan.getId())).thenReturn(3L);
+
+    workerAnalysisResultPersistenceService.persist(event());
+
+    verify(scanFindingRepository).saveAll(any());
+    assertThat(existingFinding.getPatchPayloadJson()).isNotBlank();
+    assertThat(existingFinding.getPatchPayloadJson()).contains("PATCH-0001");
     assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SUCCEEDED);
     assertThat(scan.getStatus()).isEqualTo(ScanStatus.DONE);
   }

@@ -8,7 +8,7 @@ public final class ScanFindingDetailResponseMapper {
   private ScanFindingDetailResponseMapper() {
   }
 
-  // 상세 조회는 목록보다 많은 원문/패치 관련 정보를 함께 내려준다.
+  // 상세 조회에서는 목록보다 많은 원문/패치 관련 정보를 함께 내려준다.
   public static ScanFindingDetailResponse toResponse(ScanFinding finding) {
     return new ScanFindingDetailResponse(
         finding.getId(),
@@ -27,6 +27,7 @@ public final class ScanFindingDetailResponseMapper {
         finding.getAttackScenario(),
         finding.getRemediationGuide(),
         finding.getRawSnippetJson(),
+        finding.getPatchPayloadJson(),
         finding.getResolutionStatus(),
         finding.getPatchApprovedByUserId(),
         finding.getPatchApprovedAt(),

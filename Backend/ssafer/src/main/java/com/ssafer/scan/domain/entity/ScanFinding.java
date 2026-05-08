@@ -81,6 +81,10 @@ public class ScanFinding {
   @Column(name = "raw_snippet_json")
   private String rawSnippetJson;
 
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "patch_payload_json")
+  private String patchPayloadJson;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "resolution_status", nullable = false, length = 20)
   private ResolutionStatus resolutionStatus;
@@ -109,4 +113,12 @@ public class ScanFinding {
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
+
+  public void backfillPatchPayload(String patchPayloadJson) {
+    if ((this.patchPayloadJson == null || this.patchPayloadJson.isBlank())
+        && patchPayloadJson != null
+        && !patchPayloadJson.isBlank()) {
+      this.patchPayloadJson = patchPayloadJson;
+    }
+  }
 }

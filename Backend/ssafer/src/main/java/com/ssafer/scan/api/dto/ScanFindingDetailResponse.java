@@ -39,6 +39,8 @@ public record ScanFindingDetailResponse(
     String remediationGuide,
     @Schema(description = "원본 결과 일부 JSON")
     String rawSnippetJson,
+    @Schema(description = "워커가 전달한 패치 적용 payload JSON")
+    String patchPayloadJson,
     @Schema(description = "조치 상태", example = "OPEN")
     ResolutionStatus resolutionStatus,
     @Schema(description = "패치 승인 사용자 ID", example = "1")

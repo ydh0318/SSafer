@@ -400,6 +400,7 @@ class ScanQueryControllerTest {
             "Container escape",
             "Use non-root user",
             "{\"line\":2}",
+            "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}",
             ResolutionStatus.OPEN,
             1L,
             LocalDateTime.of(2026, 4, 27, 10, 0),
@@ -424,6 +425,7 @@ class ScanQueryControllerTest {
         .andExpect(jsonPath("$.data.filePath").value("Dockerfile"))
         .andExpect(jsonPath("$.data.lineNumber").value(2))
         .andExpect(jsonPath("$.data.ruleCode").value("DS-0002"))
+        .andExpect(jsonPath("$.data.patchPayloadJson").value("{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}"))
         .andExpect(jsonPath("$.data.resolutionStatus").value("OPEN"));
   }
 

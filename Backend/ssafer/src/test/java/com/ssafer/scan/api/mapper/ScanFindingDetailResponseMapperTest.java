@@ -35,6 +35,7 @@ class ScanFindingDetailResponseMapperTest {
         .attackScenario("Container breakout risk")
         .remediationGuide("Use a non-root USER")
         .rawSnippetJson("{\"line\":2}")
+        .patchPayloadJson("{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}")
         .resolutionStatus(ResolutionStatus.OPEN)
         .patchApprovedByUserId(1L)
         .patchApprovedAt(patchApprovedAt)
@@ -64,6 +65,7 @@ class ScanFindingDetailResponseMapperTest {
     assertThat(response.attackScenario()).isEqualTo("Container breakout risk");
     assertThat(response.remediationGuide()).isEqualTo("Use a non-root USER");
     assertThat(response.rawSnippetJson()).isEqualTo("{\"line\":2}");
+    assertThat(response.patchPayloadJson()).isEqualTo("{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}");
     assertThat(response.resolutionStatus()).isEqualTo(ResolutionStatus.OPEN);
     assertThat(response.patchApprovedByUserId()).isEqualTo(1L);
     assertThat(response.patchApprovedAt()).isEqualTo(patchApprovedAt);
