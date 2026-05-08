@@ -1,6 +1,8 @@
 package com.ssafer.scan.domain.entity;
 
+import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.scan.domain.enums.FindingSourceType;
+import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.Severity;
 
@@ -81,12 +83,23 @@ public class ScanFinding {
   @Column(name = "raw_snippet_json")
   private String rawSnippetJson;
 
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "patch_payload_json")
+  private String patchPayloadJson;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "resolution_status", nullable = false, length = 20)
   private ResolutionStatus resolutionStatus;
 
   @Column(name = "patch_approved_by_user_id")
   private Long patchApprovedByUserId;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "patch_approved_actor_type", length = 20)
+  private RequestActorType patchApprovedActorType;
+
+  @Column(name = "patch_approved_by_guest_owner_key_hash", length = 255)
+  private String patchApprovedByGuestOwnerKeyHash;
 
   @Column(name = "patch_approved_at")
   private LocalDateTime patchApprovedAt;
@@ -109,4 +122,20 @@ public class ScanFinding {
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
+
+  public void backfillPatchPayload(String patchPayloadJson) {
+    if ((this.patchPayloadJson == null || this.patchPayloadJson.isBlank())
+        && patchPayloadJson != null
+        && !patchPayloadJson.isBlank()) {
+      this.patchPayloadJson = patchPayloadJson;
+    }
+  }
+
+  public void approvePatch(AuthenticatedActor actor, LocalDateTime approvedAt) {
+    this.patchApprovedActorType = actor.isMember() ? RequestActorType.USER : RequestActorType.GUEST;
+    this.patchApprovedByUserId = actor.isMember() ? actor.userId() : null;
+    this.patchApprovedByGuestOwnerKeyHash = actor.isGuest() ? actor.guestOwnerKeyHash() : null;
+    this.patchApprovedAt = approvedAt;
+    this.resolutionStatus = ResolutionStatus.IN_PROGRESS;
+  }
 }

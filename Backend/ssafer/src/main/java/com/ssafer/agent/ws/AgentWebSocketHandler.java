@@ -84,7 +84,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     agentConnectionService.markOnline(agent.getId(), now);
 
     AgentOutgoingMessage response = AgentOutgoingMessage.connected(agent.getId(), now);
-    session.sendMessage(new TextMessage(objectMapper.writeValueAsString(response)));
+    sessionRegistry.sendCurrentSessionMessage(agent.getId(), new TextMessage(objectMapper.writeValueAsString(response)));
   }
 
   private void handlePing(WebSocketSession session, AgentIncomingMessage incoming) throws IOException {
@@ -98,7 +98,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     Instant now = Instant.now();
     agentConnectionService.touchLastSeen(boundAgentId, now);
     AgentOutgoingMessage response = AgentOutgoingMessage.pong(now);
-    session.sendMessage(new TextMessage(objectMapper.writeValueAsString(response)));
+    sessionRegistry.sendCurrentSessionMessage(boundAgentId, new TextMessage(objectMapper.writeValueAsString(response)));
   }
 
   private void handleSessionClosed(String sessionId) {
