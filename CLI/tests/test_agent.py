@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
@@ -184,6 +186,7 @@ def test_agent_watch_command_uses_env_defaults(monkeypatch, tmp_path: Path):
     assert calls[0]["agent_id"] == 7
     assert calls[0]["project_id"] == 3
     assert calls[0]["agent_token"] == "agent-token"
+    assert calls[0]["reconnect"] is True
     assert "Starting local agent." in result.output
     assert "Checking pending tasks..." in result.output
     assert "No pending tasks." in result.output
@@ -242,3 +245,118 @@ def test_agent_watch_command_prints_dry_run_and_task_result_table(monkeypatch, t
     assert "Agent task #10 result" in result.output
     assert "PATCH_APPLY" in result.output
     assert "DRY_RUN" in result.output
+
+
+def test_agent_watch_command_passes_reconnect_options(monkeypatch, tmp_path: Path):
+    calls = []
+
+    async def fake_watch_agent(**kwargs):
+        calls.append(kwargs)
+        kwargs["on_event"]("disconnected", {"attempt": 1, "error": "closed"})
+        kwargs["on_event"]("reconnecting", {"attempt": 1, "delaySeconds": 1})
+
+    monkeypatch.setenv("SSAFER_AGENT_ID", "7")
+    monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
+    monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "agent-watch",
+            "--path",
+            str(tmp_path),
+            "--max-retries",
+            "3",
+            "--reconnect-max-delay",
+            "9",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls[0]["reconnect"] is True
+    assert calls[0]["max_retries"] == 3
+    assert calls[0]["reconnect_max_delay_seconds"] == 9
+    assert "Agent connection lost." in result.output
+    assert "Reconnecting agent..." in result.output
+
+
+def test_watch_agent_reconnects_after_connection_drop(monkeypatch, tmp_path: Path):
+    events = []
+    calls = {"count": 0}
+
+    async def fake_session(**kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("websocket closed")
+
+    async def fake_sleep(delay: float):
+        events.append(("sleep", delay))
+
+    monkeypatch.setitem(sys.modules, "websockets", SimpleNamespace())
+    monkeypatch.setattr(agent, "_watch_agent_session", fake_session)
+    monkeypatch.setattr(agent.asyncio, "sleep", fake_sleep)
+
+    async def run_watch():
+        await agent.watch_agent(
+            api_url="https://example.com",
+            agent_id=7,
+            project_id=3,
+            agent_token="agent-token",
+            project_root=tmp_path,
+            interval_seconds=5,
+            once=False,
+            dry_run=False,
+            reconnect=True,
+            max_retries=2,
+            reconnect_max_delay_seconds=30,
+            on_event=lambda event_type, payload: events.append((event_type, payload)),
+        )
+
+    import asyncio
+
+    asyncio.run(run_watch())
+
+    assert calls["count"] == 2
+    assert events[0][0] == "disconnected"
+    assert events[1][0] == "reconnecting"
+    assert events[2] == ("sleep", 1)
+
+
+def test_watch_agent_once_does_not_reconnect(monkeypatch, tmp_path: Path):
+    calls = {"count": 0}
+
+    async def fake_session(**kwargs):
+        calls["count"] += 1
+        raise RuntimeError("websocket closed")
+
+    monkeypatch.setitem(sys.modules, "websockets", SimpleNamespace())
+    monkeypatch.setattr(agent, "_watch_agent_session", fake_session)
+
+    async def run_watch():
+        await agent.watch_agent(
+            api_url="https://example.com",
+            agent_id=7,
+            project_id=3,
+            agent_token="agent-token",
+            project_root=tmp_path,
+            interval_seconds=5,
+            once=True,
+            dry_run=False,
+            reconnect=True,
+            max_retries=2,
+            reconnect_max_delay_seconds=30,
+            on_event=lambda event_type, payload: None,
+        )
+
+    import asyncio
+
+    try:
+        asyncio.run(run_watch())
+    except RuntimeError as exc:
+        assert str(exc) == "websocket closed"
+    else:
+        raise AssertionError("watch_agent should raise when --once connection drops")
+
+    assert calls["count"] == 1

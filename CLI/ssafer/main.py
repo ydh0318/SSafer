@@ -352,6 +352,9 @@ def agent_watch(
     interval: float = typer.Option(5.0, "--interval", help="Polling interval in seconds."),
     once: bool = typer.Option(False, "--once", help="Connect, fetch pending tasks once, then exit."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch tasks without modifying files."),
+    reconnect: bool = typer.Option(True, "--reconnect/--no-reconnect", help="Reconnect automatically when the agent connection drops."),
+    max_retries: Optional[int] = typer.Option(None, "--max-retries", help="Maximum reconnect attempts. Omit for unlimited retries."),
+    reconnect_max_delay: float = typer.Option(30.0, "--reconnect-max-delay", help="Maximum reconnect backoff delay in seconds."),
 ) -> None:
     """Connect a local agent and apply pending PATCH_APPLY tasks."""
     from ssafer.core.agent import AgentTaskResult, watch_agent
@@ -373,6 +376,14 @@ def agent_watch(
         console.print("[dim]Mode: fetch pending tasks once, then exit.[/dim]")
     else:
         console.print(f"[dim]Mode: watching for pending tasks every {interval:g}s.[/dim]")
+        if reconnect:
+            retry_label = "unlimited" if max_retries is None else str(max_retries)
+            console.print(
+                f"[dim]Reconnect: enabled, max retries={retry_label}, "
+                f"max delay={reconnect_max_delay:g}s.[/dim]"
+            )
+        else:
+            console.print("[yellow]Reconnect: disabled. Agent exits when the connection drops.[/yellow]")
     if dry_run:
         console.print("[yellow]Dry-run mode: files will not be modified.[/yellow]")
 
@@ -400,6 +411,30 @@ def agent_watch(
                 interval_seconds = str(payload.get("intervalSeconds", "-"))
             console.print(f"[dim]Waiting for next task check in {interval_seconds}s.[/dim]")
             return
+        if event_type == "disconnected":
+            error = "-"
+            attempt = "-"
+            if isinstance(payload, dict):
+                error = str(payload.get("error", "-"))
+                attempt = str(payload.get("attempt", "-"))
+            console.print(f"[yellow]Agent connection lost.[/yellow] attempt={attempt}, error={error}")
+            return
+        if event_type == "reconnecting":
+            attempt = "-"
+            delay = "-"
+            if isinstance(payload, dict):
+                attempt = str(payload.get("attempt", "-"))
+                delay = str(payload.get("delaySeconds", "-"))
+            console.print(f"[cyan]Reconnecting agent...[/cyan] attempt={attempt}, next retry in {delay}s")
+            return
+        if event_type == "reconnect_gave_up":
+            attempt = "-"
+            error = "-"
+            if isinstance(payload, dict):
+                attempt = str(payload.get("attempt", "-"))
+                error = str(payload.get("error", "-"))
+            console.print(f"[red]Agent reconnect attempts exhausted.[/red] attempts={attempt}, error={error}")
+            return
         if event_type == "ping":
             console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
             return
@@ -417,6 +452,9 @@ def agent_watch(
                 interval_seconds=interval,
                 once=once,
                 dry_run=dry_run,
+                reconnect=reconnect,
+                max_retries=max_retries,
+                reconnect_max_delay_seconds=reconnect_max_delay,
                 on_event=on_event,
             )
         )

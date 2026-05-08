@@ -110,6 +110,9 @@ async def watch_agent(
     interval_seconds: float,
     once: bool,
     dry_run: bool,
+    reconnect: bool = True,
+    max_retries: int | None = None,
+    reconnect_max_delay_seconds: float = 30.0,
     on_event,
 ) -> None:
     try:
@@ -119,6 +122,52 @@ async def watch_agent(
 
     ws_url = build_agent_ws_url(api_url)
     headers = {"Authorization": f"Bearer {agent_token}"}
+    attempt = 0
+    while True:
+        try:
+            await _watch_agent_session(
+                websockets=websockets,
+                ws_url=ws_url,
+                headers=headers,
+                api_url=api_url,
+                agent_id=agent_id,
+                project_id=project_id,
+                agent_token=agent_token,
+                project_root=project_root,
+                interval_seconds=interval_seconds,
+                once=once,
+                dry_run=dry_run,
+                on_event=on_event,
+            )
+            return
+        except Exception as exc:
+            if once or not reconnect:
+                raise
+            attempt += 1
+            if max_retries is not None and attempt > max_retries:
+                on_event("reconnect_gave_up", {"attempt": attempt - 1, "error": str(exc)})
+                raise
+            delay = min(reconnect_max_delay_seconds, 2 ** min(attempt - 1, 5))
+            on_event("disconnected", {"attempt": attempt, "error": str(exc)})
+            on_event("reconnecting", {"attempt": attempt, "delaySeconds": delay})
+            await asyncio.sleep(delay)
+
+
+async def _watch_agent_session(
+    *,
+    websockets: Any,
+    ws_url: str,
+    headers: dict[str, str],
+    api_url: str,
+    agent_id: int,
+    project_id: int,
+    agent_token: str,
+    project_root: Path,
+    interval_seconds: float,
+    once: bool,
+    dry_run: bool,
+    on_event,
+) -> None:
     async with _connect_websocket(websockets, ws_url, headers) as websocket:
         await websocket.send(json.dumps(_connect_message(agent_id, project_id)))
         connected = await websocket.recv()
