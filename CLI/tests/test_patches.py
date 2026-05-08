@@ -183,8 +183,42 @@ def test_apply_command_applies_analysis_result_patch(tmp_path: Path):
     )
 
     assert result.exit_code == 0
+    assert "Patch diff preview" in result.output
+    assert "- USER root" in result.output
+    assert "+ USER appuser" in result.output
     assert "SUCCESS" in result.output
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
+
+
+def test_apply_command_dry_run_does_not_modify_file(tmp_path: Path):
+    target = tmp_path / "Dockerfile"
+    target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+    analysis_result = tmp_path / "analysis_result.json"
+    analysis_result.write_text(
+        json.dumps(
+            {
+                "patches": [
+                    {
+                        "patchId": "P1",
+                        "filePath": "Dockerfile",
+                        "oldText": "USER root",
+                        "newText": "USER appuser",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["apply", "--path", str(tmp_path), "--analysis-result", str(analysis_result), "--dry-run", "--yes"],
+    )
+
+    assert result.exit_code == 0
+    assert "Patch diff preview" in result.output
+    assert "DRY_RUN" in result.output
+    assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER root\n"
 
 
 def test_apply_command_uses_default_analysis_result_and_interactive_selection(tmp_path: Path):
