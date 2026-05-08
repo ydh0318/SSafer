@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import PageBanner from '../../components/common/PageBanner';
 import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import { getProjects } from '../../features/projects/api/projects';
@@ -272,9 +273,7 @@ function DashboardPage() {
 
   return (
     <section className="space-y-10">
-      {displayErrorMessage ? (
-        <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{displayErrorMessage}</div>
-      ) : null}
+      {displayErrorMessage ? <PageBanner message={displayErrorMessage} tone="error" /> : null}
 
       <section className="border-b border-neutral-200 pb-12">
         <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">

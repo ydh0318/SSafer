@@ -1,11 +1,12 @@
 # EC2 #2 prod: AI 분석 서버
-# - EC2 #1 Spring -> EC2 #2 FastAPI: http://<EC2_2_PRIVATE_IP>:8000
-# - EC2 #2 Worker -> EC2 #1 RabbitMQ: <EC2_1_PRIVATE_IP>:5672
-# - EC2 #2 Worker -> EC2 #1 Spring callback: http://<EC2_1_PRIVATE_IP>:8080
+# EC2 #1/#2는 서로 다른 AWS 계정/VPC → public IP로 통신
+# - EC2 #1 Spring -> EC2 #2 FastAPI: http://<EC2_2_PUBLIC_IP>:8000
+# - EC2 #2 Worker -> EC2 #1 RabbitMQ: <EC2_1_PUBLIC_IP>:8989
+# - EC2 #2 Worker -> EC2 #1 Spring callback: http://<EC2_1_PUBLIC_IP>:8080
 #
 # UFW 설정 (1회):
 #   sudo ufw allow 22/tcp
-#   sudo ufw allow from <EC2_1_PRIVATE_IP> to any port 8000 proto tcp
+#   sudo ufw allow from <EC2_1_PUBLIC_IP> to any port 8000 proto tcp
 #   sudo ufw enable
 
 name: ${COMPOSE_PROJECT_NAME:-ssafer-ec2-prod}
@@ -25,19 +26,6 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
-
-  ollama-pull:
-    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
-    container_name: ${OLLAMA_PULL_CONTAINER_NAME:-ssafer-ollama-pull}
-    restart: "no"
-    depends_on:
-      ollama:
-        condition: service_healthy
-    environment:
-      OLLAMA_HOST: ${OLLAMA_BASE_URL:-http://ollama:11434}
-    command: ["pull", "${OLLAMA_MODEL:-qwen2.5:3b}"]
-    networks:
-      - ec2-internal
 
   fastapi:
     image: ${FASTAPI_IMAGE}
@@ -62,8 +50,6 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-      ollama-pull:
-        condition: service_completed_successfully
     healthcheck:
       test:
         [
