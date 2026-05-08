@@ -5,11 +5,13 @@ import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.enums.Severity;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -96,6 +98,18 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
   List<ScanFinding> findByScanIdAndScanNodeId(Long scanId, Long scanNodeId);
 
   Optional<ScanFinding> findByIdAndScanId(Long id, Long scanId);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("""
+      select f
+      from ScanFinding f
+      where f.id = :findingId
+        and f.scanId = :scanId
+      """)
+  Optional<ScanFinding> findByIdAndScanIdForUpdate(
+      @Param("findingId") Long findingId,
+      @Param("scanId") Long scanId
+  );
 
   boolean existsByScanIdAndScanNodeIdAndFingerprint(Long scanId, Long scanNodeId, String fingerprint);
 }

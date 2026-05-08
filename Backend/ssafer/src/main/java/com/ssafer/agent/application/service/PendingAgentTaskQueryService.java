@@ -7,6 +7,7 @@ import com.ssafer.agent.domain.repository.AgentRepository;
 import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,7 +17,7 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class PendingAgentTaskQueryService {
 
-  private static final List<AgentTaskStatus> PENDING_STATUSES = AgentTaskStatus.resendTargetStatuses();
+  private static final List<AgentTaskStatus> DISPATCH_TARGET_STATUSES = List.of(AgentTaskStatus.PENDING);
 
   private final AgentRepository agentRepository;
   private final AgentTaskRepository agentTaskRepository;
@@ -32,7 +33,7 @@ public class PendingAgentTaskQueryService {
     this.objectMapper = objectMapper;
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public List<PendingAgentTaskResponseData> getPendingTasks(Long pathAgentId, Long authenticatedAgentId) {
     // 먼저 path agent 존재 여부를 확인해 NOT_FOUND와 FORBIDDEN을 명확히 구분한다.
     Agent agent = agentRepository.findById(pathAgentId)
@@ -42,19 +43,25 @@ public class PendingAgentTaskQueryService {
       throw new BusinessException(ErrorCode.FORBIDDEN);
     }
 
-    return agentTaskRepository.findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(agent.getId(), PENDING_STATUSES)
+    Instant sentAt = Instant.now();
+    return agentTaskRepository.findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(agent.getId(), DISPATCH_TARGET_STATUSES)
         .stream()
-        .map(task -> new PendingAgentTaskResponseData(
-            task.getId(),
-            task.getTaskType(),
-            task.getTaskStatus(),
-            task.getProject().getId(),
-            task.getScan().getId(),
-            task.getFinding() == null ? null : task.getFinding().getId(),
-            parsePayload(task.getPayloadJson()),
-            task.getQueuedAt()
-        ))
+        .map(task -> mapToResponseAndMarkSent(task, sentAt))
         .toList();
+  }
+
+  private PendingAgentTaskResponseData mapToResponseAndMarkSent(com.ssafer.agent.domain.entity.AgentTask task, Instant sentAt) {
+    task.markSent(sentAt);
+    return new PendingAgentTaskResponseData(
+        task.getId(),
+        task.getTaskType(),
+        task.getTaskStatus(),
+        task.getProject().getId(),
+        task.getScan().getId(),
+        task.getFinding() == null ? null : task.getFinding().getId(),
+        parsePayload(task.getPayloadJson()),
+        task.getQueuedAt()
+    );
   }
 
   private JsonNode parsePayload(String payloadJson) {

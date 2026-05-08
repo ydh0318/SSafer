@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import AppRouter from './app/router';
+import { ToastProvider } from './features/feedback/ToastProvider';
 import { useUiStore } from './store/uiStore';
 
 function App() {
@@ -17,7 +18,11 @@ function App() {
     body.classList.add(`theme-${theme}`);
   }, [theme]);
 
-  return <AppRouter />;
+  return (
+    <ToastProvider>
+      <AppRouter />
+    </ToastProvider>
+  );
 }
 
 export default App;

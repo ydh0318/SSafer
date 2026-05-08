@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import os
 import re
 import sys
@@ -124,7 +125,9 @@ def doctor() -> None:
 @app.command("install-tools")
 def install_tools() -> None:
     """Install optional local tools used by SSAfer."""
-    ok, message = install_trivy_with_winget()
+    console.print("[cyan]Installing Trivy. This can take a few minutes...[/cyan]")
+    with console.status("[cyan]Running installer...[/cyan]", spinner="dots"):
+        ok, message = install_trivy_with_winget()
     if ok:
         console.print(f"[green]{message}[/green]")
         return
@@ -171,7 +174,12 @@ def server_audit(
                 "일부 서버 점검은 sudo 권한이 필요할 수 있습니다. 필요한 명령에만 sudo를 사용하시겠습니까?",
                 default=False,
             )
-    result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
+    if include_os_packages:
+        console.print("[cyan]Running server audit. OS package scan can take several minutes...[/cyan]")
+    else:
+        console.print("[cyan]Running server audit...[/cyan]")
+    with console.status("[cyan]Collecting server runtime data...[/cyan]", spinner="dots"):
+        result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
     output_root = path.resolve() if path is not None else Path.home()
     output_path = save_server_audit_result(output_root, result)
 
@@ -189,7 +197,9 @@ def server_audit(
     if details:
         _print_server_audit_details(result)
     if upload:
-        response = _upload_server_audit_or_exit(output_root, api_url=api_url)
+        console.print("[cyan]Uploading server audit result...[/cyan]")
+        with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+            response = _upload_server_audit_or_exit(output_root, api_url=api_url)
         _print_upload_response(response)
     console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
 
@@ -244,7 +254,9 @@ def run(
 
     _print_scan_summary(result_ref[0])
     if upload:
-        response = _upload_or_exit(path.resolve(), api_url=api_url)
+        console.print("[cyan]Uploading scan result...[/cyan]")
+        with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+            response = _upload_or_exit(path.resolve(), api_url=api_url)
         _print_upload_response(response)
 
 
@@ -254,7 +266,9 @@ def upload(
     api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL."),
 ) -> None:
     """Upload the last local scan package."""
-    response = _upload_or_exit(path.resolve(), api_url=api_url)
+    console.print("[cyan]Uploading scan result...[/cyan]")
+    with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+        response = _upload_or_exit(path.resolve(), api_url=api_url)
     _print_upload_response(response)
 
 
@@ -291,6 +305,7 @@ def apply_fix(
             raise typer.Exit(code=1)
 
         selected = _select_patch_candidates(selected, patch_id=patch_id, yes=yes)
+        _print_patch_preview(selected)
 
         if not dry_run and not yes:
             confirmed = typer.confirm("Apply selected patches?")
@@ -442,6 +457,37 @@ def _select_patch_candidates(
     return [candidates[selected - 1]]
 
 
+def _print_patch_preview(candidates: list["PatchCandidate"]) -> None:
+    table = Table(title="Patch diff preview")
+    table.add_column("Patch ID")
+    table.add_column("Finding ID")
+    table.add_column("File", overflow="fold")
+    table.add_column("Diff", overflow="fold")
+    for candidate in candidates:
+        table.add_row(
+            candidate.patch_id,
+            candidate.finding_id or "-",
+            candidate.file_path,
+            _format_patch_diff(candidate.old_text, candidate.new_text),
+        )
+    console.print(table)
+
+
+def _format_patch_diff(old_text: str, new_text: str) -> str:
+    old_lines = old_text.splitlines()
+    new_lines = new_text.splitlines()
+    if len(old_lines) <= 1 and len(new_lines) <= 1:
+        return f"- {old_text}\n+ {new_text}"
+    diff_lines = difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile="oldText",
+        tofile="newText",
+        lineterm="",
+    )
+    return "\n".join(diff_lines)
+
+
 @app.command()
 def login(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer 서버 API URL"),
@@ -468,7 +514,7 @@ def login(
         console.print(f"[red]Login failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Login failed:[/red] {exc}")
+        console.print(f"[red]Login failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     except ValueError as exc:
         console.print(f"[red]Login failed:[/red] {exc}")
@@ -508,7 +554,7 @@ def signup(
         console.print(f"[red]Signup failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Signup failed:[/red] {exc}")
+        console.print(f"[red]Signup failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Signup succeeded. Run 'ssafer login' to save login tokens.[/green]")
 
@@ -531,7 +577,7 @@ def send_email_code(
         console.print(f"[red]Email code request failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email code request failed:[/red] {exc}")
+        console.print(f"[red]Email code request failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Verification code sent. Check your email.[/green]")
 
@@ -555,7 +601,7 @@ def verify_email(
         console.print(f"[red]Email verification failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email verification failed:[/red] {exc}")
+        console.print(f"[red]Email verification failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Email verified. Run 'ssafer signup' to create your account.[/green]")
 
@@ -598,6 +644,18 @@ def _format_http_error(exc: httpx.HTTPStatusError) -> str:
     if message:
         return f"backend returned {status_code} ({message})."
     return f"backend returned {status_code}."
+
+
+def _format_http_transport_error(exc: httpx.HTTPError) -> str:
+    message = _mask_non_api_urls(str(exc))
+    request = getattr(exc, "request", None)
+    if request is not None:
+        return f"{message} (request: {_format_upload_request_url(request.url)})"
+    return message
+
+
+def _mask_non_api_urls(text: str) -> str:
+    return re.sub(r"https?://[^\s'\")>]+", lambda match: _format_upload_request_url(match.group(0)), text)
 
 
 def _format_upload_request_url(url: object) -> str:
@@ -859,6 +917,11 @@ def _format_scan_warning(warning: object) -> str:
     if not text:
         return "-"
 
+    standalone_compose_match = re.search(r"(.+?)을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다\.", text)
+    if standalone_compose_match:
+        compose_path = Path(standalone_compose_match.group(1))
+        return f"기본 Compose 없이 단독 분석: {compose_path.name}"
+
     missing_vars = list(dict.fromkeys(re.findall(r'The \\?"([^"\\]+)\\?" variable is not set', text)))
     if missing_vars:
         return f"Docker Compose 환경변수 미설정: {_join_compact(missing_vars, max_items=8)}"
@@ -1019,7 +1082,7 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
         console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
-        console.print(f"[red]Upload failed:[/red] {exc}")
+        console.print(f"[red]Upload failed:[/red] {_format_http_transport_error(exc)}")
     except RuntimeError as exc:
         console.print(f"[red]Upload failed:[/red] {exc}")
     raise typer.Exit(code=1)
@@ -1048,7 +1111,7 @@ def _upload_server_audit_or_exit(path: Path, api_url: str | None) -> dict:
         console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
-        console.print(f"[red]Upload failed:[/red] {exc}")
+        console.print(f"[red]Upload failed:[/red] {_format_http_transport_error(exc)}")
     except RuntimeError as exc:
         console.print(f"[red]Upload failed:[/red] {exc}")
     raise typer.Exit(code=1)

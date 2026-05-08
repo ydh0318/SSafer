@@ -129,6 +129,15 @@ def test_format_scan_warning_summarizes_compose_service_without_image():
     assert _format_scan_warning(warning) == "Compose 서비스 'spring'에 image/build 설정이 없어 분석하지 못함"
 
 
+def test_format_scan_warning_summarizes_standalone_compose_file():
+    warning = (
+        r"C:\Users\SSAFY\Desktop\S14P31B105\Frontend\docker-compose.front.yml을 "
+        "함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다."
+    )
+
+    assert _format_scan_warning(warning) == "기본 Compose 없이 단독 분석: docker-compose.front.yml"
+
+
 def test_print_findings_separates_rows_for_readability(monkeypatch):
     record_console = Console(record=True, width=100)
     monkeypatch.setattr(main, "console", record_console)

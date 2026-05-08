@@ -16,6 +16,7 @@ import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -149,14 +150,21 @@ public class WorkerAnalysisResultPersistenceService {
     }
 
     Set<String> existingFingerprints = new HashSet<>();
+    Map<String, ScanFinding> existingFindingsByFingerprint = new HashMap<>();
     for (ScanFinding finding : scanFindingRepository.findAllByScanId(scan.getId())) {
       existingFingerprints.add(finding.getFingerprint());
+      existingFindingsByFingerprint.put(finding.getFingerprint(), finding);
     }
 
-    List<ScanFinding> findingsToSave = new java.util.ArrayList<>();
+    List<ScanFinding> findingsToSave = new ArrayList<>();
     for (JsonNode result : results) {
       String fingerprint = resolveFingerprint(result);
+      String patchPayloadJson = buildPatchPayloadJson(result.path("fix"));
       if (existingFingerprints.contains(fingerprint)) {
+        ScanFinding existingFinding = existingFindingsByFingerprint.get(fingerprint);
+        if (existingFinding != null) {
+          existingFinding.backfillPatchPayload(patchPayloadJson);
+        }
         continue;
       }
 
@@ -177,6 +185,7 @@ public class WorkerAnalysisResultPersistenceService {
           .attackScenario(readNullableText(result, "explanation"))
           .remediationGuide(buildRemediationGuide(result.path("fix")))
           .rawSnippetJson(buildRawSnippetJson(result))
+          .patchPayloadJson(patchPayloadJson)
           .resolutionStatus(ResolutionStatus.OPEN)
           .createdAt(createdAt)
           .build());
@@ -213,6 +222,26 @@ public class WorkerAnalysisResultPersistenceService {
       return objectMapper.writeValueAsString(snippet);
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to serialize raw snippet json", ex);
+    }
+  }
+
+  // 승인 단계에서 worker 원본 patch payload를 그대로 재사용할 수 있게 별도 저장한다.
+  private String buildPatchPayloadJson(JsonNode fix) {
+    if (fix == null || fix.isMissingNode() || fix.isNull()) {
+      return null;
+    }
+
+    JsonNode patches = fix.path("patches");
+    if (!patches.isArray() || patches.isEmpty()) {
+      return null;
+    }
+
+    try {
+      ObjectNode payload = objectMapper.createObjectNode();
+      payload.set("patches", patches);
+      return objectMapper.writeValueAsString(payload);
+    } catch (Exception ex) {
+      throw new IllegalStateException("Failed to serialize patch payload json", ex);
     }
   }
 

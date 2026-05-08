@@ -2,8 +2,8 @@ project_name: S14P31B105
 
 upload:
   # 서버 엔드포인트
-  endpoint: http://localhost:8080
-  # endpoint: https://ssafer.co.kr
+  # endpoint: http://localhost:8080
+  endpoint: https://k14b105.p.ssafy.io
 
   # 백엔드 서버에 결과 업로드 시 사용할 토큰을 환경 변수에서 가져옵니다.
   token_env: SSAFER_TOKEN

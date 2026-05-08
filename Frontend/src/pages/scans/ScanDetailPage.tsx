@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { ROUTES } from '../../constants/routes';
+import { useToast } from '../../features/feedback/useToast';
 import { getScanStatus } from '../../features/scans/api/scans';
 import ScanProgressPanel from '../../features/scans/components/ScanProgressPanel';
 import { isTerminalScanStatus } from '../../features/scans/utils/scanPresentation';
@@ -20,6 +21,7 @@ function ScanDetailPage() {
   const { scanId = '' } = useParams<{ scanId: string }>();
   const location = useLocation();
   const routeState = (location.state ?? {}) as ScanRouteState;
+  const toast = useToast();
 
   const [statusData, setStatusData] = useState<ScanProgressStatusData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,6 +93,23 @@ function ScanDetailPage() {
     };
   }, [isAutoRefreshEnabled, scanId, statusData]);
 
+  useEffect(() => {
+    if (!routeState.autoOpenedFromScanRequest) {
+      return;
+    }
+
+    toast.success('스캔 요청이 접수되었습니다.', { durationMs: 2000 });
+  }, [routeState.autoOpenedFromScanRequest, toast]);
+
+  useEffect(() => {
+    if (!refreshNotice) {
+      return;
+    }
+
+    toast.warning(refreshNotice, { durationMs: 2000 });
+    setRefreshNotice(null);
+  }, [refreshNotice, toast]);
+
   const handleRefresh = async () => {
     if (!scanId) {
       return;
@@ -142,13 +161,13 @@ function ScanDetailPage() {
         )}
       </div>
 
-      {routeState.autoOpenedFromScanRequest ? (
+      {false ? (
         <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
           스캔 요청이 접수되었습니다. 완료되면 결과 화면으로 이동할 수 있습니다.
         </div>
       ) : null}
 
-      {refreshNotice ? (
+      {false ? (
         <div className="border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">{refreshNotice}</div>
       ) : null}
 

@@ -99,6 +99,24 @@ def test_handle_agent_task_applies_patch_payload(tmp_path: Path):
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
 
 
+def test_handle_agent_task_fails_invalid_patch_apply_payload(tmp_path: Path):
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=3,
+        payload={"patches": [{"patchId": "PATCH-1", "filePath": "Dockerfile", "newText": "USER appuser"}]},
+    )
+
+    result = agent.handle_agent_task(tmp_path, task)
+
+    assert result.status == "FAILED"
+    assert "no applicable patch" in result.message
+    assert result.patch_results == []
+
+
 def test_handle_agent_task_skips_non_patch_task(tmp_path: Path):
     task = agent.AgentTask(
         task_id=10,

@@ -73,6 +73,16 @@ public enum ErrorCode {
   INVALID_PARAMETER(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", "Request parameter format is invalid"),
   INVALID_PAYLOAD_HASH(HttpStatus.BAD_REQUEST, "INVALID_PAYLOAD_HASH", "payloadHash format is invalid"),
   RAW_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "RAW_RESULT_NOT_FOUND", "Raw result object not found"),
+  PATCH_PAYLOAD_NOT_FOUND(
+      HttpStatus.CONFLICT,
+      "PATCH_PAYLOAD_NOT_FOUND",
+      "Patch payload is not available for this finding"
+  ),
+  PATCH_APPROVAL_NOT_ALLOWED(
+      HttpStatus.CONFLICT,
+      "PATCH_APPROVAL_NOT_ALLOWED",
+      "Patch approval is not allowed for current finding state"
+  ),
   SCAN_STATUS_CONFLICT(
       HttpStatus.CONFLICT,
       "SCAN_STATUS_CONFLICT",

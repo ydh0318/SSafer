@@ -3,7 +3,10 @@ from __future__ import annotations
 import platform
 import shutil
 
+from typer.testing import CliRunner
+
 from ssafer.core import doctor
+from ssafer.main import app
 
 
 def test_install_tools_supports_linux_trivy_install(monkeypatch):
@@ -35,3 +38,13 @@ def test_install_tools_linux_requires_sudo(monkeypatch):
 
     assert ok is False
     assert "sudo was not found" in message
+
+
+def test_install_tools_command_prints_progress_before_install(monkeypatch):
+    monkeypatch.setattr("ssafer.main.install_trivy_with_winget", lambda: (True, "Trivy installed"))
+
+    result = CliRunner().invoke(app, ["install-tools"])
+
+    assert result.exit_code == 0
+    assert "Installing Trivy. This can take a few minutes..." in result.output
+    assert "Trivy installed" in result.output

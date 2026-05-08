@@ -8,6 +8,9 @@ from typer.testing import CliRunner
 from ssafer.main import app
 from ssafer.server.audit import (
     CommandResult,
+    DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    TRIVY_ROOTFS_TIMEOUT_SECONDS,
+    _command_timeout_seconds,
     parse_ssh_settings,
     parse_ss_listening_ports,
     run_server_audit,
@@ -30,6 +33,18 @@ tcp   LISTEN 0      4096            [::]:22           [::]:*    users:(("sshd",p
         {"protocol": "tcp", "host": "127.0.0.1", "port": 6379, "raw": 'tcp   LISTEN 0      4096       127.0.0.1:6379      0.0.0.0:*    users:(("redis",pid=2,fd=3))'},
         {"protocol": "tcp", "host": "::", "port": 22, "raw": 'tcp   LISTEN 0      4096            [::]:22           [::]:*    users:(("sshd",pid=3,fd=3))'},
     ]
+
+
+def test_trivy_rootfs_uses_longer_command_timeout():
+    assert _command_timeout_seconds(["ss", "-tulpen"]) == DEFAULT_COMMAND_TIMEOUT_SECONDS
+    assert (
+        _command_timeout_seconds(["trivy", "rootfs", "--scanners", "vuln", "/"])
+        == TRIVY_ROOTFS_TIMEOUT_SECONDS
+    )
+    assert (
+        _command_timeout_seconds(["sudo", "-n", "trivy", "rootfs", "--scanners", "vuln", "/"])
+        == TRIVY_ROOTFS_TIMEOUT_SECONDS
+    )
 
 
 def test_server_audit_reports_public_sensitive_port():
@@ -288,8 +303,27 @@ def test_server_audit_command_saves_result(tmp_path: Path, monkeypatch):
     result = CliRunner().invoke(app, ["server-audit", "--path", str(tmp_path), "--checks", "ports"])
 
     assert result.exit_code == 0
+    assert "Running server audit..." in result.output
     assert "서버 점검 결과 저장" in result.output
     assert (tmp_path / ".ssafer" / "server-audit" / "last_audit.txt").exists()
+
+
+def test_server_audit_command_prints_long_running_os_package_notice(tmp_path: Path, monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    monkeypatch.setattr(
+        audit_module,
+        "run_command",
+        lambda command: CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:5432 0.0.0.0:*"),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["server-audit", "--path", str(tmp_path), "--checks", "ports", "--include-os-packages"],
+    )
+
+    assert result.exit_code == 0
+    assert "Running server audit. OS package scan can take several minutes..." in result.output
 
 
 def test_server_audit_command_noninteractive_skips_sudo_prompt(tmp_path: Path, monkeypatch):
@@ -381,4 +415,5 @@ def test_server_audit_command_uploads_saved_result(tmp_path: Path, monkeypatch):
         "path": tmp_path,
         "api_url": "https://api.example.com",
     }
+    assert "Uploading server audit result..." in result.output
     assert "777" in result.output

@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import MetricCard from '../../components/common/MetricCard';
+import PageBanner from '../../components/common/PageBanner';
 import PageHero from '../../components/common/PageHero';
 import PixelGoose from '../../components/common/PixelGoose';
 import SectionPanel from '../../components/common/SectionPanel';
 import { ROUTES } from '../../constants/routes';
 import { getProjectAgentStatus } from '../../features/agents/api/agents';
 import AgentStatusCard from '../../features/agents/components/AgentStatusCard';
+import { useToast } from '../../features/feedback/useToast';
 import { getProjectDetail } from '../../features/projects/api/projects';
 import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
 import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
@@ -43,6 +45,7 @@ const initialScanRequestForm: CreateScanRequestPayload = {
 function ProjectDetailPage() {
   const navigate = useNavigate();
   const { projectId = '' } = useParams<{ projectId: string }>();
+  const toast = useToast();
 
   const [projectDetail, setProjectDetail] = useState<ProjectDetailResponseData | null>(null);
   const [projectError, setProjectError] = useState<string | null>(null);
@@ -88,6 +91,23 @@ function ProjectDetailPage() {
   const activeScans = scans.filter((scan) => ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED'].includes(scan.status));
   const completedScans = scans.filter((scan) => scan.status === 'DONE');
   const failedScans = scans.filter((scan) => scan.status === 'FAILED' || scan.status === 'CANCELED');
+
+  useEffect(() => {
+    if (!scanListNotice) {
+      return;
+    }
+
+    toast.success(scanListNotice, { durationMs: 2000 });
+    setScanListNotice(null);
+  }, [scanListNotice, toast]);
+
+  useEffect(() => {
+    if (!lastCreatedScan) {
+      return;
+    }
+
+    toast.success(`스캔 #${lastCreatedScan.scanId} 생성이 완료되었습니다.`, { durationMs: 2000 });
+  }, [lastCreatedScan, toast]);
 
   useEffect(() => {
     if (!projectId) {
@@ -400,14 +420,11 @@ function ProjectDetailPage() {
         }
       />
 
-      {projectError ? <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{projectError}</div> : null}
+      {projectError ? <PageBanner message={projectError} tone="error" /> : null}
 
-      {!scanListError && scanListNotice ? (
-        <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{scanListNotice}</div>
-      ) : null}
 
       {lastCreatedScan ? (
-        <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
+        <div className="hidden border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
           스캔 #{lastCreatedScan.scanId} 생성이 완료되었습니다. 상세 화면에서 진행 상태를 바로 확인할 수 있습니다.
         </div>
       ) : null}
