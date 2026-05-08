@@ -13,6 +13,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
         .allowedOrigins(
             "https://ssafer.co.kr",
             "https://www.ssafer.co.kr",
+            "https://k14b105.p.ssafy.io",
             "http://localhost:5173",
             "http://localhost:3000"
         )
