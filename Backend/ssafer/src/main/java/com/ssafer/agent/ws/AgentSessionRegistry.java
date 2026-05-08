@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 @Component
@@ -34,6 +35,21 @@ public class AgentSessionRegistry {
     }
     current.session().close(closeStatus);
     return true;
+  }
+
+  public boolean sendCurrentSessionMessage(Long agentId, TextMessage message) throws IOException {
+    SessionRef current = agentSessions.get(agentId);
+    if (current == null || current.session() == null || !current.session().isOpen()) {
+      return false;
+    }
+    // WS ping/알림 전송이 겹칠 수 있어 현재 세션 단위로 직렬화한다.
+    synchronized (current.session()) {
+      if (!current.session().isOpen()) {
+        return false;
+      }
+      current.session().sendMessage(message);
+      return true;
+    }
   }
 
   public Long findAgentIdBySessionId(String sessionId) {

@@ -7,6 +7,7 @@ import com.ssafer.agent.domain.enums.AgentTaskStatus;
 import com.ssafer.agent.domain.enums.AgentTaskType;
 import com.ssafer.agent.domain.repository.AgentRepository;
 import com.ssafer.agent.domain.repository.AgentTaskRepository;
+import com.ssafer.agent.application.service.AgentTaskAvailableRequestedEvent;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
@@ -20,6 +21,7 @@ import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +35,7 @@ public class ScanFindingPatchApprovalService {
   private final AgentTaskRepository agentTaskRepository;
   private final CurrentActorProvider currentActorProvider;
   private final ProjectAuthorizationService projectAuthorizationService;
+  private final ApplicationEventPublisher applicationEventPublisher;
 
   public ScanFindingPatchApprovalService(
       ScanRepository scanRepository,
@@ -40,7 +43,8 @@ public class ScanFindingPatchApprovalService {
       AgentRepository agentRepository,
       AgentTaskRepository agentTaskRepository,
       CurrentActorProvider currentActorProvider,
-      ProjectAuthorizationService projectAuthorizationService
+      ProjectAuthorizationService projectAuthorizationService,
+      ApplicationEventPublisher applicationEventPublisher
   ) {
     this.scanRepository = scanRepository;
     this.scanFindingRepository = scanFindingRepository;
@@ -48,6 +52,7 @@ public class ScanFindingPatchApprovalService {
     this.agentTaskRepository = agentTaskRepository;
     this.currentActorProvider = currentActorProvider;
     this.projectAuthorizationService = projectAuthorizationService;
+    this.applicationEventPublisher = applicationEventPublisher;
   }
 
   @Transactional
@@ -73,6 +78,14 @@ public class ScanFindingPatchApprovalService {
         AgentTaskType.PATCH_APPLY,
         AgentTaskStatus.PENDING,
         finding.getPatchPayloadJson()
+    ));
+    applicationEventPublisher.publishEvent(new AgentTaskAvailableRequestedEvent(
+        agent.getId(),
+        task.getId(),
+        task.getTaskType(),
+        project.getId(),
+        scan.getId(),
+        finding.getId()
     ));
 
     return new ScanFindingPatchApprovalResult(

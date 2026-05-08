@@ -33,6 +33,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.context.ApplicationEventPublisher;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -54,6 +55,8 @@ class ScanFindingPatchApprovalServiceTest {
   private CurrentActorProvider currentActorProvider;
   @Mock
   private ProjectAuthorizationService projectAuthorizationService;
+  @Mock
+  private ApplicationEventPublisher applicationEventPublisher;
 
   @InjectMocks
   private ScanFindingPatchApprovalService scanFindingPatchApprovalService;
@@ -95,6 +98,7 @@ class ScanFindingPatchApprovalServiceTest {
     assertThat(finding.getPatchApprovedAt()).isNotNull();
     assertThat(result.agentTaskId()).isEqualTo(701L);
     assertThat(result.agentId()).isEqualTo(501L);
+    verify(applicationEventPublisher).publishEvent(any(com.ssafer.agent.application.service.AgentTaskAvailableRequestedEvent.class));
   }
 
   @Test
