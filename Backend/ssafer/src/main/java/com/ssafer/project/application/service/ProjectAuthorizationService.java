@@ -34,6 +34,13 @@ public class ProjectAuthorizationService {
     return project;
   }
 
+  public Project loadAuthorizedProjectForUpdateOrThrow(Long projectId, AuthenticatedActor actor) {
+    Project project = projectRepository.findWithLockByIdAndDeletedAtIsNull(projectId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    assertOwner(project, actor);
+    return project;
+  }
+
   public List<Project> loadAuthorizedProjects(AuthenticatedActor actor) {
     // 히스토리나 프로젝트 목록처럼 "내가 접근 가능한 프로젝트 전체"가 필요한 곳에서 재사용한다.
     return actor.isMember()
