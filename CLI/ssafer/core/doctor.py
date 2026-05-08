@@ -45,8 +45,10 @@ def _command_first_line(command: list[str]) -> str | None:
 
 
 def install_trivy_with_winget() -> tuple[bool, str]:
+    if platform.system() == "Linux":
+        return _install_trivy_on_linux()
     if platform.system() != "Windows":
-        return False, "Automatic Trivy installation is only supported on Windows."
+        return False, "Automatic Trivy installation is only supported on Windows and Linux."
 
     current_version = trivy_version()
     if current_version is not None:
@@ -96,6 +98,66 @@ def install_trivy_with_winget() -> tuple[bool, str]:
     if installed_version is not None:
         return True, f"Trivy installed: {installed_version}"
     return True, "Trivy installation finished. Restart the terminal if 'trivy' is not on PATH yet."
+
+
+def _install_trivy_on_linux() -> tuple[bool, str]:
+    current_version = trivy_version()
+    if current_version is not None:
+        return True, f"Trivy is already installed: {current_version}"
+
+    if shutil.which("sudo") is None:
+        return False, "sudo was not found. Install Trivy manually from https://aquasecurity.github.io/trivy/"
+
+    commands = [
+        ["sudo", "apt-get", "install", "-y", "wget", "apt-transport-https", "gnupg", "lsb-release"],
+        [
+            "bash",
+            "-lc",
+            "wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key "
+            "| gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null",
+        ],
+        [
+            "bash",
+            "-lc",
+            'echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] '
+            'https://aquasecurity.github.io/trivy-repo/deb generic main" '
+            "| sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null",
+        ],
+        ["sudo", "apt-get", "update"],
+        ["sudo", "apt-get", "install", "-y", "trivy"],
+    ]
+
+    for command in commands:
+        ok, detail = _run_install_command(command)
+        if not ok:
+            return False, detail
+
+    installed_version = trivy_version()
+    if installed_version is not None:
+        return True, f"Trivy installed: {installed_version}"
+    return True, "Trivy installation finished, but this terminal cannot find 'trivy'. Restart the shell and run 'trivy --version'."
+
+
+def _run_install_command(command: list[str]) -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"Timed out while running: {' '.join(command)}"
+    except OSError as exc:
+        return False, f"Failed to run {' '.join(command)}: {exc}"
+
+    if completed.returncode == 0:
+        return True, "ok"
+    combined_output = "\n".join(part for part in (completed.stdout, completed.stderr) if part).strip()
+    detail = combined_output.splitlines()[-1] if combined_output else "no output"
+    return False, f"Failed to install Trivy on Linux while running {' '.join(command)}: {detail}"
 
 
 def _winget_output_means_already_installed(detail: str) -> bool:

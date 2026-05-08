@@ -2,6 +2,7 @@ import re
 from typing import Any
 
 from app.chains.explain_chain import create_explain_chain
+from app.core.llm import invoke_llm_with_retry
 from app.services.input_service import format_finding_for_llm
 
 
@@ -63,7 +64,7 @@ def generate_finding_explanation(finding: dict[str, Any]) -> str:
 
             prompt_input = "\n".join(retry_instructions)
 
-        explanation = chain.invoke({"finding_input": prompt_input})
+        explanation = invoke_llm_with_retry(chain, {"finding_input": prompt_input})
         last_disallowed_scripts = get_disallowed_scripts(explanation)
         if not last_disallowed_scripts:
             return explanation

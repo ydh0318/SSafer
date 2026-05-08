@@ -2,16 +2,20 @@ import { ArrowLeft, FileText, GitBranch, RefreshCw, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
+import PageBanner from '../../components/common/PageBanner';
 import PageHero from '../../components/common/PageHero';
 import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
+import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
 import {
   getScanBasic,
   getScanFindings,
   getScanSummary,
 } from '../../features/results/api/results';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
-import { formatDateTime } from '../../features/scans/utils/scanPresentation';
+import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
+import { formatDateTime, getSafeScanType, getScanModeLabel, getScanTypeLabel } from '../../features/scans/utils/scanPresentation';
+import { buildMockServerAuditResult } from '../../mocks/serverAudit';
 import type {
   FindingResolutionStatus,
   FindingSeverity,
@@ -19,6 +23,7 @@ import type {
   ScanFindingListItemData,
   ScanFindingListResponseData,
   ScanSummaryData,
+  ServerAuditResultViewModel,
 } from '../../types/scan';
 
 type ResultRouteState = {
@@ -72,6 +77,7 @@ function ResultPage() {
   const [scanBasic, setScanBasic] = useState<ScanBasicData | null>(null);
   const [summary, setSummary] = useState<ScanSummaryData | null>(null);
   const [findingsData, setFindingsData] = useState<ScanFindingListResponseData>(emptyFindingList);
+  const [serverAuditResult, setServerAuditResult] = useState<ServerAuditResultViewModel | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isFindingsLoading, setIsFindingsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -95,17 +101,28 @@ function ResultPage() {
       setErrorMessage(null);
 
       try {
-        const [basicData, summaryData] = await Promise.all([
-          getScanBasic(scanId),
-          getScanSummary(scanId),
-        ]);
+        const basicData = await getScanBasic(scanId);
 
         if (!isMounted) {
           return;
         }
 
         setScanBasic(basicData);
+
+        if (getSafeScanType(basicData.scanType) === 'SERVER_AUDIT') {
+          setSummary(null);
+          setServerAuditResult(buildMockServerAuditResult(basicData));
+          return;
+        }
+
+        const summaryData = await getScanSummary(scanId);
+
+        if (!isMounted) {
+          return;
+        }
+
         setSummary(summaryData);
+        setServerAuditResult(null);
       } catch (error) {
         if (!isMounted) {
           return;
@@ -138,6 +155,15 @@ function ResultPage() {
       setErrorMessage(null);
 
       try {
+        if (getSafeScanType(scanBasic?.scanType) === 'SERVER_AUDIT') {
+          if (!isMounted) {
+            return;
+          }
+
+          setFindingsData(emptyFindingList);
+          return;
+        }
+
         const data = await getScanFindings(scanId, {
           severity: severityFilter === 'all' ? undefined : severityFilter,
           resolutionStatus: resolutionFilter === 'all' ? undefined : resolutionFilter,
@@ -169,7 +195,7 @@ function ResultPage() {
     return () => {
       isMounted = false;
     };
-  }, [page, resolutionFilter, scanId, severityFilter]);
+  }, [page, resolutionFilter, scanBasic?.scanType, scanId, severityFilter]);
 
   const counts = useMemo(
     () => ({
@@ -191,6 +217,7 @@ function ResultPage() {
   const resolvedRatio = Math.round((resolvedCount / actionableTotal) * 100);
   const routeProjectId = routeState.projectId ? Number(routeState.projectId) : undefined;
   const currentProjectId = scanBasic?.projectId ?? routeProjectId;
+  const currentScanType = getSafeScanType(scanBasic?.scanType);
 
   return (
     <section className="space-y-8">
@@ -222,12 +249,20 @@ function ResultPage() {
                   return;
                 }
 
-                void Promise.all([getScanBasic(scanId), getScanSummary(scanId)]).then(
-                  ([basicData, summaryData]) => {
-                    setScanBasic(basicData);
+                void getScanBasic(scanId).then((basicData) => {
+                  setScanBasic(basicData);
+
+                  if (getSafeScanType(basicData.scanType) === 'SERVER_AUDIT') {
+                    setSummary(null);
+                    setServerAuditResult(buildMockServerAuditResult(basicData));
+                    return;
+                  }
+
+                  void getScanSummary(scanId).then((summaryData) => {
                     setSummary(summaryData);
-                  },
-                );
+                    setServerAuditResult(null);
+                  });
+                });
               }}
               type="button"
             >
@@ -255,27 +290,30 @@ function ResultPage() {
           </div>
         }
         description={
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
-              <span className="font-mono">scanId #{scanId}</span>
-              {scanBasic ? <ScanStatusBadge status={scanBasic.status} /> : null}
-              {currentProjectId ? <span>projectId #{currentProjectId}</span> : null}
-              {scanBasic ? <span>{scanBasic.scanMode}</span> : null}
-            </div>
-            <p className="text-neutral-600">
-              {scanBasic?.completedAt
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
+                <span className="font-mono">scanId #{scanId}</span>
+                {scanBasic ? <ScanStatusBadge status={scanBasic.status} /> : null}
+                {scanBasic ? <ScanTypeBadge scanType={scanBasic.scanType} /> : null}
+                {currentProjectId ? <span>projectId #{currentProjectId}</span> : null}
+                {scanBasic ? <span>{getScanModeLabel(scanBasic.scanMode)}</span> : null}
+              </div>
+              <p className="text-neutral-600">
+                {scanBasic?.completedAt
                 ? `완료 시각: ${formatDateTime(scanBasic.completedAt)}`
                 : '아직 완료되지 않은 스캔입니다. 진행 중이라면 목록이 부분적으로 보일 수 있습니다.'}
             </p>
           </div>
         }
         eyebrow="SCAN RESULT"
-        title="스캔 결과 요약과 취약점 목록"
+        title={
+          currentScanType === 'SERVER_AUDIT'
+            ? '서버 점검 결과와 운영 조치 안내'
+            : '스캔 결과 요약과 취약점 목록'
+        }
       />
 
-      {errorMessage ? (
-        <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{errorMessage}</div>
-      ) : null}
+      {errorMessage ? <PageBanner message={errorMessage} tone="error" /> : null}
 
       {isInitialLoading ? (
         <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">
@@ -283,7 +321,11 @@ function ResultPage() {
         </div>
       ) : null}
 
-      {!isInitialLoading && summary ? (
+      {!isInitialLoading && currentScanType === 'SERVER_AUDIT' && scanBasic && serverAuditResult ? (
+        <ServerAuditResultView result={serverAuditResult} routeState={routeState} />
+      ) : null}
+
+      {!isInitialLoading && currentScanType === 'PROJECT_SCAN' && summary ? (
         <>
           <div className="border border-neutral-200 bg-white p-5">
             <div className="flex items-center justify-between">

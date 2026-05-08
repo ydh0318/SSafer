@@ -28,7 +28,6 @@ function getProfileInitial(name?: string, email?: string) {
 function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
@@ -38,8 +37,12 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
     Boolean(refreshToken) || user?.role === 'USER' || user?.role === 'ADMIN' || hasStoredMemberSession();
   const isGuestSession = user?.role === 'GUEST' || isStoredGuestSession();
   void showSessionBar;
-  void isGuestSession;
   void isMemberSession;
+
+  const handleLogout = () => {
+    logout();
+    navigate(ROUTES.root, { replace: true });
+  };
 
   const navItems = [
     {
@@ -66,13 +69,13 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
       memberOnly: true,
     },
     {
-      label: '사용 가이드',
+      label: '가이드',
       to: ROUTES.guide,
       icon: BookOpen,
       active: location.pathname.startsWith('/guide'),
     },
     {
-      label: '타이핑',
+      label: '타이핑 게임',
       to: ROUTES.typingGame,
       icon: Trophy,
       active: location.pathname.startsWith('/typing-game'),
@@ -80,20 +83,21 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
   ].filter((item) => !('memberOnly' in item) || isMemberSession);
 
   const linkClass = (active: boolean) =>
-    `site-header-link inline-flex h-10 w-10 items-center justify-center rounded-sm p-0 font-bold tracking-wide transition lg:h-auto lg:w-auto lg:gap-2 lg:px-4 lg:py-2 ${
+    `site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 font-bold tracking-wide transition lg:h-auto lg:w-auto lg:gap-2 lg:rounded-sm lg:px-4 lg:py-2 ${
       active ? 'bg-black text-white' : 'text-neutral-600 hover:text-black'
     }`;
 
   return (
     <header className="site-header-shell site-app-header-shell theme-surface-header border-b border-neutral-200 bg-[#f5f5f5]/95 backdrop-blur">
-      <div className="site-header-inner mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+      <div className="site-header-inner mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <AppBrand
+          className="shrink-0"
           textClassName="hidden lg:block"
           titleClassName="text-lg font-black tracking-tight text-black"
           to={ROUTES.root}
         />
 
-        <nav className="site-header-nav flex flex-wrap items-center gap-2 text-sm lg:gap-3">
+        <nav className="site-header-nav flex min-w-0 items-center justify-end gap-1.5 text-sm sm:gap-2 lg:gap-3">
           {navItems.map((item) => {
             const Icon = item.icon;
 
@@ -112,11 +116,11 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
 
           <ThemeToggleButton />
 
-          {isAuthenticated ? (
+          {isMemberSession ? (
             <>
               <button
                 aria-label="설정"
-                className="site-header-link inline-flex h-9 w-9 items-center justify-center rounded-full bg-black text-sm font-black text-white transition hover:opacity-85"
+                className="site-header-link inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-sm font-black text-white transition hover:opacity-85"
                 onClick={() => navigate(ROUTES.settings)}
                 type="button"
               >
@@ -125,8 +129,28 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
 
               <button
                 aria-label="로그아웃"
-                className="site-header-link inline-flex h-10 w-10 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
-                onClick={logout}
+                className="site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
+                onClick={handleLogout}
+                type="button"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </>
+          ) : isGuestSession ? (
+            <>
+              <button
+                aria-label="게스트 설정"
+                className="site-header-link inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-[11px] font-black uppercase tracking-[0.14em] text-white transition hover:opacity-85"
+                onClick={() => navigate(ROUTES.settings)}
+                type="button"
+              >
+                <span>G1</span>
+              </button>
+
+              <button
+                aria-label="게스트 로그아웃"
+                className="site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
+                onClick={handleLogout}
                 type="button"
               >
                 <LogOut className="h-4 w-4" />
@@ -134,7 +158,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
             </>
           ) : (
             <button
-              className="site-header-link inline-flex h-10 w-10 items-center justify-center rounded-sm p-0 font-bold tracking-wide text-black transition hover:opacity-70 lg:h-auto lg:w-auto lg:gap-2 lg:px-4 lg:py-2"
+              className="site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 font-bold tracking-wide text-black transition hover:opacity-70 lg:h-auto lg:w-auto lg:gap-2 lg:rounded-sm lg:px-4 lg:py-2"
               onClick={() => navigate(ROUTES.login)}
               type="button"
             >

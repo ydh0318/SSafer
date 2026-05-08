@@ -23,6 +23,8 @@ EXCLUDED_DIRS = {
     ".venv",
     "venv",
     "__pycache__",
+    ".pytest_cache",
+    ".pytest_tmp",
     ".ssafer",
 }
 

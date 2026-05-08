@@ -1,20 +1,61 @@
 import { apiClient } from '../../../api/client';
-import { getApiErrorMessage } from '../../../api/error';
+import { getApiErrorCode, getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
   CreateScanRequestPayload,
   CreateScanResponseData,
+  DeleteScanHistoryResponseData,
   ProjectScanListQuery,
   ProjectScanListResponseData,
   RawScanUploadReportData,
   ScanProgressStatusData,
 } from '../../../types/scan';
 
-const CREATE_SCAN_ERROR = '스캔 요청을 등록하지 못했습니다.';
+const CREATE_SCAN_ERROR = '스캔 요청을 생성하지 못했습니다.';
 const GET_PROJECT_SCANS_ERROR = '프로젝트 스캔 목록을 불러오지 못했습니다.';
 const GET_SCAN_STATUS_ERROR = '스캔 상태를 불러오지 못했습니다.';
-const UPLOAD_SCAN_FILE_ERROR = '스캔 결과 파일 업로드에 실패했습니다.';
-const REPORT_SCAN_UPLOAD_ERROR = '업로드 완료 보고에 실패했습니다.';
+const UPLOAD_SCAN_FILE_ERROR = '스캔 결과 파일을 업로드하지 못했습니다.';
+const REPORT_SCAN_UPLOAD_ERROR = '업로드된 스캔 결과를 보고하지 못했습니다.';
+const UPLOAD_SCAN_FILE_USER_ERROR = '파일 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.';
+
+function isLikelyPresignedS3CorsError(error: unknown, rawUploadUrl: string) {
+  if (!(error instanceof TypeError) && !(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  const isNetworkStyleMessage =
+    message.includes('failed to fetch') ||
+    message.includes('load failed') ||
+    message.includes('networkerror');
+
+  return isNetworkStyleMessage && rawUploadUrl.includes('.s3.');
+}
+
+function buildUploadFailureMessage(rawUploadUrl: string, error: unknown) {
+  if (isLikelyPresignedS3CorsError(error, rawUploadUrl)) {
+    console.error('Presigned S3 upload blocked by likely CORS/preflight issue.', {
+      origin: window.location.origin,
+      rawUploadUrl,
+      error,
+    });
+    return UPLOAD_SCAN_FILE_USER_ERROR;
+  }
+
+  if (error instanceof Error && error.message) {
+    console.error('Scan file upload failed.', {
+      rawUploadUrl,
+      error,
+    });
+    return UPLOAD_SCAN_FILE_USER_ERROR;
+  }
+
+  console.error('Scan file upload failed with unknown error.', {
+    rawUploadUrl,
+    error,
+  });
+  return UPLOAD_SCAN_FILE_USER_ERROR;
+}
 
 export async function createScanRequest(payload: CreateScanRequestPayload) {
   try {
@@ -51,6 +92,37 @@ export async function getScanStatus(scanId: string) {
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, GET_SCAN_STATUS_ERROR));
+  }
+}
+
+export async function deleteScanHistory(scanId: string | number) {
+  try {
+    const response = await apiClient.delete<ApiSuccessResponse<DeleteScanHistoryResponseData>>(`/scans/${scanId}`);
+    return response.data.data;
+  } catch (error) {
+    const errorCode = getApiErrorCode(error);
+
+    if (errorCode === 'INVALID_PARAMETER') {
+      throw new Error('잘못된 스캔 ID입니다.');
+    }
+
+    if (errorCode === 'FORBIDDEN') {
+      throw new Error('이 스캔을 삭제할 권한이 없습니다.');
+    }
+
+    if (errorCode === 'NOT_FOUND') {
+      throw new Error('스캔이 존재하지 않거나 이미 삭제되었습니다.');
+    }
+
+    if (errorCode === 'SCAN_STATUS_CONFLICT') {
+      throw new Error('현재 스캔 상태에서는 삭제할 수 없습니다.');
+    }
+
+    if (errorCode === 'INTERNAL_SERVER_ERROR') {
+      throw new Error('서버 내부 오류로 스캔 이력을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    throw new Error(getApiErrorMessage(error, '스캔 이력을 삭제하지 못했습니다.'));
   }
 }
 
@@ -92,11 +164,7 @@ export async function uploadScanResultFile(rawUploadUrl: string, file: File) {
       throw new Error(`${UPLOAD_SCAN_FILE_ERROR} (HTTP ${response.status})`);
     }
   } catch (error) {
-    if (error instanceof Error) {
-      throw new Error(error.message || UPLOAD_SCAN_FILE_ERROR);
-    }
-
-    throw new Error(UPLOAD_SCAN_FILE_ERROR);
+    throw new Error(buildUploadFailureMessage(rawUploadUrl, error));
   }
 }
 

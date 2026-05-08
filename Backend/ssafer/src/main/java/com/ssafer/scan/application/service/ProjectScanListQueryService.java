@@ -92,6 +92,7 @@ public class ProjectScanListQueryService {
     return (root, query, criteriaBuilder) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(criteriaBuilder.equal(root.get("projectId"), projectId));
+      predicates.add(criteriaBuilder.isNull(root.get("deletedAt")));
       if (status != null) {
         predicates.add(criteriaBuilder.equal(root.get("status"), status));
       }

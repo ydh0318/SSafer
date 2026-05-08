@@ -12,6 +12,7 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.project.application.service.ProjectAuthorizationService;
+import com.ssafer.project.domain.entity.Project;
 import com.ssafer.scan.api.dto.CliRawResultUploadReportRequest;
 import com.ssafer.scan.api.dto.CliRawResultUploadReportResponseData;
 import com.ssafer.scan.domain.entity.Scan;
@@ -30,7 +31,7 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-// 공개 CLI 완료 알림 API의 검증과 작업 발행을 담당한다.
+// 공개 CLI 완료 알림 API의 검증/큐 발행 흐름을 담당한다.
 public class CliRawResultUploadReportService {
 
   private static final Pattern PAYLOAD_HASH_PATTERN = Pattern.compile("^sha256:[a-fA-F0-9]{64}$");
@@ -50,17 +51,20 @@ public class CliRawResultUploadReportService {
       AuthenticatedActor actor,
       CliRawResultUploadReportRequest request
   ) {
-    // 동시에 같은 완료 알림이 들어와도 한 번만 처리되도록 scan row를 잠근다.
+    // 동일 scanId에 대한 중복 완료 알림이 동시에 들어와도 1건만 처리되도록 행 잠금을 건다.
     Scan scan = scanRepository.findByIdForUpdate(scanId)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
-    // 권한, 입력값, 상태, S3 객체 존재 여부를 순서대로 검증한다.
-    projectAuthorizationService.loadAuthorizedProjectOrThrow(scan.getProjectId(), actor);
+    // 권한, 입력값, 스캔 상태, S3 객체 존재 여부를 순서대로 검증한다.
+    // 권한 검증 시 Project 엔티티를 함께 확보해서 fallback Agent 생성에도 재사용한다.
+    Project project = projectAuthorizationService.loadAuthorizedProjectOrThrow(scan.getProjectId(), actor);
     validatePayloadHash(request.payloadHash());
     validateScanStatus(scan.getStatus());
     validateRawObjectExists(scan.getRawResultPath());
 
-    Agent agent = loadDispatchAgent(scan.getProjectId());
+    // 프로젝트에 Agent가 없으면 OFFLINE placeholder Agent를 먼저 만든 뒤 같은 경로로 발행한다.
+    // taskId/agentId를 포함한 기존 Rabbit 메시지 계약을 그대로 유지하기 위함이다.
+    Agent agent = loadOrCreateDispatchAgent(project);
     LocalDateTime now = LocalDateTime.now();
 
     AgentTask agentTask = agentTaskRepository.save(new AgentTask(
@@ -84,7 +88,7 @@ public class CliRawResultUploadReportService {
     );
     String taskPayloadJson = buildTaskPayloadJson(message);
 
-    // taskId가 생성된 뒤 최종 payload를 저장하고, 같은 payload를 RabbitMQ로 발행한다.
+    // DB의 payload_json과 실제 publish payload를 동일하게 맞춘 뒤 전송한다.
     agentTask.updatePayloadJson(taskPayloadJson);
     agentTaskPublisher.publishScanRequest(message);
     agentTask.markSent(Instant.now());
@@ -109,10 +113,15 @@ public class CliRawResultUploadReportService {
     return new CliRawResultUploadReportResponseData(scan.getId(), scan.getStatus(), request.resultCount());
   }
 
-  private Agent loadDispatchAgent(Long projectId) {
-    // 현재는 프로젝트별 대표 agent 1대를 선택해 작업을 발행한다.
-    return agentRepository.findFirstByProjectId(projectId)
-        .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+  private Agent loadOrCreateDispatchAgent(Project project) {
+    // 프로젝트에 연결된 Agent가 하나라도 있으면 재사용하고,
+    // 없으면 OFFLINE placeholder Agent를 생성해서 dispatch 기준점을 만든다.
+    return agentRepository.findFirstByProjectId(project.getId())
+        .orElseGet(() -> agentRepository.save(new Agent(
+            project,
+            com.ssafer.agent.domain.enums.AgentStatus.OFFLINE,
+            true
+        )));
   }
 
   private void validatePayloadHash(String payloadHash) {
@@ -129,14 +138,14 @@ public class CliRawResultUploadReportService {
     switch (status) {
       case REQUESTED:
         return;
-      // 이미 완료 알림을 받았거나 이후 단계로 진행된 상태다.
+      // 이미 완료 알림을 받았거나 그 이후 단계로 진행된 상태는 중복 요청으로 본다.
       case RAW_UPLOADED:
       case QUEUED:
       case RUNNING:
       case DONE:
         log.warn("Duplicate CLI analysis completion blocked: scanStatus={}", status);
         throw new BusinessException(ErrorCode.DUPLICATE_RAW_RESULT_UPLOAD);
-      // 아직 결과를 받지 않았더라도 현재 정책상 완료 알림을 받을 수 없는 상태다.
+      // 실패/취소 상태는 현재 정책상 완료 알림을 수용하지 않는다.
       case FAILED:
       case CANCELED:
       default:

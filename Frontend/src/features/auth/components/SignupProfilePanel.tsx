@@ -53,7 +53,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
       ...current,
       displayName: undefined,
     }));
-    setDisplayNameCheckMessage(null);
+    setDisplayNameCheckMessage('닉네임을 확인하고 있습니다.');
     setMessage(null);
 
     try {
@@ -69,12 +69,14 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
         ...current,
         displayName: '이미 사용 중인 닉네임입니다.',
       }));
+      setDisplayNameCheckMessage(null);
       setIsDisplayNameConfirmed(false);
     } catch (error) {
       setFieldErrors((current) => ({
         ...current,
         ...getApiFieldErrors(error),
       }));
+      setDisplayNameCheckMessage(null);
       setMessage({
         tone: 'error',
         text: getApiErrorMessage(error, '닉네임 중복 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
@@ -155,7 +157,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
             Ok, Let&apos;s complete the last step.
           </h2>
           <p className="auth-body-text text-[#6f6f6f]">
-            회원가입을 완료하기 전에 사용할 닉네임과 비밀번호를 설정해 주세요.
+            회원가입을 완료하기 전에 닉네임과 비밀번호를 설정해 주세요.
           </p>
         </header>
 
@@ -264,9 +266,7 @@ function SignupProfilePanel({ values, onBack, onChange, onCompleted }: SignupPro
         {message ? <AuthMessage message={message.text} tone={message.tone} /> : null}
 
         <div className="space-y-3 border-t border-dashed border-[#cfcfcf] pt-4">
-          <p className="auth-body-text text-black">
-            입력한 정보가 맞는지 확인한 뒤 회원가입을 완료해 주세요.
-          </p>
+          <p className="auth-body-text text-black">입력한 정보를 확인한 뒤 회원가입을 완료해 주세요.</p>
           <AuthButton isLoading={isSubmitting} type="submit">
             Register
           </AuthButton>

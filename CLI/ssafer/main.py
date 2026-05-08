@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import difflib
+import os
+import re
+import sys
 import threading
 import time
 from pathlib import Path
@@ -16,7 +21,7 @@ from rich.text import Text
 from ssafer import __version__
 from ssafer.core.doctor import collect_doctor_status, install_trivy_with_winget
 from ssafer.core.result_store import load_last_scan, run_scan
-from ssafer.core.upload import upload_last_scan
+from ssafer.core.upload import upload_last_scan, upload_last_server_audit
 
 app = typer.Typer(help="SSAfer security configuration CLI.")
 console = Console()
@@ -48,6 +53,29 @@ _GOOSE_RIGHT = [
 _TRACK_W = 36
 _GOOSE_W = 8
 _REPORT_EVIDENCE_MAX = 80
+
+_REPORT_RULE_DISPLAY = {
+    "COMPOSE_EXPOSED_DB_PORT": "COMPOSE_DB_PORT",
+    "COMPOSE_HARDCODED_SECRET": "COMPOSE_SECRET",
+    "COMPOSE_PRIVILEGED_MODE": "COMPOSE_PRIVILEGED",
+    "COMPOSE_HOST_NETWORK": "COMPOSE_HOST_NET",
+    "COMPOSE_LATEST_TAG": "COMPOSE_LATEST",
+    "COMPOSE_ROOT_USER": "COMPOSE_ROOT",
+    "COMPOSE_NO_MEMORY_LIMIT": "COMPOSE_NO_MEM_LIMIT",
+    "ENV_PLAIN_SECRET": "ENV_SECRET",
+    "DS-0002": "DOCKER_ROOT_USER",
+    "DS-0026": "DOCKER_HEALTHCHECK",
+}
+
+_TRIVY_TITLE_KO = {
+    "DS-0002": "Dockerfile이 root 사용자로 실행됨",
+    "DS-0026": "Dockerfile에 HEALTHCHECK가 없음",
+}
+
+_TRIVY_EVIDENCE_KO = {
+    "DS-0002": "USER root 또는 non-root USER 미지정",
+    "DS-0026": "HEALTHCHECK 명령어 미정의",
+}
 
 
 def _walking_panel(pos: int, direction: int, frame: int, step: str) -> Panel:
@@ -97,12 +125,87 @@ def doctor() -> None:
 @app.command("install-tools")
 def install_tools() -> None:
     """Install optional local tools used by SSAfer."""
-    ok, message = install_trivy_with_winget()
+    console.print("[cyan]Installing Trivy. This can take a few minutes...[/cyan]")
+    with console.status("[cyan]Running installer...[/cyan]", spinner="dots"):
+        ok, message = install_trivy_with_winget()
     if ok:
         console.print(f"[green]{message}[/green]")
         return
     console.print(f"[red]{message}[/red]")
     raise typer.Exit(code=1)
+
+
+@app.command("server-audit")
+def server_audit(
+    path: Optional[Path] = typer.Option(None, "--path", "-p", help="Output root for .ssafer server-audit files."),
+    upload: bool = typer.Option(False, "--upload", help="Upload the generated server audit package."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL for --upload."),
+    checks: Optional[str] = typer.Option(
+        None,
+        "--checks",
+        help="Comma-separated checks: ports,processes,docker,ssh,firewall,nginx,os-packages.",
+    ),
+    details: bool = typer.Option(False, "--details", "-d", help="Print findings, warnings, and artifacts."),
+    include_os_packages: bool = typer.Option(
+        False,
+        "--include-os-packages",
+        help="Run Trivy rootfs OS package vulnerability scan. This can be slow and may require privileges.",
+    ),
+    allow_sudo_option: bool = typer.Option(
+        False,
+        "--allow-sudo",
+        help="Retry privileged server checks with sudo without asking for confirmation.",
+    ),
+) -> None:
+    """Audit runtime security state from inside a server."""
+    from ssafer.server.audit import run_server_audit, save_server_audit_result
+
+    selected_checks = [item.strip() for item in checks.split(",") if item.strip()] if checks else None
+    needs_sudo_prompt = include_os_packages or selected_checks is None or "firewall" in selected_checks
+    allow_sudo = allow_sudo_option
+    if needs_sudo_prompt and not allow_sudo:
+        if not _can_prompt_for_sudo():
+            console.print(
+                "[yellow]Some server checks may require sudo. Non-interactive session detected; "
+                "continuing without sudo. Use --allow-sudo to retry privileged checks.[/yellow]"
+            )
+        else:
+            allow_sudo = typer.confirm(
+                "일부 서버 점검은 sudo 권한이 필요할 수 있습니다. 필요한 명령에만 sudo를 사용하시겠습니까?",
+                default=False,
+            )
+    if include_os_packages:
+        console.print("[cyan]Running server audit. OS package scan can take several minutes...[/cyan]")
+    else:
+        console.print("[cyan]Running server audit...[/cyan]")
+    with console.status("[cyan]Collecting server runtime data...[/cyan]", spinner="dots"):
+        result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
+    output_root = path.resolve() if path is not None else Path.home()
+    output_path = save_server_audit_result(output_root, result)
+
+    table = Table(title="서버 점검 결과")
+    table.add_column("항목")
+    table.add_column("수량", justify="right")
+    table.add_row("Findings", str(len(result.findings)))
+    table.add_row("Warnings", str(len(result.warnings)))
+    table.add_row("Artifacts", str(len(result.artifacts)))
+    console.print(table)
+    if result.warnings:
+        console.print("[yellow]경고 목록[/yellow]")
+        for warning in result.warnings:
+            console.print(f"  - {warning}")
+    if details:
+        _print_server_audit_details(result)
+    if upload:
+        console.print("[cyan]Uploading server audit result...[/cyan]")
+        with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+            response = _upload_server_audit_or_exit(output_root, api_url=api_url)
+        _print_upload_response(response)
+    console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
+
+
+def _can_prompt_for_sudo() -> bool:
+    return bool(getattr(sys.stdin, "isatty", lambda: False)())
 
 
 @app.command()
@@ -151,7 +254,9 @@ def run(
 
     _print_scan_summary(result_ref[0])
     if upload:
-        response = _upload_or_exit(path.resolve(), api_url=api_url)
+        console.print("[cyan]Uploading scan result...[/cyan]")
+        with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+            response = _upload_or_exit(path.resolve(), api_url=api_url)
         _print_upload_response(response)
 
 
@@ -161,8 +266,226 @@ def upload(
     api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL."),
 ) -> None:
     """Upload the last local scan package."""
-    response = _upload_or_exit(path.resolve(), api_url=api_url)
+    console.print("[cyan]Uploading scan result...[/cyan]")
+    with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+        response = _upload_or_exit(path.resolve(), api_url=api_url)
     _print_upload_response(response)
+
+
+@app.command("apply")
+def apply_fix(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to patch."),
+    analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="Worker analysis_result.json with patch payloads."),
+    patch_id: Optional[str] = typer.Option(None, "--patch-id", help="Apply only one patch ID."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch payloads without modifying files."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirmation prompt."),
+) -> None:
+    """Apply approved patch payloads to local project files."""
+    from ssafer.core.patches import (
+        PatchCandidate,
+        PatchError,
+        apply_patch_candidates,
+        find_default_analysis_result,
+        load_patch_candidates_from_file,
+    )
+
+    try:
+        project_root = path.resolve()
+        analysis_path = analysis_result or find_default_analysis_result(project_root)
+        if analysis_path is None:
+            raise PatchError(
+                "analysis_result.json not found. Use --analysis-result or place it under .ssafer/analysis_result.json."
+            )
+        console.print(f"[dim]Analysis result: {analysis_path}[/dim]")
+
+        candidates = load_patch_candidates_from_file(analysis_path)
+        selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
+        if not selected:
+            console.print("[yellow]No applicable patch payloads found.[/yellow]")
+            raise typer.Exit(code=1)
+
+        selected = _select_patch_candidates(selected, patch_id=patch_id, yes=yes)
+        _print_patch_preview(selected)
+
+        if not dry_run and not yes:
+            confirmed = typer.confirm("Apply selected patches?")
+            if not confirmed:
+                console.print("[yellow]Patch apply canceled.[/yellow]")
+                raise typer.Exit(code=1)
+
+        selected_patch_id = selected[0].patch_id if len(selected) == 1 else None
+        selected_candidates = selected if selected_patch_id is None else candidates
+        results = apply_patch_candidates(
+            project_root,
+            selected_candidates,
+            patch_id=selected_patch_id,
+            dry_run=dry_run,
+        )
+    except (OSError, ValueError, PatchError, RuntimeError) as exc:
+        console.print(f"[red]Patch apply failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    result_table = Table(title="Patch apply result")
+    result_table.add_column("Patch ID")
+    result_table.add_column("Status")
+    result_table.add_column("File", overflow="fold")
+    result_table.add_column("Message", overflow="fold")
+    result_table.add_column("Backup", overflow="fold")
+    for result in results:
+        result_table.add_row(
+            result.patch_id,
+            result.status,
+            result.file_path,
+            result.message,
+            result.backup_path or "-",
+        )
+    console.print(result_table)
+
+
+@app.command("agent-watch")
+def agent_watch(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root where patches are applied."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL."),
+    agent_id: Optional[int] = typer.Option(None, "--agent-id", help="Local agent ID issued by the backend."),
+    project_id: Optional[int] = typer.Option(None, "--project-id", help="Project ID bound to the local agent."),
+    agent_token: Optional[str] = typer.Option(None, "--agent-token", help="Agent bearer token issued by the backend."),
+    interval: float = typer.Option(5.0, "--interval", help="Polling interval in seconds."),
+    once: bool = typer.Option(False, "--once", help="Connect, fetch pending tasks once, then exit."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch tasks without modifying files."),
+) -> None:
+    """Connect a local agent and apply pending PATCH_APPLY tasks."""
+    from ssafer.core.agent import AgentTaskResult, watch_agent
+    from ssafer.core.auth import load_endpoint
+
+    effective_url = api_url or load_endpoint()
+    effective_agent_id = agent_id or _load_int_env("SSAFER_AGENT_ID", "agent ID")
+    effective_project_id = project_id or _load_int_env("SSAFER_PROJECT_ID", "project ID")
+    effective_agent_token = agent_token or os.getenv("SSAFER_AGENT_TOKEN")
+    if not effective_agent_token:
+        console.print("[red]Agent token is required. Use --agent-token or SSAFER_AGENT_TOKEN.[/red]")
+        raise typer.Exit(code=1)
+    project_root = path.resolve()
+
+    def on_event(event_type: str, payload: object) -> None:
+        if event_type == "connected":
+            console.print(f"[green]Agent connected.[/green] {payload}")
+            return
+        if event_type == "ping":
+            console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
+            return
+        if isinstance(payload, AgentTaskResult):
+            console.print(
+                f"[cyan]Task {payload.task_id}[/cyan] {payload.task_type}: "
+                f"{payload.status} - {payload.message}"
+            )
+            for patch_result in payload.patch_results:
+                console.print(
+                    f"  - {patch_result.patch_id} {patch_result.status} "
+                    f"{patch_result.file_path}: {patch_result.message}"
+                )
+
+    try:
+        asyncio.run(
+            watch_agent(
+                api_url=effective_url,
+                agent_id=effective_agent_id,
+                project_id=effective_project_id,
+                agent_token=effective_agent_token,
+                project_root=project_root,
+                interval_seconds=interval,
+                once=once,
+                dry_run=dry_run,
+                on_event=on_event,
+            )
+        )
+    except KeyboardInterrupt:
+        console.print("[yellow]Agent watch stopped.[/yellow]")
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Agent watch failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+def _load_int_env(name: str, label: str) -> int:
+    value = os.getenv(name)
+    if not value:
+        console.print(f"[red]Agent {label} is required. Use --{name.lower().removeprefix('ssafer_').replace('_', '-')} or {name}.[/red]")
+        raise typer.Exit(code=1)
+    try:
+        return int(value)
+    except ValueError as exc:
+        console.print(f"[red]{name} must be an integer.[/red]")
+        raise typer.Exit(code=1) from exc
+
+
+def _select_patch_candidates(
+    candidates: list["PatchCandidate"],
+    *,
+    patch_id: str | None,
+    yes: bool,
+) -> list["PatchCandidate"]:
+    table = Table(title="Applicable patch candidates")
+    table.add_column("No.", justify="right")
+    table.add_column("Patch ID")
+    table.add_column("Finding ID")
+    table.add_column("File", overflow="fold")
+    table.add_column("Operation")
+    for index, candidate in enumerate(candidates, start=1):
+        table.add_row(
+            str(index),
+            candidate.patch_id,
+            candidate.finding_id or "-",
+            candidate.file_path,
+            candidate.operation,
+        )
+    if len(candidates) > 1 and patch_id is None:
+        table.add_row(str(len(candidates) + 1), "ALL", "-", "Apply all patch candidates", "-")
+    console.print(table)
+
+    if patch_id is not None or yes or len(candidates) == 1:
+        return candidates
+
+    choice = typer.prompt("Select patch number")
+    try:
+        selected = int(choice)
+    except ValueError as exc:
+        raise PatchError("Patch selection must be a number.") from exc
+
+    if selected == len(candidates) + 1:
+        return candidates
+    if selected < 1 or selected > len(candidates):
+        raise PatchError(f"Patch selection is out of range: {selected}")
+    return [candidates[selected - 1]]
+
+
+def _print_patch_preview(candidates: list["PatchCandidate"]) -> None:
+    table = Table(title="Patch diff preview")
+    table.add_column("Patch ID")
+    table.add_column("Finding ID")
+    table.add_column("File", overflow="fold")
+    table.add_column("Diff", overflow="fold")
+    for candidate in candidates:
+        table.add_row(
+            candidate.patch_id,
+            candidate.finding_id or "-",
+            candidate.file_path,
+            _format_patch_diff(candidate.old_text, candidate.new_text),
+        )
+    console.print(table)
+
+
+def _format_patch_diff(old_text: str, new_text: str) -> str:
+    old_lines = old_text.splitlines()
+    new_lines = new_text.splitlines()
+    if len(old_lines) <= 1 and len(new_lines) <= 1:
+        return f"- {old_text}\n+ {new_text}"
+    diff_lines = difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile="oldText",
+        tofile="newText",
+        lineterm="",
+    )
+    return "\n".join(diff_lines)
 
 
 @app.command()
@@ -191,7 +514,7 @@ def login(
         console.print(f"[red]Login failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Login failed:[/red] {exc}")
+        console.print(f"[red]Login failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     except ValueError as exc:
         console.print(f"[red]Login failed:[/red] {exc}")
@@ -203,8 +526,13 @@ def login(
 def signup(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
 ) -> None:
-    """Create a SSAfer backend user account."""
-    from ssafer.core.auth import load_endpoint, register_user
+    """Verify email and create a SSAfer backend user account."""
+    from ssafer.core.auth import (
+        load_endpoint,
+        register_user,
+        send_email_verification_code,
+        verify_email_code,
+    )
 
     effective_endpoint = endpoint or load_endpoint()
     email = typer.prompt("Email")
@@ -214,12 +542,19 @@ def signup(
         console.print("[red]Email, display name, and password are required.[/red]")
         raise typer.Exit(code=1)
     try:
+        send_email_verification_code(effective_endpoint, email.strip())
+        console.print("[green]Verification code sent. Check your email.[/green]")
+        code = typer.prompt("Verification code")
+        if not code.strip():
+            console.print("[red]Verification code is required.[/red]")
+            raise typer.Exit(code=1)
+        verify_email_code(effective_endpoint, email.strip(), code.strip())
         register_user(effective_endpoint, email.strip(), display_name.strip(), password)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]Signup failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Signup failed:[/red] {exc}")
+        console.print(f"[red]Signup failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Signup succeeded. Run 'ssafer login' to save login tokens.[/green]")
 
@@ -242,7 +577,7 @@ def send_email_code(
         console.print(f"[red]Email code request failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email code request failed:[/red] {exc}")
+        console.print(f"[red]Email code request failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Verification code sent. Check your email.[/green]")
 
@@ -266,7 +601,7 @@ def verify_email(
         console.print(f"[red]Email verification failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email verification failed:[/red] {exc}")
+        console.print(f"[red]Email verification failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Email verified. Run 'ssafer signup' to create your account.[/green]")
 
@@ -311,6 +646,25 @@ def _format_http_error(exc: httpx.HTTPStatusError) -> str:
     return f"backend returned {status_code}."
 
 
+def _format_http_transport_error(exc: httpx.HTTPError) -> str:
+    message = _mask_non_api_urls(str(exc))
+    request = getattr(exc, "request", None)
+    if request is not None:
+        return f"{message} (request: {_format_upload_request_url(request.url)})"
+    return message
+
+
+def _mask_non_api_urls(text: str) -> str:
+    return re.sub(r"https?://[^\s'\")>]+", lambda match: _format_upload_request_url(match.group(0)), text)
+
+
+def _format_upload_request_url(url: object) -> str:
+    text = str(url)
+    if "/api/" in text:
+        return text
+    return "S3 presigned upload URL hidden"
+
+
 def _print_scan_summary(scan: dict) -> None:
     summary = scan.get("cliSummary", {})
     status = scan.get("analysisStatus", "UNKNOWN")
@@ -336,7 +690,7 @@ def _print_scan_summary(scan: dict) -> None:
     if warnings:
         console.print("[yellow]경고 목록[/yellow]")
         for warning in warnings:
-            console.print(f"  - {warning}")
+            console.print(f"  - {_format_scan_warning(warning)}")
 
 
 def _print_scan_details(scan: dict, project_root: Path) -> None:
@@ -460,10 +814,11 @@ def _print_findings(scan: dict) -> None:
 def _group_report_findings(findings: list[dict]) -> list[dict[str, str | int]]:
     groups: dict[tuple[str, str, str, str], dict[str, object]] = {}
     for finding in findings:
-        rule_id = str(finding.get("ruleId") or "-")
+        raw_rule_id = str(finding.get("ruleId") or "-")
+        rule_id = _format_report_rule_id(raw_rule_id)
         severity = str(finding.get("severity") or "-")
-        title = str(finding.get("title") or "-")
-        evidence = _format_report_evidence(finding.get("maskedEvidence"))
+        title = _format_report_title(finding)
+        evidence = _format_report_finding_evidence(finding)
         key = (rule_id, severity, title, evidence)
         group = groups.setdefault(
             key,
@@ -537,6 +892,51 @@ def _format_report_evidence(value: object) -> str:
     return text[: _REPORT_EVIDENCE_MAX - 3] + "..."
 
 
+def _format_report_rule_id(rule_id: str) -> str:
+    return _REPORT_RULE_DISPLAY.get(rule_id, rule_id)
+
+
+def _format_report_title(finding: dict) -> str:
+    rule_id = str(finding.get("ruleId") or "")
+    source = str(finding.get("source") or "")
+    if source == "trivy" and rule_id in _TRIVY_TITLE_KO:
+        return _TRIVY_TITLE_KO[rule_id]
+    return str(finding.get("title") or "-")
+
+
+def _format_report_finding_evidence(finding: dict) -> str:
+    rule_id = str(finding.get("ruleId") or "")
+    source = str(finding.get("source") or "")
+    if source == "trivy" and rule_id in _TRIVY_EVIDENCE_KO:
+        return _TRIVY_EVIDENCE_KO[rule_id]
+    return _format_report_evidence(finding.get("maskedEvidence"))
+
+
+def _format_scan_warning(warning: object) -> str:
+    text = str(warning).replace("\r\n", "\n").strip()
+    if not text:
+        return "-"
+
+    standalone_compose_match = re.search(r"(.+?)을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다\.", text)
+    if standalone_compose_match:
+        compose_path = Path(standalone_compose_match.group(1))
+        return f"기본 Compose 없이 단독 분석: {compose_path.name}"
+
+    missing_vars = list(dict.fromkeys(re.findall(r'The \\?"([^"\\]+)\\?" variable is not set', text)))
+    if missing_vars:
+        return f"Docker Compose 환경변수 미설정: {_join_compact(missing_vars, max_items=8)}"
+
+    env_file_match = re.search(r"env file (.+?) not found", text)
+    if env_file_match:
+        return f"Compose env 파일을 찾을 수 없음: {env_file_match.group(1)}"
+
+    service_match = re.search(r'service "([^"]+)" has neither an image nor a build context specified', text)
+    if service_match:
+        return f"Compose 서비스 '{service_match.group(1)}'에 image/build 설정이 없어 분석하지 못함"
+
+    return _format_report_evidence(text)
+
+
 def _count_trivy_artifact_findings(content: dict) -> int:
     total = 0
     for result in content.get("Results", []):
@@ -557,6 +957,106 @@ def _print_upload_response(response: dict) -> None:
     console.print(f"스캔 ID: {response.get('scanId', 'unknown')}")
     if response.get("viewUrl"):
         console.print(f"결과 보기: {response['viewUrl']}")
+
+
+def _print_server_audit_details(result: object) -> None:
+    findings = getattr(result, "findings", [])
+    warnings = getattr(result, "warnings", [])
+    artifacts = getattr(result, "artifacts", [])
+
+    finding_table = Table(title="서버 점검 Findings", show_lines=True)
+    finding_table.add_column("ID")
+    finding_table.add_column("Severity")
+    finding_table.add_column("Rule")
+    finding_table.add_column("Target", overflow="fold")
+    finding_table.add_column("Title", overflow="fold")
+    finding_table.add_column("Evidence", overflow="fold")
+    if not findings:
+        finding_table.add_row("-", "-", "-", "-", "-", "-")
+    for finding in findings:
+        finding_table.add_row(
+            getattr(finding, "id", "-"),
+            getattr(finding, "severity", "-"),
+            _format_server_rule_id(getattr(finding, "ruleId", "-")),
+            getattr(finding, "target", "-"),
+            getattr(finding, "title", "-"),
+            getattr(finding, "evidence", "-"),
+        )
+    console.print(finding_table)
+
+    warning_table = Table(title="서버 점검 경고", show_lines=True)
+    warning_table.add_column("번호", justify="right")
+    warning_table.add_column("메시지", overflow="fold")
+    if not warnings:
+        warning_table.add_row("-", "-")
+    for index, warning in enumerate(warnings, start=1):
+        warning_table.add_row(str(index), str(warning))
+    console.print(warning_table)
+
+    artifact_table = Table(title="서버 점검 산출물", show_lines=True)
+    artifact_table.add_column("Type")
+    artifact_table.add_column("Target", overflow="fold")
+    artifact_table.add_column("Summary", overflow="fold")
+    if not artifacts:
+        artifact_table.add_row("-", "-", "-")
+    for artifact in artifacts:
+        artifact_table.add_row(
+            getattr(artifact, "type", "-"),
+            getattr(artifact, "target", "-"),
+            _summarize_server_artifact(getattr(artifact, "content", None), artifact_type=getattr(artifact, "type", None)),
+        )
+    console.print(artifact_table)
+
+
+def _summarize_server_artifact(content: object, *, artifact_type: object = None) -> str:
+    if artifact_type == "trivy-rootfs-json" and isinstance(content, dict):
+        return _summarize_trivy_rootfs_content(content)
+    if isinstance(content, list):
+        return f"{len(content)} items"
+    if isinstance(content, dict):
+        if {"command", "exit_code"}.issubset(content):
+            command = " ".join(content.get("command") or [])
+            return f"{command} (exit {content.get('exit_code')})"
+        return f"{len(content)} keys"
+    if content is None:
+        return "-"
+    text = str(content).replace("\r", " ").replace("\n", " ").strip()
+    if not text:
+        return "-"
+    if len(text) <= _REPORT_EVIDENCE_MAX:
+        return text
+    return text[: _REPORT_EVIDENCE_MAX - 3] + "..."
+
+
+def _summarize_trivy_rootfs_content(content: dict) -> str:
+    counts: dict[str, int] = {}
+    for scan_result in content.get("Results", []) or []:
+        for vulnerability in scan_result.get("Vulnerabilities", []) or []:
+            severity = str(vulnerability.get("Severity") or "UNKNOWN").upper()
+            counts[severity] = counts.get(severity, 0) + 1
+    total = sum(counts.values())
+    if total == 0:
+        return "0 vulnerabilities"
+    order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+    parts = [f"{severity}={counts[severity]}" for severity in order if counts.get(severity, 0) > 0]
+    extra = sorted(severity for severity in counts if severity not in order)
+    parts.extend(f"{severity}={counts[severity]}" for severity in extra)
+    return f"{total} vulnerabilities ({', '.join(parts)})"
+
+
+def _format_server_rule_id(rule_id: object) -> str:
+    text = str(rule_id)
+    prefix = "SERVER_"
+    if text.startswith(prefix):
+        text = text[len(prefix):]
+    known = {
+        "PUBLIC_SENSITIVE_PORT": "PUBLIC_PORT",
+        "SSH_ROOT_LOGIN": "SSH_ROOT_LOGIN",
+        "SSH_PASSWORD_AUTH": "SSH_PASSWORD_AUTH",
+        "FIREWALL_INACTIVE": "FIREWALL_INACTIVE",
+        "OS_PACKAGE_VULNERABILITY": "OS_VULN",
+    }
+    return known.get(text, text)
 
 
 def _upload_or_exit(path: Path, api_url: str | None) -> dict:
@@ -580,9 +1080,38 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
         return upload_last_scan(path, api_url=effective_url, token=token)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
-        console.print(f"[dim]Request URL: {exc.request.url}[/dim]")
+        console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
+        console.print(f"[red]Upload failed:[/red] {_format_http_transport_error(exc)}")
+    except RuntimeError as exc:
         console.print(f"[red]Upload failed:[/red] {exc}")
+    raise typer.Exit(code=1)
+
+
+def _upload_server_audit_or_exit(path: Path, api_url: str | None) -> dict:
+    from ssafer.core.auth import load_endpoint, load_token
+    from ssafer.core.config import load_project_config
+
+    config_warnings: list[str] = []
+    project_config = load_project_config(path, config_warnings)
+    for warning in config_warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
+
+    token = load_token(project_config.upload.token_env)
+    effective_url = api_url or project_config.upload.endpoint or load_endpoint()
+    if token is None:
+        console.print(
+            "[yellow]?氇勳瑔 ?膦応矙???雴侂捒?雿堧枎. 鐧掛嚤? [bold]ssafer login[/bold]???銋诫痪?靹嶊祬??n"
+            "  ?靹嶊紞韫偮€??SSAFER_TOKEN???銋检牂?靹応江??[/yellow]"
+        )
+        raise typer.Exit(code=1)
+    try:
+        return upload_last_server_audit(path, api_url=effective_url, token=token)
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Upload failed:[/red] {_format_http_transport_error(exc)}")
     except RuntimeError as exc:
         console.print(f"[red]Upload failed:[/red] {exc}")
     raise typer.Exit(code=1)

@@ -11,9 +11,10 @@ from ssafer.core.config import load_project_config
 from ssafer.core.constants import MASK
 from ssafer.core.result_store import load_last_scan
 from ssafer.core.sanitize import AWS_KEY_RE, PRIVATE_KEY_RE, is_placeholder, is_secret_key
+from ssafer.server.audit import load_last_server_audit
 
 
-DEFAULT_API_URL = "http://localhost:8080"
+DEFAULT_API_URL = "https://k14b105.p.ssafy.io"
 IGNORED_SECRET_PATH_KEYS = {
     "id",
     "ruleId",
@@ -29,8 +30,10 @@ IGNORED_SECRET_PATH_KEYS = {
     "hash",
     "schemaVersion",
     "scanId",
+    "auditId",
     "analysisStatus",
     "scannedAt",
+    "generatedAt",
 }
 
 
@@ -42,8 +45,47 @@ def upload_last_scan(
     scan = load_last_scan(project_root)
     if scan is None:
         raise RuntimeError("No local scan package found. Run 'ssafer run' first.")
+    return _upload_result(
+        project_root=project_root,
+        result=scan,
+        api_url=api_url,
+        token=token,
+        scan_type=None,
+        source="CLI",
+        name=_scan_name(scan),
+    )
 
-    suspicious_paths = find_unmasked_secret_paths(scan)
+
+def upload_last_server_audit(
+    project_root: Path,
+    api_url: str | None = None,
+    token: str | None = None,
+) -> dict[str, Any]:
+    audit = load_last_server_audit(project_root)
+    if audit is None:
+        raise RuntimeError("No local server audit package found. Run 'ssafer server-audit' first.")
+    return _upload_result(
+        project_root=project_root,
+        result=audit,
+        api_url=api_url,
+        token=token,
+        scan_type="SERVER_AUDIT",
+        source="SERVER_AUDIT",
+        name=_server_audit_name(audit, project_root),
+    )
+
+
+def _upload_result(
+    *,
+    project_root: Path,
+    result: dict[str, Any],
+    api_url: str | None,
+    token: str | None,
+    scan_type: str | None,
+    source: str,
+    name: str,
+) -> dict[str, Any]:
+    suspicious_paths = find_unmasked_secret_paths(result)
     if suspicious_paths:
         paths = "\n".join(f"- {path}" for path in suspicious_paths[:20])
         suffix = "\n- ..." if len(suspicious_paths) > 20 else ""
@@ -60,7 +102,13 @@ def upload_last_scan(
     with httpx.Client(timeout=30) as client:
         create_response = client.post(
             f"{base_url}/api/v1/scans",
-            json=_build_create_scan_payload(project_root, scan),
+            json=_build_create_scan_payload(
+                project_root=project_root,
+                result=result,
+                scan_type=scan_type,
+                source=source,
+                name=name,
+            ),
             headers=headers,
         )
         create_response.raise_for_status()
@@ -71,7 +119,7 @@ def upload_last_scan(
         if not raw_upload_url or not raw_result_path or remote_scan_id is None:
             raise RuntimeError("Backend scan registration response is missing raw upload information.")
 
-        scan_json = _scan_json_bytes(scan)
+        scan_json = _scan_json_bytes(result)
         upload_response = client.put(
             raw_upload_url,
             content=scan_json,
@@ -81,26 +129,44 @@ def upload_last_scan(
 
         callback_response = client.post(
             f"{base_url}/api/v1/scans/{remote_scan_id}/raw-results",
-            json=_build_raw_upload_report_payload(scan, scan_json),
+            json=_build_raw_upload_report_payload(result, scan_json),
             headers=headers,
         )
         callback_response.raise_for_status()
-        return callback_response.json()
+        callback_data = _response_data(callback_response.json())
+        callback_data.setdefault("scanId", remote_scan_id)
+        return callback_data
 
 
-def _build_create_scan_payload(project_root: Path, scan: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "projectName": scan.get("projectName") or project_root.name,
-        "source": "CLI",
-        "scanName": _scan_name(scan),
+def _build_create_scan_payload(
+    *,
+    project_root: Path,
+    result: dict[str, Any],
+    scan_type: str | None,
+    source: str,
+    name: str,
+) -> dict[str, Any]:
+    payload = {
+        "projectName": result.get("projectName") or project_root.name,
+        "source": source,
+        "scanName": name,
         "targetPath": str(project_root),
         "includeLogs": False,
     }
+    if scan_type:
+        payload["scanType"] = scan_type
+    return payload
 
 
 def _scan_name(scan: dict[str, Any]) -> str:
     scan_id = scan.get("scanId")
     return f"SSAfer CLI scan {scan_id}" if scan_id else "SSAfer CLI scan"
+
+
+def _server_audit_name(audit: dict[str, Any], project_root: Path) -> str:
+    audit_id = audit.get("auditId")
+    host_name = project_root.name or "server"
+    return f"SSAfer server audit {host_name} {audit_id}" if audit_id else f"SSAfer server audit {host_name}"
 
 
 def _build_raw_upload_report_payload(scan: dict[str, Any], scan_json: bytes) -> dict[str, Any]:

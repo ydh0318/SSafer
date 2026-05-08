@@ -11,8 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.ssafer.scan.api.dto.RawScanResultUploadRequest;
-import com.ssafer.scan.application.service.ScanRawResultUploadService;
+import com.ssafer.scan.api.dto.WorkerAnalysisResultCallbackRequest;
+import com.ssafer.scan.application.service.WorkerAnalysisResultCallbackService;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
@@ -30,110 +30,114 @@ import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
-class ScanRawResultControllerTest {
+class WorkerAnalysisResultControllerTest {
 
   private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
   @Mock
-  private ScanRawResultUploadService scanRawResultUploadService;
+  private WorkerAnalysisResultCallbackService workerAnalysisResultCallbackService;
 
   @InjectMocks
-  private ScanRawResultController scanRawResultController;
+  private WorkerAnalysisResultController workerAnalysisResultController;
 
   @Test
-  void uploadRawResultReturnsOkResponse() throws Exception {
+  void reportAnalysisResultReturnsOkResponse() throws Exception {
     MockMvc mockMvc = buildMockMvc();
     LocalDateTime requestedAt = LocalDateTime.of(2026, 4, 24, 15, 30);
     LocalDateTime lastUpdatedAt = requestedAt.plusMinutes(1);
 
-    when(scanRawResultUploadService.upload(anyLong(), any(RawScanResultUploadRequest.class))).thenReturn(
+    when(workerAnalysisResultCallbackService.report(anyLong(), any(WorkerAnalysisResultCallbackRequest.class))).thenReturn(
         Scan.builder()
             .id(1L)
             .projectId(10L)
             .requestActorType(RequestActorType.USER)
             .scanMode(ScanMode.AGENT)
-            .status(ScanStatus.RAW_UPLOADED)
-            .rawResultPath("s3://ssafer/raw/1/scan_result.json")
+            .status(ScanStatus.RUNNING)
+            .analysisResultPath("s3://ssafer/result/1/analysis_result.json")
             .requestedAt(requestedAt)
             .lastUpdatedAt(lastUpdatedAt)
             .build());
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
-        ScanStatus.RAW_UPLOADED,
-        "uploaded",
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
+        100L,
+        ScanStatus.DONE,
+        "analysis_completed",
         null,
-        "s3://ssafer/raw/1/scan_result.json",
+        "s3://ssafer/result/1/analysis_result.json",
         null,
         null,
         lastUpdatedAt);
 
-    mockMvc.perform(post("/api/v1/internal/scans/1/raw-results")
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.scanId").value(1))
         .andExpect(jsonPath("$.projectId").value(10))
         .andExpect(jsonPath("$.scanMode").value("AGENT"))
-        .andExpect(jsonPath("$.status").value("RAW_UPLOADED"))
-        .andExpect(jsonPath("$.rawResultPath").value("s3://ssafer/raw/1/scan_result.json"));
+        .andExpect(jsonPath("$.status").value("RUNNING"))
+        .andExpect(jsonPath("$.analysisResultPath").value("s3://ssafer/result/1/analysis_result.json"));
   }
 
   @Test
-  void uploadRawResultWithoutPathReturnsBadRequest() throws Exception {
+  void reportAnalysisResultWithoutTaskIdReturnsBadRequest() throws Exception {
     MockMvc mockMvc = buildMockMvc();
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
+        null,
+        ScanStatus.DONE,
         null,
         null,
-        null,
-        null,
+        "s3://ssafer/result/1/analysis_result.json",
         null,
         null,
         null);
 
-    mockMvc.perform(post("/api/v1/internal/scans/1/raw-results")
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isBadRequest());
   }
 
   @Test
-  void uploadRawResultWhenScanMissingReturnsNotFound() throws Exception {
+  void reportAnalysisResultWhenScanMissingReturnsNotFound() throws Exception {
     MockMvc mockMvc = buildMockMvc();
-    when(scanRawResultUploadService.upload(anyLong(), any(RawScanResultUploadRequest.class)))
+    when(workerAnalysisResultCallbackService.report(anyLong(), any(WorkerAnalysisResultCallbackRequest.class)))
         .thenThrow(new ResponseStatusException(NOT_FOUND, "Scan not found: 999"));
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
-        ScanStatus.RAW_UPLOADED,
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
+        999L,
+        ScanStatus.DONE,
         null,
         null,
-        "s3://ssafer/raw/999/scan_result.json",
+        "s3://ssafer/result/999/analysis_result.json",
         null,
         null,
         null);
 
-    mockMvc.perform(post("/api/v1/internal/scans/999/raw-results")
+    mockMvc.perform(post("/api/v1/internal/scans/999/analysis-results")
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isNotFound());
   }
 
   @Test
-  void uploadRawResultWhenScanIsTerminalReturnsConflict() throws Exception {
+  void reportAnalysisResultWhenScanIsTerminalReturnsConflict() throws Exception {
     MockMvc mockMvc = buildMockMvc();
-    when(scanRawResultUploadService.upload(anyLong(), any(RawScanResultUploadRequest.class)))
-        .thenThrow(new ResponseStatusException(CONFLICT, "Raw result upload is not allowed"));
+    when(workerAnalysisResultCallbackService.report(anyLong(), any(WorkerAnalysisResultCallbackRequest.class)))
+        .thenThrow(new ResponseStatusException(CONFLICT, "Analysis result callback is not allowed"));
 
-    RawScanResultUploadRequest request = new RawScanResultUploadRequest(
-        ScanStatus.RAW_UPLOADED,
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
+        100L,
+        ScanStatus.DONE,
         null,
         null,
-        "s3://ssafer/raw/1/scan_result.json",
+        "s3://ssafer/result/1/analysis_result.json",
         null,
         null,
         null);
 
-    mockMvc.perform(post("/api/v1/internal/scans/1/raw-results")
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isConflict());
@@ -142,7 +146,7 @@ class ScanRawResultControllerTest {
   private MockMvc buildMockMvc() {
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
     validator.afterPropertiesSet();
-    return MockMvcBuilders.standaloneSetup(scanRawResultController)
+    return MockMvcBuilders.standaloneSetup(workerAnalysisResultController)
         .setValidator(validator)
         .build();
   }

@@ -26,6 +26,7 @@ public class ScanBasicQueryService {
     // 현재 요청 주체를 먼저 확보해 프로젝트 접근 권한을 판단한다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     Scan scan = scanRepository.findById(scanId)
+        .filter(found -> !found.isDeleted())
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
     // 단건 조회 경로를 쓰더라도 실제 접근 범위는 scan.projectId 기준으로 제한한다.

@@ -42,7 +42,9 @@ html.theme-dark body {
 
 html.theme-dark .bg-\[\#F5F5F5\],
 html.theme-dark .bg-\[\#f5f5f5\],
-html.theme-dark .bg-\[\#f4f4f4\] {
+html.theme-dark .bg-\[\#f4f4f4\],
+html.theme-dark .bg-\[\#FAFAF7\],
+html.theme-dark .bg-\[\#fafaf7\] {
   background: #2b2b2b !important;
 }
 
@@ -126,7 +128,32 @@ html.theme-dark .theme-dark-soft-card span {
   color: inherit !important;
 }
 
+html.theme-dark .theme-landing-page,
+html.theme-dark .theme-guide-page {
+  background:
+    radial-gradient(circle at top left, rgba(212, 252, 100, 0.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent 24%),
+    #101010 !important;
+  color: #f3f4f6 !important;
+}
+
+html.theme-dark .theme-landing-hero,
+html.theme-dark .theme-guide-hero {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    #101010 !important;
+  border-color: #2d2d2d !important;
+}
+
+html.theme-dark .theme-landing-now {
+  color: #f9fafb !important;
+}
+
 html.theme-dark .bg-neutral-100 {
+  background: #202020 !important;
+}
+
+html.theme-dark .bg-neutral-50 {
   background: #202020 !important;
 }
 
@@ -140,6 +167,19 @@ html.theme-dark .bg-black {
 
 html.theme-dark .text-black {
   color: #f9fafb !important;
+}
+
+html.theme-dark .theme-accent-card,
+html.theme-dark .theme-accent-card.text-black,
+html.theme-dark .theme-accent-card p,
+html.theme-dark .theme-accent-card div,
+html.theme-dark .theme-accent-card span,
+html.theme-dark .theme-accent-card h1,
+html.theme-dark .theme-accent-card h2,
+html.theme-dark .theme-accent-card h3,
+html.theme-dark .theme-accent-card h4,
+html.theme-dark .theme-accent-card svg {
+  color: #111111 !important;
 }
 
 html.theme-dark .text-neutral-400 {
@@ -179,6 +219,31 @@ html.theme-dark .hover\:bg-white:hover {
 html.theme-dark .hover\:bg-\[\#F5F5F5\]:hover,
 html.theme-dark .hover\:bg-neutral-800:hover {
   background: #202020 !important;
+}
+
+html.theme-dark .theme-page-hero {
+  background: linear-gradient(135deg, #181818 0%, #131313 52%, #101010 100%) !important;
+  border-color: #3a3a3a !important;
+}
+
+html.theme-dark .theme-settings-panel {
+  background: #181818 !important;
+  border-color: #424242 !important;
+}
+
+html.theme-dark .theme-settings-input {
+  background: #121212 !important;
+  border-color: #424242 !important;
+  color: #f9fafb !important;
+}
+
+html.theme-dark .theme-settings-input::placeholder {
+  color: #6b7280 !important;
+}
+
+html.theme-dark .theme-settings-input:disabled {
+  background: #202020 !important;
+  color: #9ca3af !important;
 }
 
 html.theme-dark .auth-design-frame {

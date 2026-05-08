@@ -25,6 +25,7 @@ public class ScanStatusQueryService {
     // 현재 요청 주체(회원/게스트)를 기준으로 스캔 접근 가능 여부를 함께 검증한다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     Scan scan = scanRepository.findById(scanId)
+        .filter(found -> !found.isDeleted())
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
     // scanId 자체로 조회하더라도, 실제 반환 전에는 프로젝트 소유/권한 검증을 강제한다.

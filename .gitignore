@@ -99,3 +99,6 @@ secrets/
 
 # SSAfer local scan artifacts
 .ssafer/
+
+# Local architecture notes
+docs/service_architecture_overview.md

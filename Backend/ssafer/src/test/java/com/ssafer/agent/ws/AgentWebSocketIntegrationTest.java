@@ -133,7 +133,27 @@ class AgentWebSocketIntegrationTest {
     assertThat(updated.getDisconnectedAt()).isNull();
   }
 
+  @Test
+  void connectPromotesPlaceholderAgentToRealAgent() throws Exception {
+    // placeholder Agent가 CONNECT를 받으면 실제 Agent로 승격되는지 검증한다.
+    Agent placeholder = persistPlaceholderAgent();
+    assertThat(placeholder.isPlaceholder()).isTrue();
+
+    TestSocketHandler handler = new TestSocketHandler();
+    WebSocketSession session = connect(handler);
+
+    session.sendMessage(new TextMessage("""
+        {"type":"CONNECT","agentId":%d,"projectId":%d}
+        """.formatted(placeholder.getId(), placeholder.getProject().getId())));
+    handler.awaitMessage();
+
+    Agent promoted = loadAgent(placeholder.getId());
+    assertThat(promoted.getStatus()).isEqualTo(AgentStatus.ONLINE);
+    assertThat(promoted.isPlaceholder()).isFalse();
+  }
+
   private WebSocketSession connect(TestSocketHandler handler) throws Exception {
+    // 인증 토큰을 헤더로 넣어 내부 Agent WebSocket 엔드포인트에 연결한다.
     WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
     headers.add(HttpHeaders.AUTHORIZATION, "Bearer " + TEST_AGENT_TOKEN);
     URI uri = URI.create("ws://localhost:" + port + "/ws/v1/internal/agents/connect");
@@ -146,6 +166,15 @@ class AgentWebSocketIntegrationTest {
     Agent agent = new Agent(savedProject, AgentStatus.OFFLINE);
     agent.updateAuthTokenHash(agentTokenRegistry.hashToken(TEST_AGENT_TOKEN));
     return agentRepository.save(agent);
+  }
+
+  private Agent persistPlaceholderAgent() {
+    // raw-results 선처리 시 만들어지는 placeholder Agent와 동일한 형태로 저장한다.
+    Project project = new Project(1L, null, "ws-placeholder-project", null, ScanMode.AGENT, false);
+    Project savedProject = projectRepository.save(project);
+    Agent placeholder = new Agent(savedProject, AgentStatus.OFFLINE, true);
+    placeholder.updateAuthTokenHash(agentTokenRegistry.hashToken(TEST_AGENT_TOKEN));
+    return agentRepository.save(placeholder);
   }
 
   private Agent loadAgent(Long agentId) {

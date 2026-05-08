@@ -13,5 +13,7 @@ public interface ScanNodeRepository extends JpaRepository<ScanNode, Long> {
 
   Optional<ScanNode> findByIdAndScanId(Long id, Long scanId);
 
+  Optional<ScanNode> findByScanIdAndNodeKey(Long scanId, String nodeKey);
+
   boolean existsByIdAndScanId(Long id, Long scanId);
 }

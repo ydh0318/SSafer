@@ -1,7 +1,7 @@
 import { AlertCircle, BellRing, Wifi, WifiOff } from 'lucide-react';
 
-import PageHero from '../../components/common/PageHero';
-import PixelGoose from '../../components/common/PixelGoose';
+import FeatureBanner from '../../components/common/FeatureBanner';
+import FeatureInfoCard from '../../components/common/FeatureInfoCard';
 
 const monitorProjects = [
   { id: 101, name: 'shopping-mall-api', monitorEnabled: true, agentStatus: 'ONLINE', agentId: 1, lastSeenAt: '5초 전', currentTaskType: null, openCritical: 2 },
@@ -15,7 +15,7 @@ const monitorFeed = [
   { time: '5분 전', sev: 'INFO', text: 'auth-service: PATCH_APPLY 시작', detail: 'findingId #2010' },
   { time: '12분 전', sev: 'HIGH', text: 'media-uploader: Agent ERROR', detail: 'connection lost' },
   { time: '1시간 전', sev: 'INFO', text: 'shopping-mall-api: scan #1001 완료', detail: 'findings: 17' },
-  { time: '3시간 전', sev: 'INFO', text: 'admin-dashboard: 12건 RESOLVED', detail: 'auto-applied' },
+  { time: '3시간 전', sev: 'INFO', text: 'admin-dashboard: 12개 RESOLVED', detail: 'auto-applied' },
 ] as const;
 
 const feedDotColor: Record<(typeof monitorFeed)[number]['sev'], string> = {
@@ -27,48 +27,38 @@ const feedDotColor: Record<(typeof monitorFeed)[number]['sev'], string> = {
 function MonitorPage() {
   return (
     <section className="space-y-8">
-      <PageHero
+      <FeatureBanner
         aside={
-          <div className="theme-monitor-banner border border-neutral-200 bg-white p-6 shadow-sm">
-            <div className="inline-flex items-center gap-2 rounded-sm border border-neutral-200 px-4 py-3 text-sm">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-[#3DDC84]" />
-              <span className="font-mono text-xs">실시간 연결 중 · WebSocket</span>
-            </div>
+          <FeatureInfoCard
+            className="min-w-[280px]"
+            description="5초 단위 heartbeat와 WebSocket 상태를 기준으로 Agent 연결 상태를 추적합니다."
+            eyebrow="LIVE"
+            title={<div className="text-lg font-black">실시간 연결 모니터</div>}
+            tone="dark"
+          />
+        }
+        description="Local Agent 연결 상태, 최근 알림, 새로 생긴 위험과 해결된 위험을 한 화면에서 바로 확인할 수 있도록 구성합니다."
+        eyebrow="MONITOR"
+        title={
+          <div>
+            <div className="text-sm text-neutral-500">실시간 연결과 알림 흐름</div>
+            <h1 className="mt-3 text-5xl font-black tracking-tight md:text-6xl">모니터</h1>
           </div>
         }
-        description="Local Agent 연결 상태와 최근 보안 변화, 현재 실행 중인 작업을 한눈에 확인할 수 있습니다."
-        eyebrow="MONITOR"
-        title="실시간 모니터링"
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <article className="border border-neutral-200 bg-white p-5">
-          <div className="text-[10px] font-bold tracking-[0.24em] text-neutral-500">ONLINE AGENTS</div>
-          <div className="mt-2 text-4xl font-black">2</div>
-          <div className="mt-1 text-xs text-neutral-500">/ 4 프로젝트</div>
-        </article>
-        <article className="border border-neutral-200 bg-white p-5">
-          <div className="text-[10px] font-bold tracking-[0.24em] text-neutral-500">현재 실행 중인 작업</div>
-          <div className="mt-2 text-4xl font-black">1</div>
-          <div className="mt-1 font-mono text-xs text-neutral-500">PATCH_APPLY</div>
-        </article>
-        <article className="theme-monitor-danger border border-neutral-200 bg-[#FFE5E5] p-5">
-          <div className="text-[10px] font-bold tracking-[0.24em]">새로 발생 (24h)</div>
-          <div className="mt-2 text-4xl font-black">+3</div>
-          <div className="mt-1 text-xs">CRITICAL findings</div>
-        </article>
-        <article className="theme-monitor-success border border-neutral-200 bg-[#E6F9EE] p-5">
-          <div className="text-[10px] font-bold tracking-[0.24em]">해결 (24h)</div>
-          <div className="mt-2 text-4xl font-black">-12</div>
-          <div className="mt-1 text-xs">RESOLVED findings</div>
-        </article>
+        <FeatureInfoCard eyebrow="ONLINE AGENTS" title={<div className="text-4xl font-black">2</div>} description="/ 4 프로젝트" />
+        <FeatureInfoCard eyebrow="RUNNING TASK" title={<div className="text-4xl font-black">1</div>} description="PATCH_APPLY" />
+        <FeatureInfoCard eyebrow="NEW IN 24H" title={<div className="text-4xl font-black">+3</div>} description="Critical findings" tone="danger" />
+        <FeatureInfoCard eyebrow="RESOLVED IN 24H" title={<div className="text-4xl font-black">-12</div>} description="Resolved findings" tone="success" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="border border-neutral-200 bg-white">
+        <div className="border border-black/5 bg-white">
           <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
             <h2 className="font-black tracking-tight">Local Agent 상태</h2>
-            <span className="text-xs text-neutral-500">5초마다 업데이트</span>
+            <span className="text-xs text-neutral-500">5초마다 갱신</span>
           </div>
           {monitorProjects.map((project) => (
             <div className="grid grid-cols-12 items-center gap-4 border-b border-neutral-100 px-5 py-4 last:border-b-0" key={project.id}>
@@ -82,7 +72,7 @@ function MonitorPage() {
                 <div
                   className={`flex items-center gap-2 text-sm font-bold ${
                     project.agentStatus === 'ONLINE'
-                      ? 'text-[#3DDC84]'
+                      ? 'text-[#0A8F4E]'
                       : project.agentStatus === 'ERROR'
                         ? 'text-[#FF8A33]'
                         : 'text-neutral-400'
@@ -117,23 +107,21 @@ function MonitorPage() {
               </div>
               <div className="col-span-2 flex justify-end gap-2">
                 {project.monitorEnabled ? (
-                  <span className="bg-[#3D5AFE] px-2 py-0.5 text-[10px] font-bold tracking-[0.22em] text-white">
-                    MONITOR
-                  </span>
+                  <span className="theme-accent-card bg-[#D4FC64] px-2 py-0.5 text-[10px] font-bold tracking-[0.22em] !text-black">MONITOR</span>
                 ) : null}
                 <button className="bg-black px-3 py-1.5 text-xs font-bold text-white" type="button">
-                  점검
+                  보기
                 </button>
               </div>
             </div>
           ))}
         </div>
 
-        <aside className="border border-neutral-200 bg-white">
+        <aside className="border border-black/5 bg-white">
           <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
             <span className="flex items-center gap-2 font-bold">
               <BellRing className="h-4 w-4" />
-              알림 피드
+              최근 알림
             </span>
             <span className="bg-[#E63946] px-1.5 py-0.5 text-[10px] font-bold tracking-[0.22em] text-white">3 NEW</span>
           </div>

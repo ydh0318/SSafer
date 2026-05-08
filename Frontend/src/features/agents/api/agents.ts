@@ -1,9 +1,9 @@
 import { apiClient } from '../../../api/client';
-import { getApiErrorMessage } from '../../../api/error';
+import { getApiErrorCode, getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type { AgentStatusResponseData } from '../../../types/scan';
 
-const GET_AGENT_STATUS_ERROR = '로컬 에이전트 상태를 불러오지 못했습니다.';
+const GET_AGENT_STATUS_ERROR = '에이전트 상태를 불러오지 못했습니다.';
 
 export async function getProjectAgentStatus(projectId: string) {
   try {
@@ -12,6 +12,12 @@ export async function getProjectAgentStatus(projectId: string) {
     );
     return response.data.data;
   } catch (error) {
+    const errorCode = getApiErrorCode(error);
+
+    if (errorCode === 'NOT_FOUND') {
+      return null;
+    }
+
     throw new Error(getApiErrorMessage(error, GET_AGENT_STATUS_ERROR));
   }
 }

@@ -2,18 +2,25 @@ import { AlertTriangle, ArrowLeft, ExternalLink, Send, Trophy, Wand2 } from 'luc
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
+import PageBanner from '../../components/common/PageBanner';
 import PixelGoose from '../../components/common/PixelGoose';
 import TypingBox from '../../components/common/TypingBox';
 import { ROUTES } from '../../constants/routes';
+import ServerAuditFindingDetailView from '../../features/results/components/ServerAuditFindingDetailView';
 import {
+  getScanBasic,
   getScanFindingDetail,
   getScanFindings,
 } from '../../features/results/api/results';
-import { formatDateTime } from '../../features/scans/utils/scanPresentation';
+import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
+import { formatDateTime, getSafeScanType } from '../../features/scans/utils/scanPresentation';
+import { buildMockServerAuditResult, getMockServerAuditFinding } from '../../mocks/serverAudit';
 import type {
   FindingSeverity,
+  ScanBasicData,
   ScanFindingDetailData,
   ScanFindingListItemData,
+  ServerAuditFindingViewModel,
 } from '../../types/scan';
 
 type FindingRouteState = {
@@ -70,8 +77,11 @@ function FindingDetailPage() {
   const routeState = (location.state ?? {}) as FindingRouteState;
 
   const [view, setView] = useState<'explain' | 'fix' | 'apply' | 'references'>('explain');
+  const [scanBasic, setScanBasic] = useState<ScanBasicData | null>(null);
   const [finding, setFinding] = useState<ScanFindingDetailData | null>(null);
   const [relatedFindings, setRelatedFindings] = useState<ScanFindingListItemData[]>([]);
+  const [serverAuditFinding, setServerAuditFinding] = useState<ServerAuditFindingViewModel | null>(null);
+  const [serverAuditRelatedFindings, setServerAuditRelatedFindings] = useState<ServerAuditFindingViewModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -87,6 +97,23 @@ function FindingDetailPage() {
       setErrorMessage(null);
 
       try {
+        const basicData = await getScanBasic(scanId);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setScanBasic(basicData);
+
+        if (getSafeScanType(basicData.scanType) === 'SERVER_AUDIT') {
+          const mockResult = buildMockServerAuditResult(basicData);
+          setServerAuditFinding(getMockServerAuditFinding(Number(scanId), Number(findingId)));
+          setServerAuditRelatedFindings(mockResult.findings);
+          setFinding(null);
+          setRelatedFindings([]);
+          return;
+        }
+
         const [detailData, findingListData] = await Promise.all([
           getScanFindingDetail(scanId, findingId),
           getScanFindings(scanId, { page: 0, size: 100 }),
@@ -98,14 +125,19 @@ function FindingDetailPage() {
 
         setFinding(detailData);
         setRelatedFindings(findingListData.items);
+        setServerAuditFinding(null);
+        setServerAuditRelatedFindings([]);
       } catch (error) {
         if (!isMounted) {
           return;
         }
 
         setErrorMessage(error instanceof Error ? error.message : '취약점 상세 정보를 불러오지 못했습니다.');
+        setScanBasic(null);
         setFinding(null);
         setRelatedFindings([]);
+        setServerAuditFinding(null);
+        setServerAuditRelatedFindings([]);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -122,6 +154,7 @@ function FindingDetailPage() {
 
   const practiceSnippet = useMemo(() => getPracticeSnippet(finding), [finding]);
   const rawSnippetText = useMemo(() => prettyJsonText(finding?.rawSnippetJson ?? null), [finding?.rawSnippetJson]);
+  const currentScanType = getSafeScanType(scanBasic?.scanType);
 
   return (
     <section className="space-y-6">
@@ -134,9 +167,7 @@ function FindingDetailPage() {
         결과 목록으로 돌아가기
       </Link>
 
-      {errorMessage ? (
-        <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{errorMessage}</div>
-      ) : null}
+      {errorMessage ? <PageBanner message={errorMessage} tone="error" /> : null}
 
       {isLoading ? (
         <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">
@@ -144,7 +175,22 @@ function FindingDetailPage() {
         </div>
       ) : null}
 
-      {!isLoading && finding ? (
+      {!isLoading && currentScanType === 'SERVER_AUDIT' && serverAuditFinding ? (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
+            <span className="font-mono">scanId #{scanId}</span>
+            <ScanTypeBadge scanType="SERVER_AUDIT" />
+          </div>
+          <ServerAuditFindingDetailView
+            finding={serverAuditFinding}
+            relatedFindings={serverAuditRelatedFindings}
+            routeState={routeState}
+            scanId={scanId}
+          />
+        </div>
+      ) : null}
+
+      {!isLoading && currentScanType === 'PROJECT_SCAN' && finding ? (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div>
             <div className="border border-neutral-200 bg-white p-6">

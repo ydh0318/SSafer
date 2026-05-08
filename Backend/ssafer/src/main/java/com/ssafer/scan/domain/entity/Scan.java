@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -22,7 +23,7 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * 스캔 요청부터 실행, 결과 적재까지의 전체 상태를 표현하는 루트 엔티티다.
- * Raw 결과 업로드 API는 이 엔티티의 raw result 관련 필드만 갱신한다.
+ * CLI 완료 알림과 워커 완료 콜백은 이 엔티티의 상태와 결과 경로를 전이시킨다.
  */
 @Getter
 @Builder
@@ -83,6 +84,12 @@ public class Scan {
   @Column(name = "raw_result_path", length = 500)
   private String rawResultPath;
 
+  @Column(name = "analysis_result_path", length = 500)
+  private String analysisResultPath;
+
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
+
   @Column(name = "requested_at", nullable = false)
   private LocalDateTime requestedAt;
 
@@ -96,8 +103,8 @@ public class Scan {
   private LocalDateTime lastUpdatedAt;
 
   /**
-   * 내부 raw 결과 업로드 시점에 바뀌는 필드만 한 번에 갱신한다.
-   * scan 생성에 쓰이는 식별/소유 필드는 여기서 변경하지 않는다.
+   * CLI raw 결과 업로드 완료 보고처럼 raw 결과 필드만 한 번에 갱신할 때 사용한다.
+   * scan 생성 주체나 대상 정보는 바꾸지 않는다.
    */
   public void updateRawResult(
       ScanStatus status,
@@ -107,7 +114,8 @@ public class Scan {
       String rawResultPath,
       LocalDateTime startedAt,
       LocalDateTime completedAt,
-      LocalDateTime lastUpdatedAt) {
+      LocalDateTime lastUpdatedAt
+  ) {
     this.status.assertTransitionAllowed(status);
     this.status = status;
     this.progressStep = progressStep;
@@ -119,7 +127,73 @@ public class Scan {
     this.lastUpdatedAt = lastUpdatedAt;
   }
 
-  // CLI raw 결과 업로드 완료 알림을 작업 큐에 실은 뒤 대기 상태로 전환한다.
+  // 워커 콜백을 받아 적재를 백그라운드로 넘기기 직전 RUNNING 상태로 전환한다.
+  public void markAnalysisQueuedForIngestion(
+      String progressStep,
+      String analysisResultPath,
+      LocalDateTime startedAt,
+      LocalDateTime lastUpdatedAt
+  ) {
+    this.status.assertTransitionAllowed(ScanStatus.RUNNING);
+    this.status = ScanStatus.RUNNING;
+    this.progressStep = progressStep;
+    this.failureReason = null;
+    this.analysisResultPath = analysisResultPath;
+    this.startedAt = startedAt;
+    this.completedAt = null;
+    this.lastUpdatedAt = lastUpdatedAt;
+  }
+
+  // 적재가 최종 완료되면 DONE 상태와 완료 시각을 남긴다.
+  public void markAnalysisCompleted(
+      String progressStep,
+      LocalDateTime startedAt,
+      LocalDateTime completedAt,
+      LocalDateTime lastUpdatedAt
+  ) {
+    this.status.assertTransitionAllowed(ScanStatus.DONE);
+    this.status = ScanStatus.DONE;
+    this.progressStep = progressStep;
+    this.failureReason = null;
+    this.startedAt = startedAt;
+    this.completedAt = completedAt;
+    this.lastUpdatedAt = lastUpdatedAt;
+  }
+
+  // 적재 job이 실패하면 실패 사유와 종료 시각을 함께 남긴다.
+  public void markAnalysisFailed(
+      String progressStep,
+      String failureReason,
+      LocalDateTime startedAt,
+      LocalDateTime completedAt,
+      LocalDateTime lastUpdatedAt
+  ) {
+    this.status.assertTransitionAllowed(ScanStatus.FAILED);
+    this.status = ScanStatus.FAILED;
+    this.progressStep = progressStep;
+    this.failureReason = failureReason;
+    this.startedAt = startedAt;
+    this.completedAt = completedAt;
+    this.lastUpdatedAt = lastUpdatedAt;
+  }
+
+  // 비동기 적재 도중 일시 실패가 나면 RUNNING 상태는 유지하고 재시도 정보를 남긴다.
+  public void markAnalysisRetryPending(
+      String progressStep,
+      String failureReason,
+      LocalDateTime startedAt,
+      LocalDateTime lastUpdatedAt
+  ) {
+    this.status.assertTransitionAllowed(ScanStatus.RUNNING);
+    this.status = ScanStatus.RUNNING;
+    this.progressStep = progressStep;
+    this.failureReason = failureReason;
+    this.startedAt = startedAt;
+    this.completedAt = null;
+    this.lastUpdatedAt = lastUpdatedAt;
+  }
+
+  // CLI raw 결과 업로드 완료 알림 이후 작업 큐에 올린 대기 상태로 전환한다.
   public void markQueued(String progressStep, String rawResultJson, LocalDateTime startedAt, LocalDateTime lastUpdatedAt) {
     this.status.assertTransitionAllowed(ScanStatus.QUEUED);
     this.status = ScanStatus.QUEUED;
@@ -129,5 +203,13 @@ public class Scan {
     this.startedAt = startedAt;
     this.completedAt = null;
     this.lastUpdatedAt = lastUpdatedAt;
+  }
+
+  public boolean isDeleted() {
+    return deletedAt != null;
+  }
+
+  public void softDelete() {
+    this.deletedAt = Instant.now();
   }
 }
