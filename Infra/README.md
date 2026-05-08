@@ -2,6 +2,11 @@
 
 SSAfer 운영 인프라 구성과 EC2 초기 세팅 절차를 관리하는 디렉터리입니다.
 
+## Related Docs
+
+- S3 presigned upload CORS 가이드:
+  [docs/s3-presigned-upload-cors.md](</c:/Users/SSAFY/Desktop/S14P31B105/Infra/docs/s3-presigned-upload-cors.md:1>)
+
 ## EC2 Initial Setup
 
 이 절차는 `S14P31B105-159` 작업 기준입니다. EC2 #1 서비스 서버와 EC2 #2 분석 서버 모두에 공통으로 적용하되, UFW 포트 정책은 서버 역할에 맞게 다르게 적용합니다.
