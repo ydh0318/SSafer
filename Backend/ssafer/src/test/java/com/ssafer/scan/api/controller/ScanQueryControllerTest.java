@@ -25,6 +25,7 @@ import com.ssafer.scan.application.service.ScanFindingListQueryService;
 import com.ssafer.scan.application.service.ScanStatusQueryService;
 import com.ssafer.scan.application.service.ScanSummaryQueryService;
 import com.ssafer.scan.domain.enums.FindingSourceType;
+import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
@@ -402,6 +403,7 @@ class ScanQueryControllerTest {
             "{\"line\":2}",
             "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}",
             ResolutionStatus.OPEN,
+            RequestActorType.USER,
             1L,
             LocalDateTime.of(2026, 4, 27, 10, 0),
             "Patch prepared",
@@ -426,6 +428,7 @@ class ScanQueryControllerTest {
         .andExpect(jsonPath("$.data.lineNumber").value(2))
         .andExpect(jsonPath("$.data.ruleCode").value("DS-0002"))
         .andExpect(jsonPath("$.data.patchPayloadJson").value("{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}"))
+        .andExpect(jsonPath("$.data.patchApprovedActorType").value("USER"))
         .andExpect(jsonPath("$.data.resolutionStatus").value("OPEN"));
   }
 

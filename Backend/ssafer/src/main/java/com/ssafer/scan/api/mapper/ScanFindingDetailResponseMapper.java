@@ -29,6 +29,7 @@ public final class ScanFindingDetailResponseMapper {
         finding.getRawSnippetJson(),
         finding.getPatchPayloadJson(),
         finding.getResolutionStatus(),
+        finding.getPatchApprovedActorType(),
         finding.getPatchApprovedByUserId(),
         finding.getPatchApprovedAt(),
         finding.getPatchResultMessage(),
