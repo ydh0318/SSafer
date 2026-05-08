@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 def build_processor() -> ScanTaskProcessor:
     settings = load_worker_settings()
     spring_headers: dict[str, str] = {}
-    if settings.spring_worker_secret is not None:
-        spring_headers["X-Worker-Secret"] = settings.spring_worker_secret
+    if settings.spring_api_secret is not None:
+        spring_headers["X-Worker-Secret"] = settings.spring_api_secret
 
     spring_client = SpringClient(
         JsonHttpClient(

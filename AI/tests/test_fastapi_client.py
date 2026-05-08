@@ -1,6 +1,7 @@
 import unittest
 
 from app.worker.fastapi_client import FastApiClient
+from app.worker.http_client import JsonHttpClientError
 from app.worker.schemas import AnalysisResultCallbackRequest, FastApiAnalyzeRequest
 from app.worker.spring_client import SpringClient
 
@@ -22,6 +23,32 @@ class FakeHttpClient:
             "invalid_finding_count": 0,
             "result_count": 1,
         }
+
+
+class FakeFailingHttpClient:
+    def post_json(self, path, payload):
+        del path, payload
+        raise JsonHttpClientError(
+            "POST /analyze failed with HTTP 400",
+            status_code=400,
+            response_json={
+                "status": "failed",
+                "error_code": "S3_DOWNLOAD_FAILED",
+                "message": "Failed to download scan_result.json from S3.",
+                "stage": "input",
+                "scan_result_path": (
+                    "s3://ssafer-scan-storage-dev/raw/5/scan_result.json"
+                ),
+                "analysis_result_path": (
+                    "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+                ),
+                "finding_count": 0,
+                "valid_finding_count": 0,
+                "invalid_finding_count": 0,
+                "result_count": 0,
+                "invalid_findings": [],
+            },
+        )
 
 
 class FastApiClientTest(unittest.TestCase):
@@ -62,6 +89,30 @@ class FastApiClientTest(unittest.TestCase):
         )
         self.assertTrue(response.succeeded)
         self.assertEqual(response.result_count, 1)
+
+    def test_analyze_preserves_standard_error_body_from_http_error(self):
+        client = FastApiClient(FakeFailingHttpClient())
+
+        response = client.analyze(
+            FastApiAnalyzeRequest(
+                taskId=123,
+                agentId=10,
+                projectId=2,
+                scanId=5,
+                rawResultPath="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
+                analysisResultPath=(
+                    "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+                ),
+            )
+        )
+
+        self.assertFalse(response.succeeded)
+        self.assertEqual(response.error_code, "S3_DOWNLOAD_FAILED")
+        self.assertEqual(response.stage, "input")
+        self.assertEqual(
+            response.message,
+            "Failed to download scan_result.json from S3.",
+        )
 
 
 class SpringClientTest(unittest.TestCase):

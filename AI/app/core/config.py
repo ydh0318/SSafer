@@ -20,7 +20,7 @@ def _get_float_env(key: str, default: float) -> float:
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 OLLAMA_TEMPERATURE = _get_float_env("OLLAMA_TEMPERATURE", 0.1)
-OLLAMA_TIMEOUT_SECONDS = _get_float_env("OLLAMA_TIMEOUT_SECONDS", 120.0)
+OLLAMA_TIMEOUT_SECONDS = _get_float_env("OLLAMA_TIMEOUT_SECONDS", 600.0)
 OLLAMA_MAX_RETRIES = _get_int_env("OLLAMA_MAX_RETRIES", 2)
 OLLAMA_RETRY_BACKOFF_SECONDS = _get_float_env(
     "OLLAMA_RETRY_BACKOFF_SECONDS",
@@ -56,7 +56,11 @@ def load_s3_settings(env: Mapping[str, str] | None = None) -> S3Settings:
 
     region = _get_optional_env(env, "AWS_REGION") or "ap-northeast-2"
     default_bucket = _get_optional_env(env, "AWS_S3_BUCKET")
-    raw_scan_bucket = _get_optional_env(env, "APP_SCAN_RAW_S3_BUCKET") or default_bucket
+    raw_scan_bucket = (
+        _get_optional_env(env, "APP_SCAN_RESULT_S3_BUCKET")
+        or _get_optional_env(env, "APP_SCAN_RAW_S3_BUCKET")
+        or default_bucket
+    )
     analysis_result_bucket = (
         _get_optional_env(env, "APP_ANALYSIS_RESULT_S3_BUCKET") or default_bucket
     )
@@ -66,7 +70,7 @@ def load_s3_settings(env: Mapping[str, str] | None = None) -> S3Settings:
 
     if raw_scan_bucket is None:
         raise S3ConfigurationError(
-            "APP_SCAN_RAW_S3_BUCKET or AWS_S3_BUCKET must be set."
+            "APP_SCAN_RESULT_S3_BUCKET or AWS_S3_BUCKET must be set."
         )
 
     if analysis_result_bucket is None:
