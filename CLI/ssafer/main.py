@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import os
 import re
 import sys
@@ -304,6 +305,7 @@ def apply_fix(
             raise typer.Exit(code=1)
 
         selected = _select_patch_candidates(selected, patch_id=patch_id, yes=yes)
+        _print_patch_preview(selected)
 
         if not dry_run and not yes:
             confirmed = typer.confirm("Apply selected patches?")
@@ -455,6 +457,37 @@ def _select_patch_candidates(
     return [candidates[selected - 1]]
 
 
+def _print_patch_preview(candidates: list["PatchCandidate"]) -> None:
+    table = Table(title="Patch diff preview")
+    table.add_column("Patch ID")
+    table.add_column("Finding ID")
+    table.add_column("File", overflow="fold")
+    table.add_column("Diff", overflow="fold")
+    for candidate in candidates:
+        table.add_row(
+            candidate.patch_id,
+            candidate.finding_id or "-",
+            candidate.file_path,
+            _format_patch_diff(candidate.old_text, candidate.new_text),
+        )
+    console.print(table)
+
+
+def _format_patch_diff(old_text: str, new_text: str) -> str:
+    old_lines = old_text.splitlines()
+    new_lines = new_text.splitlines()
+    if len(old_lines) <= 1 and len(new_lines) <= 1:
+        return f"- {old_text}\n+ {new_text}"
+    diff_lines = difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile="oldText",
+        tofile="newText",
+        lineterm="",
+    )
+    return "\n".join(diff_lines)
+
+
 @app.command()
 def login(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer 서버 API URL"),
@@ -481,7 +514,7 @@ def login(
         console.print(f"[red]Login failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Login failed:[/red] {exc}")
+        console.print(f"[red]Login failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     except ValueError as exc:
         console.print(f"[red]Login failed:[/red] {exc}")
@@ -521,7 +554,7 @@ def signup(
         console.print(f"[red]Signup failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Signup failed:[/red] {exc}")
+        console.print(f"[red]Signup failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Signup succeeded. Run 'ssafer login' to save login tokens.[/green]")
 
@@ -544,7 +577,7 @@ def send_email_code(
         console.print(f"[red]Email code request failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email code request failed:[/red] {exc}")
+        console.print(f"[red]Email code request failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Verification code sent. Check your email.[/green]")
 
@@ -568,7 +601,7 @@ def verify_email(
         console.print(f"[red]Email verification failed:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email verification failed:[/red] {exc}")
+        console.print(f"[red]Email verification failed:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Email verified. Run 'ssafer signup' to create your account.[/green]")
 
@@ -611,6 +644,18 @@ def _format_http_error(exc: httpx.HTTPStatusError) -> str:
     if message:
         return f"backend returned {status_code} ({message})."
     return f"backend returned {status_code}."
+
+
+def _format_http_transport_error(exc: httpx.HTTPError) -> str:
+    message = _mask_non_api_urls(str(exc))
+    request = getattr(exc, "request", None)
+    if request is not None:
+        return f"{message} (request: {_format_upload_request_url(request.url)})"
+    return message
+
+
+def _mask_non_api_urls(text: str) -> str:
+    return re.sub(r"https?://[^\s'\")>]+", lambda match: _format_upload_request_url(match.group(0)), text)
 
 
 def _format_upload_request_url(url: object) -> str:
@@ -1037,7 +1082,7 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
         console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
-        console.print(f"[red]Upload failed:[/red] {exc}")
+        console.print(f"[red]Upload failed:[/red] {_format_http_transport_error(exc)}")
     except RuntimeError as exc:
         console.print(f"[red]Upload failed:[/red] {exc}")
     raise typer.Exit(code=1)
@@ -1066,7 +1111,7 @@ def _upload_server_audit_or_exit(path: Path, api_url: str | None) -> dict:
         console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
-        console.print(f"[red]Upload failed:[/red] {exc}")
+        console.print(f"[red]Upload failed:[/red] {_format_http_transport_error(exc)}")
     except RuntimeError as exc:
         console.print(f"[red]Upload failed:[/red] {exc}")
     raise typer.Exit(code=1)

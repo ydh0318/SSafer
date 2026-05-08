@@ -208,6 +208,22 @@ def test_upload_error_request_url_hides_s3_presigned_url():
     )
 
 
+def test_http_transport_error_masks_s3_presigned_url():
+    request = httpx.Request(
+        "PUT",
+        "https://bucket.s3.ap-northeast-2.amazonaws.com/raw/1/scan_result.json?X-Amz-Signature=secret",
+    )
+    error = httpx.TransportError(
+        "failed to PUT https://bucket.s3.ap-northeast-2.amazonaws.com/raw/1/scan_result.json?X-Amz-Signature=secret",
+        request=request,
+    )
+
+    message = main_module._format_http_transport_error(error)
+
+    assert "S3 presigned upload URL hidden" in message
+    assert "X-Amz-Signature" not in message
+
+
 def test_upload_command_prints_progress_before_upload(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(main_module, "_upload_or_exit", lambda path, api_url=None: {"scanId": 1001})
 
