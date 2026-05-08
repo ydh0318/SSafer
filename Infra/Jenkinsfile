@@ -59,13 +59,24 @@ pipeline {
                 script { FAILED_STAGE = 'Build Images' }
                 sh '''
                     ENV_FILE="$DEPLOY_ROOT/Infra/docker/ec2-1/prod/.env"
-                    VITE_GOOGLE_CLIENT_ID=$(grep '^VITE_GOOGLE_CLIENT_ID=' "$ENV_FILE" | cut -d'=' -f2-)
-                    VITE_GITHUB_CLIENT_ID=$(grep '^VITE_GITHUB_CLIENT_ID=' "$ENV_FILE" | cut -d'=' -f2-)
+
+                    read_env_value() {
+                      key="$1"
+                      grep "^${key}=" "$ENV_FILE" | tail -n 1 | cut -d'=' -f2-
+                    }
+
+                    VITE_API_BASE_URL="$(read_env_value VITE_API_BASE_URL)"
+                    VITE_GOOGLE_CLIENT_ID="$(read_env_value VITE_GOOGLE_CLIENT_ID)"
+                    VITE_GITHUB_CLIENT_ID="$(read_env_value VITE_GITHUB_CLIENT_ID)"
+
+                    : "${VITE_API_BASE_URL:?VITE_API_BASE_URL is required for frontend build}"
                     : "${VITE_GOOGLE_CLIENT_ID:?VITE_GOOGLE_CLIENT_ID is required for frontend OAuth build}"
                     : "${VITE_GITHUB_CLIENT_ID:?VITE_GITHUB_CLIENT_ID is required for frontend OAuth build}"
+
                     docker build -f Infra/docker/dockerfiles/Dockerfile.spring -t "$SPRING_IMAGE" .
                     docker build -f Infra/docker/dockerfiles/Dockerfile.fastapi -t "$FASTAPI_IMAGE" .
                     docker build -f Infra/docker/dockerfiles/nginx/Dockerfile \
+                      --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
                       --build-arg VITE_GOOGLE_CLIENT_ID="$VITE_GOOGLE_CLIENT_ID" \
                       --build-arg VITE_GITHUB_CLIENT_ID="$VITE_GITHUB_CLIENT_ID" \
                       -t "$NGINX_IMAGE" .
