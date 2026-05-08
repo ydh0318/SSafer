@@ -15,7 +15,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -23,9 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/v1/projects")
+@RequestMapping("/api/v1/scans")
 @RequiredArgsConstructor
-@Tag(name = "업로드 점검 요청", description = "웹 업로드 기반 점검 요청 API")
+@Tag(name = "Upload Scan Request", description = "Web upload based scan request API")
 public class UploadScanController {
 
   private static final String REQUEST_UPLOAD_SCAN_SUCCESS_MESSAGE = "업로드 기반 점검 요청 성공";
@@ -33,17 +32,33 @@ public class UploadScanController {
   private final UploadScanService uploadScanService;
 
   @PostMapping(
-      value = "/{projectId}/scans/upload",
+      value = "/upload",
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE
   )
-  @Operation(summary = "업로드 기반 점검 요청", description = "웹 업로드 파일로 점검 요청을 접수합니다.")
+  @Operation(
+      summary = "업로드 기반 점검 요청",
+      description = "업로드 파일을 기반으로 1차 점검을 수행하고 Worker 분석 요청을 발행합니다."
+  )
   public ResponseEntity<?> requestUploadScan(
-      @Parameter(description = "프로젝트 ID", example = "101")
-      @PathVariable Long projectId,
+      @Parameter(
+          description = "프로젝트 이름(요청자 스코프에서 find-or-create)",
+          example = "sample-project",
+          required = true
+      )
+      @RequestPart(value = "projectName", required = false) String projectName,
+      @Parameter(
+          description = "업로드 파일 목록(1~3개, 총 1MB 이하)",
+          required = true
+      )
       @RequestPart(value = "files", required = false) List<MultipartFile> files,
+      @Parameter(
+          description = "스캔 식별용 이름",
+          example = "upload-scan-1"
+      )
       @RequestPart(value = "scanName", required = false) String scanName
   ) {
-    UploadScanResult result = uploadScanService.requestUploadScan(projectId, scanName, files);
+    // 업로드 요청을 서비스에 위임하고, 생성 후 실패 케이스까지 동일 응답 포맷으로 변환한다.
+    UploadScanResult result = uploadScanService.requestUploadScan(projectName, scanName, files);
     UploadScanResponseData data = new UploadScanResponseData(
         result.scanId(),
         result.status(),
@@ -55,6 +70,7 @@ public class UploadScanController {
           .body(ApiResponse.success(REQUEST_UPLOAD_SCAN_SUCCESS_MESSAGE, data));
     }
 
+    // Scan 생성 이후 실패한 경우에도 scanId/status/failureReason를 data에 포함해 반환한다.
     Map<String, Object> errorData = new LinkedHashMap<>();
     errorData.put("scanId", result.scanId());
     errorData.put("status", result.status());

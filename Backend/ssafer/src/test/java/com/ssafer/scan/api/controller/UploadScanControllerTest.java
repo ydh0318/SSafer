@@ -37,6 +37,12 @@ class UploadScanControllerTest {
   void requestUploadScanReturnsCreatedWhenQueued() throws Exception {
     MockMvc mockMvc = buildMockMvc();
 
+    MockMultipartFile projectNamePart = new MockMultipartFile(
+        "projectName",
+        "",
+        "text/plain",
+        "project-a".getBytes(StandardCharsets.UTF_8)
+    );
     MockMultipartFile file = new MockMultipartFile(
         "files",
         ".env",
@@ -50,10 +56,11 @@ class UploadScanControllerTest {
         "scan-a".getBytes(StandardCharsets.UTF_8)
     );
 
-    when(uploadScanService.requestUploadScan(eq(101L), eq("scan-a"), any()))
+    when(uploadScanService.requestUploadScan(eq("project-a"), eq("scan-a"), any()))
         .thenReturn(new UploadScanResult(1001L, ScanStatus.QUEUED, null, null));
 
-    mockMvc.perform(multipart("/api/v1/projects/101/scans/upload")
+    mockMvc.perform(multipart("/api/v1/scans/upload")
+            .file(projectNamePart)
             .file(file)
             .file(scanNamePart))
         .andExpect(status().isCreated())
@@ -65,6 +72,12 @@ class UploadScanControllerTest {
   void requestUploadScanReturns500WhenQueuePublishFailsAfterCreation() throws Exception {
     MockMvc mockMvc = buildMockMvc();
 
+    MockMultipartFile projectNamePart = new MockMultipartFile(
+        "projectName",
+        "",
+        "text/plain",
+        "project-a".getBytes(StandardCharsets.UTF_8)
+    );
     MockMultipartFile file = new MockMultipartFile(
         "files",
         ".env",
@@ -72,7 +85,7 @@ class UploadScanControllerTest {
         "A".getBytes(StandardCharsets.UTF_8)
     );
 
-    when(uploadScanService.requestUploadScan(eq(101L), eq(null), any()))
+    when(uploadScanService.requestUploadScan(eq("project-a"), eq(null), any()))
         .thenReturn(new UploadScanResult(
             1001L,
             ScanStatus.RAW_UPLOADED,
@@ -80,7 +93,8 @@ class UploadScanControllerTest {
             ErrorCode.ANALYSIS_QUEUE_PUBLISH_FAILED
         ));
 
-    mockMvc.perform(multipart("/api/v1/projects/101/scans/upload")
+    mockMvc.perform(multipart("/api/v1/scans/upload")
+            .file(projectNamePart)
             .file(file))
         .andExpect(status().isInternalServerError())
         .andExpect(jsonPath("$.code").value("ANALYSIS_QUEUE_PUBLISH_FAILED"))
@@ -93,6 +107,12 @@ class UploadScanControllerTest {
   void requestUploadScanWhenPermitBusyReturns429() throws Exception {
     MockMvc mockMvc = buildMockMvc();
 
+    MockMultipartFile projectNamePart = new MockMultipartFile(
+        "projectName",
+        "",
+        "text/plain",
+        "project-a".getBytes(StandardCharsets.UTF_8)
+    );
     MockMultipartFile file = new MockMultipartFile(
         "files",
         ".env",
@@ -100,13 +120,34 @@ class UploadScanControllerTest {
         "A".getBytes(StandardCharsets.UTF_8)
     );
 
-    when(uploadScanService.requestUploadScan(eq(101L), eq(null), any()))
+    when(uploadScanService.requestUploadScan(eq("project-a"), eq(null), any()))
         .thenThrow(new BusinessException(ErrorCode.SCAN_EXECUTION_BUSY));
 
-    mockMvc.perform(multipart("/api/v1/projects/101/scans/upload")
+    mockMvc.perform(multipart("/api/v1/scans/upload")
+            .file(projectNamePart)
             .file(file))
         .andExpect(status().isTooManyRequests())
         .andExpect(jsonPath("$.code").value("SCAN_EXECUTION_BUSY"));
+  }
+
+  @Test
+  void requestUploadScanWhenProjectNameMissingReturns400() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+
+    MockMultipartFile file = new MockMultipartFile(
+        "files",
+        ".env",
+        "text/plain",
+        "A".getBytes(StandardCharsets.UTF_8)
+    );
+
+    when(uploadScanService.requestUploadScan(eq(null), eq(null), any()))
+        .thenThrow(new BusinessException(ErrorCode.INVALID_PARAMETER));
+
+    mockMvc.perform(multipart("/api/v1/scans/upload")
+            .file(file))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
   }
 
   private MockMvc buildMockMvc() {

@@ -12,9 +12,9 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.global.security.CurrentActorProvider;
-import com.ssafer.project.application.service.ProjectAuthorizationService;
 import com.ssafer.project.domain.entity.Project;
 import com.ssafer.project.domain.enums.ScanMode;
+import com.ssafer.project.domain.repository.ProjectRepository;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.ScanFailureReason;
 import com.ssafer.scan.domain.enums.ScanStatus;
@@ -37,7 +37,7 @@ class UploadScanServiceTest {
   @Mock
   private CurrentActorProvider currentActorProvider;
   @Mock
-  private ProjectAuthorizationService projectAuthorizationService;
+  private ProjectRepository projectRepository;
   @Mock
   private UploadScanFileValidator uploadScanFileValidator;
   @Mock
@@ -65,7 +65,7 @@ class UploadScanServiceTest {
     );
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
-    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(2001L, actor)).thenReturn(project);
+    when(projectRepository.findByUserIdAndDeletedAtIsNull(10L)).thenReturn(List.of(project));
     when(scanExecutionPermit.tryAcquire()).thenReturn(true);
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"scanName\":\"scan-1\"}");
     when(scanRepository.save(any(Scan.class))).thenAnswer(invocation -> {
@@ -75,7 +75,7 @@ class UploadScanServiceTest {
     });
     when(webUploadScanProcessor.process(any())).thenReturn(UploadScanProcessingResult.queued());
 
-    UploadScanResult result = uploadScanService.requestUploadScan(2001L, "scan-1", List.of(file));
+    UploadScanResult result = uploadScanService.requestUploadScan("project-a", "scan-1", List.of(file));
 
     assertThat(result.scanId()).isEqualTo(3001L);
     assertThat(result.status()).isEqualTo(ScanStatus.QUEUED);
@@ -93,6 +93,36 @@ class UploadScanServiceTest {
   }
 
   @Test
+  void requestUploadScanWhenProjectMissingCreatesNewProject() {
+    AuthenticatedActor actor = AuthenticatedActor.member(10L);
+    Project createdProject = new Project(10L, null, "project-a", null, ScanMode.AGENT, false);
+    ReflectionTestUtils.setField(createdProject, "id", 2001L);
+    MockMultipartFile file = new MockMultipartFile(
+        "files",
+        ".env",
+        "text/plain",
+        "A".getBytes(StandardCharsets.UTF_8)
+    );
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(projectRepository.findByUserIdAndDeletedAtIsNull(10L)).thenReturn(List.of());
+    when(projectRepository.save(any(Project.class))).thenReturn(createdProject);
+    when(scanExecutionPermit.tryAcquire()).thenReturn(true);
+    when(objectMapper.writeValueAsString(any())).thenReturn("{\"scanName\":\"scan-1\"}");
+    when(scanRepository.save(any(Scan.class))).thenAnswer(invocation -> {
+      Scan scan = invocation.getArgument(0);
+      ReflectionTestUtils.setField(scan, "id", 3001L);
+      return scan;
+    });
+    when(webUploadScanProcessor.process(any())).thenReturn(UploadScanProcessingResult.queued());
+
+    UploadScanResult result = uploadScanService.requestUploadScan("Project A", "scan-1", List.of(file));
+
+    assertThat(result.scanId()).isEqualTo(3001L);
+    verify(projectRepository).save(any(Project.class));
+  }
+
+  @Test
   void requestUploadScanWhenPermitBusyThrowsBusyError() {
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
     Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
@@ -105,10 +135,10 @@ class UploadScanServiceTest {
     );
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
-    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(2001L, actor)).thenReturn(project);
+    when(projectRepository.findByUserIdAndDeletedAtIsNull(10L)).thenReturn(List.of(project));
     when(scanExecutionPermit.tryAcquire()).thenReturn(false);
 
-    assertThatThrownBy(() -> uploadScanService.requestUploadScan(2001L, "scan-1", List.of(file)))
+    assertThatThrownBy(() -> uploadScanService.requestUploadScan("project-a", "scan-1", List.of(file)))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.SCAN_EXECUTION_BUSY);
@@ -131,12 +161,12 @@ class UploadScanServiceTest {
     );
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
-    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(2001L, actor)).thenReturn(project);
+    when(projectRepository.findByUserIdAndDeletedAtIsNull(10L)).thenReturn(List.of(project));
     org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.INVALID_PARAMETER))
         .when(uploadScanFileValidator)
         .validate(eq(List.of(file)));
 
-    assertThatThrownBy(() -> uploadScanService.requestUploadScan(2001L, "scan-1", List.of(file)))
+    assertThatThrownBy(() -> uploadScanService.requestUploadScan("project-a", "scan-1", List.of(file)))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.INVALID_PARAMETER);
@@ -159,7 +189,7 @@ class UploadScanServiceTest {
     );
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
-    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(2001L, actor)).thenReturn(project);
+    when(projectRepository.findByUserIdAndDeletedAtIsNull(10L)).thenReturn(List.of(project));
     when(scanExecutionPermit.tryAcquire()).thenReturn(true);
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"scanName\":\"scan-1\"}");
     when(scanRepository.save(any(Scan.class))).thenAnswer(invocation -> {
@@ -174,7 +204,7 @@ class UploadScanServiceTest {
         )
     );
 
-    UploadScanResult result = uploadScanService.requestUploadScan(2001L, "scan-1", List.of(file));
+    UploadScanResult result = uploadScanService.requestUploadScan("project-a", "scan-1", List.of(file));
 
     assertThat(result.scanId()).isEqualTo(3001L);
     assertThat(result.status()).isEqualTo(ScanStatus.RAW_UPLOADED);
