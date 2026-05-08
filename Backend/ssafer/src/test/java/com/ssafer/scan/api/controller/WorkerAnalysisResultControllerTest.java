@@ -80,6 +80,45 @@ class WorkerAnalysisResultControllerTest {
   }
 
   @Test
+  void reportAnalysisRunningStatusReturnsOkResponse() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    LocalDateTime requestedAt = LocalDateTime.of(2026, 4, 24, 15, 30);
+    LocalDateTime startedAt = requestedAt.plusMinutes(1);
+    LocalDateTime lastUpdatedAt = requestedAt.plusMinutes(2);
+
+    when(workerAnalysisResultCallbackService.report(anyLong(), any(WorkerAnalysisResultCallbackRequest.class))).thenReturn(
+        Scan.builder()
+            .id(1L)
+            .projectId(10L)
+            .requestActorType(RequestActorType.USER)
+            .scanMode(ScanMode.AGENT)
+            .status(ScanStatus.RUNNING)
+            .requestedAt(requestedAt)
+            .startedAt(startedAt)
+            .lastUpdatedAt(lastUpdatedAt)
+            .build());
+
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
+        100L,
+        ScanStatus.RUNNING,
+        null,
+        null,
+        null,
+        startedAt,
+        null,
+        lastUpdatedAt);
+
+    mockMvc.perform(post("/api/v1/internal/scans/1/analysis-results")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.scanId").value(1))
+        .andExpect(jsonPath("$.projectId").value(10))
+        .andExpect(jsonPath("$.scanMode").value("AGENT"))
+        .andExpect(jsonPath("$.status").value("RUNNING"));
+  }
+
+  @Test
   void reportAnalysisResultWithoutTaskIdReturnsBadRequest() throws Exception {
     MockMvc mockMvc = buildMockMvc();
 

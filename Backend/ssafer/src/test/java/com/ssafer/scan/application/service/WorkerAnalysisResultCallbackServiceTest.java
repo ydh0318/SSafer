@@ -2,6 +2,7 @@ package com.ssafer.scan.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -85,6 +86,37 @@ class WorkerAnalysisResultCallbackServiceTest {
     assertThat(eventCaptor.getValue()).isEqualTo(
         new WorkerAnalysisResultIngestionRequestedEvent(1L, agentTask.getId(), startedAt, completedAt)
     );
+  }
+
+  @Test
+  void reportRunningStatusMarksTaskRunningAndScanRunning() {
+    LocalDateTime requestedAt = LocalDateTime.of(2026, 4, 24, 15, 0);
+    LocalDateTime startedAt = requestedAt.plusMinutes(1);
+    LocalDateTime lastUpdatedAt = requestedAt.plusMinutes(2);
+    Scan scan = queuedScan(requestedAt);
+    AgentTask agentTask = sentTask(scan);
+
+    when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(scan));
+    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
+        100L,
+        ScanStatus.RUNNING,
+        null,
+        null,
+        null,
+        startedAt,
+        null,
+        lastUpdatedAt
+    );
+
+    Scan reported = workerAnalysisResultCallbackService.report(1L, request);
+
+    assertThat(reported).isSameAs(scan);
+    assertThat(scan.getStatus()).isEqualTo(ScanStatus.RUNNING);
+    assertThat(scan.getProgressStep()).isEqualTo("ANALYZING");
+    assertThat(agentTask.getTaskStatus()).isEqualTo(AgentTaskStatus.RUNNING);
+    verify(applicationEventPublisher, org.mockito.Mockito.never()).publishEvent(any());
   }
 
   @Test

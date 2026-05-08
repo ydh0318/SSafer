@@ -14,6 +14,7 @@ import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -22,9 +23,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
-// 워커 완료 콜백을 받아 task와 scan 상태를 적재 단계에 맞게 전이한다.
+// 워커 콜백을 받아 task와 scan 상태를 현재 단계에 맞게 올린다.
 public class WorkerAnalysisResultCallbackService {
 
+  private static final String RUNNING_PROGRESS_STEP = "ANALYZING";
   private static final String INGESTING_PROGRESS_STEP = "INGESTING_ANALYSIS_RESULT";
   private static final String FAILED_PROGRESS_STEP = "ANALYSIS_FAILED";
 
@@ -51,7 +53,14 @@ public class WorkerAnalysisResultCallbackService {
 
     validateResolvedTimeRange(startedAt, completedAt);
 
+    if (requestedStatus == ScanStatus.RUNNING) {
+      markTaskRunning(agentTask, lastUpdatedAt);
+      scan.markAnalysisRunning(resolveRunningProgressStep(request.progressStep()), startedAt, lastUpdatedAt);
+      return scan;
+    }
+
     if (requestedStatus == ScanStatus.FAILED) {
+      markTaskRunning(agentTask, lastUpdatedAt);
       markTaskFailed(agentTask, lastUpdatedAt, request.failureReason());
       scan.markAnalysisFailed(
           resolveFailureProgressStep(request.progressStep()),
@@ -63,10 +72,8 @@ public class WorkerAnalysisResultCallbackService {
       return scan;
     }
 
-    // 성공 콜백은 바로 적재를 끝내지 않고, 커밋 후 비동기 적재 이벤트만 발행한다.
-    if (agentTask.getTaskStatus() == AgentTaskStatus.SENT) {
-      agentTask.markAcked(toInstant(lastUpdatedAt));
-    }
+    // 성공 콜백은 결과 파일 경로만 기록하고, 실제 적재는 비동기 이벤트로 넘긴다.
+    markTaskAcked(agentTask, lastUpdatedAt);
     scan.markAnalysisQueuedForIngestion(
         resolveIngestingProgressStep(request.progressStep()),
         request.analysisResultPath().trim(),
@@ -111,8 +118,8 @@ public class WorkerAnalysisResultCallbackService {
   }
 
   private void validateRequestedStatus(ScanStatus status, WorkerAnalysisResultCallbackRequest request) {
-    if (status != ScanStatus.DONE && status != ScanStatus.FAILED) {
-      throw new ResponseStatusException(BAD_REQUEST, "Analysis result callback only supports DONE or FAILED status");
+    if (status != ScanStatus.RUNNING && status != ScanStatus.DONE && status != ScanStatus.FAILED) {
+      throw new ResponseStatusException(BAD_REQUEST, "Analysis result callback only supports RUNNING, DONE or FAILED status");
     }
 
     if (status == ScanStatus.DONE && !hasText(request.analysisResultPath())) {
@@ -124,13 +131,20 @@ public class WorkerAnalysisResultCallbackService {
     }
   }
 
-  private void markTaskFailed(AgentTask agentTask, LocalDateTime lastUpdatedAt, String failureReason) {
+  private void markTaskAcked(AgentTask agentTask, LocalDateTime lastUpdatedAt) {
     if (agentTask.getTaskStatus() == AgentTaskStatus.SENT) {
       agentTask.markAcked(toInstant(lastUpdatedAt));
     }
+  }
+
+  private void markTaskRunning(AgentTask agentTask, LocalDateTime lastUpdatedAt) {
+    markTaskAcked(agentTask, lastUpdatedAt);
     if (agentTask.getTaskStatus() == AgentTaskStatus.ACKED) {
       agentTask.markRunning(toInstant(lastUpdatedAt));
     }
+  }
+
+  private void markTaskFailed(AgentTask agentTask, LocalDateTime lastUpdatedAt, String failureReason) {
     agentTask.markFailed(toInstant(lastUpdatedAt), normalizeBlank(failureReason));
   }
 
@@ -180,6 +194,10 @@ public class WorkerAnalysisResultCallbackService {
     }
   }
 
+  private String resolveRunningProgressStep(String progressStep) {
+    return hasText(progressStep) ? progressStep : RUNNING_PROGRESS_STEP;
+  }
+
   private String resolveFailureProgressStep(String progressStep) {
     return hasText(progressStep) ? progressStep : FAILED_PROGRESS_STEP;
   }
@@ -189,7 +207,7 @@ public class WorkerAnalysisResultCallbackService {
   }
 
   private Instant toInstant(LocalDateTime value) {
-    return value.atZone(java.time.ZoneId.systemDefault()).toInstant();
+    return value.atZone(ZoneId.systemDefault()).toInstant();
   }
 
   private String normalizeBlank(String value) {
