@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import FeatureBanner from '../../components/common/FeatureBanner';
 import FeatureInfoCard from '../../components/common/FeatureInfoCard';
+import PageBanner from '../../components/common/PageBanner';
 import { ROUTES } from '../../constants/routes';
 import { hasStoredMemberSession, isStoredGuestSession } from '../../features/auth/utils/session';
 import { getHistoryScans } from '../../features/history/api/history';
@@ -311,11 +312,7 @@ function HistoryPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {errorMessage ? (
-            <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{errorMessage}</div>
-          ) : noticeMessage ? (
-            <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{noticeMessage}</div>
-          ) : null}
+          {errorMessage ? <PageBanner message={errorMessage} tone="error" /> : noticeMessage ? <PageBanner message={noticeMessage} tone="success" /> : null}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <FeatureInfoCard eyebrow="전체 스캔" title={<div className="text-3xl font-black">{historyData.summary.totalScanCount}</div>} />

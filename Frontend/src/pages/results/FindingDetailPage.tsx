@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowLeft, ExternalLink, Send, Trophy, Wand2 } from 'luc
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
+import PageBanner from '../../components/common/PageBanner';
 import PixelGoose from '../../components/common/PixelGoose';
 import TypingBox from '../../components/common/TypingBox';
 import { ROUTES } from '../../constants/routes';
@@ -166,9 +167,7 @@ function FindingDetailPage() {
         결과 목록으로 돌아가기
       </Link>
 
-      {errorMessage ? (
-        <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{errorMessage}</div>
-      ) : null}
+      {errorMessage ? <PageBanner message={errorMessage} tone="error" /> : null}
 
       {isLoading ? (
         <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">
