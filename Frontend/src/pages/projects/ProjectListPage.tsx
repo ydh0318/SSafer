@@ -134,6 +134,15 @@ function ProjectListPage() {
   }, [setProjectsFromList]);
 
   useEffect(() => {
+    if (!createNotice) {
+      return;
+    }
+
+    toast.warning(createNotice.message, { durationMs: 2000 });
+    setCreateNotice(null);
+  }, [createNotice, toast]);
+
+  useEffect(() => {
     if (projects.length === 0) {
       setSelectedProjectId(null);
       return;
@@ -379,8 +388,6 @@ function ProjectListPage() {
           <PixelGoose mood="idle" size={92} />
         </div>
       </header>
-
-      {createNotice ? <PageBanner message={createNotice.message} tone={createNotice.tone} /> : null}
 
       <section className="space-y-4 pt-12">
         <div className="text-sm text-neutral-500">프로젝트</div>
