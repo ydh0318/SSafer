@@ -4,7 +4,7 @@
 
 Use `https://ssafer.co.kr` as the official user-facing production domain.
 
-The old SSAFY domain, `k14b105.p.ssafy.io`, may remain as an operational alias, but user login and OAuth flows should be validated against the official domain.
+The old SSAFY domain, `k14b105.p.ssafy.io`, remains as a redirect alias. It still needs its own valid certificate because HTTPS redirect can happen only after the TLS handshake succeeds.
 
 ## Problem
 
@@ -54,9 +54,11 @@ sudo certbot renew --dry-run --cert-name ssafer.co.kr
 
 ## NGINX Policy
 
-- `http://ssafer.co.kr` redirects to `https://ssafer.co.kr`.
+- HTTP requests for `ssafer.co.kr`, `www.ssafer.co.kr`, and `k14b105.p.ssafy.io` redirect directly to `https://ssafer.co.kr`.
 - `https://ssafer.co.kr` serves the React app and proxies `/api/`, `/n8n/`, and `/jenkins/`.
-- `https://k14b105.p.ssafy.io` redirects to `https://ssafer.co.kr`.
+- `https://k14b105.p.ssafy.io` keeps its own certificate and redirects to `https://ssafer.co.kr`.
+
+Do not remove the `k14b105.p.ssafy.io` certificate block while the domain can still receive HTTPS traffic. Without that certificate, browsers cannot complete TLS and NGINX cannot return the redirect response.
 
 ## OAuth/CORS Checklist
 
