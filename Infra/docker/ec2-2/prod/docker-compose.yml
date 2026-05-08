@@ -1,10 +1,11 @@
-# EC2 #2 prod: 분석 서버 (private IP만 사용, 외부 직접 접근 불가)
-# EC2 #1 Spring이 http://{EC2_2_PUBLIC_IP}:8000 으로 분석 요청
-# FastAPI가 ${SPRING_CALLBACK_URL} 으로 결과 콜백
+# EC2 #2 prod: AI 분석 서버
+# - EC2 #1 Spring -> EC2 #2 FastAPI: http://<EC2_2_PRIVATE_IP>:8000
+# - EC2 #2 Worker -> EC2 #1 RabbitMQ: <EC2_1_PRIVATE_IP>:5672
+# - EC2 #2 Worker -> EC2 #1 Spring callback: http://<EC2_1_PRIVATE_IP>:8080
 #
 # UFW 설정 (1회):
 #   sudo ufw allow 22/tcp
-#   sudo ufw allow from <EC2_1_PUBLIC_IP> to any port 8000 proto tcp
+#   sudo ufw allow from <EC2_1_PRIVATE_IP> to any port 8000 proto tcp
 #   sudo ufw enable
 
 name: ${COMPOSE_PROJECT_NAME:-ssafer-ec2-prod}
@@ -42,25 +43,20 @@ services:
     image: ${FASTAPI_IMAGE}
     container_name: ${FASTAPI_CONTAINER_NAME:-ssafer-fastapi}
     restart: ${RESTART_POLICY:-always}
-    env_file:
-      - path: ${FASTAPI_ENV_FILE:-.env}
-        required: true
     environment:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.1}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-600}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      SPRING_CALLBACK_URL: ${SPRING_CALLBACK_URL}
-      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      HASDATA_API_KEY: ${HASDATA_API_KEY}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
-      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
-      APP_SCAN_RAW_S3_BUCKET: ${APP_SCAN_RAW_S3_BUCKET}
+      APP_SCAN_RESULT_S3_BUCKET: ${APP_SCAN_RESULT_S3_BUCKET}
       APP_ANALYSIS_RESULT_S3_BUCKET: ${APP_ANALYSIS_RESULT_S3_BUCKET}
-      HASDATA_API_KEY: ${HASDATA_API_KEY}
     ports:
-      - "${FASTAPI_HOST_PORT:-8000}:8000"
+      - "${FASTAPI_HOST_BIND_IP:-0.0.0.0}:${FASTAPI_HOST_PORT:-8000}:8000"
     networks:
       - ec2-internal
     depends_on:
@@ -78,6 +74,29 @@ services:
       timeout: 10s
       retries: 3
       start_period: 45s
+  
+  worker:
+    image: ${FASTAPI_IMAGE}
+    container_name: ${WORKER_CONTAINER_NAME:-ssafer-ai-worker}
+    restart: ${RESTART_POLICY:-always}
+    command: ["python", "-m", "app.worker.consumer"]
+    environment:
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_VIRTUAL_HOST: ${RABBITMQ_VIRTUAL_HOST:-/}
+      AGENT_TASK_SCAN_REQUEST_QUEUE: ${AGENT_TASK_SCAN_REQUEST_QUEUE:-ssafer.agent.scan.request}
+      FASTAPI_BASE_URL: ${FASTAPI_BASE_URL:-http://fastapi:8000}
+      SPRING_BASE_URL: ${SPRING_BASE_URL}
+      SPRING_API_SECRET: ${SPRING_API_SECRET}
+      APP_ANALYSIS_RESULT_S3_BUCKET: ${APP_ANALYSIS_RESULT_S3_BUCKET}
+      WORKER_HTTP_TIMEOUT_SECONDS: ${WORKER_HTTP_TIMEOUT_SECONDS:-600}
+    networks:
+      - ec2-internal
+    depends_on:
+      fastapi:
+        condition: service_healthy
 
 volumes:
   ollama-data:

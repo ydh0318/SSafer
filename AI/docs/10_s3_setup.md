@@ -31,7 +31,7 @@ S3 설정 단위 테스트 추가
 | 이름 | 기본값 | 설명 |
 | --- | --- | --- |
 | `AWS_REGION` | `ap-northeast-2` | S3 region |
-| `APP_SCAN_RAW_S3_BUCKET` | `AWS_S3_BUCKET` | scan_result.json 다운로드 bucket |
+| `APP_SCAN_RESULT_S3_BUCKET` | `AWS_S3_BUCKET` | scan_result.json 다운로드 bucket |
 | `APP_ANALYSIS_RESULT_S3_BUCKET` | `AWS_S3_BUCKET` | analysis_result.json 업로드 bucket |
 | `S3_MAX_RETRIES` | `2` | S3 다운로드/업로드 실패 시 추가 재시도 횟수 |
 | `S3_RETRY_BACKOFF_SECONDS` | `1` | S3 재시도 사이 대기 시간 |
@@ -52,7 +52,7 @@ AI 모듈에는 아래 예시 파일을 추가했습니다.
 dev 기준 bucket 값은 Infra 문서를 참고해 아래처럼 분리했습니다.
 
 ```text
-APP_SCAN_RAW_S3_BUCKET=ssafer-scan-storage-dev
+APP_SCAN_RESULT_S3_BUCKET=ssafer-scan-storage-dev
 APP_ANALYSIS_RESULT_S3_BUCKET=ssafer-scan-storage-dev
 ```
 
@@ -66,7 +66,7 @@ export AWS_SECRET_ACCESS_KEY=your-secret-key
 bucket을 분리하려면 아래 값을 추가합니다.
 
 ```bash
-export APP_SCAN_RAW_S3_BUCKET=ssafer-scan-storage-dev
+export APP_SCAN_RESULT_S3_BUCKET=ssafer-scan-storage-dev
 export APP_ANALYSIS_RESULT_S3_BUCKET=ssafer-scan-storage-dev
 ```
 
@@ -137,7 +137,7 @@ ok
 
 ## 6. scan_result.json 다운로드
 
-객체 key만 전달하면 `APP_SCAN_RAW_S3_BUCKET` bucket에서 다운로드합니다.
+객체 key만 전달하면 `APP_SCAN_RESULT_S3_BUCKET` bucket에서 다운로드합니다.
 
 ```python
 download_scan_result_json(
