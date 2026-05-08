@@ -1,6 +1,7 @@
 package com.ssafer.scan.api.dto;
 
 import com.ssafer.scan.domain.enums.FindingSourceType;
+import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.Severity;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -39,8 +40,12 @@ public record ScanFindingDetailResponse(
     String remediationGuide,
     @Schema(description = "원본 결과 일부 JSON")
     String rawSnippetJson,
+    @Schema(description = "워커가 전달한 패치 적용 payload JSON")
+    String patchPayloadJson,
     @Schema(description = "조치 상태", example = "OPEN")
     ResolutionStatus resolutionStatus,
+    @Schema(description = "패치 승인 주체 유형", example = "USER")
+    RequestActorType patchApprovedActorType,
     @Schema(description = "패치 승인 사용자 ID", example = "1")
     Long patchApprovedByUserId,
     @Schema(description = "패치 승인 시각", example = "2026-04-27T10:00:00")

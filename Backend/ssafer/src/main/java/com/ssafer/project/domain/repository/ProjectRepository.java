@@ -3,13 +3,18 @@ package com.ssafer.project.domain.repository;
 import com.ssafer.project.domain.entity.Project;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 
 public interface ProjectRepository extends JpaRepository<Project, Long> {
 
   Optional<Project> findByIdAndDeletedAtIsNull(Long projectId);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  Optional<Project> findWithLockByIdAndDeletedAtIsNull(Long projectId);
 
   Page<Project> findByUserIdAndDeletedAtIsNull(Long userId, Pageable pageable);
 

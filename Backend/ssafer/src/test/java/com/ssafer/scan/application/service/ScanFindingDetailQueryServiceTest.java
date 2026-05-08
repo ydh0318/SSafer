@@ -16,6 +16,7 @@ import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.RequestActorType;
+import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
@@ -78,7 +79,9 @@ class ScanFindingDetailQueryServiceTest {
         .attackScenario("Container escape")
         .remediationGuide("Use non-root user")
         .rawSnippetJson("{\"line\":2}")
+        .patchPayloadJson("{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}")
         .resolutionStatus(ResolutionStatus.OPEN)
+        .patchApprovedActorType(com.ssafer.scan.domain.enums.RequestActorType.USER)
         .patchApprovedByUserId(1L)
         .patchApprovedAt(LocalDateTime.of(2026, 4, 27, 10, 0))
         .patchResultMessage("Patch prepared")
@@ -104,6 +107,7 @@ class ScanFindingDetailQueryServiceTest {
     assertThat(response.category()).isEqualTo("CONFIG");
     assertThat(response.lineNumber()).isEqualTo(2);
     assertThat(response.ruleCode()).isEqualTo("DS-0002");
+    assertThat(response.patchApprovedActorType()).isEqualTo(RequestActorType.USER);
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);
   }
 

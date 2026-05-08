@@ -225,6 +225,8 @@ public class GlobalExceptionHandler {
       case INVALID_PARAMETER -> "Request parameter format is invalid.";
       case INVALID_PAYLOAD_HASH -> "payloadHash format is invalid.";
       case RAW_RESULT_NOT_FOUND -> "Raw result object was not found.";
+      case PATCH_PAYLOAD_NOT_FOUND -> "Patch payload is not available for this finding.";
+      case PATCH_APPROVAL_NOT_ALLOWED -> "Patch approval is not allowed for the current finding state.";
       case SCAN_STATUS_CONFLICT -> "Operation is not allowed for the current scan status.";
       case DUPLICATE_RAW_RESULT_UPLOAD -> "Raw result upload report was already submitted.";
       case INTERNAL_SERVER_ERROR -> "Internal server error.";
