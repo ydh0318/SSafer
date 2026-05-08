@@ -303,8 +303,27 @@ def test_server_audit_command_saves_result(tmp_path: Path, monkeypatch):
     result = CliRunner().invoke(app, ["server-audit", "--path", str(tmp_path), "--checks", "ports"])
 
     assert result.exit_code == 0
+    assert "Running server audit..." in result.output
     assert "서버 점검 결과 저장" in result.output
     assert (tmp_path / ".ssafer" / "server-audit" / "last_audit.txt").exists()
+
+
+def test_server_audit_command_prints_long_running_os_package_notice(tmp_path: Path, monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    monkeypatch.setattr(
+        audit_module,
+        "run_command",
+        lambda command: CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:5432 0.0.0.0:*"),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["server-audit", "--path", str(tmp_path), "--checks", "ports", "--include-os-packages"],
+    )
+
+    assert result.exit_code == 0
+    assert "Running server audit. OS package scan can take several minutes..." in result.output
 
 
 def test_server_audit_command_noninteractive_skips_sudo_prompt(tmp_path: Path, monkeypatch):
@@ -396,4 +415,5 @@ def test_server_audit_command_uploads_saved_result(tmp_path: Path, monkeypatch):
         "path": tmp_path,
         "api_url": "https://api.example.com",
     }
+    assert "Uploading server audit result..." in result.output
     assert "777" in result.output

@@ -4,10 +4,12 @@ from typing import Any
 
 import httpx
 import pytest
+from typer.testing import CliRunner
 
 from security_samples import scan_payload_with_trivy_secret, sanitized_scan_payload_with_trivy_secret
 import ssafer.main as main_module
 from ssafer.core import upload
+from ssafer.main import app
 
 
 def _write_scan(project_root: Path, scan: dict[str, Any]) -> None:
@@ -204,6 +206,16 @@ def test_upload_error_request_url_hides_s3_presigned_url():
         )
         == "S3 presigned upload URL hidden"
     )
+
+
+def test_upload_command_prints_progress_before_upload(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(main_module, "_upload_or_exit", lambda path, api_url=None: {"scanId": 1001})
+
+    result = CliRunner().invoke(app, ["upload", "--path", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert "Uploading scan result..." in result.output
+    assert "1001" in result.output
 
 
 def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
