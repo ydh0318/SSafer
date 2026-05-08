@@ -2,11 +2,11 @@
 
 ## API 선택 기준
 
-이번 단계에서는 서버 환경에서 빠르게 검증할 수 있도록 GMS를 먼저 사용합니다. GMS가 `claude-haiku-4-5-20251001` 모델을 OpenAI 호환 API로 제공한다면, 별도 Anthropic API Key 없이 GMS Key로 Claude 품질 비교를 진행할 수 있습니다.
+이번 단계에서는 서버 환경에서 빠르게 검증할 수 있도록 GMS를 먼저 사용합니다. GMS가 `claude-haiku-4-5-20251001` 모델을 Anthropic Messages API 호환 endpoint로 제공하므로, 별도 Anthropic API Key 없이 GMS Key로 Claude 품질 비교를 진행할 수 있습니다.
 
 Anthropic 공식 API는 이후 토큰 사용량, 과금, 모델 버전 통제, GMS 제약 확인이 필요할 때 추가 검증 경로로 사용합니다. 이 경우 Claude 앱 구독이 아니라 Anthropic Console에서 발급받은 API Key가 필요합니다.
 
-GMS 방식은 `OPENAI_API_BASE`를 GMS 주소로 바꾸고, LangChain에서는 OpenAI 호환 provider로 모델명을 전달하는 방식입니다.
+GMS 방식은 Anthropic Messages API 호환 endpoint를 사용합니다.
 
 따라서 이 프로젝트에서는 아래처럼 구분합니다.
 
@@ -27,7 +27,7 @@ ANTHROPIC_TEMPERATURE=0.1
 ANTHROPIC_TIMEOUT_SECONDS=600
 
 GMS_API_KEY=your_gms_api_key
-GMS_BASE_URL=https://gms.ssafy.io/gmsapi/api.openai.com/v1
+GMS_BASE_URL=https://gms.ssafy.io/gmsapi/api.anthropic.com
 GMS_MODEL=claude-haiku-4-5-20251001
 GMS_TEMPERATURE=0.1
 GMS_TIMEOUT_SECONDS=600
@@ -90,7 +90,7 @@ python scripts/compare_local_models.py \
   --models ollama:qwen2.5:3b gms:claude-haiku-4-5-20251001 anthropic:claude-3-5-haiku-latest
 ```
 
-GMS가 OpenAI 호환 API로 Claude를 감싸는 경우 `response_format={"type": "json_object"}`를 지원하지 않을 수 있습니다. 그래서 기본값은 `GMS_FORCE_JSON_RESPONSE_FORMAT=false`입니다. Fix Chain은 프롬프트에서 JSON만 출력하도록 요구하고, 응답 파서에서 JSON을 검증합니다.
+GMS Claude는 Anthropic Messages API 호환 endpoint를 사용합니다. 따라서 OpenAI 전용 `response_format={"type": "json_object"}`는 적용하지 않습니다. Fix Chain은 프롬프트에서 JSON만 출력하도록 요구하고, 응답 파서에서 JSON을 검증합니다.
 
 ## 결과 저장 형식
 

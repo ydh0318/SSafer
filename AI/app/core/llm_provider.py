@@ -155,6 +155,34 @@ class GmsProvider(LLMProvider):
         self.force_json_response_format = force_json_response_format
 
     def create_chat_model(self, response_format: str | None = None) -> Any:
+        if self._uses_anthropic_messages_api():
+            return self._create_anthropic_chat_model()
+        return self._create_openai_compatible_chat_model(response_format)
+
+    def _uses_anthropic_messages_api(self) -> bool:
+        return self.model.startswith("claude-")
+
+    def _create_anthropic_chat_model(self) -> Any:
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError as exc:
+            raise LLMConfigurationError(
+                "langchain-anthropic must be installed to use GMS Claude models."
+            ) from exc
+
+        api_key = self._get_api_key()
+        return ChatAnthropic(
+            model=self.model,
+            api_key=api_key,
+            base_url=self.base_url,
+            temperature=self.temperature,
+            timeout=self.timeout_seconds,
+        )
+
+    def _create_openai_compatible_chat_model(
+        self,
+        response_format: str | None = None,
+    ) -> Any:
         try:
             from langchain.chat_models import init_chat_model
         except ImportError as exc:
@@ -164,10 +192,7 @@ class GmsProvider(LLMProvider):
 
         import os
 
-        api_key = self.api_key or os.getenv("GMS_API_KEY") or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise LLMConfigurationError("GMS_API_KEY or OPENAI_API_KEY must be set.")
-
+        api_key = self._get_api_key()
         os.environ["OPENAI_API_KEY"] = api_key
         os.environ["OPENAI_API_BASE"] = self.base_url
         os.environ["OPENAI_BASE_URL"] = self.base_url
@@ -184,6 +209,14 @@ class GmsProvider(LLMProvider):
             model_provider="openai",
             **model_kwargs,
         )
+
+    def _get_api_key(self) -> str:
+        import os
+
+        api_key = self.api_key or os.getenv("GMS_API_KEY") or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise LLMConfigurationError("GMS_API_KEY or OPENAI_API_KEY must be set.")
+        return api_key
 
     def get_model_name(self) -> str:
         return self.model
