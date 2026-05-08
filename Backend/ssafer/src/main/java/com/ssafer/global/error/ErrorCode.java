@@ -71,6 +71,37 @@ public enum ErrorCode {
   ),
   EMAIL_DELIVERY_FAILED(HttpStatus.BAD_GATEWAY, "EMAIL_DELIVERY_FAILED", "Failed to deliver email"),
   INVALID_PARAMETER(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", "Request parameter format is invalid"),
+  FILE_COUNT_EXCEEDED(
+      HttpStatus.BAD_REQUEST,
+      "FILE_COUNT_EXCEEDED",
+      "Upload file count exceeded"
+  ),
+  UNSUPPORTED_FILE_TYPE(
+      HttpStatus.BAD_REQUEST,
+      "UNSUPPORTED_FILE_TYPE",
+      "Unsupported upload file type"
+  ),
+  PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", "Payload too large"),
+  SCAN_EXECUTION_BUSY(
+      HttpStatus.TOO_MANY_REQUESTS,
+      "SCAN_EXECUTION_BUSY",
+      "Scan execution is busy"
+  ),
+  SCAN_EXECUTION_FAILED(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      "SCAN_EXECUTION_FAILED",
+      "Scan execution failed"
+  ),
+  RAW_RESULT_UPLOAD_FAILED(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      "RAW_RESULT_UPLOAD_FAILED",
+      "Raw result upload failed"
+  ),
+  ANALYSIS_QUEUE_PUBLISH_FAILED(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      "ANALYSIS_QUEUE_PUBLISH_FAILED",
+      "Analysis queue publish failed"
+  ),
   INVALID_PAYLOAD_HASH(HttpStatus.BAD_REQUEST, "INVALID_PAYLOAD_HASH", "payloadHash format is invalid"),
   RAW_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "RAW_RESULT_NOT_FOUND", "Raw result object not found"),
   PATCH_PAYLOAD_NOT_FOUND(
