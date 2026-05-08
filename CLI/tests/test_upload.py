@@ -18,6 +18,14 @@ def _write_scan(project_root: Path, scan: dict[str, Any]) -> None:
     (results_dir / "last_scan.txt").write_text(scan_path.name, encoding="utf-8")
 
 
+def _write_server_audit(project_root: Path, audit: dict[str, Any]) -> None:
+    results_dir = project_root / ".ssafer" / "server-audit"
+    results_dir.mkdir(parents=True)
+    audit_path = results_dir / "local-server-audit.json"
+    audit_path.write_text(json.dumps(audit), encoding="utf-8")
+    (results_dir / "last_audit.txt").write_text(audit_path.name, encoding="utf-8")
+
+
 def test_upload_last_scan_registers_uploads_to_s3_and_reports_completion(tmp_path: Path, monkeypatch):
     scan = {
         "scanId": "local-scan-test",
@@ -103,6 +111,80 @@ def test_upload_last_scan_registers_uploads_to_s3_and_reports_completion(tmp_pat
                 "toolVersion": upload.__version__,
                 "resultCount": 2,
                 "payloadHash": upload._payload_hash(upload._scan_json_bytes(scan)),
+            },
+        ),
+    ]
+
+
+def test_upload_last_server_audit_uses_server_audit_scan_type(tmp_path: Path, monkeypatch):
+    audit = {
+        "auditId": "audit-test",
+        "source": "server-audit",
+        "artifacts": [],
+        "findings": [{"id": "SRV-0001"}],
+    }
+    _write_server_audit(tmp_path, audit)
+    calls: list[tuple[str, str, Any]] = []
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            assert timeout == 30
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            calls.append(("POST", url, json))
+            request = httpx.Request("POST", url)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 3001,
+                            "rawResultPath": "s3://ssafer/raw/3001/upload/server_audit.json",
+                            "rawUploadUrl": "https://s3.example.com/upload-server-audit",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(200, json={"scanId": 3001, "status": "RAW_UPLOADED"}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            calls.append(("PUT", url, json.loads(content.decode("utf-8"))))
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    response = upload.upload_last_server_audit(tmp_path, api_url="http://backend.test/")
+
+    assert response == {"scanId": 3001, "status": "RAW_UPLOADED"}
+    assert calls == [
+        (
+            "POST",
+            "http://backend.test/api/v1/scans",
+            {
+                "projectName": tmp_path.name,
+                "source": "SERVER_AUDIT",
+                "scanName": "SSAfer server audit " + tmp_path.name + " audit-test",
+                "targetPath": str(tmp_path),
+                "includeLogs": False,
+                "scanType": "SERVER_AUDIT",
+            },
+        ),
+        ("PUT", "https://s3.example.com/upload-server-audit", audit),
+        (
+            "POST",
+            "http://backend.test/api/v1/scans/3001/raw-results",
+            {
+                "tool": "ssafer-cli",
+                "toolVersion": upload.__version__,
+                "resultCount": 1,
+                "payloadHash": upload._payload_hash(upload._scan_json_bytes(audit)),
             },
         ),
     ]
@@ -226,6 +308,11 @@ upload:
 def test_upload_last_scan_requires_existing_scan(tmp_path: Path):
     with pytest.raises(RuntimeError, match="No local scan package found"):
         upload.upload_last_scan(tmp_path)
+
+
+def test_upload_last_server_audit_requires_existing_result(tmp_path: Path):
+    with pytest.raises(RuntimeError, match="No local server audit package found"):
+        upload.upload_last_server_audit(tmp_path)
 
 
 def test_upload_last_scan_blocks_unmasked_secret_before_backend_or_s3_requests(tmp_path: Path, monkeypatch):

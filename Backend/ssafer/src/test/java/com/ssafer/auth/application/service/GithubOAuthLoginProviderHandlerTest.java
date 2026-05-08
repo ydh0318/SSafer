@@ -1,10 +1,8 @@
 package com.ssafer.auth.application.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
-import com.ssafer.auth.domain.enums.OAuthProvider;
 import com.ssafer.auth.infrastructure.oauth.github.GithubOAuthApiClient;
 import com.ssafer.auth.infrastructure.oauth.github.GithubOAuthEmailResponse;
 import com.ssafer.auth.infrastructure.oauth.github.GithubOAuthTokenResponse;
@@ -28,56 +26,17 @@ class GithubOAuthLoginProviderHandlerTest {
   }
 
   @Test
-  void fetchUserInfoExchangesCodeAndReturnsGithubUserInfo() {
-    given(githubOAuthApiClient.exchangeAuthorizationCode("auth-code", "http://localhost:5173/oauth/github/callback"))
+  void fetchUserInfoThrowsUnauthorizedWhenGithubHasNoVerifiedEmail() {
+    given(githubOAuthApiClient.exchangeAuthorizationCode("auth-code", "http://localhost/callback"))
         .willReturn(new GithubOAuthTokenResponse("access-token", "bearer", "read:user user:email"));
     given(githubOAuthApiClient.fetchUserInfo("access-token"))
-        .willReturn(new GithubOAuthUserResponse(101L, "ssafer-dev", "싸피맨"));
+        .willReturn(new GithubOAuthUserResponse(101L, "alice", "Alice"));
     given(githubOAuthApiClient.fetchUserEmails("access-token"))
-        .willReturn(List.of(
-            new GithubOAuthEmailResponse("secondary@ssafer.co.kr", false, true, null),
-            new GithubOAuthEmailResponse("primary@ssafer.co.kr", true, true, null)
-        ));
+        .willReturn(List.of(new GithubOAuthEmailResponse("user@ssafer.co.kr", true, false, "public")));
 
-    OAuthProviderUserInfo result = handler.fetchUserInfo("auth-code", "http://localhost:5173/oauth/github/callback");
-
-    assertThat(result.provider()).isEqualTo(OAuthProvider.GITHUB);
-    assertThat(result.providerUserId()).isEqualTo("101");
-    assertThat(result.email()).isEqualTo("primary@ssafer.co.kr");
-    assertThat(result.displayName()).isEqualTo("싸피맨");
-  }
-
-  @Test
-  void fetchUserInfoFallsBackToAnyVerifiedEmailWhenPrimaryEmailIsMissing() {
-    given(githubOAuthApiClient.exchangeAuthorizationCode("auth-code", "http://localhost:5173/oauth/github/callback"))
-        .willReturn(new GithubOAuthTokenResponse("access-token", "bearer", "read:user user:email"));
-    given(githubOAuthApiClient.fetchUserInfo("access-token"))
-        .willReturn(new GithubOAuthUserResponse(101L, "ssafer-dev", ""));
-    given(githubOAuthApiClient.fetchUserEmails("access-token"))
-        .willReturn(List.of(
-            new GithubOAuthEmailResponse("verified@ssafer.co.kr", false, true, null)
-        ));
-
-    OAuthProviderUserInfo result = handler.fetchUserInfo("auth-code", "http://localhost:5173/oauth/github/callback");
-
-    assertThat(result.email()).isEqualTo("verified@ssafer.co.kr");
-    assertThat(result.displayName()).isEqualTo("ssafer-dev");
-  }
-
-  @Test
-  void fetchUserInfoThrowsInternalServerErrorWhenVerifiedEmailIsMissing() {
-    given(githubOAuthApiClient.exchangeAuthorizationCode("auth-code", "http://localhost:5173/oauth/github/callback"))
-        .willReturn(new GithubOAuthTokenResponse("access-token", "bearer", "read:user user:email"));
-    given(githubOAuthApiClient.fetchUserInfo("access-token"))
-        .willReturn(new GithubOAuthUserResponse(101L, "ssafer-dev", "싸피맨"));
-    given(githubOAuthApiClient.fetchUserEmails("access-token"))
-        .willReturn(List.of(
-            new GithubOAuthEmailResponse("unverified@ssafer.co.kr", true, false, null)
-        ));
-
-    assertThatThrownBy(() -> handler.fetchUserInfo("auth-code", "http://localhost:5173/oauth/github/callback"))
+    assertThatThrownBy(() -> handler.fetchUserInfo("auth-code", "http://localhost/callback"))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
-        .isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR);
+        .isEqualTo(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
   }
 }

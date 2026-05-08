@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { getApiFieldErrors } from '../../../api/error';
 import type { SignupFormValues } from '../../../types/auth';
 import { checkEmailAvailability, sendEmailVerificationCode } from '../api/member';
-import { getTooManyRequestsMessage } from '../utils/authError';
+import { getOAuthConfigMissingMessage, getTooManyRequestsMessage } from '../utils/authError';
+import { buildOAuthStartUrl } from '../utils/oauth';
 import { validateEmail } from '../utils/signup';
 import AuthButton from './AuthButton';
 import AuthField from './AuthField';
@@ -19,7 +20,7 @@ type SignupEmailPanelProps = {
 
 type FieldErrors = Partial<Record<keyof SignupFormValues, string>>;
 
-function GoogleMark() {
+export function GoogleMark() {
   return (
     <svg
       aria-hidden="true"
@@ -47,7 +48,7 @@ function GoogleMark() {
   );
 }
 
-function GithubMark() {
+export function GithubMark() {
   return (
     <svg
       aria-hidden="true"
@@ -69,10 +70,12 @@ function SignupEmailPanel({
 }: SignupEmailPanelProps) {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     const normalizedEmail = email.trim();
     const emailError = validateEmail(normalizedEmail);
+    setOauthError(null);
 
     if (emailError) {
       setFieldErrors({ email: emailError });
@@ -86,7 +89,7 @@ function SignupEmailPanel({
 
       if (!emailCheckResult.available) {
         setFieldErrors({
-          email: '이미 가입된 이메일 입니다.',
+          email: '이미 사용 중인 이메일입니다.',
         });
         return;
       }
@@ -104,15 +107,25 @@ function SignupEmailPanel({
         }));
       } else {
         setFieldErrors({
-          email: getTooManyRequestsMessage(
-            error,
-            '인증 번호 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
-          ),
+          email: getTooManyRequestsMessage(error, '이메일 인증 요청 중 문제가 발생했습니다. 다시 시도해 주세요.'),
         });
       }
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const beginOAuthLogin = (provider: 'GOOGLE' | 'GITHUB') => {
+    setOauthError(null);
+
+    const loginUrl = buildOAuthStartUrl(provider, 'login');
+
+    if (!loginUrl) {
+      setOauthError(getOAuthConfigMissingMessage(provider));
+      return;
+    }
+
+    window.location.assign(loginUrl);
   };
 
   return (
@@ -133,6 +146,7 @@ function SignupEmailPanel({
             label="EMAIL ADDRESS"
             onChange={(event) => {
               onEmailChange(event.target.value);
+              setOauthError(null);
               setFieldErrors((current) => ({ ...current, email: undefined }));
             }}
             placeholder="Email Address"
@@ -147,9 +161,19 @@ function SignupEmailPanel({
         </div>
 
         <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
-          <AuthSocialButton icon={<GithubMark />} label="Github로 시작하기" />
-          <AuthSocialButton icon={<GoogleMark />} label="Google로 시작하기" />
+          <AuthSocialButton
+            icon={<GithubMark />}
+            label="Github로 시작하기"
+            onClick={() => beginOAuthLogin('GITHUB')}
+          />
+          <AuthSocialButton
+            icon={<GoogleMark />}
+            label="Google로 시작하기"
+            onClick={() => beginOAuthLogin('GOOGLE')}
+          />
         </div>
+
+        {oauthError ? <p className="auth-body-text mt-4 text-[#b42318]">{oauthError}</p> : null}
 
         <div className="mt-[clamp(2.5rem,6vh,4.25rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
           <AuthButton isLoading={isSubmitting} type="submit">
@@ -157,7 +181,7 @@ function SignupEmailPanel({
           </AuthButton>
 
           <p className="auth-body-text text-black">
-            가입함으로써 팀 및 데이터 정책에 동의합니다.
+            이메일로 먼저 가입을 진행하거나 Google, GitHub 계정으로 바로 시작할 수 있습니다.
           </p>
         </div>
       </div>

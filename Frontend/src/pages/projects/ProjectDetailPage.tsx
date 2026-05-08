@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Bot, FolderOpen, ShieldCheck } from 'lucide-react';
+import { Activity, ArrowRight, Bot, FolderOpen, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
@@ -10,6 +10,8 @@ import { ROUTES } from '../../constants/routes';
 import { getProjectAgentStatus } from '../../features/agents/api/agents';
 import AgentStatusCard from '../../features/agents/components/AgentStatusCard';
 import { getProjectDetail } from '../../features/projects/api/projects';
+import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
+import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
 import {
   createScanRequest,
   deleteScanHistory,
@@ -69,6 +71,20 @@ function ProjectDetailPage() {
   const [isScanRequestSubmitting, setIsScanRequestSubmitting] = useState(false);
   const [lastCreatedScan, setLastCreatedScan] = useState<CreateScanResponseData | null>(null);
 
+  const {
+    closeDeleteModal,
+    confirmDelete,
+    errorMessage: deleteProjectError,
+    isDeleteModalOpen,
+    isDeleting: isDeletingProject,
+    openDeleteModal,
+    targetProject,
+  } = useProjectDeleteFlow({
+    onDeleted: () => {
+      navigate(ROUTES.projects, { replace: true });
+    },
+  });
+
   const activeScans = scans.filter((scan) => ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED'].includes(scan.status));
   const completedScans = scans.filter((scan) => scan.status === 'DONE');
   const failedScans = scans.filter((scan) => scan.status === 'FAILED' || scan.status === 'CANCELED');
@@ -97,11 +113,9 @@ function ProjectDetailPage() {
           projectName: data.name,
         }));
       } catch (error) {
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setProjectError(error instanceof Error ? error.message : '프로젝트 상세 정보를 불러오지 못했습니다.');
         }
-
-        setProjectError(error instanceof Error ? error.message : '프로젝트 상세 정보를 불러오지 못했습니다.');
       } finally {
         if (isMounted) {
           setIsProjectLoading(false);
@@ -130,18 +144,14 @@ function ProjectDetailPage() {
       try {
         const data = await getProjectAgentStatus(projectId);
 
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setAgentStatus(data);
         }
-
-        setAgentStatus(data);
       } catch (error) {
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setAgentStatus(null);
+          setAgentError(error instanceof Error ? error.message : 'Agent 상태를 불러오지 못했습니다.');
         }
-
-        setAgentStatus(null);
-        setAgentError(error instanceof Error ? error.message : '로컬 에이전트 상태를 불러오지 못했습니다.');
       } finally {
         if (isMounted) {
           setIsAgentLoading(false);
@@ -170,18 +180,14 @@ function ProjectDetailPage() {
       try {
         const data = await getProjectScans(projectId, scanFilters);
 
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setScans(data.items);
         }
-
-        setScans(data.items);
       } catch (error) {
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setScans([]);
+          setScanListError(error instanceof Error ? error.message : '스캔 목록을 불러오지 못했습니다.');
         }
-
-        setScans([]);
-        setScanListError(error instanceof Error ? error.message : '스캔 목록을 불러오지 못했습니다.');
       } finally {
         if (isMounted) {
           setIsScanListLoading(false);
@@ -209,7 +215,7 @@ function ProjectDetailPage() {
       setAgentStatus(data);
     } catch (error) {
       setAgentStatus(null);
-      setAgentError(error instanceof Error ? error.message : '로컬 에이전트 상태를 불러오지 못했습니다.');
+      setAgentError(error instanceof Error ? error.message : 'Agent 상태를 불러오지 못했습니다.');
     } finally {
       setIsAgentLoading(false);
     }
@@ -239,7 +245,7 @@ function ProjectDetailPage() {
       return;
     }
 
-    const shouldDelete = window.confirm(`스캔 #${scanId} 이력을 삭제하시겠습니까?`);
+    const shouldDelete = window.confirm(`스캔 #${scanId} 을(를) 삭제할까요?`);
 
     if (!shouldDelete) {
       return;
@@ -256,10 +262,10 @@ function ProjectDetailPage() {
         setLastCreatedScan(null);
       }
 
-      setScanListNotice(`스캔 #${scanId} 이력이 프로젝트 목록에서 삭제되었습니다.`);
+      setScanListNotice(`스캔 #${scanId} 이(가) 삭제되었습니다.`);
       await handleRefreshScans();
     } catch (error) {
-      setScanListError(error instanceof Error ? error.message : 'Failed to delete scan history.');
+      setScanListError(error instanceof Error ? error.message : '스캔 삭제에 실패했습니다.');
       setScanListNotice(null);
     } finally {
       setDeletingScanIds((current) => current.filter((value) => value !== scanId));
@@ -310,10 +316,10 @@ function ProjectDetailPage() {
 
       await handleRefreshScans();
       navigate(ROUTES.scanDetail.replace(':scanId', String(data.scanId)), {
-        state: { projectId, autoOpenedFromScanRequest: true },
+        state: { autoOpenedFromScanRequest: true, projectId },
       });
     } catch (error) {
-      setScanRequestError(error instanceof Error ? error.message : '스캔 요청 등록에 실패했습니다.');
+      setScanRequestError(error instanceof Error ? error.message : '스캔 요청 중 오류가 발생했습니다.');
     } finally {
       setIsScanRequestSubmitting(false);
     }
@@ -324,7 +330,7 @@ function ProjectDetailPage() {
       <section className="space-y-4">
         <p className="text-sm text-neutral-600">프로젝트 ID가 없습니다.</p>
         <Link className="inline-flex bg-black px-4 py-2 text-sm font-bold text-white" to={ROUTES.projects}>
-          프로젝트 목록으로 이동
+          프로젝트 목록으로 돌아가기
         </Link>
       </section>
     );
@@ -341,13 +347,23 @@ function ProjectDetailPage() {
             >
               프로젝트 목록
             </Link>
+            {projectDetail ? (
+              <button
+                className="inline-flex items-center gap-2 border border-rose-200 px-5 py-3 text-sm font-bold text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
+                onClick={() => openDeleteModal({ id: projectId, name: projectDetail.name })}
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+                프로젝트 삭제
+              </button>
+            ) : null}
             {lastCreatedScan ? (
               <Link
                 className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
                 state={{ projectId }}
                 to={ROUTES.scanDetail.replace(':scanId', String(lastCreatedScan.scanId))}
               >
-                최신 스캔 보기
+                최근 스캔 보기
                 <ArrowRight className="h-4 w-4" />
               </Link>
             ) : null}
@@ -359,27 +375,27 @@ function ProjectDetailPage() {
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-neutral-500">PROJECT STATUS</p>
                 <h2 className="mt-3 text-2xl font-black tracking-tight text-black">
-                  {isProjectLoading ? '프로젝트 불러오는 중...' : projectDetail?.name ?? '프로젝트 정보 없음'}
+                  {isProjectLoading ? '프로젝트를 불러오는 중…' : projectDetail?.name ?? '프로젝트를 찾을 수 없습니다'}
                 </h2>
               </div>
               <PixelGoose mood={activeScans.length > 0 ? 'working' : completedScans.length > 0 ? 'happy' : 'idle'} size={88} />
             </div>
             <p className="mt-4 text-sm leading-7 text-neutral-600">
-              {projectDetail?.description ?? '프로젝트 설명이 아직 등록되지 않았습니다.'}
+              {projectDetail?.description ?? '프로젝트 설명이 아직 없습니다.'}
             </p>
           </div>
         }
         description={
           <>
-            프로젝트 단위로 스캔 등록, 파일 업로드, 로컬 에이전트 상태 확인, 스캔 이력 확인을 모두 이 화면에서 이어서 처리합니다.
+            프로젝트 단위로 스캔 요청, Agent 상태, 업로드 흐름, 스캔 기록을 한 화면에서 관리할 수 있습니다.
           </>
         }
         eyebrow="PROJECT DETAIL"
         title={
           <>
-            스캔을 시작하고,
+            스캔을 실행하고,
             <br />
-            진행 이력을 프로젝트 안에서 관리합니다.
+            결과 흐름까지 한 번에 보는 프로젝트 화면입니다.
           </>
         }
       />
@@ -392,19 +408,19 @@ function ProjectDetailPage() {
 
       {lastCreatedScan ? (
         <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-          스캔 #{lastCreatedScan.scanId} 이(가) 등록되었습니다. 상태 화면으로 이동해 진행 상황을 확인할 수 있습니다.
+          스캔 #{lastCreatedScan.scanId} 생성이 완료되었습니다. 상세 화면에서 진행 상태를 바로 확인할 수 있습니다.
         </div>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard helper="현재 진행 중이거나 대기 중인 스캔 수입니다." label="진행 중 스캔" tone="sky" value={activeScans.length} />
-        <MetricCard helper="완료된 스캔 수입니다." label="완료된 스캔" tone="green" value={completedScans.length} />
-        <MetricCard helper="실패 또는 취소된 스캔 수입니다." label="주의 필요" tone="red" value={failedScans.length} />
+        <MetricCard helper="진행 중이거나 분석 대기 중인 스캔 수입니다." label="진행 중 스캔" tone="sky" value={activeScans.length} />
+        <MetricCard helper="결과를 확인할 수 있는 완료 스캔 수입니다." label="완료 스캔" tone="green" value={completedScans.length} />
+        <MetricCard helper="실패 또는 취소된 스캔 수입니다." label="실패/취소" tone="red" value={failedScans.length} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
         <SectionPanel
-          description="로컬 에이전트 실행형 스캔과 JSON 업로드형 스캔을 같은 폼에서 처리합니다. 기존 API 호출 구조는 유지됩니다."
+          description="Agent, CLI, 업로드 방식 중 하나를 골라 새 스캔을 생성할 수 있습니다."
           eyebrow="NEW SCAN"
           title="새 스캔 요청"
         >
@@ -435,13 +451,13 @@ function ProjectDetailPage() {
                 </dd>
               </div>
               <div className="flex items-start justify-between gap-4 border-t border-neutral-100 pt-3">
-                <dt className="font-semibold text-neutral-500">상태 추적</dt>
+                <dt className="font-semibold text-neutral-500">모니터링 상태</dt>
                 <dd className="text-right font-bold text-black">
                   {projectDetail ? formatBooleanLabel(projectDetail.monitorEnabled) : '-'}
                 </dd>
               </div>
               <div className="flex items-start justify-between gap-4 border-t border-neutral-100 pt-3">
-                <dt className="font-semibold text-neutral-500">누적 스캔 수</dt>
+                <dt className="font-semibold text-neutral-500">전체 스캔 수</dt>
                 <dd className="text-right font-bold text-black">{scans.length}</dd>
               </div>
             </dl>
@@ -451,9 +467,9 @@ function ProjectDetailPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#3ddc84]">WORKFLOW</p>
-                <h3 className="mt-3 text-xl font-black tracking-tight">등록 후에는 상태 화면으로 바로 이어집니다.</h3>
+                <h3 className="mt-3 text-xl font-black tracking-tight">스캔 실행부터 결과 확인까지 이어서 작업할 수 있습니다.</h3>
                 <p className="mt-3 text-sm leading-7 text-neutral-300">
-                  스캔 등록에 성공하면 스캔 진행 상태 페이지로 이동하고, 그 화면에서 자동 새로고침으로 현재 단계를 계속 확인할 수 있습니다.
+                  한 프로젝트 안에서 스캔 요청과 상태 확인을 반복하면서 같은 문맥으로 결과를 계속 관리할 수 있습니다.
                 </p>
               </div>
               <PixelGoose mood="working" size={72} />
@@ -464,9 +480,9 @@ function ProjectDetailPage() {
             <div className="inline-flex bg-black p-3 text-white">
               <ShieldCheck className="h-5 w-5" />
             </div>
-            <h3 className="mt-4 text-xl font-black tracking-tight text-black">업로드 전 확인할 점</h3>
+            <h3 className="mt-4 text-xl font-black tracking-tight text-black">업로드 파일 가이드</h3>
             <p className="mt-3 text-sm leading-7 text-neutral-600">
-              업로드 파일은 JSON 형식, 10MB 이하, 비어 있지 않은 파일만 허용됩니다. 오류가 있으면 요청 전에 프론트에서 먼저 알려줍니다.
+              업로드 방식은 JSON 결과 파일을 기준으로 동작하며, 형식이 맞지 않으면 시작 전에 바로 검증됩니다.
             </p>
           </article>
 
@@ -474,9 +490,9 @@ function ProjectDetailPage() {
             <div className="inline-flex bg-black p-3 text-white">
               <Bot className="h-5 w-5" />
             </div>
-            <h3 className="mt-4 text-xl font-black tracking-tight text-black">에이전트 연결 상태</h3>
+            <h3 className="mt-4 text-xl font-black tracking-tight text-black">Agent 연결 상태</h3>
             <p className="mt-3 text-sm leading-7 text-neutral-600">
-              아래 에이전트 상태 카드에서 온라인 여부와 최근 응답 시간을 확인한 뒤 로컬 에이전트 스캔을 요청하면 더 안정적으로 테스트할 수 있습니다.
+              Agent가 연결된 프로젝트는 서버 측 수집 기반으로 더 빠르게 다음 스캔을 이어갈 수 있습니다.
             </p>
           </article>
         </div>
@@ -507,13 +523,23 @@ function ProjectDetailPage() {
             <Activity className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-xl font-black tracking-tight text-black">현재 구현 범위</h3>
+            <h3 className="text-xl font-black tracking-tight text-black">운영 메모</h3>
             <p className="mt-3 text-sm leading-7 text-neutral-600">
-              이 화면은 기존에 연결된 프로젝트 상세, 에이전트 상태, 스캔 목록, 스캔 요청 API를 그대로 사용하면서 사용자 관점에서 더 보기 쉽게 재배치한 버전입니다.
+              이 화면은 프로젝트 상세, Agent 상태, 스캔 목록, 새 스캔 요청 API를 한 번에 엮어 확인하는 운영용 화면입니다.
             </p>
           </div>
         </div>
       </article>
+
+      {isDeleteModalOpen && targetProject ? (
+        <ProjectDeleteModal
+          errorMessage={deleteProjectError}
+          isDeleting={isDeletingProject}
+          onClose={closeDeleteModal}
+          onConfirm={() => void confirmDelete()}
+          projectName={targetProject.name}
+        />
+      ) : null}
     </section>
   );
 }

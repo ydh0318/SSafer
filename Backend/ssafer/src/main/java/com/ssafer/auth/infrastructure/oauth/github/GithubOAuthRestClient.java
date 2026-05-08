@@ -50,10 +50,12 @@ public class GithubOAuthRestClient implements GithubOAuthApiClient {
       return Objects.requireNonNull(response);
     } catch (RestClientResponseException ex) {
       log.error("GitHub OAuth token exchange failed. status={}, response={}", ex.getStatusCode(), ex.getResponseBodyAsString());
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw translateProviderResponse(ex);
+    } catch (BusinessException ex) {
+      throw ex;
     } catch (Exception ex) {
       log.error("GitHub OAuth token exchange request failed", ex);
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
     }
   }
 
@@ -69,10 +71,12 @@ public class GithubOAuthRestClient implements GithubOAuthApiClient {
       return Objects.requireNonNull(response);
     } catch (RestClientResponseException ex) {
       log.error("GitHub OAuth user info fetch failed. status={}, response={}", ex.getStatusCode(), ex.getResponseBodyAsString());
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw translateProviderResponse(ex);
+    } catch (BusinessException ex) {
+      throw ex;
     } catch (Exception ex) {
       log.error("GitHub OAuth user info request failed", ex);
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
     }
   }
 
@@ -89,20 +93,34 @@ public class GithubOAuthRestClient implements GithubOAuthApiClient {
       return Objects.requireNonNull(response);
     } catch (RestClientResponseException ex) {
       log.error("GitHub OAuth email fetch failed. status={}, response={}", ex.getStatusCode(), ex.getResponseBodyAsString());
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw translateProviderResponse(ex);
+    } catch (BusinessException ex) {
+      throw ex;
     } catch (Exception ex) {
       log.error("GitHub OAuth email request failed", ex);
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      throw new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
     }
   }
 
   private void validateConfigured() {
     if (isBlank(properties.getClientId()) || isBlank(properties.getClientSecret())) {
+      log.error(
+          "GitHub OAuth 설정이 누락되었습니다. clientIdConfigured={}, clientSecretConfigured={}",
+          !isBlank(properties.getClientId()),
+          !isBlank(properties.getClientSecret())
+      );
       throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
   }
 
   private boolean isBlank(String value) {
     return value == null || value.isBlank();
+  }
+
+  private BusinessException translateProviderResponse(RestClientResponseException ex) {
+    if (ex.getStatusCode().is4xxClientError()) {
+      return new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
+    }
+    return new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
   }
 }

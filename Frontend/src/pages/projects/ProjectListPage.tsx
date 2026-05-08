@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Upload, X } from 'lucide-react';
+import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -7,12 +7,19 @@ import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import { createProject, getProjects } from '../../features/projects/api/projects';
 import ProjectCreateForm from '../../features/projects/components/ProjectCreateForm';
-import { createScanRequest, getProjectScans, reportUploadedScanResult, uploadScanResultFile } from '../../features/scans/api/scans';
+import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
+import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
+import {
+  createScanRequest,
+  getProjectScans,
+  reportUploadedScanResult,
+  uploadScanResultFile,
+} from '../../features/scans/api/scans';
 import { formatCompactDateTime, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
 import { SCAN_UPLOAD_FILE_SIZE_LIMIT_MB, validateScanUploadFile } from '../../features/scans/utils/uploadValidation';
 import { useProjectStore } from '../../store/projectStore';
-import type { ProjectScanListItemData } from '../../types/scan';
 import type { CreateProjectFormValues, ProjectSummary } from '../../types/project';
+import type { ProjectScanListItemData } from '../../types/scan';
 
 type ScanModeOption = 'UPLOAD' | 'CLI' | 'AGENT';
 
@@ -33,15 +40,23 @@ const initialProjectForm: CreateProjectFormValues = {
 };
 
 const modeCards: Array<{
-  id: ScanModeOption;
-  icon: typeof Upload;
-  title: string;
   description: string;
+  icon: typeof Upload;
+  id: ScanModeOption;
+  title: string;
 }> = [
-  { id: 'UPLOAD', icon: Upload, title: '웹 업로드', description: '파일 끌어다 놓기' },
-  { id: 'CLI', icon: Terminal, title: 'CLI', description: '터미널 한 줄로 실행' },
-  { id: 'AGENT', icon: Server, title: 'Agent', description: '서버에서 바로 스캔' },
+  { id: 'UPLOAD', icon: Upload, title: '파일 업로드', description: 'raw 결과 JSON을 올려 바로 스캔을 시작합니다.' },
+  { id: 'CLI', icon: Terminal, title: 'CLI', description: 'CLI 결과를 연결해 빠르게 다음 단계로 넘깁니다.' },
+  { id: 'AGENT', icon: Server, title: 'Agent', description: '서버 Agent가 프로젝트를 직접 수집하도록 요청합니다.' },
 ];
+
+function getAgentTone(project: ProjectSummary, isSelected: boolean) {
+  if (!project.monitorEnabled) {
+    return isSelected ? 'text-neutral-400' : 'text-neutral-500';
+  }
+
+  return isSelected ? 'text-[#D4FC64]' : 'text-[#8CC319]';
+}
 
 function ProjectListPage() {
   const navigate = useNavigate();
@@ -54,7 +69,8 @@ function ProjectListPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createNotice, setCreateNotice] = useState<{ tone: 'success' | 'warning'; message: string } | null>(null);
+  const [createNotice, setCreateNotice] = useState<{ message: string; tone: 'success' | 'warning' } | null>(null);
+  const [projectActionNotice, setProjectActionNotice] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<ScanModeOption>('UPLOAD');
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
@@ -66,6 +82,20 @@ function ProjectListPage() {
   const [latestCompletedScans, setLatestCompletedScans] = useState<LatestCompletedScanMap>({});
   const [isLoadingCompletedScans, setIsLoadingCompletedScans] = useState(false);
 
+  const {
+    closeDeleteModal,
+    confirmDelete,
+    errorMessage: deleteProjectError,
+    isDeleteModalOpen,
+    isDeleting: isDeletingProject,
+    openDeleteModal,
+    targetProject,
+  } = useProjectDeleteFlow({
+    onDeleted: (project) => {
+      setProjectActionNotice(`${project.name} 프로젝트가 삭제되었습니다.`);
+    },
+  });
+
   useEffect(() => {
     let isMounted = true;
 
@@ -76,17 +106,13 @@ function ProjectListPage() {
       try {
         const data = await getProjects();
 
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setProjectsFromList(data.items, data.totalElements, data.totalPages);
         }
-
-        setProjectsFromList(data.items, data.totalElements, data.totalPages);
       } catch (error) {
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setLoadError(error instanceof Error ? error.message : '프로젝트 목록을 불러오지 못했습니다.');
         }
-
-        setLoadError(error instanceof Error ? error.message : '프로젝트 목록을 불러오지 못했습니다.');
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -162,11 +188,9 @@ function ProjectListPage() {
 
         setLatestCompletedScans(nextMap);
       } catch {
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setLatestCompletedScans({});
         }
-
-        setLatestCompletedScans({});
       } finally {
         if (isMounted) {
           setIsLoadingCompletedScans(false);
@@ -186,10 +210,6 @@ function ProjectListPage() {
     [projects, selectedProjectId],
   );
 
-  const navigateToProjectDetail = (projectId: string) => {
-    navigate(ROUTES.projectDetail.replace(':projectId', projectId));
-  };
-
   const completedProjectEntries = useMemo(
     () =>
       projects
@@ -200,10 +220,7 @@ function ProjectListPage() {
             return null;
           }
 
-          return {
-            project,
-            latestCompleted,
-          };
+          return { latestCompleted, project };
         })
         .filter((item): item is NonNullable<typeof item> => item !== null)
         .sort((left, right) => {
@@ -233,11 +250,10 @@ function ProjectListPage() {
   const handleCreateProject = async () => {
     setCreateError(null);
     setCreateNotice(null);
+    setProjectActionNotice(null);
 
-    const uploadFile = createUploadFile;
-
-    if (uploadFile) {
-      const validationError = validateScanUploadFile(uploadFile);
+    if (createUploadFile) {
+      const validationError = validateScanUploadFile(createUploadFile);
 
       if (validationError) {
         setCreateError(validationError);
@@ -258,7 +274,7 @@ function ProjectListPage() {
         scans: 0,
         lastStatus: 'NEW',
         risk: 'LOW',
-        description: projectDescription || '설명이 아직 없는 프로젝트입니다.',
+        description: projectDescription || '프로젝트 설명이 아직 없습니다.',
         defaultScanMode: formValues.defaultScanMode,
         monitorEnabled: formValues.monitorEnabled,
         createdAt: new Date().toISOString(),
@@ -269,7 +285,7 @@ function ProjectListPage() {
       resetCreateForm();
       setIsCreateOpen(false);
 
-      if (uploadFile) {
+      if (createUploadFile) {
         try {
           const scanData = await createScanRequest({
             projectName,
@@ -278,11 +294,11 @@ function ProjectListPage() {
             includeLogs: false,
           });
 
-          await uploadScanResultFile(scanData.rawUploadUrl, uploadFile);
-          await reportUploadedScanResult(scanData.scanId, uploadFile);
+          await uploadScanResultFile(scanData.rawUploadUrl, createUploadFile);
+          await reportUploadedScanResult(scanData.scanId, createUploadFile);
 
           navigate(ROUTES.scanDetail.replace(':scanId', String(scanData.scanId)), {
-            state: { projectId: nextProject.id, autoOpenedFromScanRequest: true },
+            state: { autoOpenedFromScanRequest: true, projectId: nextProject.id },
           });
           return;
         } catch (error) {
@@ -290,16 +306,16 @@ function ProjectListPage() {
             tone: 'warning',
             message:
               error instanceof Error
-                ? `프로젝트는 생성됐지만 초기 스캔 시작은 실패했습니다. ${error.message}`
-                : '프로젝트는 생성됐지만 초기 스캔 시작은 실패했습니다.',
+                ? `프로젝트는 생성됐지만 첫 스캔 시작에는 실패했습니다. ${error.message}`
+                : '프로젝트는 생성됐지만 첫 스캔 시작에는 실패했습니다.',
           });
           return;
         }
       }
 
-      setCreateNotice({ tone: 'success', message: '프로젝트를 만들었습니다.' });
+      setCreateNotice({ tone: 'success', message: '프로젝트가 생성되었습니다.' });
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : '프로젝트 생성에 실패했습니다.');
+      setCreateError(error instanceof Error ? error.message : '프로젝트 생성 중 오류가 발생했습니다.');
     } finally {
       setIsCreating(false);
     }
@@ -311,10 +327,8 @@ function ProjectListPage() {
       return;
     }
 
-    const uploadFile = selectedUploadFile;
-
     if (selectedMode === 'UPLOAD') {
-      const validationError = validateScanUploadFile(uploadFile);
+      const validationError = validateScanUploadFile(selectedUploadFile);
 
       if (validationError) {
         setScanError(validationError);
@@ -328,36 +342,37 @@ function ProjectListPage() {
     try {
       const scanData = await createScanRequest({
         projectName: selectedProject.name,
-        source: selectedMode === 'CLI' || selectedMode === 'UPLOAD' ? 'CLI' : undefined,
+        source: selectedMode === 'AGENT' ? undefined : 'CLI',
         scanName: `${selectedProject.name} ${selectedMode} 스캔`,
         includeLogs: false,
       });
 
-      if (selectedMode === 'UPLOAD' && uploadFile) {
-        await uploadScanResultFile(scanData.rawUploadUrl, uploadFile);
-        await reportUploadedScanResult(scanData.scanId, uploadFile);
+      if (selectedMode === 'UPLOAD' && selectedUploadFile) {
+        await uploadScanResultFile(scanData.rawUploadUrl, selectedUploadFile);
+        await reportUploadedScanResult(scanData.scanId, selectedUploadFile);
       }
 
       navigate(ROUTES.scanDetail.replace(':scanId', String(scanData.scanId)), {
-        state: { projectId: selectedProject.id, autoOpenedFromScanRequest: true },
+        state: { autoOpenedFromScanRequest: true, projectId: selectedProject.id },
       });
     } catch (error) {
-      setScanError(error instanceof Error ? error.message : '스캔 시작에 실패했습니다.');
+      setScanError(error instanceof Error ? error.message : '스캔 시작 중 오류가 발생했습니다.');
     } finally {
       setIsStartingScan(false);
     }
   };
 
   return (
-    <section className="space-y-12">
-      <header className="flex items-start justify-between gap-8">
-        <div>
-          <p className="font-mono text-sm tracking-[0.18em] text-neutral-400">STEP 1 of 2</p>
-          <h1 className="mt-7 text-5xl font-black leading-none tracking-[-0.04em] text-[#080B16] md:text-7xl">
+    <section className="space-y-10">
+      <header className="flex items-start justify-between gap-6">
+        <div className="min-w-0">
+          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">
             뭐 스캔할까요?
           </h1>
         </div>
-        <PixelGoose mood="idle" size={92} />
+        <div className="shrink-0">
+          <PixelGoose mood="idle" size={92} />
+        </div>
       </header>
 
       {createNotice ? (
@@ -372,27 +387,33 @@ function ProjectListPage() {
         </div>
       ) : null}
 
-      <section>
-        <div className="mb-5 text-sm text-neutral-500">프로젝트</div>
+      {projectActionNotice ? (
+        <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{projectActionNotice}</div>
+      ) : null}
+
+      <section className="space-y-4 pt-12">
+        <div className="text-sm text-neutral-500">프로젝트</div>
+
         {isLoading ? (
           <div className="bg-white px-5 py-4 text-sm text-neutral-500">프로젝트 목록을 불러오는 중입니다.</div>
         ) : loadError ? (
           <div className="border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{loadError}</div>
         ) : (
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-stretch gap-3">
             {projects.map((project) => {
               const isSelected = project.id === selectedProjectId;
-              const agentLabel = project.monitorEnabled ? '● Agent' : '○ Agent';
 
               return (
                 <button
-                  className={`inline-flex min-h-14 items-center gap-3 px-6 text-left text-base font-black transition ${
+                  className={`inline-flex min-h-[98px] min-w-[260px] items-center gap-3 px-8 text-left text-base font-black transition ${
                     isSelected ? 'bg-[#111111] text-white' : 'bg-white text-black hover:bg-neutral-50'
                   }`}
                   key={project.id}
                   onClick={() => {
+                    setProjectActionNotice(null);
+
                     if (isSelected) {
-                      navigateToProjectDetail(project.id);
+                      navigate(ROUTES.projectDetail.replace(':projectId', project.id));
                       return;
                     }
 
@@ -400,54 +421,69 @@ function ProjectListPage() {
                   }}
                   type="button"
                 >
-                  <span>{project.name}</span>
-                  <span
-                    className={`text-xs font-bold ${
-                      project.monitorEnabled ? (isSelected ? 'text-[#D4FC64]' : 'text-[#74A800]') : 'text-neutral-400'
-                    }`}
-                  >
-                    {agentLabel}
+                  <span className="truncate text-[clamp(1.35rem,2vw,1.85rem)]">{project.name}</span>
+                  <span className={`shrink-0 text-sm font-bold ${getAgentTone(project, isSelected)}`}>
+                    {project.monitorEnabled ? '● Agent' : '○ Agent'}
                   </span>
                 </button>
               );
             })}
+
             <button
-              className="inline-flex min-h-14 items-center gap-2 border border-dashed border-neutral-300 bg-white px-6 text-base font-black transition hover:border-black"
+              className="inline-flex min-h-[98px] min-w-[160px] items-center justify-center gap-2 border border-dashed border-neutral-300 bg-white px-8 text-[1.9rem] font-black text-[#111111] transition hover:border-black"
               onClick={() => setIsCreateOpen(true)}
               type="button"
             >
-              <Plus className="h-4 w-4" /> 새로
+              <Plus className="h-7 w-7" />
+              새로
             </button>
           </div>
         )}
+
+        {selectedProject ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+              onClick={() => navigate(ROUTES.projectDetail.replace(':projectId', selectedProject.id))}
+              type="button"
+            >
+              프로젝트 상세
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
+              onClick={() => openDeleteModal({ id: selectedProject.id, name: selectedProject.name })}
+              type="button"
+            >
+              <Trash2 className="h-4 w-4" />
+              프로젝트 삭제
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <section className="space-y-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="text-sm text-neutral-500">완료된 스캔</div>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-[#080B16]">최근 결과가 있는 프로젝트</h2>
+            <div className="text-sm text-neutral-500">최근 결과</div>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-[#080B16]">status 카드</h2>
           </div>
-          <p className="text-sm text-neutral-500">프로젝트를 누르면 가장 최근에 완료된 결과 화면으로 바로 이동합니다.</p>
+          <p className="text-sm text-neutral-500">완료된 프로젝트 카드에서도 같은 삭제 모달을 그대로 사용합니다.</p>
         </div>
 
         {isLoadingCompletedScans ? (
-          <div className="theme-dark-soft-card border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500">
-            완료된 스캔 목록을 불러오는 중입니다.
-          </div>
+          <div className="border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500">최근 결과를 불러오는 중입니다.</div>
         ) : completedProjectEntries.length === 0 ? (
-          <div className="theme-dark-soft-card border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600">
-            아직 결과 화면으로 연결할 완료 스캔이 없습니다.
-          </div>
+          <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600">완료된 스캔이 있는 프로젝트가 아직 없습니다.</div>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
             {completedProjectEntries.map(({ project, latestCompleted }) => {
-              const resultPath = ROUTES.resultDetail.replace(':scanId', String(latestCompleted.scan.scanId));
               const detailPath = ROUTES.projectDetail.replace(':projectId', project.id);
+              const resultPath = ROUTES.resultDetail.replace(':scanId', String(latestCompleted.scan.scanId));
 
               return (
                 <button
-                  className="theme-dark-soft-card flex flex-col gap-5 border border-black/5 bg-white p-6 text-left transition hover:-translate-y-0.5 hover:border-black/15"
+                  className="flex flex-col gap-5 border border-black/5 bg-white p-6 text-left transition hover:-translate-y-0.5 hover:border-black/15"
                   key={project.id}
                   onClick={() => navigate(resultPath, { state: { projectId: project.id } })}
                   type="button"
@@ -476,9 +512,7 @@ function ProjectListPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <span className="theme-accent-card inline-flex items-center bg-[#D4FC64] px-3 py-2 text-sm font-bold !text-black">
-                      결과 보기
-                    </span>
+                    <span className="inline-flex items-center bg-[#D4FC64] px-3 py-2 text-sm font-bold text-black">결과 보기</span>
                     <button
                       className="border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 transition hover:border-black hover:text-black"
                       onClick={(event) => {
@@ -490,15 +524,14 @@ function ProjectListPage() {
                       프로젝트 상세
                     </button>
                     <button
-                      aria-disabled="true"
-                      className="border border-dashed border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-400"
+                      className="border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
                       onClick={(event) => {
                         event.stopPropagation();
+                        openDeleteModal({ id: project.id, name: project.name });
                       }}
-                      title="결과 삭제 API 연결 후 바로 활성화할 버튼입니다."
                       type="button"
                     >
-                      결과 삭제 예정
+                      프로젝트 삭제
                     </button>
                   </div>
                 </button>
@@ -509,7 +542,7 @@ function ProjectListPage() {
       </section>
 
       <section>
-        <div className="mb-5 text-sm text-neutral-500">방식</div>
+        <div className="mb-5 text-sm text-neutral-500">방식 선택</div>
         <div className="grid gap-3 lg:grid-cols-3">
           {modeCards.map((mode) => {
             const Icon = mode.icon;
@@ -555,10 +588,10 @@ function ProjectListPage() {
             }}
           >
             <PixelGoose mood={isDragOver ? 'alert' : 'idle'} size={72} />
-            <h2 className="mt-8 text-3xl font-black tracking-tight">여기로 끌어다 놓으세요</h2>
+            <h2 className="mt-8 text-3xl font-black tracking-tight">JSON 파일을 끌어다 놓으세요</h2>
             <p className="mt-3 text-sm text-neutral-500">raw 결과 JSON 1개, 최대 {SCAN_UPLOAD_FILE_SIZE_LIMIT_MB}MB</p>
             <label className="mt-8 cursor-pointer text-base text-neutral-700 underline underline-offset-4 hover:text-black">
-              아니면 직접 고르기
+              컴퓨터에서 파일 선택
               <input
                 accept="application/json,.json"
                 className="sr-only"
@@ -579,12 +612,12 @@ function ProjectListPage() {
           <div className="min-h-[360px] bg-white p-10">
             <p className="font-mono text-[11px] tracking-[0.24em] text-neutral-400">{selectedMode}</p>
             <h2 className="mt-4 text-3xl font-black tracking-tight">
-              {selectedMode === 'CLI' ? '터미널 한 줄로 바로 실행하세요' : 'Agent가 연결된 서버에서 바로 시작합니다'}
+              {selectedMode === 'CLI' ? 'CLI 결과 업로드 흐름으로 진행합니다.' : 'Agent가 프로젝트를 직접 수집하도록 요청합니다.'}
             </h2>
             <p className="mt-4 max-w-xl text-sm leading-7 text-neutral-600">
               {selectedMode === 'CLI'
-                ? '선택한 프로젝트 이름으로 스캔을 등록하고, 로컬이나 CI 환경에서 raw 결과를 업로드하는 흐름입니다.'
-                : '프로젝트에 Agent가 연결되어 있다면 서버에서 바로 스캔을 시작하고 진행 상태를 이어서 볼 수 있습니다.'}
+                ? '로컬이나 CI에서 수집한 결과를 업로드하는 구조에 맞춰 빠르게 다음 단계로 넘길 수 있습니다.'
+                : '프로젝트에서 Agent가 활성화되어 있으면 서버 쪽 수집 흐름으로 바로 이어서 스캔을 시작할 수 있습니다.'}
             </p>
             <div className="mt-8 bg-neutral-950 p-5 font-mono text-sm text-[#D4FC64]">
               {selectedMode === 'CLI'
@@ -597,21 +630,21 @@ function ProjectListPage() {
         <aside className="space-y-4">
           <div className="bg-white p-8">
             <Lock className="h-6 w-6" />
-            <h3 className="mt-7 text-xl font-black">개인정보 안 새요</h3>
-            <p className="mt-4 text-sm leading-7 text-neutral-500">마스킹 후 폐기되고, 마스킹된 값만 분석에 사용됩니다.</p>
+            <h3 className="mt-7 text-xl font-black">보안상 중요한 입력</h3>
+            <p className="mt-4 text-sm leading-7 text-neutral-500">업로드 파일 형식과 프로젝트 설정이 맞는지 먼저 확인하고 시작하는 것이 가장 안전합니다.</p>
           </div>
           <div className="bg-[#111111] p-8 text-white">
-            <p className="font-mono text-[11px] tracking-[0.24em] text-[#D4FC64]">예상 시간</p>
+            <p className="font-mono text-[11px] tracking-[0.24em] text-[#D4FC64]">평균 응답 속도</p>
             <div className="mt-6 text-5xl font-black tracking-tight">~30초</div>
             <p className="mt-4 text-sm text-neutral-500">P95 기준</p>
           </div>
           <button
-            className="theme-accent-card inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-6 py-4 text-sm font-black !text-black transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-6 py-4 text-sm font-black text-black transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isStartingScan || !selectedProject}
             onClick={() => void handleStartScan()}
             type="button"
           >
-            {isStartingScan ? '스캔 시작 중' : selectedMode === 'UPLOAD' ? '업로드하고 스캔 시작' : '스캔 시작하기'}
+            {isStartingScan ? '스캔 시작 중' : selectedMode === 'UPLOAD' ? '파일 업로드 후 스캔 시작' : '스캔 시작하기'}
             {isStartingScan ? <Clock className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
           </button>
         </aside>
@@ -640,6 +673,16 @@ function ProjectListPage() {
             value={formValues}
           />
         </ModalFrame>
+      ) : null}
+
+      {isDeleteModalOpen && targetProject ? (
+        <ProjectDeleteModal
+          errorMessage={deleteProjectError}
+          isDeleting={isDeletingProject}
+          onClose={closeDeleteModal}
+          onConfirm={() => void confirmDelete()}
+          projectName={targetProject.name}
+        />
       ) : null}
 
       <button

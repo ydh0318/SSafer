@@ -9,10 +9,12 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class GithubOAuthLoginProviderHandler implements OAuthLoginProviderHandler {
 
   private final GithubOAuthApiClient githubOAuthApiClient;
@@ -26,7 +28,8 @@ public class GithubOAuthLoginProviderHandler implements OAuthLoginProviderHandle
   public OAuthProviderUserInfo fetchUserInfo(String authorizationCode, String redirectUri) {
     GithubOAuthTokenResponse tokenResponse = githubOAuthApiClient.exchangeAuthorizationCode(authorizationCode, redirectUri);
     if (tokenResponse.accessToken() == null || tokenResponse.accessToken().isBlank()) {
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      log.error("GitHub OAuth 토큰 교환 응답에 access token 이 없습니다.");
+      throw new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
     }
 
     GithubOAuthUserResponse userInfo = githubOAuthApiClient.fetchUserInfo(tokenResponse.accessToken());
@@ -34,7 +37,12 @@ public class GithubOAuthLoginProviderHandler implements OAuthLoginProviderHandle
     GithubOAuthEmailResponse verifiedEmail = resolveVerifiedEmail(emails);
 
     if (userInfo.id() == null || verifiedEmail == null || verifiedEmail.email() == null || verifiedEmail.email().isBlank()) {
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      log.warn(
+          "GitHub OAuth 사용자 정보가 유효하지 않습니다. userIdPresent={}, verifiedEmailPresent={}",
+          userInfo.id() != null,
+          verifiedEmail != null && verifiedEmail.email() != null && !verifiedEmail.email().isBlank()
+      );
+      throw new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
     }
 
     return new OAuthProviderUserInfo(

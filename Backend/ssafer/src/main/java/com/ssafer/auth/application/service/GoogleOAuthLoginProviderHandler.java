@@ -7,10 +7,12 @@ import com.ssafer.auth.infrastructure.oauth.google.GoogleOAuthUserInfoResponse;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class GoogleOAuthLoginProviderHandler implements OAuthLoginProviderHandler {
 
   private final GoogleOAuthApiClient googleOAuthApiClient;
@@ -24,7 +26,8 @@ public class GoogleOAuthLoginProviderHandler implements OAuthLoginProviderHandle
   public OAuthProviderUserInfo fetchUserInfo(String authorizationCode, String redirectUri) {
     GoogleOAuthTokenResponse tokenResponse = googleOAuthApiClient.exchangeAuthorizationCode(authorizationCode, redirectUri);
     if (tokenResponse.accessToken() == null || tokenResponse.accessToken().isBlank()) {
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      log.error("Google OAuth 토큰 교환 응답에 access token 이 없습니다.");
+      throw new BusinessException(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE);
     }
 
     GoogleOAuthUserInfoResponse userInfo = googleOAuthApiClient.fetchUserInfo(tokenResponse.accessToken());
@@ -34,7 +37,13 @@ public class GoogleOAuthLoginProviderHandler implements OAuthLoginProviderHandle
         || userInfo.email() == null
         || userInfo.email().isBlank()
         || !Boolean.TRUE.equals(userInfo.emailVerified())) {
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+      log.warn(
+          "Google OAuth 사용자 정보가 유효하지 않습니다. subPresent={}, emailPresent={}, emailVerified={}",
+          userInfo.sub() != null && !userInfo.sub().isBlank(),
+          userInfo.email() != null && !userInfo.email().isBlank(),
+          Boolean.TRUE.equals(userInfo.emailVerified())
+      );
+      throw new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
     }
 
     return new OAuthProviderUserInfo(

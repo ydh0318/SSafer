@@ -8,10 +8,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
+import com.ssafer.project.domain.enums.ScanMode;
 import com.ssafer.scan.api.dto.ProjectScanListItemResponse;
 import com.ssafer.scan.api.dto.ProjectScanListResponse;
+import com.ssafer.scan.api.dto.ProjectScanOptionsResponseData;
 import com.ssafer.scan.application.service.ProjectScanListQueryService;
-import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.application.service.ProjectScanOptionQueryService;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,19 +30,70 @@ class ProjectScanQueryControllerTest {
 
   @Mock
   private ProjectScanListQueryService projectScanListQueryService;
+  @Mock
+  private ProjectScanOptionQueryService projectScanOptionQueryService;
 
   @InjectMocks
   private ProjectScanQueryController projectScanQueryController;
 
   @Test
+  void getScanOptionsReturnsOk() throws Exception {
+    // defaultScanMode과 availableScanModes가 다를 수 있는 케이스를 응답으로 검증한다.
+    MockMvc mockMvc = buildMockMvc();
+    when(projectScanOptionQueryService.getScanOptions(101L))
+        .thenReturn(new ProjectScanOptionsResponseData(
+            ScanMode.AGENT,
+            List.of(ScanMode.UPLOAD),
+            true,
+            false
+        ));
+
+    mockMvc.perform(get("/api/v1/projects/101/scan-options"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("점검 옵션 조회 성공"))
+        .andExpect(jsonPath("$.data.defaultScanMode").value("AGENT"))
+        .andExpect(jsonPath("$.data.availableScanModes[0]").value("UPLOAD"))
+        .andExpect(jsonPath("$.data.monitorEnabled").value(true))
+        .andExpect(jsonPath("$.data.agentAvailable").value(false));
+  }
+
+  @Test
+  void getScanOptionsWhenForbiddenReturnsForbidden() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(projectScanOptionQueryService.getScanOptions(101L))
+        .thenThrow(new BusinessException(ErrorCode.FORBIDDEN));
+
+    mockMvc.perform(get("/api/v1/projects/101/scan-options"))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+  }
+
+  @Test
+  void getScanOptionsWhenProjectMissingReturnsNotFound() throws Exception {
+    MockMvc mockMvc = buildMockMvc();
+    when(projectScanOptionQueryService.getScanOptions(999L))
+        .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
+
+    mockMvc.perform(get("/api/v1/projects/999/scan-options"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+  }
+
+  @Test
   void getProjectScansReturnsOk() throws Exception {
     MockMvc mockMvc = buildMockMvc();
-    when(projectScanListQueryService.getProjectScans(101L, 0, 20, ScanStatus.DONE, ScanMode.AGENT))
+    when(projectScanListQueryService.getProjectScans(
+        101L,
+        0,
+        20,
+        ScanStatus.DONE,
+        com.ssafer.scan.domain.enums.ScanMode.AGENT
+    ))
         .thenReturn(new ProjectScanListResponse(
             List.of(new ProjectScanListItemResponse(
                 1001L,
                 ScanStatus.DONE,
-                ScanMode.AGENT,
+                com.ssafer.scan.domain.enums.ScanMode.AGENT,
                 LocalDateTime.of(2026, 4, 27, 9, 0),
                 LocalDateTime.of(2026, 4, 27, 9, 10)
             )),
