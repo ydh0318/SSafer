@@ -20,11 +20,18 @@ public class ScanResultJsonBuilder {
     this.objectMapper = objectMapper;
   }
 
-  public Path writeScanResultJson(Path workspace, Long scanId, List<UploadScanFinding> findings) {
-    // AI/Worker가 읽는 scan_result.json 계약(schemaVersion 0.1)에 맞춰 payload를 생성한다.
+  public Path writeScanResultJson(
+      Path workspace,
+      Long scanId,
+      String projectName,
+      List<UploadScanFinding> findings
+  ) {
+    // Worker가 읽는 scan_result.json 계약(schemaVersion 0.1)에 맞춰 payload를 만든다.
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("schemaVersion", "0.1");
     payload.put("scanId", UUID.randomUUID().toString());
+    // 업로드 요청의 프로젝트 식별값을 결과에 함께 남긴다.
+    payload.put("projectName", projectName);
     payload.put("source", "cli");
     payload.put("scannedAt", Instant.now().toString());
     payload.put("analysisStatus", "SUCCESS");
@@ -42,7 +49,7 @@ public class ScanResultJsonBuilder {
   }
 
   private List<Map<String, Object>> toFindingMaps(List<UploadScanFinding> findings) {
-    // 최종 출력 시 findingId를 연속 번호(FND-0001...)로 재정렬한다.
+    // 결과 파일의 findingId는 순번(FND-0001...)으로 다시 부여한다.
     List<Map<String, Object>> mappedFindings = new java.util.ArrayList<>();
     int index = 1;
     for (UploadScanFinding finding : findings) {

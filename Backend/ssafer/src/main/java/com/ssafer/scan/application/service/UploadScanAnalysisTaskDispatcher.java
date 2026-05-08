@@ -31,7 +31,16 @@ public class UploadScanAnalysisTaskDispatcher {
   private final ObjectMapper objectMapper;
 
   @Transactional
-  public void dispatch(Long scanId, Long projectId, String rawResultPath) {
+  public void dispatch(
+      Long scanId,
+      Long projectId,
+      String rawResultPath,
+      Integer resultCount,
+      String tool,
+      String toolVersion,
+      String payloadHash
+  ) {
+    // 업로드 경로도 기존 Worker 계약을 재사용하기 위해 AgentTask를 만들고 메시지를 발행한다.
     Project project = projectRepository.findById(projectId)
         .orElseThrow(() -> new IllegalStateException("Project not found for upload scan dispatch"));
     Scan scan = scanRepository.findById(scanId)
@@ -51,10 +60,10 @@ public class UploadScanAnalysisTaskDispatcher {
     ScanRequestTaskMessage message = ScanRequestTaskMessage.of(
         task,
         rawResultPath,
-        null,
-        null,
-        null,
-        null
+        resultCount,
+        tool,
+        toolVersion,
+        payloadHash
     );
 
     try {
@@ -68,6 +77,7 @@ public class UploadScanAnalysisTaskDispatcher {
   }
 
   private Agent loadOrCreateDispatchAgent(Project project) {
+    // 실제 로컬 에이전트와 무관한 내부 dispatch 용도 Agent를 재사용/생성한다.
     return agentRepository.findFirstByProjectId(project.getId())
         .orElseGet(() -> agentRepository.save(new Agent(
             project,

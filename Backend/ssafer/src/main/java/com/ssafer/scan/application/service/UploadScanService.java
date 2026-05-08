@@ -37,7 +37,7 @@ public class UploadScanService {
   private final ObjectMapper objectMapper;
 
   public UploadScanResult requestUploadScan(String projectName, String scanName, List<MultipartFile> files) {
-    // projectName 기준 프로젝트를 find-or-create 한 뒤, 기존 업로드 처리 파이프라인을 수행한다.
+    // projectName 기준으로 프로젝트를 find-or-create 하고 업로드 처리 파이프라인을 수행한다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     String normalizedProjectName = normalizeProjectName(projectName);
     if (normalizedProjectName == null) {
@@ -54,8 +54,15 @@ public class UploadScanService {
 
     try {
       Scan saved = scanRepository.save(buildRequestedScan(actor, project.getId(), scanName, files));
+      // scan_result.json에 실제 프로젝트 이름이 기록되도록 command에 함께 전달한다.
       UploadScanProcessingResult processingResult = webUploadScanProcessor.process(
-          new UploadScanProcessingCommand(saved.getId(), project.getId(), scanName, List.copyOf(files))
+          new UploadScanProcessingCommand(
+              saved.getId(),
+              project.getId(),
+              project.getName(),
+              scanName,
+              List.copyOf(files)
+          )
       );
 
       return new UploadScanResult(
@@ -70,7 +77,7 @@ public class UploadScanService {
   }
 
   private Project findOrCreateProject(AuthenticatedActor actor, String normalizedProjectName) {
-    // 동일 요청자 스코프 내에서 이름이 같으면 재사용한다.
+    // 동일 소유 범위 내 같은 이름 프로젝트가 있으면 재사용한다.
     Project matched = findProjectByNormalizedName(actor, normalizedProjectName);
     if (matched != null) {
       return matched;
@@ -98,7 +105,7 @@ public class UploadScanService {
   }
 
   private Project findProjectByNormalizedName(AuthenticatedActor actor, String normalizedProjectName) {
-    // 요청자 타입(USER/GUEST)에 따라 소유 범위를 분리해서 프로젝트를 조회한다.
+    // 요청자 타입(USER/GUEST)에 따라 소유 범위를 분리해 프로젝트를 조회한다.
     List<Project> candidates = actor.isMember()
         ? projectRepository.findByUserIdAndDeletedAtIsNull(actor.userId())
         : projectRepository.findByGuestOwnerKeyHashAndDeletedAtIsNull(actor.guestOwnerKeyHash());

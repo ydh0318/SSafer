@@ -2,7 +2,10 @@ package com.ssafer.scan.application.service;
 
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.scan.domain.enums.ScanFailureReason;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -21,11 +24,12 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
   private final UploadScanRawResultUploader uploadScanRawResultUploader;
   private final UploadScanAnalysisTaskDispatcher uploadScanAnalysisTaskDispatcher;
   private final UploadScanStatusUpdater uploadScanStatusUpdater;
+  private final UploadScanToolMetadata uploadScanToolMetadata;
 
   @Override
   public UploadScanProcessingResult process(UploadScanProcessingCommand command) {
     // 업로드 스캔 처리 순서:
-    // temp 저장 -> 1차 점검 -> scan_result.json 생성 -> S3 저장 -> MQ 발행 -> 상태 전이
+    // temp 저장 -> 1차 점검 -> scan_result.json 생성 -> S3 업로드 -> MQ 발행 -> 상태 전이
     Path workspace = null;
     try {
       workspace = tempWorkspaceManager.createWorkspace(command.scanId());
@@ -35,11 +39,27 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
       findings.addAll(customRuleScanner.scan(savedFiles));
       findings.addAll(trivyScanExecutor.scan(savedFiles));
 
-      Path resultPath = scanResultJsonBuilder.writeScanResultJson(workspace, command.scanId(), findings);
+      Path resultPath = scanResultJsonBuilder.writeScanResultJson(
+          workspace,
+          command.scanId(),
+          command.projectName(),
+          findings
+      );
+      // worker 추적 메타데이터(resultCount/tool/toolVersion/payloadHash)를 계산한다.
+      String payloadHash = calculatePayloadHash(resultPath);
+      int resultCount = findings.size();
       String rawResultPath = uploadScanRawResultUploader.upload(command.scanId(), resultPath);
       uploadScanStatusUpdater.markRawUploaded(command.scanId(), rawResultPath);
 
-      uploadScanAnalysisTaskDispatcher.dispatch(command.scanId(), command.projectId(), rawResultPath);
+      uploadScanAnalysisTaskDispatcher.dispatch(
+          command.scanId(),
+          command.projectId(),
+          rawResultPath,
+          resultCount,
+          uploadScanToolMetadata.toolName(),
+          uploadScanToolMetadata.toolVersion(),
+          payloadHash
+      );
       uploadScanStatusUpdater.markQueued(command.scanId());
 
       log.info(
@@ -85,5 +105,27 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
         ScanFailureReason.SCAN_EXECUTION_FAILED,
         ErrorCode.SCAN_EXECUTION_FAILED
     );
+  }
+
+  private String calculatePayloadHash(Path resultPath) {
+    try {
+      // 생성된 scan_result.json bytes 기준으로 sha256 해시를 계산한다.
+      byte[] content = Files.readAllBytes(resultPath);
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      byte[] hashed = digest.digest(content);
+      return "sha256:" + toHex(hashed);
+    } catch (NoSuchAlgorithmException ex) {
+      throw new IllegalStateException("SHA-256 is not available", ex);
+    } catch (Exception ex) {
+      throw new IllegalStateException("Failed to calculate scan_result.json payload hash", ex);
+    }
+  }
+
+  private String toHex(byte[] bytes) {
+    StringBuilder builder = new StringBuilder(bytes.length * 2);
+    for (byte value : bytes) {
+      builder.append(String.format("%02x", value));
+    }
+    return builder.toString();
   }
 }

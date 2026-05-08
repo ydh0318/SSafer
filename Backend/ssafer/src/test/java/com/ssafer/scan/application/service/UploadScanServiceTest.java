@@ -54,6 +54,7 @@ class UploadScanServiceTest {
 
   @Test
   void requestUploadScanCreatesRequestedScanAndReturnsQueued() {
+    // 기존 프로젝트가 있으면 재사용하고 REQUESTED 생성 후 processor 결과를 그대로 반환한다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
     Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
     ReflectionTestUtils.setField(project, "id", 2001L);
@@ -85,15 +86,21 @@ class UploadScanServiceTest {
     ArgumentCaptor<Scan> scanCaptor = ArgumentCaptor.forClass(Scan.class);
     verify(scanRepository).save(scanCaptor.capture());
     Scan saved = scanCaptor.getValue();
+    // Scan 엔티티가 업로드 모드(UPLOAD/REQUESTED)로 생성되는지 검증한다.
     assertThat(saved.getProjectId()).isEqualTo(2001L);
     assertThat(saved.getRequestedByUserId()).isEqualTo(10L);
     assertThat(saved.getScanMode()).isEqualTo(com.ssafer.scan.domain.enums.ScanMode.UPLOAD);
     assertThat(saved.getStatus()).isEqualTo(ScanStatus.REQUESTED);
+    ArgumentCaptor<UploadScanProcessingCommand> commandCaptor = ArgumentCaptor.forClass(UploadScanProcessingCommand.class);
+    verify(webUploadScanProcessor).process(commandCaptor.capture());
+    // scan_result.json 생성을 위해 프로젝트 이름이 processor command에 전달되어야 한다.
+    assertThat(commandCaptor.getValue().projectName()).isEqualTo("project-a");
     verify(scanExecutionPermit).release();
   }
 
   @Test
   void requestUploadScanWhenProjectMissingCreatesNewProject() {
+    // 동일 이름 프로젝트가 없으면 새 프로젝트를 생성한 뒤 업로드를 진행한다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
     Project createdProject = new Project(10L, null, "project-a", null, ScanMode.AGENT, false);
     ReflectionTestUtils.setField(createdProject, "id", 2001L);
@@ -124,6 +131,7 @@ class UploadScanServiceTest {
 
   @Test
   void requestUploadScanWhenPermitBusyThrowsBusyError() {
+    // permit 획득 실패 시 Scan 생성 없이 즉시 BUSY 에러를 반환해야 한다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
     Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
     ReflectionTestUtils.setField(project, "id", 2001L);
@@ -150,6 +158,7 @@ class UploadScanServiceTest {
 
   @Test
   void requestUploadScanWhenValidationFailsSkipsPermitAcquire() {
+    // 파일 검증에서 실패하면 permit 획득/Scan 생성/processor 호출을 모두 건너뛴다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
     Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
     ReflectionTestUtils.setField(project, "id", 2001L);
@@ -178,6 +187,7 @@ class UploadScanServiceTest {
 
   @Test
   void requestUploadScanWhenProcessingFailsAfterCreationReturnsFailurePayload() {
+    // Scan 생성 이후 단계에서 실패하면 scanId를 포함한 실패 payload를 반환한다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
     Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
     ReflectionTestUtils.setField(project, "id", 2001L);
