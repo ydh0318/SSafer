@@ -2,5 +2,6 @@ fastapi
 uvicorn[standard]
 langchain
 langchain-ollama
+langchain-anthropic
 boto3
 pika

@@ -6,13 +6,11 @@ import httpx
 from langchain_ollama import ChatOllama
 
 from app.core.config import (
-    OLLAMA_BASE_URL,
     OLLAMA_MAX_RETRIES,
-    OLLAMA_MODEL,
     OLLAMA_RETRY_BACKOFF_SECONDS,
-    OLLAMA_TEMPERATURE,
     OLLAMA_TIMEOUT_SECONDS,
 )
+from app.core.llm_provider import get_llm_provider
 
 
 class LLMCallError(RuntimeError):
@@ -24,13 +22,13 @@ class LLMTimeoutError(LLMCallError):
 
 
 def get_ollama_llm(response_format: str | None = None) -> ChatOllama:
-    return ChatOllama(
-        model=OLLAMA_MODEL,
-        base_url=OLLAMA_BASE_URL,
-        temperature=OLLAMA_TEMPERATURE,
-        format=response_format,
-        sync_client_kwargs={"timeout": OLLAMA_TIMEOUT_SECONDS},
-    )
+    provider = get_llm_provider("ollama")
+    provider.timeout_seconds = OLLAMA_TIMEOUT_SECONDS
+    return provider.create_chat_model(response_format=response_format)
+
+
+def get_llm(response_format: str | None = None) -> Any:
+    return get_llm_provider().create_chat_model(response_format=response_format)
 
 
 def is_timeout_error(exc: BaseException) -> bool:
