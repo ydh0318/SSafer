@@ -192,6 +192,116 @@ def test_agent_watch_command_uses_env_defaults(monkeypatch, tmp_path: Path):
     assert "No pending tasks." in result.output
 
 
+def test_agent_watch_command_uses_saved_agent_config(monkeypatch, tmp_path: Path):
+    calls = []
+
+    async def fake_watch_agent(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.delenv("SSAFER_AGENT_ID", raising=False)
+    monkeypatch.delenv("SSAFER_PROJECT_ID", raising=False)
+    monkeypatch.delenv("SSAFER_AGENT_TOKEN", raising=False)
+    monkeypatch.setattr(
+        "ssafer.core.auth.load_agent_config",
+        lambda: {
+            "endpoint": "https://api.example.com",
+            "agentId": 3,
+            "projectId": 10,
+            "agentToken": "raw-agent-token",
+        },
+    )
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
+
+    assert result.exit_code == 0
+    assert calls[0]["api_url"] == "https://api.example.com"
+    assert calls[0]["agent_id"] == 3
+    assert calls[0]["project_id"] == 10
+    assert calls[0]["agent_token"] == "raw-agent-token"
+
+
+def test_agent_command_starts_with_saved_agent_config(monkeypatch, tmp_path: Path):
+    calls = []
+
+    async def fake_watch_agent(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.delenv("SSAFER_AGENT_ID", raising=False)
+    monkeypatch.delenv("SSAFER_PROJECT_ID", raising=False)
+    monkeypatch.delenv("SSAFER_AGENT_TOKEN", raising=False)
+    monkeypatch.setattr(
+        "ssafer.core.auth.load_agent_config",
+        lambda: {
+            "endpoint": "https://api.example.com",
+            "agentId": 3,
+            "projectId": 10,
+            "agentToken": "raw-agent-token",
+        },
+    )
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent", "--path", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert calls[0]["api_url"] == "https://api.example.com"
+    assert calls[0]["agent_id"] == 3
+    assert calls[0]["project_id"] == 10
+    assert calls[0]["agent_token"] == "raw-agent-token"
+    assert calls[0]["once"] is False
+    assert calls[0]["reconnect"] is True
+    assert "Starting local agent." in result.output
+
+
+def test_agent_command_initializes_missing_agent_config(monkeypatch, tmp_path: Path):
+    calls = []
+    captured = {}
+
+    async def fake_watch_agent(**kwargs):
+        calls.append(kwargs)
+
+    def fake_issue(endpoint: str, project_id: int, access_token: str):
+        captured["issue"] = {
+            "endpoint": endpoint,
+            "project_id": project_id,
+            "access_token": access_token,
+        }
+        return {"agentId": 9, "projectId": project_id, "agentToken": "new-agent-token"}
+
+    def fake_save(agent_data: dict, endpoint: str | None = None):
+        captured["save"] = {
+            "agent_data": agent_data,
+            "endpoint": endpoint,
+        }
+
+    monkeypatch.delenv("SSAFER_AGENT_ID", raising=False)
+    monkeypatch.delenv("SSAFER_PROJECT_ID", raising=False)
+    monkeypatch.delenv("SSAFER_AGENT_TOKEN", raising=False)
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda: {})
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://api.example.com")
+    monkeypatch.setattr("ssafer.core.auth.load_token", lambda: "access-token")
+    monkeypatch.setattr("ssafer.core.auth.issue_project_agent_token", fake_issue)
+    monkeypatch.setattr("ssafer.core.auth.save_agent_config", fake_save)
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent", "--path", str(tmp_path)], input="10\n")
+
+    assert result.exit_code == 0
+    assert captured["issue"] == {
+        "endpoint": "https://api.example.com",
+        "project_id": 10,
+        "access_token": "access-token",
+    }
+    assert captured["save"] == {
+        "agent_data": {"agentId": 9, "projectId": 10, "agentToken": "new-agent-token"},
+        "endpoint": "https://api.example.com",
+    }
+    assert calls[0]["agent_id"] == 9
+    assert calls[0]["project_id"] == 10
+    assert calls[0]["agent_token"] == "new-agent-token"
+    assert "Agent setup complete." in result.output
+
+
 def test_agent_watch_command_prints_pending_task_count(monkeypatch, tmp_path: Path):
     task = agent.AgentTask(
         task_id=10,

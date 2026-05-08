@@ -83,6 +83,20 @@ def verify_email_code(endpoint: str, email: str, code: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else payload
 
 
+def issue_project_agent_token(endpoint: str, project_id: int, access_token: str) -> dict[str, Any]:
+    """Issue a local-agent token for a project."""
+    base_url = endpoint.rstrip("/")
+    with httpx.Client(timeout=30) as client:
+        response = client.post(
+            f"{base_url}/api/v1/projects/{project_id}/agent/token",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data")
+    return data if isinstance(data, dict) else payload
+
+
 def save_auth_tokens(auth_data: dict[str, Any], endpoint: str | None = None) -> None:
     """Persist backend-issued auth tokens for later upload requests."""
     access_token = auth_data.get("accessToken")
@@ -103,6 +117,30 @@ def save_auth_tokens(auth_data: dict[str, Any], endpoint: str | None = None) -> 
     if endpoint:
         upload_config["endpoint"] = endpoint
     CONFIG_PATH.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
+
+
+def save_agent_config(agent_data: dict[str, Any], endpoint: str | None = None) -> None:
+    agent_id = agent_data.get("agentId")
+    project_id = agent_data.get("projectId")
+    agent_token = agent_data.get("agentToken")
+    if agent_id is None or project_id is None or not agent_token:
+        raise ValueError("Agent token response is missing agentId, projectId, or agentToken.")
+
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    config = _load_config()
+    agent_config = config.setdefault("agent", {})
+    agent_config["agentId"] = int(agent_id)
+    agent_config["projectId"] = int(project_id)
+    agent_config["agentToken"] = str(agent_token)
+    if endpoint:
+        agent_config["endpoint"] = endpoint
+    CONFIG_PATH.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
+
+
+def load_agent_config() -> dict[str, Any]:
+    config = _load_config()
+    agent_config = config.get("agent", {})
+    return agent_config if isinstance(agent_config, dict) else {}
 
 
 def save_token(token: str, endpoint: str | None = None) -> None:

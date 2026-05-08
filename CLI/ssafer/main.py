@@ -357,16 +357,121 @@ def agent_watch(
     reconnect_max_delay: float = typer.Option(30.0, "--reconnect-max-delay", help="Maximum reconnect backoff delay in seconds."),
 ) -> None:
     """Connect a local agent and apply pending PATCH_APPLY tasks."""
-    from ssafer.core.agent import AgentTaskResult, watch_agent
+    _run_agent_watch(
+        path=path,
+        api_url=api_url,
+        agent_id=agent_id,
+        project_id=project_id,
+        agent_token=agent_token,
+        interval=interval,
+        once=once,
+        dry_run=dry_run,
+        reconnect=reconnect,
+        max_retries=max_retries,
+        reconnect_max_delay=reconnect_max_delay,
+    )
+
+
+@app.command("agent")
+def agent(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root where patches are applied."),
+) -> None:
+    """Initialize the local agent if needed, then keep it running."""
+    from ssafer.core.auth import load_agent_config, load_endpoint
+
+    agent_config = load_agent_config()
+    if not _has_saved_agent_config(agent_config):
+        endpoint = load_endpoint()
+        project_id = typer.prompt("Project ID", type=int)
+        agent_config = _issue_and_save_agent_token(project_id, endpoint, "Agent setup")
+        console.print("[green]Agent setup complete.[/green]")
+    _run_agent_watch(
+        path=path,
+        api_url=None,
+        agent_id=None,
+        project_id=None,
+        agent_token=None,
+        interval=5.0,
+        once=False,
+        dry_run=False,
+        reconnect=True,
+        max_retries=None,
+        reconnect_max_delay=30.0,
+        agent_config=agent_config,
+    )
+
+
+@app.command("agent-init")
+def agent_init(
+    project_id: int = typer.Option(..., "--project-id", help="Project ID to issue a local-agent token for."),
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL."),
+) -> None:
+    """Issue and save a local-agent token for a project."""
     from ssafer.core.auth import load_endpoint
 
-    effective_url = api_url or load_endpoint()
-    effective_agent_id = agent_id or _load_int_env("SSAFER_AGENT_ID", "agent ID")
-    effective_project_id = project_id or _load_int_env("SSAFER_PROJECT_ID", "project ID")
-    effective_agent_token = agent_token or os.getenv("SSAFER_AGENT_TOKEN")
-    if not effective_agent_token:
-        console.print("[red]Agent token is required. Use --agent-token or SSAFER_AGENT_TOKEN.[/red]")
+    effective_endpoint = endpoint or load_endpoint()
+    agent_data = _issue_and_save_agent_token(project_id, effective_endpoint, "Agent init")
+
+    console.print("[green]Agent token saved.[/green]")
+    console.print(f"agentId: {agent_data.get('agentId')}")
+    console.print(f"projectId: {agent_data.get('projectId')}")
+    console.print("[dim]Run ssafer agent to start watching pending tasks.[/dim]")
+
+
+def _has_saved_agent_config(config: dict) -> bool:
+    return bool(config.get("agentId") and config.get("projectId") and config.get("agentToken"))
+
+
+def _issue_and_save_agent_token(project_id: int, endpoint: str, label: str) -> dict:
+    from ssafer.core.auth import issue_project_agent_token, load_token, save_agent_config
+
+    access_token = load_token()
+    if access_token is None:
+        console.print("[red]Login token is required. Run ssafer login first.[/red]")
         raise typer.Exit(code=1)
+
+    try:
+        agent_data = issue_project_agent_token(endpoint, project_id, access_token)
+        save_agent_config(agent_data, endpoint)
+        return agent_data
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]{label} failed:[/red] {_format_http_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(f"[red]{label} failed:[/red] {_format_http_transport_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except ValueError as exc:
+        console.print(f"[red]{label} failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+def _run_agent_watch(
+    *,
+    path: Path,
+    api_url: Optional[str],
+    agent_id: Optional[int],
+    project_id: Optional[int],
+    agent_token: Optional[str],
+    interval: float,
+    once: bool,
+    dry_run: bool,
+    reconnect: bool,
+    max_retries: Optional[int],
+    reconnect_max_delay: float,
+    agent_config: Optional[dict] = None,
+) -> None:
+    from ssafer.core.agent import AgentTaskResult, watch_agent
+    from ssafer.core.auth import load_agent_config, load_endpoint
+
+    config = agent_config if agent_config is not None else load_agent_config()
+    effective_url = api_url or config.get("endpoint") or load_endpoint()
+    effective_agent_id = agent_id or _load_int_config_or_env(config, "agentId", "SSAFER_AGENT_ID", "agent ID")
+    effective_project_id = project_id or _load_int_config_or_env(config, "projectId", "SSAFER_PROJECT_ID", "project ID")
+    effective_agent_token = agent_token or os.getenv("SSAFER_AGENT_TOKEN") or config.get("agentToken")
+    if not effective_agent_token:
+        console.print("[red]Agent token is required. Run ssafer agent, or use --agent-token/SSAFER_AGENT_TOKEN.[/red]")
+        raise typer.Exit(code=1)
+
     project_root = path.resolve()
     console.print(
         f"[cyan]Starting local agent.[/cyan] agentId={effective_agent_id}, "
@@ -475,6 +580,17 @@ def _load_int_env(name: str, label: str) -> int:
     except ValueError as exc:
         console.print(f"[red]{name} must be an integer.[/red]")
         raise typer.Exit(code=1) from exc
+
+
+def _load_int_config_or_env(config: dict, key: str, env_name: str, label: str) -> int:
+    value = config.get(key)
+    if value is not None:
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            console.print(f"[red]Saved agent {label} must be an integer.[/red]")
+            raise typer.Exit(code=1) from exc
+    return _load_int_env(env_name, label)
 
 
 def _print_agent_task_result(result: "AgentTaskResult") -> None:
