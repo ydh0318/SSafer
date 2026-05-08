@@ -1,16 +1,17 @@
 # EC2 #1 prod: 서비스 서버 (k14b105.p.ssafy.io)
 # 실행: docker compose --env-file .env pull && docker compose --env-file .env up -d
 #
-# Spring 8080 포트는 호스트 전체에 바인딩 (127.0.0.1 아님)
-# → EC2 #2 FastAPI가 private IP:8080으로 콜백 필요
-# → UFW에서 EC2_2_PRIVATE_IP만 8080/tcp 허용으로 보호
+# EC2 #1/#2는 서로 다른 AWS 계정/VPC → public IP로 통신
+# Spring 8080, RabbitMQ 8989(→5672) 포트는 호스트 전체 바인딩
+# → UFW에서 EC2 #2 public IP만 허용으로 보호
 #
 # UFW 설정 (1회):
 #   sudo ufw allow 22/tcp
 #   sudo ufw allow 80/tcp
 #   sudo ufw allow 443/tcp
 #   sudo ufw allow 9090/tcp
-#   sudo ufw allow from <EC2_2_PRIVATE_IP> to any port 8080 proto tcp
+#   sudo ufw allow from <EC2_2_PUBLIC_IP> to any port 8080 proto tcp
+#   sudo ufw allow from <EC2_2_PUBLIC_IP> to any port 8989 proto tcp
 #   sudo ufw enable
 
 name: ssafer-ec1-prod
@@ -71,7 +72,7 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     ports:
-      - "127.0.0.1:5672:5672"
+      - "8989:5672"
       - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
