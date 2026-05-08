@@ -33,6 +33,7 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
 
   @Override
   public List<UploadScanFinding> scan(List<Path> targetFiles) {
+    // 업로드 파일별 Trivy 결과를 공통 finding 모델로 정규화한다.
     // 업로드된 대상 파일별로 trivy config를 실행하고 공통 finding 모델로 정규화한다.
     List<UploadScanFinding> findings = new ArrayList<>();
     int findingIndex = 1;
@@ -40,6 +41,7 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
     for (Path file : targetFiles) {
       String fileName = file.getFileName().toString();
       // env 파일은 커스텀 스캐너에서 처리하므로 Trivy 대상에서 제외한다.
+      // .env 계열은 커스텀 룰에서 처리하므로 Trivy 대상에서는 제외한다.
       if (isEnvFile(fileName)) {
         continue;
       }
@@ -54,6 +56,7 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
         String resultFile = readText(result, "Target", fileName);
 
         for (JsonNode misconfiguration : result.path("Misconfigurations")) {
+          // 메시지 원문은 sanitize 후 evidence로 저장한다.
           findings.add(new UploadScanFinding(
               formatFindingId(findingIndex++),
               readText(misconfiguration, "ID", "UNKNOWN"),
@@ -62,12 +65,15 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
               resultFile,
               readStartLine(misconfiguration.path("CauseMetadata")),
               readText(misconfiguration, "Title", "Trivy misconfiguration"),
-              truncateEvidence(readText(misconfiguration, "Message", ""))
+              truncateEvidence(TrivyEvidenceSanitizer.sanitizeEvidence(
+                  readText(misconfiguration, "Message", "")
+              ))
           ));
         }
 
         for (JsonNode vulnerability : result.path("Vulnerabilities")) {
           String vulnId = readText(vulnerability, "VulnerabilityID", "UNKNOWN");
+          // 설명 원문도 sanitize 후 evidence로 저장한다.
           findings.add(new UploadScanFinding(
               formatFindingId(findingIndex++),
               vulnId,
@@ -76,11 +82,14 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
               resultFile,
               null,
               readText(vulnerability, "Title", vulnId),
-              truncateEvidence(readText(vulnerability, "Description", ""))
+              truncateEvidence(TrivyEvidenceSanitizer.sanitizeEvidence(
+                  readText(vulnerability, "Description", "")
+              ))
           ));
         }
 
         for (JsonNode secret : result.path("Secrets")) {
+          // Secret match 값은 원문을 남기지 않고 마스킹 상수로 치환한다.
           findings.add(new UploadScanFinding(
               formatFindingId(findingIndex++),
               readText(secret, "RuleID", "UNKNOWN"),
@@ -89,7 +98,9 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
               resultFile,
               readInteger(secret, "StartLine"),
               readText(secret, "Title", "Trivy secret finding"),
-              truncateEvidence(readText(secret, "Match", ""))
+              truncateEvidence(TrivyEvidenceSanitizer.sanitizeSecretMatch(
+                  readText(secret, "Match", "")
+              ))
           ));
         }
       }
@@ -99,6 +110,8 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
   }
 
   private JsonNode runTrivyConfig(Path targetFile) {
+    // 로컬 프로세스로 Trivy를 실행하고 JSON 결과를 파싱한다.
+    // compose 상대 경로 해석을 위해 실행 디렉터리를 업로드 파일 부모로 맞춘다.
     // 외부 프로세스로 Trivy를 실행하고 JSON 결과를 파싱한다.
     // compose 파일 내부 상대 경로(Dockerfile 등)를 위해 실행 기준 디렉토리를 업로드 폴더로 맞춘다.
     Path parentDirectory = targetFile.toAbsolutePath().getParent();
@@ -135,6 +148,7 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
       boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
       if (!finished) {
         // timeout 초과 시 프로세스를 강제 종료한다.
+        // 타임아웃 초과 시 프로세스를 강제 종료한다.
         process.destroyForcibly();
         outputReader.join(1000);
         throw new IllegalStateException(
@@ -227,7 +241,8 @@ public class LocalProcessTrivyScanExecutor implements TrivyScanExecutor {
     if (text == null) {
       return "";
     }
-    String normalized = text.replaceAll("\\s+", " ").trim();
+    // 예외 로그에도 민감정보가 남지 않도록 sanitize를 먼저 적용한다.
+    String normalized = TrivyEvidenceSanitizer.sanitizeEvidence(text.replaceAll("\\s+", " ").trim());
     if (normalized.length() <= 300) {
       return normalized;
     }
