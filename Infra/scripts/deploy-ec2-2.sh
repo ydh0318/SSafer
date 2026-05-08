@@ -70,13 +70,16 @@ log "DEPLOY_DIR=${DEPLOY_DIR}"
 missing_env=0
 check_env_key "FASTAPI_IMAGE" || missing_env=1
 check_env_present_allow_placeholder "ANTHROPIC_API_KEY" || missing_env=1
-check_env_key "SPRING_CALLBACK_URL" || missing_env=1
-check_env_key "INTERNAL_TOKEN" || missing_env=1
 check_env_key "AWS_ACCESS_KEY_ID" || missing_env=1
 check_env_key "AWS_SECRET_ACCESS_KEY" || missing_env=1
 check_env_key "AWS_REGION" || missing_env=1
-check_env_key "APP_SCAN_RAW_S3_BUCKET" || missing_env=1
+check_env_key "APP_SCAN_RESULT_S3_BUCKET" || missing_env=1
 check_env_key "APP_ANALYSIS_RESULT_S3_BUCKET" || missing_env=1
+check_env_key "RABBITMQ_HOST" || missing_env=1
+check_env_key "RABBITMQ_PORT" || missing_env=1
+check_env_key "RABBITMQ_PASSWORD" || missing_env=1
+check_env_key "SPRING_BASE_URL" || missing_env=1
+check_env_key "SPRING_API_SECRET" || missing_env=1
 
 if [[ "${missing_env}" -ne 0 ]]; then
   log "ERROR: required environment values are missing or still placeholders"
