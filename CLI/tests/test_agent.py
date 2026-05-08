@@ -117,6 +117,35 @@ def test_handle_agent_task_fails_invalid_patch_apply_payload(tmp_path: Path):
     assert result.patch_results == []
 
 
+def test_handle_agent_task_returns_failed_when_patch_apply_fails(tmp_path: Path):
+    target = tmp_path / "Dockerfile"
+    target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=3,
+        payload={
+            "patches": [
+                {
+                    "patchId": "PATCH-1",
+                    "filePath": "Dockerfile",
+                    "oldText": "USER missing",
+                    "newText": "USER appuser",
+                }
+            ]
+        },
+    )
+
+    result = agent.handle_agent_task(tmp_path, task)
+
+    assert result.status == "FAILED"
+    assert "oldText was not found" in result.message
+    assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER root\n"
+
+
 def test_handle_agent_task_skips_non_patch_task(tmp_path: Path):
     task = agent.AgentTask(
         task_id=10,
@@ -138,6 +167,9 @@ def test_agent_watch_command_uses_env_defaults(monkeypatch, tmp_path: Path):
 
     async def fake_watch_agent(**kwargs):
         calls.append(kwargs)
+        kwargs["on_event"]("connected", "ok")
+        kwargs["on_event"]("checking_tasks", None)
+        kwargs["on_event"]("tasks_found", [])
 
     monkeypatch.setenv("SSAFER_AGENT_ID", "7")
     monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
@@ -152,3 +184,61 @@ def test_agent_watch_command_uses_env_defaults(monkeypatch, tmp_path: Path):
     assert calls[0]["agent_id"] == 7
     assert calls[0]["project_id"] == 3
     assert calls[0]["agent_token"] == "agent-token"
+    assert "Starting local agent." in result.output
+    assert "Checking pending tasks..." in result.output
+    assert "No pending tasks." in result.output
+
+
+def test_agent_watch_command_prints_pending_task_count(monkeypatch, tmp_path: Path):
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        task_status="PENDING",
+        project_id=3,
+        scan_id=2,
+        finding_id=1,
+        payload={"patches": []},
+    )
+
+    async def fake_watch_agent(**kwargs):
+        kwargs["on_event"]("tasks_found", [task])
+
+    monkeypatch.setenv("SSAFER_AGENT_ID", "7")
+    monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
+    monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
+
+    assert result.exit_code == 0
+    assert "Found 1 pending task(s)." in result.output
+    assert "PATCH_APPLY" in result.output
+
+
+def test_agent_watch_command_prints_dry_run_and_task_result_table(monkeypatch, tmp_path: Path):
+    async def fake_watch_agent(**kwargs):
+        kwargs["on_event"](
+            "task",
+            agent.AgentTaskResult(
+                task_id=10,
+                task_type="PATCH_APPLY",
+                status="DRY_RUN",
+                message="Applied 1 patch candidate(s).",
+                patch_results=[],
+            ),
+        )
+
+    monkeypatch.setenv("SSAFER_AGENT_ID", "7")
+    monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
+    monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "Dry-run mode: files will not be modified." in result.output
+    assert "Agent task #10 result" in result.output
+    assert "PATCH_APPLY" in result.output
+    assert "DRY_RUN" in result.output

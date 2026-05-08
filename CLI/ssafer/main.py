@@ -365,24 +365,46 @@ def agent_watch(
         console.print("[red]Agent token is required. Use --agent-token or SSAFER_AGENT_TOKEN.[/red]")
         raise typer.Exit(code=1)
     project_root = path.resolve()
+    console.print(
+        f"[cyan]Starting local agent.[/cyan] agentId={effective_agent_id}, "
+        f"projectId={effective_project_id}, path={project_root}"
+    )
+    if once:
+        console.print("[dim]Mode: fetch pending tasks once, then exit.[/dim]")
+    else:
+        console.print(f"[dim]Mode: watching for pending tasks every {interval:g}s.[/dim]")
+    if dry_run:
+        console.print("[yellow]Dry-run mode: files will not be modified.[/yellow]")
 
     def on_event(event_type: str, payload: object) -> None:
         if event_type == "connected":
             console.print(f"[green]Agent connected.[/green] {payload}")
             return
+        if event_type == "checking_tasks":
+            console.print("[cyan]Checking pending tasks...[/cyan]")
+            return
+        if event_type == "tasks_found":
+            tasks = payload if isinstance(payload, list) else []
+            if not tasks:
+                if once:
+                    console.print("[dim]No pending tasks.[/dim]")
+                else:
+                    console.print("[dim]No pending tasks. Agent is watching.[/dim]")
+                return
+            task_types = ", ".join(str(getattr(task, "task_type", "UNKNOWN")) for task in tasks)
+            console.print(f"[cyan]Found {len(tasks)} pending task(s).[/cyan] {task_types}")
+            return
+        if event_type == "watching":
+            interval_seconds = "-"
+            if isinstance(payload, dict):
+                interval_seconds = str(payload.get("intervalSeconds", "-"))
+            console.print(f"[dim]Waiting for next task check in {interval_seconds}s.[/dim]")
+            return
         if event_type == "ping":
             console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
             return
         if isinstance(payload, AgentTaskResult):
-            console.print(
-                f"[cyan]Task {payload.task_id}[/cyan] {payload.task_type}: "
-                f"{payload.status} - {payload.message}"
-            )
-            for patch_result in payload.patch_results:
-                console.print(
-                    f"  - {patch_result.patch_id} {patch_result.status} "
-                    f"{patch_result.file_path}: {patch_result.message}"
-                )
+            _print_agent_task_result(payload)
 
     try:
         asyncio.run(
@@ -415,6 +437,28 @@ def _load_int_env(name: str, label: str) -> int:
     except ValueError as exc:
         console.print(f"[red]{name} must be an integer.[/red]")
         raise typer.Exit(code=1) from exc
+
+
+def _print_agent_task_result(result: "AgentTaskResult") -> None:
+    table = Table(title=f"Agent task #{result.task_id} result")
+    table.add_column("Task Type")
+    table.add_column("Patch ID")
+    table.add_column("Status")
+    table.add_column("File", overflow="fold")
+    table.add_column("Message", overflow="fold")
+
+    if not result.patch_results:
+        table.add_row(result.task_type, "-", result.status, "-", result.message)
+    else:
+        for patch_result in result.patch_results:
+            table.add_row(
+                result.task_type,
+                patch_result.patch_id,
+                patch_result.status,
+                patch_result.file_path,
+                patch_result.message,
+            )
+    console.print(table)
 
 
 def _select_patch_candidates(

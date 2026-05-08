@@ -10,7 +10,7 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 
-from ssafer.core.patches import PatchApplyResult, apply_patch_candidates, extract_patch_candidates
+from ssafer.core.patches import PatchApplyResult, PatchError, apply_patch_candidates, extract_patch_candidates
 
 
 @dataclass(frozen=True)
@@ -81,7 +81,16 @@ def handle_agent_task(project_root: Path, task: AgentTask, *, dry_run: bool = Fa
             patch_results=[],
         )
 
-    results = apply_patch_candidates(project_root, candidates, dry_run=dry_run)
+    try:
+        results = apply_patch_candidates(project_root, candidates, dry_run=dry_run)
+    except PatchError as exc:
+        return AgentTaskResult(
+            task_id=task.task_id,
+            task_type=task.task_type,
+            status="FAILED",
+            message=str(exc),
+            patch_results=[],
+        )
     return AgentTaskResult(
         task_id=task.task_id,
         task_type=task.task_type,
@@ -116,14 +125,26 @@ async def watch_agent(
         on_event("connected", connected)
 
         while True:
+            on_event("checking_tasks", None)
             tasks = fetch_pending_agent_tasks(api_url, agent_id, agent_token)
+            on_event("tasks_found", tasks)
             for task in tasks:
-                result = handle_agent_task(project_root, task, dry_run=dry_run)
+                try:
+                    result = handle_agent_task(project_root, task, dry_run=dry_run)
+                except Exception as exc:  # noqa: BLE001 - keep the long-running agent alive per task.
+                    result = AgentTaskResult(
+                        task_id=task.task_id,
+                        task_type=task.task_type,
+                        status="FAILED",
+                        message=f"Task failed: {exc}",
+                        patch_results=[],
+                    )
                 on_event("task", result)
 
             if once:
                 return
 
+            on_event("watching", {"intervalSeconds": interval_seconds})
             await websocket.send(json.dumps(_ping_message(agent_id)))
             pong = await websocket.recv()
             on_event("ping", pong)
