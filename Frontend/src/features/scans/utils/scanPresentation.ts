@@ -1,4 +1,4 @@
-import type { AgentStatus, AgentTaskStatus, ScanMode, ScanStatus } from '../../../types/scan';
+import type { AgentStatus, AgentTaskStatus, ScanMode, ScanStatus, ScanType } from '../../../types/scan';
 
 const scanStatusLabelMap: Record<ScanStatus, string> = {
   REQUESTED: '요청됨',
@@ -141,6 +141,14 @@ export function getScanModeLabel(scanMode: ScanMode) {
   }
 
   return '파일 업로드';
+}
+
+export function getSafeScanType(scanType?: ScanType | null): ScanType {
+  return scanType ?? 'PROJECT_SCAN';
+}
+
+export function getScanTypeLabel(scanType?: ScanType | null) {
+  return getSafeScanType(scanType) === 'SERVER_AUDIT' ? 'Server Audit' : 'Project Scan';
 }
 
 export function isTerminalScanStatus(status: ScanStatus) {

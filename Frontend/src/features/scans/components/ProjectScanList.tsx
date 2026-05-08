@@ -3,17 +3,20 @@ import { Link } from 'react-router-dom';
 
 import SectionPanel from '../../../components/common/SectionPanel';
 import { ROUTES } from '../../../constants/routes';
-import type { ProjectScanListItemData, ProjectScanListQuery, ScanMode, ScanStatus } from '../../../types/scan';
+import type { ProjectScanListItemData, ProjectScanListQuery, ScanMode, ScanStatus, ScanType } from '../../../types/scan';
 import {
   canDeleteScanHistory,
   formatCompactDateTime,
   getDeleteBlockedReason,
   getScanModeLabel,
+  getSafeScanType,
 } from '../utils/scanPresentation';
 import ScanStatusBadge from './ScanStatusBadge';
+import ScanTypeBadge from './ScanTypeBadge';
 
 const scanStatuses: Array<ScanStatus> = ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED', 'DONE', 'FAILED', 'CANCELED'];
-const scanModes: Array<ScanMode> = ['AGENT', 'UPLOAD'];
+const scanModes: Array<ScanMode> = ['AGENT', 'UPLOAD', 'CLI'];
+const scanTypes: Array<ScanType> = ['PROJECT_SCAN', 'SERVER_AUDIT'];
 
 type ProjectScanListProps = {
   projectId: string;
@@ -38,6 +41,8 @@ function ProjectScanList({
   onDeleteScan,
   onRefresh,
 }: ProjectScanListProps) {
+  const visibleScans = scans.filter((scan) => !filters.scanType || getSafeScanType(scan.scanType) === filters.scanType);
+
   return (
     <SectionPanel
       action={
@@ -102,19 +107,43 @@ function ProjectScanList({
             ))}
           </select>
         </label>
+
+        <label className="block space-y-2">
+          <span className="inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.24em] text-neutral-500">
+            <Filter className="h-3.5 w-3.5" />
+            스캔 유형
+          </span>
+          <select
+            className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
+            onChange={(event) =>
+              onFilterChange({
+                ...filters,
+                scanType: event.target.value as ProjectScanListQuery['scanType'],
+              })
+            }
+            value={filters.scanType ?? ''}
+          >
+            <option value="">전체 유형</option>
+            {scanTypes.map((scanType) => (
+              <option key={scanType} value={scanType}>
+                {scanType}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {isLoading ? (
         <div className="border border-neutral-200 bg-[#fafafa] px-4 py-5 text-sm text-neutral-600">스캔 목록을 불러오는 중입니다...</div>
       ) : errorMessage ? (
         <div className="border border-rose-200 bg-rose-50 px-4 py-5 text-sm text-rose-700">{errorMessage}</div>
-      ) : scans.length === 0 ? (
+      ) : visibleScans.length === 0 ? (
         <div className="theme-dark-soft-card border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-6 text-sm text-neutral-600">
           현재 필터에 해당하는 스캔이 없습니다.
         </div>
       ) : (
         <div className="space-y-3">
-          {scans.map((scan) => {
+          {visibleScans.map((scan) => {
             const isDeleting = deletingScanIds.includes(scan.scanId);
             const isDeleteAllowed = canDeleteScanHistory(scan.status);
             const deleteBlockedReason = getDeleteBlockedReason(scan.status);
@@ -125,6 +154,7 @@ function ProjectScanList({
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <ScanStatusBadge status={scan.status} />
+                      <ScanTypeBadge scanType={scan.scanType} />
                       <span className="inline-flex rounded-full border border-neutral-200 bg-[#f5f5f5] px-2.5 py-1 text-xs font-bold text-neutral-700">
                         {getScanModeLabel(scan.scanMode)}
                       </span>
