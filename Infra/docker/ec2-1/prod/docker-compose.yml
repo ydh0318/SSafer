@@ -1,4 +1,4 @@
-# EC2 #1 prod: 서비스 서버 (k14b105.p.ssafy.io)
+# EC2 #1 prod: 서비스 서버 (ssafer.co.kr)
 # 실행: docker compose --env-file .env pull && docker compose --env-file .env up -d
 #
 # Spring 8080 포트는 호스트 전체에 바인딩 (127.0.0.1 아님)
@@ -140,10 +140,10 @@ services:
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       N8N_PORT: 5678
       N8N_PROTOCOL: https
-      N8N_HOST: k14b105.p.ssafy.io
+      N8N_HOST: ssafer.co.kr
       N8N_PATH: /n8n/
-      WEBHOOK_URL: https://k14b105.p.ssafy.io/n8n/
-      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-https://k14b105.p.ssafy.io/n8n/}
+      WEBHOOK_URL: https://ssafer.co.kr/n8n/
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-https://ssafer.co.kr/n8n/}
       N8N_PROXY_HOPS: 1
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Asia/Seoul}
       TZ: ${TZ:-Asia/Seoul}
