@@ -4,9 +4,9 @@ import type { CreateProjectFormValues, ScanMode } from '../../../types/project';
 
 type ProjectCreateFormProps = {
   value: CreateProjectFormValues;
-  selectedUploadFile: File | null;
+  selectedUploadFiles: File[];
   onChange: (next: CreateProjectFormValues) => void;
-  onUploadFileChange: (file: File | null) => void;
+  onUploadFilesChange: (files: File[]) => void;
   onSubmit: () => void;
   onCancel: () => void;
   isSubmitting?: boolean;
@@ -19,27 +19,27 @@ type ProjectCreateFormProps = {
 const scanModeOptions: Array<{ value: ScanMode; label: string; helper: string }> = [
   {
     value: 'AGENT',
-    label: '로컬 에이전트 스캔',
-    helper: '프로젝트를 먼저 만들고, 로컬 에이전트를 연결한 뒤 스캔을 실행하는 방식입니다.',
+    label: '에이전트 기반 스캔',
+    helper: '프로젝트에 연결된 Local Agent가 있으면 웹에서 바로 점검 작업을 시작할 수 있습니다.',
   },
   {
     value: 'UPLOAD',
     label: '업로드 기반 스캔',
-    helper: 'JSON 스캔 결과 파일을 직접 업로드해 분석하는 방식입니다.',
+    helper: '.env, Dockerfile, docker-compose.yml 같은 설정 파일을 업로드해서 바로 점검을 시작할 수 있습니다.',
   },
 ];
 
 function ProjectCreateForm({
   value,
-  selectedUploadFile,
+  selectedUploadFiles,
   onChange,
-  onUploadFileChange,
+  onUploadFilesChange,
   onSubmit,
   onCancel,
   isSubmitting = false,
   errorMessage,
   title = '새 프로젝트 만들기',
-  description = '프로젝트 기본 정보와 기본 스캔 방식을 설정한 뒤, 필요하면 스캔 결과 파일도 함께 업로드할 수 있습니다.',
+  description = '프로젝트 기본 정보와 기본 스캔 방식을 설정한 뒤, 필요하면 설정 파일도 함께 업로드할 수 있습니다.',
   submitLabel = '프로젝트 생성',
 }: ProjectCreateFormProps) {
   const setField = <K extends keyof CreateProjectFormValues>(field: K, nextValue: CreateProjectFormValues[K]) => {
@@ -98,7 +98,11 @@ function ProjectCreateForm({
                 type="button"
               >
                 <p className="text-sm font-black">{option.label}</p>
-                <p className={`mt-2 text-xs leading-6 ${value.defaultScanMode === option.value ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                <p
+                  className={`mt-2 text-xs leading-6 ${
+                    value.defaultScanMode === option.value ? 'text-neutral-300' : 'text-neutral-500'
+                  }`}
+                >
                   {option.helper}
                 </p>
               </button>
@@ -122,27 +126,40 @@ function ProjectCreateForm({
               <Upload className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-black text-black">프로젝트 생성과 함께 스캔 결과 업로드</p>
+              <p className="text-sm font-black text-black">프로젝트 생성과 함께 설정 파일 업로드</p>
               <p className="mt-2 text-sm leading-7 text-neutral-600">
-                스캔 결과 JSON 파일을 바로 업로드할 수 있습니다. 파일이 없으면 프로젝트만 생성되고, 이후 원하는 시점에 별도로 스캔을 실행할 수 있습니다.
+                원하면 프로젝트를 만들면서 설정 파일도 함께 올릴 수 있습니다. 허용 파일은 `.env`, `.env.local`
+                같은 `.env.*`, `Dockerfile`, `Containerfile`, `docker-compose*.yml/.yaml`,
+                `compose*.yml/.yaml`입니다. 파일이 없으면 프로젝트만 먼저 생성되고, 이후 원하는 시점에
+                별도로 스캔을 시작할 수 있습니다.
               </p>
             </div>
           </div>
 
           <div className="mt-5 grid gap-2">
             <label className="grid gap-2">
-              <span className="text-sm font-bold text-black">스캔 결과 파일</span>
+              <span className="text-sm font-bold text-black">설정 파일</span>
               <input
-                accept=".json,application/json,text/json"
                 className="w-full border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-4 text-sm text-black outline-none transition file:mr-4 file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:border-black"
-                onChange={(event) => onUploadFileChange(event.target.files?.[0] ?? null)}
+                multiple
+                onChange={(event) => onUploadFilesChange(Array.from(event.target.files ?? []))}
                 type="file"
               />
             </label>
-            <p className="text-xs leading-6 text-neutral-500">파일을 선택하지 않으면 프로젝트만 생성됩니다. 선택한 경우 업로드와 스캔 등록이 함께 진행됩니다.</p>
-            {selectedUploadFile ? (
+            <p className="text-xs leading-6 text-neutral-500">
+              허용 파일: .env, .env.local 같은 .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml,
+              compose*.yml/.yaml
+            </p>
+            {selectedUploadFiles.length > 0 ? (
               <div className="border border-neutral-200 bg-[#f5f5f5] px-4 py-3 text-sm text-neutral-700">
-                선택한 파일: <strong>{selectedUploadFile.name}</strong> ({Math.ceil(selectedUploadFile.size / 1024)} KB)
+                <div className="font-semibold text-black">선택된 파일</div>
+                <ul className="mt-2 space-y-1">
+                  {selectedUploadFiles.map((file) => (
+                    <li className="font-mono" key={`${file.name}-${file.size}-${file.lastModified}`}>
+                      {file.name} ({Math.ceil(file.size / 1024)} KB)
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : null}
           </div>

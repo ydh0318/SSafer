@@ -1,17 +1,20 @@
 import { AlertTriangle, ArrowLeft, ExternalLink, Send, Trophy, Wand2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
+import InlineMessage from '../../components/common/InlineMessage';
 import PageBanner from '../../components/common/PageBanner';
 import PixelGoose from '../../components/common/PixelGoose';
 import TypingBox from '../../components/common/TypingBox';
 import { ROUTES } from '../../constants/routes';
+import { useToast } from '../../features/feedback/useToast';
 import ServerAuditFindingDetailView from '../../features/results/components/ServerAuditFindingDetailView';
 import {
   getScanBasic,
   getScanFindingDetail,
   getScanFindings,
 } from '../../features/results/api/results';
+import { approveFindingPatch } from '../../features/scans/api/scans';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
 import { formatDateTime, getSafeScanType } from '../../features/scans/utils/scanPresentation';
 import { buildMockServerAuditResult, getMockServerAuditFinding } from '../../mocks/serverAudit';
@@ -75,6 +78,7 @@ function FindingDetailPage() {
   const { scanId = '', findingId = '' } = useParams<{ scanId: string; findingId: string }>();
   const location = useLocation();
   const routeState = (location.state ?? {}) as FindingRouteState;
+  const toast = useToast();
 
   const [view, setView] = useState<'explain' | 'fix' | 'apply' | 'references'>('explain');
   const [scanBasic, setScanBasic] = useState<ScanBasicData | null>(null);
@@ -84,6 +88,8 @@ function FindingDetailPage() {
   const [serverAuditRelatedFindings, setServerAuditRelatedFindings] = useState<ServerAuditFindingViewModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isApprovingPatch, setIsApprovingPatch] = useState(false);
+  const [approveErrorMessage, setApproveErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!scanId || !findingId) {
@@ -155,6 +161,31 @@ function FindingDetailPage() {
   const practiceSnippet = useMemo(() => getPracticeSnippet(finding), [finding]);
   const rawSnippetText = useMemo(() => prettyJsonText(finding?.rawSnippetJson ?? null), [finding?.rawSnippetJson]);
   const currentScanType = getSafeScanType(scanBasic?.scanType);
+  const handleApprovePatch = useCallback(async () => {
+    if (!scanId || !findingId || !finding) {
+      return;
+    }
+
+    setApproveErrorMessage(null);
+    setIsApprovingPatch(true);
+
+    try {
+      await approveFindingPatch(scanId, findingId);
+
+      const [refreshedFinding, refreshedFindingList] = await Promise.all([
+        getScanFindingDetail(scanId, findingId),
+        getScanFindings(scanId, { page: 0, size: 100 }),
+      ]);
+
+      setFinding(refreshedFinding);
+      setRelatedFindings(refreshedFindingList.items);
+      toast.success('패치 승인을 요청했습니다.', { durationMs: 2000 });
+    } catch (error) {
+      setApproveErrorMessage(error instanceof Error ? error.message : '패치 승인을 요청하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setIsApprovingPatch(false);
+    }
+  }, [finding, findingId, scanId, toast]);
 
   return (
     <section className="space-y-6">
@@ -336,6 +367,23 @@ function FindingDetailPage() {
                       {finding.resolutionStatus}
                     </span>
                   </div>
+                  {finding.resolutionStatus === 'OPEN' ? (
+                    <div className="mt-5 flex flex-wrap items-center gap-3">
+                      <button
+                        className="inline-flex items-center justify-center bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+                        disabled={isApprovingPatch}
+                        onClick={() => {
+                          void handleApprovePatch();
+                        }}
+                        type="button"
+                      >
+                        {isApprovingPatch ? '승인 요청 중...' : '패치 승인'}
+                      </button>
+                    </div>
+                  ) : null}
+                  {approveErrorMessage ? (
+                    <InlineMessage className="mt-5" message={approveErrorMessage} tone="error" />
+                  ) : null}
                   <div className="mt-5 grid gap-3 md:grid-cols-2">
                     <div className="bg-[#F5F5F5] p-4 text-sm text-neutral-700">
                       <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-500">patch approved</div>
