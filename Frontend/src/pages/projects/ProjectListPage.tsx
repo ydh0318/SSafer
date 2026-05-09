@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Trash2, Upload, X } from 'lucide-react';
+﻿import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -13,15 +13,19 @@ import ProjectDeleteModal from '../../features/projects/components/ProjectDelete
 import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
 import {
   createScanRequest,
+  getProjectScanOptions,
   getProjectScans,
-  reportUploadedScanResult,
-  uploadScanResultFile,
+  requestUploadScan,
 } from '../../features/scans/api/scans';
 import { formatCompactDateTime, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
-import { SCAN_UPLOAD_FILE_SIZE_LIMIT_MB, validateScanUploadFile } from '../../features/scans/utils/uploadValidation';
+import {
+  SCAN_UPLOAD_FILE_COUNT_LIMIT,
+  SCAN_UPLOAD_FILE_SIZE_LIMIT_MB,
+  validateScanUploadFiles,
+} from '../../features/scans/utils/uploadValidation';
 import { useProjectStore } from '../../store/projectStore';
 import type { CreateProjectFormValues, ProjectSummary } from '../../types/project';
-import type { ProjectScanListItemData } from '../../types/scan';
+import type { ProjectScanListItemData, ProjectScanOptionsData } from '../../types/scan';
 
 type ScanModeOption = 'UPLOAD' | 'CLI' | 'AGENT';
 
@@ -47,9 +51,24 @@ const modeCards: Array<{
   id: ScanModeOption;
   title: string;
 }> = [
-  { id: 'UPLOAD', icon: Upload, title: '파일 업로드', description: 'raw 결과 JSON을 업로드해서 바로 스캔을 시작할 수 있습니다.' },
-  { id: 'CLI', icon: Terminal, title: 'CLI', description: 'CLI 실행 결과를 업로드하거나 CI 흐름과 연결해 점검을 이어갈 수 있습니다.' },
-  { id: 'AGENT', icon: Server, title: 'Agent', description: '설치된 Agent가 연결되어 있으면 원격 점검 흐름을 시작할 수 있습니다.' },
+  {
+    id: 'UPLOAD',
+    icon: Upload,
+    title: '파일 업로드',
+    description: '.env, Dockerfile, docker-compose.yml 같은 설정 파일을 업로드해서 바로 스캔을 시작할 수 있습니다.',
+  },
+  {
+    id: 'CLI',
+    icon: Terminal,
+    title: 'CLI',
+    description: 'CLI 실행 결과를 업로드하거나 CI 흐름과 연결해 점검을 이어갈 수 있습니다.',
+  },
+  {
+    id: 'AGENT',
+    icon: Server,
+    title: 'Agent',
+    description: '설치된 Agent가 연결되어 있으면 원격 점검 흐름을 시작할 수 있습니다.',
+  },
 ];
 
 function getAgentTone(project: ProjectSummary, isSelected: boolean) {
@@ -75,14 +94,15 @@ function ProjectListPage() {
   const [createNotice, setCreateNotice] = useState<{ message: string; tone: 'warning' } | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<ScanModeOption>('UPLOAD');
-  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
-  const [createUploadFile, setCreateUploadFile] = useState<File | null>(null);
+  const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
+  const [createUploadFiles, setCreateUploadFiles] = useState<File[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [isStartingScan, setIsStartingScan] = useState(false);
   const [formValues, setFormValues] = useState<CreateProjectFormValues>(initialProjectForm);
   const [latestCompletedScans, setLatestCompletedScans] = useState<LatestCompletedScanMap>({});
   const [isLoadingCompletedScans, setIsLoadingCompletedScans] = useState(false);
+  const [selectedProjectScanOptions, setSelectedProjectScanOptions] = useState<ProjectScanOptionsData | null>(null);
 
   const {
     closeDeleteModal,
@@ -227,6 +247,45 @@ function ProjectListPage() {
     [projects, selectedProjectId],
   );
 
+  useEffect(() => {
+    if (!selectedProject) {
+      setSelectedProjectScanOptions(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadScanOptions = async () => {
+      try {
+        const data = await getProjectScanOptions(selectedProject.id);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setSelectedProjectScanOptions(data);
+
+        const nextMode =
+          data.defaultScanMode === 'AGENT' && data.availableScanModes.includes('AGENT') ? 'AGENT' : 'UPLOAD';
+
+        setSelectedMode((current) => (current === 'CLI' ? current : nextMode));
+      } catch (error) {
+        console.error('Failed to load scan options.', error);
+
+        if (isMounted) {
+          setSelectedProjectScanOptions(null);
+          setSelectedMode((current) => (current === 'AGENT' ? 'UPLOAD' : current));
+        }
+      }
+    };
+
+    void loadScanOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProject]);
+
   const completedProjectEntries = useMemo(
     () =>
       projects
@@ -250,26 +309,28 @@ function ProjectListPage() {
 
   const resetCreateForm = () => {
     setFormValues(initialProjectForm);
-    setCreateUploadFile(null);
+    setCreateUploadFiles([]);
     setCreateError(null);
   };
 
-  const handleUploadFileChange = (file: File | null) => {
-    setSelectedUploadFile(file);
-    setScanError(file ? validateScanUploadFile(file) : null);
+  const handleUploadFileChange = (files: File[] | null) => {
+    const nextFiles = files ?? [];
+    setSelectedUploadFiles(nextFiles);
+    setScanError(nextFiles.length > 0 ? validateScanUploadFiles(nextFiles) : null);
   };
 
-  const handleCreateUploadFileChange = (file: File | null) => {
-    setCreateUploadFile(file);
-    setCreateError(file ? validateScanUploadFile(file) : null);
+  const handleCreateUploadFileChange = (files: File[] | null) => {
+    const nextFiles = files ?? [];
+    setCreateUploadFiles(nextFiles);
+    setCreateError(nextFiles.length > 0 ? validateScanUploadFiles(nextFiles) : null);
   };
 
   const handleCreateProject = async () => {
     setCreateError(null);
     setCreateNotice(null);
 
-    if (createUploadFile) {
-      const validationError = validateScanUploadFile(createUploadFile);
+    if (createUploadFiles.length > 0) {
+      const validationError = validateScanUploadFiles(createUploadFiles);
 
       if (validationError) {
         setCreateError(validationError);
@@ -301,18 +362,13 @@ function ProjectListPage() {
       resetCreateForm();
       setIsCreateOpen(false);
 
-      if (createUploadFile) {
+      if (createUploadFiles.length > 0) {
         try {
-          const scanData = await createScanRequest({
+          const scanData = await requestUploadScan({
             projectName,
-            source: 'CLI',
             scanName: `${projectName} 첫 스캔`,
-            includeLogs: false,
+            files: createUploadFiles,
           });
-
-          await uploadScanResultFile(scanData.rawUploadUrl, createUploadFile);
-          await reportUploadedScanResult(scanData.scanId, createUploadFile);
-
           navigate(ROUTES.scanDetail.replace(':scanId', String(scanData.scanId)), {
             state: { autoOpenedFromScanRequest: true, projectId: nextProject.id },
           });
@@ -342,8 +398,13 @@ function ProjectListPage() {
       return;
     }
 
+    if (selectedMode === 'AGENT' && !selectedProjectScanOptions?.availableScanModes.includes('AGENT')) {
+      setScanError('현재 사용할 수 없는 점검 방식입니다.');
+      return;
+    }
+
     if (selectedMode === 'UPLOAD') {
-      const validationError = validateScanUploadFile(selectedUploadFile);
+      const validationError = validateScanUploadFiles(selectedUploadFiles);
 
       if (validationError) {
         setScanError(validationError);
@@ -355,17 +416,19 @@ function ProjectListPage() {
     setScanError(null);
 
     try {
-      const scanData = await createScanRequest({
+      const scanData =
+        selectedMode === 'UPLOAD' && selectedUploadFiles.length > 0
+          ? await requestUploadScan({
+              projectName: selectedProject.name,
+              scanName: `${selectedProject.name} 업로드 스캔`,
+              files: selectedUploadFiles,
+            })
+          : await createScanRequest({
         projectName: selectedProject.name,
         source: selectedMode === 'AGENT' ? undefined : 'CLI',
         scanName: `${selectedProject.name} ${selectedMode} 스캔`,
         includeLogs: false,
       });
-
-      if (selectedMode === 'UPLOAD' && selectedUploadFile) {
-        await uploadScanResultFile(scanData.rawUploadUrl, selectedUploadFile);
-        await reportUploadedScanResult(scanData.scanId, selectedUploadFile);
-      }
 
       navigate(ROUTES.scanDetail.replace(':scanId', String(scanData.scanId)), {
         state: { autoOpenedFromScanRequest: true, projectId: selectedProject.id },
@@ -543,7 +606,10 @@ function ProjectListPage() {
           {modeCards.map((mode) => {
             const Icon = mode.icon;
             const isSelected = mode.id === selectedMode;
-            const isAgentDisabled = mode.id === 'AGENT' && selectedProject ? !selectedProject.monitorEnabled : false;
+            const isAgentDisabled =
+              mode.id === 'AGENT' && selectedProject
+                ? !selectedProjectScanOptions?.availableScanModes.includes('AGENT')
+                : false;
 
             return (
               <button
@@ -580,24 +646,30 @@ function ProjectListPage() {
             onDrop={(event) => {
               event.preventDefault();
               setIsDragOver(false);
-              handleUploadFileChange(event.dataTransfer.files.item(0));
+              handleUploadFileChange(Array.from(event.dataTransfer.files));
             }}
           >
             <PixelGoose mood={isDragOver ? 'alert' : 'idle'} size={72} />
-            <h2 className="mt-8 text-3xl font-black tracking-tight">JSON 파일을 이곳에 올려주세요</h2>
-            <p className="mt-3 text-sm text-neutral-500">raw 결과 JSON 1개, 최대 {SCAN_UPLOAD_FILE_SIZE_LIMIT_MB}MB</p>
+            <h2 className="mt-8 text-3xl font-black tracking-tight">설정 파일을 이곳에 올려주세요</h2>
+            <p className="mt-3 text-sm text-neutral-500">
+              허용 파일: .env, .env.local 같은 .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml, compose*.yml/.yaml · 최대 3개 · 총 1MB
+            </p>
             <label className="mt-8 cursor-pointer text-base text-neutral-700 underline underline-offset-4 hover:text-black">
               파일 선택
               <input
-                accept="application/json,.json"
                 className="sr-only"
-                onChange={(event) => handleUploadFileChange(event.target.files?.item(0) ?? null)}
+                multiple
+                onChange={(event) => handleUploadFileChange(Array.from(event.target.files ?? []))}
                 type="file"
               />
             </label>
-            {selectedUploadFile ? (
-              <div className="mt-8 flex items-center gap-3 bg-[#111111] px-4 py-3 text-sm text-white">
-                <span className="font-mono">{selectedUploadFile.name}</span>
+            {selectedUploadFiles.length > 0 ? (
+              <div className="mt-8 flex flex-col gap-3 bg-[#111111] px-4 py-3 text-sm text-white">
+                {selectedUploadFiles.map((file) => (
+                  <span className="font-mono" key={`${file.name}-${file.size}-${file.lastModified}`}>
+                    {file.name}
+                  </span>
+                ))}
                 <button aria-label="선택한 파일 제거" onClick={() => handleUploadFileChange(null)} type="button">
                   <X className="h-4 w-4" />
                 </button>
@@ -666,8 +738,8 @@ function ProjectListPage() {
             }}
             onChange={setFormValues}
             onSubmit={() => void handleCreateProject()}
-            onUploadFileChange={handleCreateUploadFileChange}
-            selectedUploadFile={createUploadFile}
+            onUploadFilesChange={handleCreateUploadFileChange}
+            selectedUploadFiles={createUploadFiles}
             value={formValues}
           />
         </ModalFrame>
@@ -695,3 +767,5 @@ function ProjectListPage() {
 }
 
 export default ProjectListPage;
+
+

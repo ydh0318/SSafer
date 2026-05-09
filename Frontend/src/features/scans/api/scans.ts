@@ -2,60 +2,24 @@ import { apiClient } from '../../../api/client';
 import { getApiErrorCode, getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
+  ApproveFindingPatchResponseData,
   CreateScanRequestPayload,
   CreateScanResponseData,
   DeleteScanHistoryResponseData,
   ProjectScanListQuery,
   ProjectScanListResponseData,
-  RawScanUploadReportData,
+  ProjectScanOptionsData,
   ScanProgressStatusData,
+  UploadScanRequestPayload,
+  UploadScanResponseData,
 } from '../../../types/scan';
 
-const CREATE_SCAN_ERROR = '스캔 요청을 생성하지 못했습니다.';
+const CREATE_SCAN_ERROR = '스캔 생성에 실패했습니다.';
+const GET_SCAN_OPTIONS_ERROR = '점검 옵션을 불러오지 못했습니다.';
 const GET_PROJECT_SCANS_ERROR = '프로젝트 스캔 목록을 불러오지 못했습니다.';
 const GET_SCAN_STATUS_ERROR = '스캔 상태를 불러오지 못했습니다.';
-const UPLOAD_SCAN_FILE_ERROR = '스캔 결과 파일을 업로드하지 못했습니다.';
-const REPORT_SCAN_UPLOAD_ERROR = '업로드된 스캔 결과를 보고하지 못했습니다.';
-const UPLOAD_SCAN_FILE_USER_ERROR = '파일 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.';
-
-function isLikelyPresignedS3CorsError(error: unknown, rawUploadUrl: string) {
-  if (!(error instanceof TypeError) && !(error instanceof Error)) {
-    return false;
-  }
-
-  const message = error.message.toLowerCase();
-  const isNetworkStyleMessage =
-    message.includes('failed to fetch') ||
-    message.includes('load failed') ||
-    message.includes('networkerror');
-
-  return isNetworkStyleMessage && rawUploadUrl.includes('.s3.');
-}
-
-function buildUploadFailureMessage(rawUploadUrl: string, error: unknown) {
-  if (isLikelyPresignedS3CorsError(error, rawUploadUrl)) {
-    console.error('Presigned S3 upload blocked by likely CORS/preflight issue.', {
-      origin: window.location.origin,
-      rawUploadUrl,
-      error,
-    });
-    return UPLOAD_SCAN_FILE_USER_ERROR;
-  }
-
-  if (error instanceof Error && error.message) {
-    console.error('Scan file upload failed.', {
-      rawUploadUrl,
-      error,
-    });
-    return UPLOAD_SCAN_FILE_USER_ERROR;
-  }
-
-  console.error('Scan file upload failed with unknown error.', {
-    rawUploadUrl,
-    error,
-  });
-  return UPLOAD_SCAN_FILE_USER_ERROR;
-}
+const UPLOAD_SCAN_REQUEST_ERROR = '업로드 기반 점검 요청에 실패했습니다.';
+const APPROVE_FINDING_PATCH_ERROR = '취약점 패치 승인에 실패했습니다.';
 
 export async function createScanRequest(payload: CreateScanRequestPayload) {
   try {
@@ -63,6 +27,42 @@ export async function createScanRequest(payload: CreateScanRequestPayload) {
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, CREATE_SCAN_ERROR));
+  }
+}
+
+export async function getProjectScanOptions(projectId: string | number) {
+  try {
+    const response = await apiClient.get<ApiSuccessResponse<ProjectScanOptionsData>>(
+      `/projects/${projectId}/scan-options`,
+    );
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, GET_SCAN_OPTIONS_ERROR));
+  }
+}
+
+export async function requestUploadScan(payload: UploadScanRequestPayload) {
+  try {
+    const formData = new FormData();
+    formData.append('projectName', payload.projectName);
+
+    if (payload.scanName?.trim()) {
+      formData.append('scanName', payload.scanName.trim());
+    }
+
+    payload.files.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    const response = await apiClient.post<ApiSuccessResponse<UploadScanResponseData>>('/scans/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, UPLOAD_SCAN_REQUEST_ERROR));
   }
 }
 
@@ -74,6 +74,7 @@ export async function getProjectScans(projectId: string, query: ProjectScanListQ
         params: {
           page: query.page ?? 0,
           size: query.size ?? 20,
+          scanType: query.scanType || undefined,
           status: query.status || undefined,
           scanMode: query.scanMode || undefined,
         },
@@ -95,6 +96,17 @@ export async function getScanStatus(scanId: string) {
   }
 }
 
+export async function approveFindingPatch(scanId: string | number, findingId: string | number) {
+  try {
+    const response = await apiClient.post<ApiSuccessResponse<ApproveFindingPatchResponseData>>(
+      `/scans/${scanId}/findings/${findingId}/approve`,
+    );
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, APPROVE_FINDING_PATCH_ERROR));
+  }
+}
+
 export async function deleteScanHistory(scanId: string | number) {
   try {
     const response = await apiClient.delete<ApiSuccessResponse<DeleteScanHistoryResponseData>>(`/scans/${scanId}`);
@@ -103,7 +115,7 @@ export async function deleteScanHistory(scanId: string | number) {
     const errorCode = getApiErrorCode(error);
 
     if (errorCode === 'INVALID_PARAMETER') {
-      throw new Error('잘못된 스캔 ID입니다.');
+      throw new Error('유효하지 않은 스캔 ID입니다.');
     }
 
     if (errorCode === 'FORBIDDEN') {
@@ -111,7 +123,7 @@ export async function deleteScanHistory(scanId: string | number) {
     }
 
     if (errorCode === 'NOT_FOUND') {
-      throw new Error('스캔이 존재하지 않거나 이미 삭제되었습니다.');
+      throw new Error('스캔을 찾을 수 없거나 이미 삭제되었습니다.');
     }
 
     if (errorCode === 'SCAN_STATUS_CONFLICT') {
@@ -119,80 +131,9 @@ export async function deleteScanHistory(scanId: string | number) {
     }
 
     if (errorCode === 'INTERNAL_SERVER_ERROR') {
-      throw new Error('서버 내부 오류로 스캔 이력을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.');
+      throw new Error('서버 문제로 스캔을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     }
 
-    throw new Error(getApiErrorMessage(error, '스캔 이력을 삭제하지 못했습니다.'));
-  }
-}
-
-function countUploadedResults(payload: unknown) {
-  if (!payload || typeof payload !== 'object') {
-    return 1;
-  }
-
-  if ('findings' in payload && Array.isArray(payload.findings)) {
-    return payload.findings.length;
-  }
-
-  if ('items' in payload && Array.isArray(payload.items)) {
-    return payload.items.length;
-  }
-
-  return 1;
-}
-
-async function createSha256Hash(file: File) {
-  const buffer = await file.arrayBuffer();
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', buffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map((value) => value.toString(16).padStart(2, '0')).join('');
-  return `sha256:${hashHex}`;
-}
-
-export async function uploadScanResultFile(rawUploadUrl: string, file: File) {
-  try {
-    const response = await fetch(rawUploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': file.type || 'application/json',
-      },
-      body: file,
-    });
-
-    if (!response.ok) {
-      throw new Error(`${UPLOAD_SCAN_FILE_ERROR} (HTTP ${response.status})`);
-    }
-  } catch (error) {
-    throw new Error(buildUploadFailureMessage(rawUploadUrl, error));
-  }
-}
-
-export async function reportUploadedScanResult(scanId: number, file: File) {
-  try {
-    let resultCount = 1;
-
-    try {
-      const jsonText = await file.text();
-      const parsed = JSON.parse(jsonText) as unknown;
-      resultCount = countUploadedResults(parsed);
-    } catch {
-      resultCount = 1;
-    }
-
-    const payloadHash = await createSha256Hash(file);
-    const response = await apiClient.post<ApiSuccessResponse<RawScanUploadReportData>>(
-      `/scans/${scanId}/raw-results`,
-      {
-        tool: 'ssafer-web',
-        toolVersion: '1.0.0',
-        resultCount,
-        payloadHash,
-      },
-    );
-
-    return response.data.data;
-  } catch (error) {
-    throw new Error(getApiErrorMessage(error, REPORT_SCAN_UPLOAD_ERROR));
+    throw new Error(getApiErrorMessage(error, '스캔 삭제에 실패했습니다.'));
   }
 }

@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { ROUTES } from '../../constants/routes';
 import {
+  clearSessionWithMessage,
   hasInvalidAccessToken,
   isTokenExpired,
 } from '../../features/auth/utils/session';
@@ -15,12 +16,12 @@ function ProtectedRoute() {
   const location = useLocation();
 
   if (isAuthenticated && !refreshToken && (!accessToken || hasInvalidAccessToken(accessToken) || isTokenExpired(accessToken))) {
-    logout();
-    return <Navigate replace state={{ from: location }} to={ROUTES.root} />;
+    clearSessionWithMessage(logout);
+    return <Navigate replace state={{ from: location }} to={ROUTES.login} />;
   }
 
   if (!isAuthenticated) {
-    return <Navigate replace state={{ from: location }} to={ROUTES.root} />;
+    return <Navigate replace state={{ from: location }} to={ROUTES.login} />;
   }
 
   return <Outlet />;

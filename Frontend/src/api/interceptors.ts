@@ -8,6 +8,8 @@ import axios, {
 import { useAuthStore } from '../store/authStore';
 import type { ApiSuccessResponse } from '../types/api';
 import type { AuthTokenData, RefreshTokenRequest } from '../types/auth';
+import { ROUTES } from '../constants/routes';
+import { clearSessionWithMessage } from '../features/auth/utils/session';
 import { tokenStorage } from './tokenStorage';
 
 type RetryableRequestConfig = AxiosRequestConfig & {
@@ -104,11 +106,11 @@ export const setupInterceptors = (client: AxiosInstance) => {
 
         return client(originalRequest);
       } catch (refreshError) {
-        useAuthStore.getState().logout();
+        clearSessionWithMessage(useAuthStore.getState().logout);
 
         if (typeof window !== 'undefined') {
-          if (window.location.pathname !== '/') {
-            window.location.assign('/');
+          if (window.location.pathname !== ROUTES.login) {
+            window.location.assign(ROUTES.login);
           }
         }
 

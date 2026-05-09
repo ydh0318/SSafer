@@ -37,6 +37,25 @@ export interface CreateScanResponseData {
   rawUploadUrl: string;
 }
 
+export interface ProjectScanOptionsData {
+  defaultScanMode: 'UPLOAD' | 'AGENT';
+  availableScanModes: Array<'UPLOAD' | 'AGENT'>;
+  monitorEnabled: boolean;
+  agentAvailable: boolean;
+}
+
+export interface UploadScanRequestPayload {
+  projectName: string;
+  files: File[];
+  scanName?: string;
+}
+
+export interface UploadScanResponseData {
+  scanId: number;
+  status: ScanStatus;
+  failureReason: string | null;
+}
+
 export interface RawScanUploadReportData {
   scanId: number;
   status: ScanStatus;
@@ -176,6 +195,18 @@ export interface ScanFindingDetailData {
   backupMetadataJson: string | null;
   patchedAt: string | null;
   createdAt: string;
+}
+
+export interface ApproveFindingPatchResponseData {
+  scanId: number;
+  findingId: number;
+  agentTaskId: number;
+  agentId: number;
+  resolutionStatus: FindingResolutionStatus;
+  patchApprovedActorType: 'USER' | 'GUEST';
+  patchApprovedByUserId: number | null;
+  patchApprovedAt: string;
+  queuedAt: string;
 }
 
 export interface HistoryScanSummaryData {
