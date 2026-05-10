@@ -762,6 +762,12 @@ def login(
         console.print(f"[red]Login failed:[/red] {exc}")
         raise typer.Exit(code=1) from exc
     console.print("[green]Login succeeded. Tokens saved to ~/.ssafer/config.yml.[/green]")
+    _prompt_start_agent_after_login()
+
+
+def _prompt_start_agent_after_login() -> None:
+    if typer.confirm("Start local agent now?", default=False):
+        agent()
 
 
 @app.command()

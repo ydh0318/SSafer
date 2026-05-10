@@ -432,12 +432,37 @@ def test_login_command_authenticates_with_backend_and_saves_tokens(monkeypatch, 
     result = CliRunner().invoke(
         app,
         ["login", "--endpoint", "https://api.example.com"],
-        input="user@example.com\nsecret-password\n",
+        input="user@example.com\nsecret-password\nn\n",
     )
 
     assert result.exit_code == 0
     assert load_token() == "access-token"
     assert load_endpoint() == "https://api.example.com"
+    assert "Start local agent now?" in result.output
+
+
+def test_login_command_can_start_agent_after_login(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    started: dict[str, bool] = {}
+
+    def fake_login(endpoint: str, email: str, password: str) -> dict[str, str]:
+        return {"accessToken": "access-token", "refreshToken": "refresh-token"}
+
+    def fake_agent() -> None:
+        started["agent"] = True
+
+    monkeypatch.setattr(auth_module, "login_with_credentials", fake_login)
+    monkeypatch.setattr(main_module, "agent", fake_agent)
+
+    result = CliRunner().invoke(
+        app,
+        ["login", "--endpoint", "https://api.example.com"],
+        input="user@example.com\nsecret-password\ny\n",
+    )
+
+    assert result.exit_code == 0
+    assert started == {"agent": True}
 
 
 def test_signup_command_registers_backend_user(monkeypatch):
