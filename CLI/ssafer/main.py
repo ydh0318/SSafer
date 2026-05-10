@@ -377,13 +377,17 @@ def agent(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root where patches are applied."),
 ) -> None:
     """Initialize the local agent if needed, then keep it running."""
-    from ssafer.core.auth import load_agent_config, load_endpoint
+    from ssafer.core.auth import load_agent_config, load_endpoint, load_token
 
     agent_config = load_agent_config()
     if not _has_saved_agent_config(agent_config):
         endpoint = load_endpoint()
-        project_id = typer.prompt("Project ID", type=int)
-        agent_config = _issue_and_save_agent_token(project_id, endpoint, "Agent setup")
+        access_token = load_token()
+        if access_token is None:
+            console.print("[red]Login token is required. Run ssafer login first.[/red]")
+            raise typer.Exit(code=1)
+        project_id = _select_agent_project_id(endpoint, access_token)
+        agent_config = _issue_and_save_agent_token(project_id, endpoint, "Agent setup", access_token=access_token)
         console.print("[green]Agent setup complete.[/green]")
     _run_agent_watch(
         path=path,
@@ -422,16 +426,22 @@ def _has_saved_agent_config(config: dict) -> bool:
     return bool(config.get("agentId") and config.get("projectId") and config.get("agentToken"))
 
 
-def _issue_and_save_agent_token(project_id: int, endpoint: str, label: str) -> dict:
+def _issue_and_save_agent_token(
+    project_id: int,
+    endpoint: str,
+    label: str,
+    *,
+    access_token: str | None = None,
+) -> dict:
     from ssafer.core.auth import issue_project_agent_token, load_token, save_agent_config
 
-    access_token = load_token()
-    if access_token is None:
+    effective_access_token = access_token or load_token()
+    if effective_access_token is None:
         console.print("[red]Login token is required. Run ssafer login first.[/red]")
         raise typer.Exit(code=1)
 
     try:
-        agent_data = issue_project_agent_token(endpoint, project_id, access_token)
+        agent_data = issue_project_agent_token(endpoint, project_id, effective_access_token)
         save_agent_config(agent_data, endpoint)
         return agent_data
     except httpx.HTTPStatusError as exc:
@@ -443,6 +453,40 @@ def _issue_and_save_agent_token(project_id: int, endpoint: str, label: str) -> d
     except ValueError as exc:
         console.print(f"[red]{label} failed:[/red] {exc}")
         raise typer.Exit(code=1) from exc
+
+
+def _select_agent_project_id(endpoint: str, access_token: str) -> int:
+    from ssafer.core.auth import list_projects
+
+    try:
+        projects = list_projects(endpoint, access_token)
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[yellow]Project list failed:[/yellow] {_format_http_error(exc)}")
+        return typer.prompt("Project ID", type=int)
+    except httpx.HTTPError as exc:
+        console.print(f"[yellow]Project list failed:[/yellow] {_format_http_transport_error(exc)}")
+        return typer.prompt("Project ID", type=int)
+
+    if not projects:
+        console.print("[yellow]No projects were returned by the backend.[/yellow]")
+        return typer.prompt("Project ID", type=int)
+
+    console.print("[cyan]Select a project for the local agent.[/cyan]")
+    for index, project in enumerate(projects, start=1):
+        project_id = project.get("projectId") or project.get("id")
+        name = project.get("name") or "(unnamed)"
+        console.print(f"{index}. {name} (projectId={project_id})")
+
+    while True:
+        selected = typer.prompt("Project", default="1")
+        if selected.isdigit():
+            index = int(selected)
+            if 1 <= index <= len(projects):
+                project = projects[index - 1]
+                project_id = project.get("projectId") or project.get("id")
+                if project_id is not None:
+                    return int(project_id)
+        console.print("[red]Select a valid project number.[/red]")
 
 
 def _run_agent_watch(

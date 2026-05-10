@@ -31,7 +31,8 @@ def login_with_credentials(endpoint: str, email: str, password: str) -> dict[str
     """Authenticate with the SSAfer backend and return token response data."""
     base_url = endpoint.rstrip("/")
     with httpx.Client(timeout=30) as client:
-        response = client.post(
+        response = _post_preserving_redirects(
+            client,
             f"{base_url}/api/v1/auth/login",
             json={"email": email, "password": password},
         )
@@ -45,7 +46,8 @@ def register_user(endpoint: str, email: str, display_name: str, password: str) -
     """Create a SSAfer backend user account and return response data."""
     base_url = endpoint.rstrip("/")
     with httpx.Client(timeout=30) as client:
-        response = client.post(
+        response = _post_preserving_redirects(
+            client,
             f"{base_url}/api/v1/users",
             json={"email": email, "displayName": display_name, "password": password},
         )
@@ -59,7 +61,8 @@ def send_email_verification_code(endpoint: str, email: str) -> dict[str, Any]:
     """Ask the SSAfer backend to send an email verification code."""
     base_url = endpoint.rstrip("/")
     with httpx.Client(timeout=30) as client:
-        response = client.post(
+        response = _post_preserving_redirects(
+            client,
             f"{base_url}/api/v1/auth/email/send-code",
             json={"email": email},
         )
@@ -73,7 +76,8 @@ def verify_email_code(endpoint: str, email: str, code: str) -> dict[str, Any]:
     """Verify a backend-issued email code before signup."""
     base_url = endpoint.rstrip("/")
     with httpx.Client(timeout=30) as client:
-        response = client.post(
+        response = _post_preserving_redirects(
+            client,
             f"{base_url}/api/v1/auth/email/verify-code",
             json={"email": email, "code": code},
         )
@@ -87,7 +91,8 @@ def issue_project_agent_token(endpoint: str, project_id: int, access_token: str)
     """Issue a local-agent token for a project."""
     base_url = endpoint.rstrip("/")
     with httpx.Client(timeout=30) as client:
-        response = client.post(
+        response = _post_preserving_redirects(
+            client,
             f"{base_url}/api/v1/projects/{project_id}/agent/token",
             headers={"Authorization": f"Bearer {access_token}"},
         )
@@ -95,6 +100,25 @@ def issue_project_agent_token(endpoint: str, project_id: int, access_token: str)
     payload = response.json()
     data = payload.get("data")
     return data if isinstance(data, dict) else payload
+
+
+def list_projects(endpoint: str, access_token: str, *, page: int = 0, size: int = 100) -> list[dict[str, Any]]:
+    """Return projects visible to the logged-in user."""
+    base_url = endpoint.rstrip("/")
+    headers = {"Authorization": f"Bearer {access_token}"}
+    with httpx.Client(timeout=30, follow_redirects=True) as client:
+        response = client.get(
+            f"{base_url}/api/v1/projects",
+            params={"page": page, "size": size},
+            headers=headers,
+        )
+        response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data", payload)
+    if isinstance(data, dict):
+        items = data.get("items") or data.get("content") or data.get("projects")
+        return items if isinstance(items, list) else []
+    return data if isinstance(data, list) else []
 
 
 def save_auth_tokens(auth_data: dict[str, Any], endpoint: str | None = None) -> None:
@@ -175,6 +199,31 @@ def load_endpoint() -> str:
     """저장된 endpoint 반환, 없으면 DEFAULT_API_URL 반환."""
     config = _load_config()
     return config.get("upload", {}).get("endpoint") or DEFAULT_API_URL
+
+
+def _post_preserving_redirects(
+    client: httpx.Client,
+    url: str,
+    *,
+    json: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    max_redirects: int = 3,
+) -> httpx.Response:
+    current_url = url
+    for _ in range(max_redirects + 1):
+        kwargs: dict[str, Any] = {}
+        if json is not None:
+            kwargs["json"] = json
+        if headers is not None:
+            kwargs["headers"] = headers
+        response = client.post(current_url, **kwargs)
+        if response.status_code not in {301, 302, 303, 307, 308}:
+            return response
+        location = response.headers.get("location")
+        if not location:
+            return response
+        current_url = str(response.url.join(location))
+    return response
 
 
 def _load_config() -> dict[str, Any]:

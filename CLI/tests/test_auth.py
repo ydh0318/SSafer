@@ -14,6 +14,7 @@ import ssafer.main as main_module
 from ssafer.core.auth import (
     clear_token,
     issue_project_agent_token,
+    list_projects,
     load_agent_config,
     load_endpoint,
     load_token,
@@ -156,6 +157,53 @@ def test_issue_project_agent_token_posts_to_backend(monkeypatch):
     assert data["agentToken"] == "raw-agent-token"
 
 
+def test_list_projects_fetches_backend_projects(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def get(self, url: str, params: dict[str, int], headers: dict[str, str]):
+            captured["url"] = url
+            captured["params"] = params
+            captured["headers"] = headers
+            request = httpx.Request("GET", url)
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "items": [
+                            {"projectId": 10, "name": "first-project"},
+                            {"projectId": 20, "name": "second-project"},
+                        ]
+                    }
+                },
+                request=request,
+            )
+
+    monkeypatch.setattr(auth_module.httpx, "Client", FakeClient)
+
+    projects = list_projects("https://api.example.com/", "access-token")
+
+    assert captured == {
+        "client_kwargs": {"timeout": 30, "follow_redirects": True},
+        "url": "https://api.example.com/api/v1/projects",
+        "params": {"page": 0, "size": 100},
+        "headers": {"Authorization": "Bearer access-token"},
+    }
+    assert projects == [
+        {"projectId": 10, "name": "first-project"},
+        {"projectId": 20, "name": "second-project"},
+    ]
+
+
 def test_save_and_load_agent_config(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
@@ -198,15 +246,64 @@ def test_login_with_credentials_posts_to_backend_auth_login(monkeypatch):
                 request=request,
             )
 
-    monkeypatch.setattr(auth_module.httpx, "Client", lambda **_: FakeClient())
+    def fake_client(**kwargs):
+        captured["client_kwargs"] = kwargs
+        return FakeClient()
+
+    monkeypatch.setattr(auth_module.httpx, "Client", fake_client)
 
     data = login_with_credentials("https://api.example.com/", "user@example.com", "pw")
 
     assert captured == {
+        "client_kwargs": {"timeout": 30},
         "url": "https://api.example.com/api/v1/auth/login",
         "json": {"email": "user@example.com", "password": "pw"},
     }
     assert data["accessToken"] == "access-token"
+
+
+def test_login_with_credentials_redirect_keeps_post_method(monkeypatch):
+    calls: list[dict[str, Any]] = []
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, url: str, json: dict, headers: dict | None = None):
+            calls.append({"url": url, "json": json, "headers": headers})
+            request = httpx.Request("POST", url)
+            if len(calls) == 1:
+                return httpx.Response(
+                    301,
+                    headers={"location": "/api/v1/auth/login/"},
+                    request=request,
+                )
+            return httpx.Response(
+                200,
+                json={"data": {"accessToken": "access-token"}},
+                request=request,
+            )
+
+    monkeypatch.setattr(auth_module.httpx, "Client", lambda **_: FakeClient())
+
+    data = login_with_credentials("https://api.example.com/", "user@example.com", "pw")
+
+    assert data["accessToken"] == "access-token"
+    assert calls == [
+        {
+            "url": "https://api.example.com/api/v1/auth/login",
+            "json": {"email": "user@example.com", "password": "pw"},
+            "headers": None,
+        },
+        {
+            "url": "https://api.example.com/api/v1/auth/login/",
+            "json": {"email": "user@example.com", "password": "pw"},
+            "headers": None,
+        },
+    ]
 
 
 def test_register_user_posts_to_backend_users(monkeypatch):
