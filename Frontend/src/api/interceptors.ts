@@ -83,7 +83,26 @@ export const setupInterceptors = (client: AxiosInstance) => {
       const status = error.response?.status;
       const requestUrl = originalRequest?.url ?? '';
       const isRefreshRequest = requestUrl.includes(REFRESH_PATH);
+      const accessToken = tokenStorage.getAccessToken();
       const refreshToken = tokenStorage.getRefreshToken();
+
+      if (
+        originalRequest &&
+        status === 401 &&
+        !originalRequest._retry &&
+        !originalRequest.skipAuth &&
+        !isRefreshRequest &&
+        accessToken &&
+        !refreshToken
+      ) {
+        clearSessionWithMessage(useAuthStore.getState().logout);
+
+        if (typeof window !== 'undefined' && window.location.pathname !== ROUTES.login) {
+          window.location.assign(ROUTES.login);
+        }
+
+        return Promise.reject(error);
+      }
 
       if (
         !originalRequest ||

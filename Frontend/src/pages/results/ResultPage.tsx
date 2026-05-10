@@ -1,4 +1,4 @@
-import { ArrowLeft, FileText, GitBranch, RefreshCw, Wand2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, FileText, GitBranch, RefreshCw, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
@@ -7,14 +7,10 @@ import PageHero from '../../components/common/PageHero';
 import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
-import {
-  getScanBasic,
-  getScanFindings,
-  getScanSummary,
-} from '../../features/results/api/results';
+import { getScanBasic, getScanFindings, getScanSummary } from '../../features/results/api/results';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
-import { formatDateTime, getSafeScanType, getScanModeLabel, getScanTypeLabel } from '../../features/scans/utils/scanPresentation';
+import { formatDateTime, getSafeScanType, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
 import { buildMockServerAuditResult } from '../../mocks/serverAudit';
 import type {
   FindingResolutionStatus,
@@ -30,10 +26,7 @@ type ResultRouteState = {
   projectId?: string;
 };
 
-const severityMeta: Record<
-  FindingSeverity,
-  { bg: string; fg: string; soft: string; label: string }
-> = {
+const severityMeta: Record<FindingSeverity, { bg: string; fg: string; soft: string; label: string }> = {
   CRITICAL: { bg: '#E63946', fg: '#FFFFFF', soft: '#FFE5E5', label: 'CRITICAL' },
   HIGH: { bg: '#FF8A33', fg: '#FFFFFF', soft: '#FFF1E5', label: 'HIGH' },
   MEDIUM: { bg: '#FFB627', fg: '#111111', soft: '#FFF9DB', label: 'MEDIUM' },
@@ -41,6 +34,7 @@ const severityMeta: Record<
   INFO: { bg: '#9CA3AF', fg: '#FFFFFF', soft: '#F3F4F6', label: 'INFO' },
 };
 
+const severityOrder: FindingSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 const resolutionValues = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'IGNORED'] as const;
 
 const emptyFindingList: ScanFindingListResponseData = {
@@ -60,7 +54,7 @@ function getSourceCount(summary: ScanSummaryData | null, sourceType: string) {
 }
 
 function formatFindingLocation(finding: ScanFindingListItemData) {
-  const target = finding.filePath || finding.resourceName || '경로 정보 없음';
+  const target = finding.filePath || finding.resourceName || '위치를 확인할 수 없는 항목';
 
   if (finding.lineNumber && finding.lineNumber > 0) {
     return `${target}:${finding.lineNumber}`;
@@ -128,7 +122,7 @@ function ResultPage() {
           return;
         }
 
-        setErrorMessage(error instanceof Error ? error.message : '스캔 결과 정보를 불러오지 못했습니다.');
+        setErrorMessage(error instanceof Error ? error.message : '스캔 결과를 불러오지 못했습니다.');
       } finally {
         if (isMounted) {
           setIsInitialLoading(false);
@@ -181,7 +175,7 @@ function ResultPage() {
           return;
         }
 
-        setErrorMessage(error instanceof Error ? error.message : '스캔 결과 목록을 불러오지 못했습니다.');
+        setErrorMessage(error instanceof Error ? error.message : '탐지 항목 목록을 불러오지 못했습니다.');
         setFindingsData(emptyFindingList);
       } finally {
         if (isMounted) {
@@ -209,15 +203,21 @@ function ResultPage() {
     [summary],
   );
 
-  const actionableTotal = Math.max(
-    (summary?.totalFindings ?? 0) - getResolutionCount(summary, 'IGNORED'),
-    1,
-  );
+  const actionableTotal = Math.max((summary?.totalFindings ?? 0) - getResolutionCount(summary, 'IGNORED'), 1);
   const resolvedCount = getResolutionCount(summary, 'RESOLVED');
   const resolvedRatio = Math.round((resolvedCount / actionableTotal) * 100);
   const routeProjectId = routeState.projectId ? Number(routeState.projectId) : undefined;
   const currentProjectId = scanBasic?.projectId ?? routeProjectId;
   const currentScanType = getSafeScanType(scanBasic?.scanType);
+
+  const groupedFindings = useMemo(() => {
+    return severityOrder
+      .map((severity) => ({
+        severity,
+        items: findingsData.items.filter((finding) => finding.severity === severity),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [findingsData.items]);
 
   return (
     <section className="space-y-8">
@@ -228,7 +228,7 @@ function ResultPage() {
           to={ROUTES.scanDetail.replace(':scanId', scanId)}
         >
           <ArrowLeft className="h-4 w-4" />
-          스캔 상세로 돌아가기
+          스캔 진행 화면으로 돌아가기
         </Link>
       </div>
 
@@ -240,7 +240,7 @@ function ResultPage() {
               to={ROUTES.history}
             >
               <GitBranch className="h-4 w-4" />
-              이전 스캔과 비교
+              결과 비교 보기
             </Link>
             <button
               className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
@@ -269,9 +269,13 @@ function ResultPage() {
               <RefreshCw className="h-4 w-4" />
               새로고침
             </button>
-            <button className="inline-flex items-center gap-2 bg-black px-4 py-2 text-sm font-bold text-white" type="button">
+            <button
+              className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-400"
+              disabled
+              type="button"
+            >
               <FileText className="h-4 w-4" />
-              리포트
+              내보내기 준비 중
             </button>
           </>
         }
@@ -285,40 +289,34 @@ function ResultPage() {
               <PixelGoose mood={resolvedCount > 0 ? 'happy' : 'alert'} size={84} />
             </div>
             <p className="mt-4 text-sm leading-7 text-neutral-600">
-              실제 스캔 결과 요약과 finding 목록을 기반으로 현재 위험도, 조치 상태, 탐지 출처를 한 번에 확인할 수 있습니다.
+              결과 화면에서는 위험도별 분포, 탐지 위치, 해결 상태를 한 번에 볼 수 있습니다. 수정이 필요한 항목부터 순서대로 확인해 보세요.
             </p>
           </div>
         }
         description={
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
-                <span className="font-mono">scanId #{scanId}</span>
-                {scanBasic ? <ScanStatusBadge status={scanBasic.status} /> : null}
-                {scanBasic ? <ScanTypeBadge scanType={scanBasic.scanType} /> : null}
-                {currentProjectId ? <span>projectId #{currentProjectId}</span> : null}
-                {scanBasic ? <span>{getScanModeLabel(scanBasic.scanMode)}</span> : null}
-              </div>
-              <p className="text-neutral-600">
-                {scanBasic?.completedAt
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
+              <span className="font-mono">scanId #{scanId}</span>
+              {scanBasic ? <ScanStatusBadge status={scanBasic.status} /> : null}
+              {scanBasic ? <ScanTypeBadge scanType={scanBasic.scanType} /> : null}
+              {currentProjectId ? <span>projectId #{currentProjectId}</span> : null}
+              {scanBasic ? <span>{getScanModeLabel(scanBasic.scanMode)}</span> : null}
+            </div>
+            <p className="text-neutral-600">
+              {scanBasic?.completedAt
                 ? `완료 시각: ${formatDateTime(scanBasic.completedAt)}`
-                : '아직 완료되지 않은 스캔입니다. 진행 중이라면 목록이 부분적으로 보일 수 있습니다.'}
+                : '아직 분석이 끝나지 않았습니다. 결과가 완전히 준비되면 더 많은 항목을 확인할 수 있습니다.'}
             </p>
           </div>
         }
         eyebrow="SCAN RESULT"
-        title={
-          currentScanType === 'SERVER_AUDIT'
-            ? '서버 점검 결과와 운영 조치 안내'
-            : '스캔 결과 요약과 취약점 목록'
-        }
+        title={currentScanType === 'SERVER_AUDIT' ? '서버 점검 결과와 권장 조치' : '스캔 결과 체크리스트'}
       />
 
       {errorMessage ? <PageBanner message={errorMessage} tone="error" /> : null}
 
       {isInitialLoading ? (
-        <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">
-          스캔 결과 정보를 불러오는 중입니다.
-        </div>
+        <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">스캔 결과를 불러오는 중입니다.</div>
       ) : null}
 
       {!isInitialLoading && currentScanType === 'SERVER_AUDIT' && scanBasic && serverAuditResult ? (
@@ -327,45 +325,23 @@ function ResultPage() {
 
       {!isInitialLoading && currentScanType === 'PROJECT_SCAN' && summary ? (
         <>
-          <div className="border border-neutral-200 bg-white p-5">
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-bold uppercase tracking-[0.28em] text-neutral-500">severity distribution</div>
-              <div className="text-xs text-neutral-500">총 {counts.total}건</div>
-            </div>
-            <div className="mt-4 flex h-10 overflow-hidden">
-              {(Object.keys(severityMeta) as FindingSeverity[]).map((severity) =>
-                counts[severity] > 0 && counts.total > 0 ? (
-                  <div
-                    className="flex items-center justify-center text-xs font-bold"
-                    key={severity}
-                    style={{
-                      background: severityMeta[severity].bg,
-                      color: severityMeta[severity].fg,
-                      width: `${(counts[severity] / counts.total) * 100}%`,
-                    }}
-                  >
-                    {severity[0]}
-                    {counts[severity]}
-                  </div>
-                ) : null,
-              )}
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-5">
-              {(Object.keys(severityMeta) as FindingSeverity[]).map((severity) => (
-                <div className="flex items-center gap-2 text-xs" key={severity}>
-                  <span className="h-2 w-2 rounded-full" style={{ background: severityMeta[severity].bg }} />
-                  <span className="text-neutral-600">{severity}</span>
-                  <span className="ml-auto font-bold">{counts[severity]}</span>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {severityOrder.map((severity) => (
+              <div className="border border-neutral-200 bg-white p-5" key={severity}>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {severityMeta[severity].label}
                 </div>
-              ))}
-            </div>
+                <div className="mt-4 text-4xl font-black">{counts[severity]}</div>
+              </div>
+            ))}
           </div>
 
           <div className="flex flex-col gap-6 border border-neutral-200 bg-white p-6 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex items-center gap-6">
               <PixelGoose mood={resolvedRatio > 30 ? 'happy' : 'working'} size={72} />
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.28em] text-neutral-500">resolution progress</div>
+                <div className="text-xs font-bold uppercase tracking-[0.28em] text-neutral-500">CHECKLIST PROGRESS</div>
                 <div className="mt-2 text-3xl font-black">
                   {resolvedCount}
                   <span className="text-neutral-300"> / {actionableTotal}</span>
@@ -380,6 +356,7 @@ function ResultPage() {
               </div>
             </div>
             <div className="w-full xl:max-w-[420px]">
+              <div className="mb-2 text-sm text-neutral-500">전체 진행률 {resolvedRatio}%</div>
               <div className="h-3 bg-neutral-100">
                 <div className="h-full bg-[#3DDC84]" style={{ width: `${resolvedRatio}%` }} />
               </div>
@@ -397,7 +374,7 @@ function ResultPage() {
             >
               전체
             </button>
-            {(Object.keys(severityMeta) as FindingSeverity[]).map((severity) => (
+            {severityOrder.map((severity) => (
               <button
                 className={`border px-3 py-1.5 text-xs ${
                   severityFilter === severity ? 'border-black bg-black text-white' : 'border-neutral-300 bg-white'
@@ -436,77 +413,80 @@ function ResultPage() {
             ))}
             <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-neutral-500">
               <span>TRIVY {getSourceCount(summary, 'TRIVY')}</span>
-              <span>CUSTOM_RULE {getSourceCount(summary, 'CUSTOM_RULE')}</span>
+              <span>CUSTOM RULE {getSourceCount(summary, 'CUSTOM_RULE')}</span>
               <span>AI {getSourceCount(summary, 'AI')}</span>
             </div>
           </div>
 
-          <div className="border border-neutral-200 bg-white">
+          <div className="space-y-4">
             {isFindingsLoading ? (
-              <div className="px-5 py-12 text-center text-sm text-neutral-500">finding 목록을 불러오는 중입니다.</div>
-            ) : findingsData.items.length === 0 ? (
-              <div className="px-5 py-12 text-center text-sm text-neutral-500">조건에 맞는 finding이 없습니다.</div>
+              <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">탐지 항목을 불러오는 중입니다.</div>
+            ) : groupedFindings.length === 0 ? (
+              <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">조건에 맞는 탐지 항목이 없습니다.</div>
             ) : (
-              findingsData.items.map((finding) => {
-                const dimmed =
-                  finding.resolutionStatus === 'RESOLVED' || finding.resolutionStatus === 'IGNORED';
-
-                return (
-                  <Link
-                    className={`group flex items-start gap-4 border-b border-neutral-100 p-5 last:border-b-0 hover:bg-[#F5F5F5] ${
-                      dimmed ? 'opacity-60' : ''
-                    }`}
-                    key={finding.findingId}
-                    state={routeState}
-                    to={ROUTES.resultFindingDetail
-                      .replace(':scanId', String(finding.scanId))
-                      .replace(':findingId', String(finding.findingId))}
-                  >
-                    <div className="w-1 self-stretch" style={{ background: severityMeta[finding.severity].bg }} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className="px-2 py-0.5 text-[10px] font-bold tracking-[0.22em]"
-                          style={{
-                            background: severityMeta[finding.severity].bg,
-                            color: severityMeta[finding.severity].fg,
-                          }}
-                        >
-                          {finding.severity}
-                        </span>
-                        <span className="font-mono text-[11px] text-neutral-500">
-                          findingId #{finding.findingId}
-                        </span>
-                        <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">
-                          {finding.category}
-                        </span>
-                        <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">
-                          {finding.sourceType}
-                        </span>
-                        <span className="font-mono text-[10px] text-neutral-600">{finding.ruleCode}</span>
-                        <span className="ml-auto text-[10px] font-bold tracking-[0.2em] text-neutral-500">
-                          {finding.resolutionStatus}
-                        </span>
-                      </div>
-                      <h3 className={`mt-3 text-base font-bold ${dimmed ? 'line-through' : ''}`}>{finding.title}</h3>
-                      <div className="mt-2 font-mono text-xs text-neutral-500">{formatFindingLocation(finding)}</div>
-                    </div>
-                    {!dimmed ? (
-                      <span className="inline-flex items-center gap-1 bg-black px-3 py-1.5 text-xs font-bold text-white transition group-hover:bg-[#3DDC84] group-hover:text-black">
-                        <Wand2 className="h-3 w-3" />
-                        자세히 보기
+              groupedFindings.map((group) => (
+                <section className="border border-neutral-200 bg-white" key={group.severity}>
+                  <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="px-2 py-1 text-[10px] font-bold tracking-[0.22em]"
+                        style={{ background: severityMeta[group.severity].bg, color: severityMeta[group.severity].fg }}
+                      >
+                        {group.severity}
                       </span>
-                    ) : null}
-                  </Link>
-                );
-              })
+                      <span className="text-sm font-bold">{group.items.length}건</span>
+                    </div>
+                    <span className="text-xs text-neutral-500">위험도가 높은 항목부터 먼저 확인해 보세요.</span>
+                  </div>
+
+                  {group.items.map((finding) => {
+                    const dimmed = finding.resolutionStatus === 'RESOLVED' || finding.resolutionStatus === 'IGNORED';
+
+                    return (
+                      <Link
+                        className={`group flex items-start gap-4 border-b border-neutral-100 p-5 last:border-b-0 hover:bg-[#F5F5F5] ${
+                          dimmed ? 'opacity-60' : ''
+                        }`}
+                        key={finding.findingId}
+                        state={routeState}
+                        to={ROUTES.resultFindingDetail
+                          .replace(':scanId', String(finding.scanId))
+                          .replace(':findingId', String(finding.findingId))}
+                      >
+                        <div className="flex shrink-0 items-start pt-1">
+                          <CheckCircle2 className={`h-5 w-5 ${dimmed ? 'text-emerald-500' : 'text-neutral-300'}`} />
+                        </div>
+                        <div className="w-1 self-stretch" style={{ background: severityMeta[finding.severity].bg }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-[11px] text-neutral-500">findingId #{finding.findingId}</span>
+                            <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.category}</span>
+                            <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.sourceType}</span>
+                            <span className="font-mono text-[10px] text-neutral-600">{finding.ruleCode}</span>
+                            <span className="ml-auto text-[10px] font-bold tracking-[0.2em] text-neutral-500">
+                              {finding.resolutionStatus}
+                            </span>
+                          </div>
+                          <h3 className={`mt-3 text-base font-bold ${dimmed ? 'line-through' : ''}`}>{finding.title}</h3>
+                          <div className="mt-2 font-mono text-xs text-neutral-500">{formatFindingLocation(finding)}</div>
+                        </div>
+                        {!dimmed ? (
+                          <span className="inline-flex items-center gap-1 bg-black px-3 py-1.5 text-xs font-bold text-white transition group-hover:bg-[#3DDC84] group-hover:text-black">
+                            <Wand2 className="h-3 w-3" />
+                            고치기
+                          </span>
+                        ) : null}
+                      </Link>
+                    );
+                  })}
+                </section>
+              ))
             )}
           </div>
 
           <div className="flex items-center justify-between border border-neutral-200 bg-white px-5 py-4 text-sm text-neutral-500">
             <span>
-              총 {findingsData.totalElements}건 중 {findingsData.totalElements === 0 ? 0 : page * findingsData.size + 1}
-              -
+              총 {findingsData.totalElements}건 중 {findingsData.totalElements === 0 ? 0 : page * findingsData.size + 1}-
               {Math.min((page + 1) * findingsData.size, findingsData.totalElements)} 표시
             </span>
             <div className="flex items-center gap-2">

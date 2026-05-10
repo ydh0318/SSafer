@@ -10,17 +10,14 @@ function mapProjectListItem(item: ProjectListItemData): ProjectSummary {
     scans: 0,
     lastStatus: 'NEW',
     risk: 'LOW',
-    description: '프로젝트 상세 설명은 상세 화면에서 확인할 수 있습니다.',
+    description: '프로젝트 설명이 아직 없습니다.',
     defaultScanMode: item.defaultScanMode,
     monitorEnabled: item.monitorEnabled,
     createdAt: item.createdAt,
   };
 }
 
-function mergeProjectDetail(
-  baseProject: ProjectSummary | undefined,
-  detail: ProjectDetailResponseData,
-): ProjectSummary {
+function mergeProjectDetail(baseProject: ProjectSummary | undefined, detail: ProjectDetailResponseData): ProjectSummary {
   return {
     id: String(detail.projectId),
     name: detail.name,
@@ -43,12 +40,17 @@ type ProjectState = {
   upsertProjectDetail: (detail: ProjectDetailResponseData) => void;
   addProject: (project: ProjectSummary) => void;
   removeProject: (projectId: string) => void;
+  reset: () => void;
+};
+
+const initialProjectState = {
+  projects: [] as ProjectSummary[],
+  totalElements: 0,
+  totalPages: 0,
 };
 
 export const useProjectStore = create<ProjectState>((set) => ({
-  projects: [],
-  totalElements: 0,
-  totalPages: 0,
+  ...initialProjectState,
   setProjectsFromList: (items, totalElements, totalPages) =>
     set(() => ({
       projects: items.map(mapProjectListItem),
@@ -80,4 +82,5 @@ export const useProjectStore = create<ProjectState>((set) => ({
       projects: state.projects.filter((project) => project.id !== projectId),
       totalElements: Math.max(0, state.totalElements - 1),
     })),
+  reset: () => set(() => ({ ...initialProjectState })),
 }));

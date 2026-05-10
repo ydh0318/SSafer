@@ -62,11 +62,7 @@ export function getTokenRole(token: string | null | undefined): AuthRole | strin
 export function isTokenExpired(token: string | null | undefined) {
   const payload = parseJwtPayload(token);
 
-  if (!payload) {
-    return false;
-  }
-
-  if (!payload.exp) {
+  if (!payload?.exp) {
     return false;
   }
 

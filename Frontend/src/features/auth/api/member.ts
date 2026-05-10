@@ -27,7 +27,7 @@ import type {
 } from '../../../types/auth';
 
 export async function loginWithEmail(payload: LoginRequest) {
-  const response = await apiClient.post<ApiSuccessResponse<AuthTokenData>>('/auth/login', payload);
+  const response = await publicApiClient.post<ApiSuccessResponse<AuthTokenData>>('/auth/login', payload);
   return response.data.data;
 }
 

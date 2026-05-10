@@ -61,7 +61,7 @@ export function validateScanUploadFiles(files: File[]) {
   }
 
   if (issue === 'FILE_COUNT_EXCEEDED') {
-    return `업로드 파일은 최대 ${MAX_SCAN_UPLOAD_FILE_COUNT}개까지 선택할 수 있습니다.`;
+    return `업로드 파일은 최대 ${MAX_SCAN_UPLOAD_FILE_COUNT}개까지만 선택할 수 있습니다.`;
   }
 
   if (issue === 'PAYLOAD_TOO_LARGE') {
@@ -73,7 +73,7 @@ export function validateScanUploadFiles(files: File[]) {
   }
 
   if (issue === 'UNSUPPORTED_FILE_TYPE') {
-    return '지원하지 않는 파일이 포함되어 있습니다.';
+    return '지원하지 않는 파일 형식이 포함되어 있습니다.';
   }
 
   return null;
