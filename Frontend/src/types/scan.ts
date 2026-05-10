@@ -82,7 +82,6 @@ export interface ProjectScanListResponseData {
 export interface ProjectScanListQuery {
   page?: number;
   size?: number;
-  scanType?: ScanType | '';
   status?: ScanStatus | '';
   scanMode?: ScanMode | '';
 }

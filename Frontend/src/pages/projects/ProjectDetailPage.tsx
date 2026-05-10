@@ -1,4 +1,4 @@
-﻿import { Activity, ArrowRight, Bot, FolderOpen, ShieldCheck, Trash2 } from 'lucide-react';
+import { Activity, ArrowRight, Bot, FolderOpen, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
@@ -24,7 +24,9 @@ import {
 import ProjectScanList from '../../features/scans/components/ProjectScanList';
 import ScanRequestForm, { type ScanRequestMethod } from '../../features/scans/components/ScanRequestForm';
 import { formatBooleanLabel, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
-import { validateScanUploadFiles } from '../../features/scans/utils/uploadValidation';
+import { getUploadScanToastFeedback, getUploadScanValidationToastMessage } from '../../features/scans/utils/uploadScanFeedback';
+import { getScanUploadValidationIssue } from '../../features/scans/utils/uploadValidation';
+import { useAuthStore } from '../../store/authStore';
 import type { ProjectDetailResponseData } from '../../types/project';
 import type {
   AgentStatusResponseData,
@@ -46,6 +48,7 @@ function ProjectDetailPage() {
   const navigate = useNavigate();
   const { projectId = '' } = useParams<{ projectId: string }>();
   const toast = useToast();
+  const user = useAuthStore((state) => state.user);
 
   const [projectDetail, setProjectDetail] = useState<ProjectDetailResponseData | null>(null);
   const [projectError, setProjectError] = useState<string | null>(null);
@@ -107,7 +110,7 @@ function ProjectDetailPage() {
       return;
     }
 
-    toast.success(`?ㅼ틪 #${lastCreatedScan.scanId} ?앹꽦???꾨즺?섏뿀?듬땲??`, { durationMs: 2000 });
+    toast.success(`스캔 #${lastCreatedScan.scanId} 생성이 완료되었습니다.`, { durationMs: 2000 });
   }, [lastCreatedScan, toast]);
 
   useEffect(() => {
@@ -135,7 +138,7 @@ function ProjectDetailPage() {
         }));
       } catch (error) {
         if (isMounted) {
-          setProjectError(error instanceof Error ? error.message : '?꾨줈?앺듃 ?곸꽭 ?뺣낫瑜?遺덈윭?ㅼ? 紐삵뻽?듬땲??');
+          setProjectError(error instanceof Error ? error.message : '프로젝트 상세 정보를 불러오지 못했습니다.');
         }
       } finally {
         if (isMounted) {
@@ -192,6 +195,13 @@ function ProjectDetailPage() {
       return;
     }
 
+    if (user?.role === 'GUEST') {
+      setAgentStatus(null);
+      setAgentError(null);
+      setIsAgentLoading(false);
+      return;
+    }
+
     let isMounted = true;
 
     const loadAgentStatus = async () => {
@@ -207,7 +217,7 @@ function ProjectDetailPage() {
       } catch (error) {
         if (isMounted) {
           setAgentStatus(null);
-          setAgentError(error instanceof Error ? error.message : 'Agent ?곹깭瑜?遺덈윭?ㅼ? 紐삵뻽?듬땲??');
+          setAgentError(error instanceof Error ? error.message : '에이전트 상태를 불러오지 못했습니다.');
         }
       } finally {
         if (isMounted) {
@@ -221,7 +231,7 @@ function ProjectDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, user?.role]);
 
   useEffect(() => {
     if (!projectId) {
@@ -243,7 +253,7 @@ function ProjectDetailPage() {
       } catch (error) {
         if (isMounted) {
           setScans([]);
-          setScanListError(error instanceof Error ? error.message : '?ㅼ틪 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??');
+          setScanListError(error instanceof Error ? error.message : '스캔 목록을 불러오지 못했습니다.');
         }
       } finally {
         if (isMounted) {
@@ -260,7 +270,10 @@ function ProjectDetailPage() {
   }, [projectId, scanFilters]);
 
   const handleRefreshAgentStatus = async () => {
-    if (!projectId) {
+    if (!projectId || user?.role === 'GUEST') {
+      setAgentStatus(null);
+      setAgentError(null);
+      setIsAgentLoading(false);
       return;
     }
 
@@ -272,7 +285,7 @@ function ProjectDetailPage() {
       setAgentStatus(data);
     } catch (error) {
       setAgentStatus(null);
-      setAgentError(error instanceof Error ? error.message : 'Agent ?곹깭瑜?遺덈윭?ㅼ? 紐삵뻽?듬땲??');
+      setAgentError(error instanceof Error ? error.message : '에이전트 상태를 불러오지 못했습니다.');
     } finally {
       setIsAgentLoading(false);
     }
@@ -291,7 +304,7 @@ function ProjectDetailPage() {
       setScans(data.items);
     } catch (error) {
       setScans([]);
-      setScanListError(error instanceof Error ? error.message : '?ㅼ틪 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??');
+      setScanListError(error instanceof Error ? error.message : '스캔 목록을 불러오지 못했습니다.');
     } finally {
       setIsScanListLoading(false);
     }
@@ -302,7 +315,7 @@ function ProjectDetailPage() {
       return;
     }
 
-    const shouldDelete = window.confirm(`?ㅼ틪 #${scanId} ??瑜? ??젣?좉퉴??`);
+    const shouldDelete = window.confirm(`스캔 #${scanId} 이력을 삭제할까요?`);
 
     if (!shouldDelete) {
       return;
@@ -319,10 +332,10 @@ function ProjectDetailPage() {
         setLastCreatedScan(null);
       }
 
-      setScanListNotice(`?ㅼ틪 #${scanId} ??媛) ??젣?섏뿀?듬땲??`);
+      setScanListNotice(`스캔 #${scanId} 이력을 삭제했습니다.`);
       await handleRefreshScans();
     } catch (error) {
-      setScanListError(error instanceof Error ? error.message : '?ㅼ틪 ??젣???ㅽ뙣?덉뒿?덈떎.');
+      setScanListError(error instanceof Error ? error.message : '스캔 이력 삭제에 실패했습니다.');
       setScanListNotice(null);
     } finally {
       setDeletingScanIds((current) => current.filter((value) => value !== scanId));
@@ -335,15 +348,15 @@ function ProjectDetailPage() {
     }
 
     if (scanRequestMethod === 'AGENT' && !scanOptions?.availableScanModes.includes('AGENT')) {
-      setScanRequestError('?꾩옱 ?ъ슜?????녿뒗 ?먭? 諛⑹떇?낅땲??');
+      setScanRequestError('현재 사용할 수 없는 점검 방식입니다.');
       return;
     }
 
     if (scanRequestMethod === 'UPLOAD') {
-      const validationError = validateScanUploadFiles(selectedUploadFiles);
+      const validationIssue = getScanUploadValidationIssue(selectedUploadFiles);
 
-      if (validationError) {
-        setScanRequestError(validationError);
+      if (validationIssue) {
+        toast.warning(getUploadScanValidationToastMessage(validationIssue), { durationMs: 3000 });
         return;
       }
     }
@@ -383,7 +396,18 @@ function ProjectDetailPage() {
         state: { autoOpenedFromScanRequest: true, projectId },
       });
     } catch (error) {
-      setScanRequestError(error instanceof Error ? error.message : '?ㅼ틪 ?붿껌 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.');
+      if (scanRequestMethod === 'UPLOAD') {
+        const feedback = getUploadScanToastFeedback(error, 'project-detail');
+        if (feedback.tone === 'warning') {
+          toast.warning(feedback.message, { durationMs: 3000 });
+        } else {
+          toast.error(feedback.message, { durationMs: 3000 });
+        }
+        await handleRefreshScans();
+        return;
+      }
+
+      setScanRequestError(error instanceof Error ? error.message : '스캔 요청 중 오류가 발생했습니다.');
     } finally {
       setIsScanRequestSubmitting(false);
     }
@@ -392,9 +416,10 @@ function ProjectDetailPage() {
   if (!projectId) {
     return (
       <section className="space-y-4">
-        <p className="text-sm text-neutral-600">?꾨줈?앺듃 ID媛 ?놁뒿?덈떎.</p>
+        <p className="text-sm text-neutral-600">프로젝트 ID가 없습니다.</p>
         <Link className="inline-flex bg-black px-4 py-2 text-sm font-bold text-white" to={ROUTES.projects}>
-          ?꾨줈?앺듃 紐⑸줉?쇰줈 ?뚯븘媛湲?        </Link>
+          프로젝트 목록으로 돌아가기
+        </Link>
       </section>
     );
   }
@@ -408,7 +433,7 @@ function ProjectDetailPage() {
               className="border border-neutral-300 px-5 py-3 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
               to={ROUTES.projects}
             >
-              ?꾨줈?앺듃 紐⑸줉
+              프로젝트 목록
             </Link>
             {projectDetail ? (
               <button
@@ -417,7 +442,7 @@ function ProjectDetailPage() {
                 type="button"
               >
                 <Trash2 className="h-4 w-4" />
-                ?꾨줈?앺듃 ??젣
+                프로젝트 삭제
               </button>
             ) : null}
             {lastCreatedScan ? (
@@ -426,7 +451,7 @@ function ProjectDetailPage() {
                 state={{ projectId }}
                 to={ROUTES.scanDetail.replace(':scanId', String(lastCreatedScan.scanId))}
               >
-                理쒓렐 ?ㅼ틪 蹂닿린
+                최근 스캔 보기
                 <ArrowRight className="h-4 w-4" />
               </Link>
             ) : null}
@@ -444,45 +469,40 @@ function ProjectDetailPage() {
               <PixelGoose mood={activeScans.length > 0 ? 'working' : completedScans.length > 0 ? 'happy' : 'idle'} size={88} />
             </div>
             <p className="mt-4 text-sm leading-7 text-neutral-600">
-              {projectDetail?.description ?? '?꾨줈?앺듃 ?ㅻ챸???꾩쭅 ?놁뒿?덈떎.'}
+              {projectDetail?.description ?? '프로젝트 설명이 아직 없습니다.'}
             </p>
           </div>
         }
-        description={
-          <>
-            ?꾨줈?앺듃 ?⑥쐞濡??ㅼ틪 ?붿껌, Agent ?곹깭, ?낅줈???먮쫫, ?ㅼ틪 湲곕줉?????붾㈃?먯꽌 愿由ы븷 ???덉뒿?덈떎.
-          </>
-        }
+        description="프로젝트 단위로 스캔 요청, Agent 상태, 업로드 흐름, 스캔 기록까지 한 화면에서 관리할 수 있습니다."
         eyebrow="PROJECT DETAIL"
         title={
           <>
-            ?ㅼ틪???ㅽ뻾?섍퀬,
+            스캔을 시작하고,
             <br />
-            寃곌낵 ?먮쫫源뚯? ??踰덉뿉 蹂대뒗 ?꾨줈?앺듃 ?붾㈃?낅땲??
+            결과 확인까지 한 번에 보는 프로젝트 화면입니다.
           </>
         }
       />
 
       {projectError ? <PageBanner message={projectError} tone="error" /> : null}
 
-
       {lastCreatedScan ? (
         <div className="hidden border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-          ?ㅼ틪 #{lastCreatedScan.scanId} ?앹꽦???꾨즺?섏뿀?듬땲?? ?곸꽭 ?붾㈃?먯꽌 吏꾪뻾 ?곹깭瑜?諛붾줈 ?뺤씤?????덉뒿?덈떎.
+          스캔 #{lastCreatedScan.scanId} 생성이 완료되었습니다. 상세 화면에서 진행 상태를 바로 확인할 수 있습니다.
         </div>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard helper="吏꾪뻾 以묒씠嫄곕굹 遺꾩꽍 ?湲?以묒씤 ?ㅼ틪 ?섏엯?덈떎." label="吏꾪뻾 以??ㅼ틪" tone="sky" value={activeScans.length} />
-        <MetricCard helper="寃곌낵瑜??뺤씤?????덈뒗 ?꾨즺 ?ㅼ틪 ?섏엯?덈떎." label="?꾨즺 ?ㅼ틪" tone="green" value={completedScans.length} />
-        <MetricCard helper="?ㅽ뙣 ?먮뒗 痍⑥냼???ㅼ틪 ?섏엯?덈떎." label="?ㅽ뙣/痍⑥냼" tone="red" value={failedScans.length} />
+        <MetricCard helper="진행 중이거나 분석 대기 중인 스캔 수입니다." label="진행 중 스캔" tone="sky" value={activeScans.length} />
+        <MetricCard helper="결과를 확인할 수 있는 완료 스캔 수입니다." label="완료 스캔" tone="green" value={completedScans.length} />
+        <MetricCard helper="실패했거나 취소된 스캔 수입니다." label="실패/취소" tone="red" value={failedScans.length} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
         <SectionPanel
-          description="Agent, CLI, ?낅줈??諛⑹떇 以??섎굹瑜?怨⑤씪 ???ㅼ틪???앹꽦?????덉뒿?덈떎."
+          description="Agent, CLI, 업로드 방식 중 하나를 골라 새 스캔을 시작할 수 있습니다."
           eyebrow="NEW SCAN"
-          title="???ㅼ틪 ?붿껌"
+          title="새 스캔 요청"
         >
           <ScanRequestForm
             agentAvailable={Boolean(scanOptions?.availableScanModes.includes('AGENT'))}
@@ -503,16 +523,16 @@ function ProjectDetailPage() {
             <div className="inline-flex bg-black p-3 text-white">
               <FolderOpen className="h-5 w-5" />
             </div>
-            <h3 className="mt-4 text-xl font-black tracking-tight text-black">?꾨줈?앺듃 湲곕낯 ?뺣낫</h3>
+            <h3 className="mt-4 text-xl font-black tracking-tight text-black">프로젝트 기본 정보</h3>
             <dl className="mt-4 space-y-3 text-sm text-neutral-600">
               <div className="flex items-start justify-between gap-4 border-t border-neutral-100 pt-3">
-                <dt className="font-semibold text-neutral-500">湲곕낯 ?ㅼ틪 諛⑹떇</dt>
+                <dt className="font-semibold text-neutral-500">기본 스캔 방식</dt>
                 <dd className="text-right font-bold text-black">
                   {projectDetail ? getScanModeLabel(projectDetail.defaultScanMode) : '-'}
                 </dd>
               </div>
               <div className="flex items-start justify-between gap-4 border-t border-neutral-100 pt-3">
-                <dt className="font-semibold text-neutral-500">紐⑤땲?곕쭅 ?곹깭</dt>
+                <dt className="font-semibold text-neutral-500">모니터링 상태</dt>
                 <dd className="text-right font-bold text-black">
                   {projectDetail ? formatBooleanLabel(projectDetail.monitorEnabled) : '-'}
                 </dd>
@@ -528,9 +548,9 @@ function ProjectDetailPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#3ddc84]">WORKFLOW</p>
-                <h3 className="mt-3 text-xl font-black tracking-tight">?ㅼ틪 ?ㅽ뻾遺??寃곌낵 ?뺤씤源뚯? ?댁뼱???묒뾽?????덉뒿?덈떎.</h3>
+                <h3 className="mt-3 text-xl font-black tracking-tight">스캔 요청부터 결과 확인까지 이어지는 흐름을 한 곳에서 볼 수 있습니다.</h3>
                 <p className="mt-3 text-sm leading-7 text-neutral-300">
-                  ???꾨줈?앺듃 ?덉뿉???ㅼ틪 ?붿껌怨??곹깭 ?뺤씤??諛섎났?섎㈃??媛숈? 臾몃㎘?쇰줈 寃곌낵瑜?怨꾩냽 愿由ы븷 ???덉뒿?덈떎.
+                  같은 프로젝트 안에서 스캔 요청과 상태 확인을 반복하면 결과를 더 일관된 기준으로 관리할 수 있습니다.
                 </p>
               </div>
               <PixelGoose mood="working" size={72} />
@@ -551,9 +571,9 @@ function ProjectDetailPage() {
             <div className="inline-flex bg-black p-3 text-white">
               <Bot className="h-5 w-5" />
             </div>
-            <h3 className="mt-4 text-xl font-black tracking-tight text-black">Agent ?곌껐 ?곹깭</h3>
+            <h3 className="mt-4 text-xl font-black tracking-tight text-black">Agent 연결 상태</h3>
             <p className="mt-3 text-sm leading-7 text-neutral-600">
-              Agent媛 ?곌껐???꾨줈?앺듃???쒕쾭 痢??섏쭛 湲곕컲?쇰줈 ??鍮좊Ⅴ寃??ㅼ쓬 ?ㅼ틪???댁뼱媛????덉뒿?덈떎.
+              Agent가 연결된 프로젝트라면 서버 정보 수집 기반으로 다음 스캔까지 이어서 진행할 수 있습니다.
             </p>
           </article>
         </div>
@@ -584,9 +604,9 @@ function ProjectDetailPage() {
             <Activity className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-xl font-black tracking-tight text-black">?댁쁺 硫붾え</h3>
+            <h3 className="text-xl font-black tracking-tight text-black">운영 메모</h3>
             <p className="mt-3 text-sm leading-7 text-neutral-600">
-              ???붾㈃? ?꾨줈?앺듃 ?곸꽭, Agent ?곹깭, ?ㅼ틪 紐⑸줉, ???ㅼ틪 ?붿껌 API瑜???踰덉뿉 ??뼱 ?뺤씤?섎뒗 ?댁쁺???붾㈃?낅땲??
+              이 화면은 프로젝트 상세, Agent 상태, 스캔 목록, 새 스캔 요청 API를 한 번에 확인하는 운영 화면입니다.
             </p>
           </div>
         </div>
