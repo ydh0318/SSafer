@@ -55,7 +55,7 @@ function ScanRequestForm({
             <p className="text-sm font-black">에이전트 기반 스캔</p>
           </div>
           <p className={`mt-2 text-xs leading-6 ${scanRequestMethod === 'AGENT' ? 'text-neutral-300' : 'text-neutral-500'}`}>
-            연결된 Local Agent가 있으면 프로젝트 서버에서 바로 점검 작업을 시작할 수 있습니다.
+            프로젝트에 Local Agent가 연결되어 있으면 웹에서 바로 점검 작업을 시작할 수 있습니다.
           </p>
         </button>
         <button
@@ -72,7 +72,7 @@ function ScanRequestForm({
             <p className="text-sm font-black">업로드 기반 스캔</p>
           </div>
           <p className={`mt-2 text-xs leading-6 ${scanRequestMethod === 'UPLOAD' ? 'text-neutral-300' : 'text-neutral-500'}`}>
-            설정 파일을 업로드하면 서버가 바로 점검을 시작하고 분석 큐까지 이어서 처리합니다.
+            설정 파일을 업로드해서 즉시 스캔을 시작하고, 결과를 빠르게 확인할 수 있습니다.
           </p>
         </button>
       </div>
@@ -89,7 +89,7 @@ function ScanRequestForm({
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm font-semibold text-black">분석 소스</span>
+          <span className="text-sm font-semibold text-black">실행 소스</span>
           <select
             className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
             onChange={(event) => handleFieldChange('source', event.target.value as CreateScanRequestPayload['source'])}
@@ -104,7 +104,7 @@ function ScanRequestForm({
           <input
             className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
             onChange={(event) => handleFieldChange('scanName', event.target.value)}
-            placeholder="예: 운영 환경 설정 점검"
+            placeholder="예: 운영 서버 설정 스캔"
             type="text"
             value={value.scanName ?? ''}
           />
@@ -124,7 +124,7 @@ function ScanRequestForm({
 
       {scanRequestMethod === 'UPLOAD' ? (
         <label className="block space-y-2">
-          <span className="text-sm font-semibold text-black">설정 파일</span>
+          <span className="text-sm font-semibold text-black">업로드 파일</span>
           <input
             className="w-full border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-4 text-sm text-black outline-none transition file:mr-4 file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:border-black"
             multiple
@@ -133,11 +133,11 @@ function ScanRequestForm({
           />
           <p className="text-xs leading-6 text-neutral-500">
             허용 파일: .env, .env.local 같은 .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml,
-            compose*.yml/.yaml · 최대 {SCAN_UPLOAD_FILE_COUNT_LIMIT}개 · 총 {SCAN_UPLOAD_FILE_SIZE_LIMIT_MB}MB
+            compose*.yml/.yaml, 최대 {SCAN_UPLOAD_FILE_COUNT_LIMIT}개, 총 {SCAN_UPLOAD_FILE_SIZE_LIMIT_MB}MB
           </p>
           {selectedFiles.length > 0 ? (
             <div className="border border-neutral-200 bg-[#f5f5f5] px-4 py-3 text-sm text-neutral-700">
-              <div className="font-semibold text-black">선택된 파일</div>
+              <div className="font-semibold text-black">선택한 파일</div>
               <ul className="mt-2 space-y-1">
                 {selectedFiles.map((file) => (
                   <li className="font-mono" key={`${file.name}-${file.size}-${file.lastModified}`}>
@@ -157,7 +157,7 @@ function ScanRequestForm({
           onChange={(event) => handleFieldChange('includeLogs', event.target.checked)}
           type="checkbox"
         />
-        <span className="text-sm font-medium text-neutral-700">로그도 함께 점검합니다.</span>
+        <span className="text-sm font-medium text-neutral-700">로그 수집을 함께 진행합니다.</span>
       </label>
 
       {errorMessage ? (

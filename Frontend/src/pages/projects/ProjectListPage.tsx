@@ -1,4 +1,4 @@
-﻿import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Trash2, Upload, X } from 'lucide-react';
+import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -18,11 +18,8 @@ import {
   requestUploadScan,
 } from '../../features/scans/api/scans';
 import { formatCompactDateTime, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
-import {
-  SCAN_UPLOAD_FILE_COUNT_LIMIT,
-  SCAN_UPLOAD_FILE_SIZE_LIMIT_MB,
-  validateScanUploadFiles,
-} from '../../features/scans/utils/uploadValidation';
+import { getUploadScanToastFeedback, getUploadScanValidationToastMessage } from '../../features/scans/utils/uploadScanFeedback';
+import { getScanUploadValidationIssue } from '../../features/scans/utils/uploadValidation';
 import { useProjectStore } from '../../store/projectStore';
 import type { CreateProjectFormValues, ProjectSummary } from '../../types/project';
 import type { ProjectScanListItemData, ProjectScanOptionsData } from '../../types/scan';
@@ -71,6 +68,10 @@ const modeCards: Array<{
   },
 ];
 
+function normalizeProjectName(value: string) {
+  return value.trim();
+}
+
 function getAgentTone(project: ProjectSummary, isSelected: boolean) {
   if (!project.monitorEnabled) {
     return isSelected ? 'text-neutral-400' : 'text-neutral-500';
@@ -91,7 +92,6 @@ function ProjectListPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createNotice, setCreateNotice] = useState<{ message: string; tone: 'warning' } | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<ScanModeOption>('UPLOAD');
   const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
@@ -152,15 +152,6 @@ function ProjectListPage() {
       isMounted = false;
     };
   }, [setProjectsFromList]);
-
-  useEffect(() => {
-    if (!createNotice) {
-      return;
-    }
-
-    toast.warning(createNotice.message, { durationMs: 2000 });
-    setCreateNotice(null);
-  }, [createNotice, toast]);
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -314,26 +305,30 @@ function ProjectListPage() {
   };
 
   const handleUploadFileChange = (files: File[] | null) => {
-    const nextFiles = files ?? [];
-    setSelectedUploadFiles(nextFiles);
-    setScanError(nextFiles.length > 0 ? validateScanUploadFiles(nextFiles) : null);
+    setSelectedUploadFiles(files ?? []);
+    setScanError(null);
   };
 
   const handleCreateUploadFileChange = (files: File[] | null) => {
-    const nextFiles = files ?? [];
-    setCreateUploadFiles(nextFiles);
-    setCreateError(nextFiles.length > 0 ? validateScanUploadFiles(nextFiles) : null);
+    setCreateUploadFiles(files ?? []);
+    setCreateError(null);
   };
 
   const handleCreateProject = async () => {
     setCreateError(null);
-    setCreateNotice(null);
+
+    const projectName = normalizeProjectName(formValues.name);
+
+    if (projects.some((project) => normalizeProjectName(project.name) === projectName)) {
+      setCreateError('이미 같은 이름의 프로젝트가 있습니다. 다른 이름으로 다시 시도해 주세요.');
+      return;
+    }
 
     if (createUploadFiles.length > 0) {
-      const validationError = validateScanUploadFiles(createUploadFiles);
+      const validationIssue = getScanUploadValidationIssue(createUploadFiles);
 
-      if (validationError) {
-        setCreateError(validationError);
+      if (validationIssue) {
+        toast.warning(getUploadScanValidationToastMessage(validationIssue), { durationMs: 3000 });
         return;
       }
     }
@@ -342,7 +337,6 @@ function ProjectListPage() {
 
     try {
       const projectData = await createProject(formValues);
-      const projectName = formValues.name.trim();
       const projectDescription = formValues.description.trim();
       const nextProject: ProjectSummary = {
         id: String(projectData.projectId),
@@ -375,10 +369,12 @@ function ProjectListPage() {
           return;
         } catch (error) {
           console.error('Failed to start initial scan after project creation.', error);
-          setCreateNotice({
-            tone: 'warning',
-            message: '프로젝트는 생성되었지만 첫 스캔 시작에는 실패했습니다. 다시 시도해 주세요.',
-          });
+          const feedback = getUploadScanToastFeedback(error, 'project-create');
+          if (feedback.tone === 'warning') {
+            toast.warning(feedback.message, { durationMs: 3000 });
+          } else {
+            toast.error(feedback.message, { durationMs: 3000 });
+          }
           return;
         }
       }
@@ -404,10 +400,10 @@ function ProjectListPage() {
     }
 
     if (selectedMode === 'UPLOAD') {
-      const validationError = validateScanUploadFiles(selectedUploadFiles);
+      const validationIssue = getScanUploadValidationIssue(selectedUploadFiles);
 
-      if (validationError) {
-        setScanError(validationError);
+      if (validationIssue) {
+        toast.warning(getUploadScanValidationToastMessage(validationIssue), { durationMs: 3000 });
         return;
       }
     }
@@ -424,17 +420,28 @@ function ProjectListPage() {
               files: selectedUploadFiles,
             })
           : await createScanRequest({
-        projectName: selectedProject.name,
-        source: selectedMode === 'AGENT' ? undefined : 'CLI',
-        scanName: `${selectedProject.name} ${selectedMode} 스캔`,
-        includeLogs: false,
-      });
+              projectName: selectedProject.name,
+              source: selectedMode === 'AGENT' ? undefined : 'CLI',
+              scanName: `${selectedProject.name} ${selectedMode} 스캔`,
+              includeLogs: false,
+            });
 
       navigate(ROUTES.scanDetail.replace(':scanId', String(scanData.scanId)), {
         state: { autoOpenedFromScanRequest: true, projectId: selectedProject.id },
       });
     } catch (error) {
       console.error('Failed to start scan.', error);
+
+      if (selectedMode === 'UPLOAD') {
+        const feedback = getUploadScanToastFeedback(error, 'project-list');
+        if (feedback.tone === 'warning') {
+          toast.warning(feedback.message, { durationMs: 3000 });
+        } else {
+          toast.error(feedback.message, { durationMs: 3000 });
+        }
+        return;
+      }
+
       setScanError('스캔을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setIsStartingScan(false);
@@ -445,7 +452,7 @@ function ProjectListPage() {
     <section className="space-y-10">
       <header className="flex items-start justify-between gap-6 pt-4">
         <div className="min-w-0">
-          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">뭐 스캔할까요 ?</h1>
+          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">무엇을 스캔할까요?</h1>
         </div>
         <div className="shrink-0">
           <PixelGoose mood="idle" size={92} />
@@ -652,7 +659,7 @@ function ProjectListPage() {
             <PixelGoose mood={isDragOver ? 'alert' : 'idle'} size={72} />
             <h2 className="mt-8 text-3xl font-black tracking-tight">설정 파일을 이곳에 올려주세요</h2>
             <p className="mt-3 text-sm text-neutral-500">
-              허용 파일: .env, .env.local 같은 .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml, compose*.yml/.yaml · 최대 3개 · 총 1MB
+              허용 파일: .env, .env.local 같은 .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml, compose*.yml/.yaml
             </p>
             <label className="mt-8 cursor-pointer text-base text-neutral-700 underline underline-offset-4 hover:text-black">
               파일 선택
@@ -767,5 +774,3 @@ function ProjectListPage() {
 }
 
 export default ProjectListPage;
-
-

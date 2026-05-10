@@ -11,15 +11,15 @@ const scanStatusLabelMap: Record<ScanStatus, string> = {
 };
 
 const agentStatusLabelMap: Record<AgentStatus, string> = {
-  ONLINE: '정상',
+  ONLINE: '온라인',
   OFFLINE: '오프라인',
   ERROR: '오류',
 };
 
 const taskStatusLabelMap: Record<AgentTaskStatus, string> = {
-  PENDING: '대기',
+  PENDING: '대기 중',
   SENT: '전송됨',
-  ACKED: '확인됨',
+  ACKED: '수신 확인',
   RUNNING: '진행 중',
   DONE: '완료',
   FAILED: '실패',
@@ -66,7 +66,7 @@ export function formatCompactDateTime(value: string | null | undefined) {
 }
 
 export function formatBooleanLabel(value: boolean) {
-  return value ? '활성화' : '비활성화';
+  return value ? '사용 중' : '사용 안 함';
 }
 
 export function getScanStatusLabel(status: ScanStatus) {
@@ -133,7 +133,7 @@ export function getTaskStatusClassName(status: AgentTaskStatus) {
 
 export function getScanModeLabel(scanMode: ScanMode) {
   if (scanMode === 'AGENT') {
-    return '로컬 에이전트';
+    return '에이전트 기반';
   }
 
   if (scanMode === 'CLI') {
@@ -165,10 +165,10 @@ export function getDeleteBlockedReason(status: ScanStatus) {
   }
 
   if (status === 'QUEUED' || status === 'RUNNING' || status === 'RAW_UPLOADED') {
-    return '스캔이 아직 진행 중이어서 삭제할 수 없습니다.';
+    return '스캔이 아직 진행 중이라 삭제할 수 없습니다.';
   }
 
-  return '현재 상태에서는 이 스캔을 삭제할 수 없습니다.';
+  return '현재 상태에서는 스캔을 삭제할 수 없습니다.';
 }
 
 export function getInternalAgentWebSocketUrl() {
