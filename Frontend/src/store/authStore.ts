@@ -63,6 +63,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user });
   },
   login: ({ accessToken, refreshToken, user }) => {
+    useProjectStore.getState().reset();
     tokenStorage.setTokens({ accessToken, refreshToken });
 
     set({

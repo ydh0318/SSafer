@@ -19,13 +19,13 @@ type ProjectCreateFormProps = {
 const scanModeOptions: Array<{ value: ScanMode; label: string; helper: string }> = [
   {
     value: 'AGENT',
-    label: '에이전트 기반 스캔',
-    helper: '프로젝트에 연결된 Local Agent가 있으면 웹에서 바로 점검 작업을 시작할 수 있습니다.',
+    label: '로컬 Agent 스캔',
+    helper: '프로젝트에 연결된 Local Agent를 통해 서버나 실행 환경 기준으로 분석을 시작합니다.',
   },
   {
     value: 'UPLOAD',
-    label: '업로드 기반 스캔',
-    helper: '.env, Dockerfile, docker-compose.yml 같은 설정 파일을 업로드해서 바로 점검을 시작할 수 있습니다.',
+    label: '파일 업로드 스캔',
+    helper: '.env, Dockerfile, docker-compose.yml 같은 파일을 올려 바로 분석할 수 있습니다.',
   },
 ];
 
@@ -39,7 +39,7 @@ function ProjectCreateForm({
   isSubmitting = false,
   errorMessage,
   title = '새 프로젝트 만들기',
-  description = '프로젝트 기본 정보와 기본 스캔 방식을 설정한 뒤, 필요하면 설정 파일도 함께 업로드할 수 있습니다.',
+  description = '프로젝트 정보를 먼저 등록한 뒤, 필요하면 바로 파일을 업로드해 첫 스캔까지 이어서 시작할 수 있습니다.',
   submitLabel = '프로젝트 생성',
 }: ProjectCreateFormProps) {
   const setField = <K extends keyof CreateProjectFormValues>(field: K, nextValue: CreateProjectFormValues[K]) => {
@@ -69,7 +69,7 @@ function ProjectCreateForm({
             placeholder="예: payment-api"
             value={value.name}
           />
-          <span className="text-xs leading-6 text-neutral-500">프로젝트 목록과 스캔 요청 화면에서 함께 표시됩니다.</span>
+          <span className="text-xs leading-6 text-neutral-500">프로젝트 목록과 스캔 결과에서 함께 표시되는 이름입니다.</span>
         </label>
 
         <label className="grid gap-2">
@@ -78,7 +78,7 @@ function ProjectCreateForm({
             className="min-h-28 border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
             maxLength={1000}
             onChange={(event) => setField('description', event.target.value)}
-            placeholder="이 프로젝트가 다루는 서비스, 저장소, 운영 목적 등을 간단히 적어주세요."
+            placeholder="이 프로젝트가 어떤 서비스인지, 어떤 설정 파일을 점검하려는지 간단히 적어 주세요."
             value={value.description}
           />
         </label>
@@ -117,7 +117,7 @@ function ProjectCreateForm({
             onChange={(event) => setField('monitorEnabled', event.target.checked)}
             type="checkbox"
           />
-          <span className="text-sm font-medium text-neutral-700">이 프로젝트의 상태 변화를 모니터링에 반영합니다.</span>
+          <span className="text-sm font-medium text-neutral-700">이 프로젝트에서 모니터링과 Agent 상태 표시를 함께 사용합니다.</span>
         </label>
 
         <section className="border border-dashed border-neutral-300 bg-white p-5">
@@ -126,19 +126,17 @@ function ProjectCreateForm({
               <Upload className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-black text-black">프로젝트 생성과 함께 설정 파일 업로드</p>
+              <p className="text-sm font-black text-black">프로젝트 생성 후 바로 파일 업로드 스캔 시작</p>
               <p className="mt-2 text-sm leading-7 text-neutral-600">
-                원하면 프로젝트를 만들면서 설정 파일도 함께 올릴 수 있습니다. 허용 파일은 `.env`, `.env.local`
-                같은 `.env.*`, `Dockerfile`, `Containerfile`, `docker-compose*.yml/.yaml`,
-                `compose*.yml/.yaml`입니다. 파일이 없으면 프로젝트만 먼저 생성되고, 이후 원하는 시점에
-                별도로 스캔을 시작할 수 있습니다.
+                원하면 프로젝트를 만든 직후 바로 설정 파일을 업로드해 첫 스캔까지 이어서 진행할 수 있습니다. 지원 파일은 `.env`,
+                `.env.local`, `.env.*`, `Dockerfile`, `Containerfile`, `docker-compose*.yml/.yaml`, `compose*.yml/.yaml`입니다.
               </p>
             </div>
           </div>
 
           <div className="mt-5 grid gap-2">
             <label className="grid gap-2">
-              <span className="text-sm font-bold text-black">설정 파일</span>
+              <span className="text-sm font-bold text-black">스캔할 파일</span>
               <input
                 className="w-full border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-4 text-sm text-black outline-none transition file:mr-4 file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:border-black"
                 multiple
@@ -147,12 +145,11 @@ function ProjectCreateForm({
               />
             </label>
             <p className="text-xs leading-6 text-neutral-500">
-              허용 파일: .env, .env.local 같은 .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml,
-              compose*.yml/.yaml
+              지원 파일: .env, .env.local, .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml, compose*.yml/.yaml
             </p>
             {selectedUploadFiles.length > 0 ? (
               <div className="border border-neutral-200 bg-[#f5f5f5] px-4 py-3 text-sm text-neutral-700">
-                <div className="font-semibold text-black">선택된 파일</div>
+                <div className="font-semibold text-black">선택한 파일</div>
                 <ul className="mt-2 space-y-1">
                   {selectedUploadFiles.map((file) => (
                     <li className="font-mono" key={`${file.name}-${file.size}-${file.lastModified}`}>

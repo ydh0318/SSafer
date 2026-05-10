@@ -2,8 +2,8 @@ import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Trash2, Up
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import PageBanner from '../../components/common/PageBanner';
 import ModalFrame from '../../components/common/ModalFrame';
+import PageBanner from '../../components/common/PageBanner';
 import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import { useToast } from '../../features/feedback/useToast';
@@ -52,19 +52,19 @@ const modeCards: Array<{
     id: 'UPLOAD',
     icon: Upload,
     title: '파일 업로드',
-    description: '.env, Dockerfile, docker-compose.yml 같은 설정 파일을 업로드해서 바로 스캔을 시작할 수 있습니다.',
+    description: '설정 파일을 바로 올려 빠르게 결과를 확인하고 싶을 때 적합합니다.',
   },
   {
     id: 'CLI',
     icon: Terminal,
     title: 'CLI',
-    description: 'CLI 실행 결과를 업로드하거나 CI 흐름과 연결해 점검을 이어갈 수 있습니다.',
+    description: '로컬 또는 CI 환경에서 명령어 기반으로 스캔을 실행하고 싶을 때 사용합니다.',
   },
   {
     id: 'AGENT',
     icon: Server,
     title: 'Agent',
-    description: '설치된 Agent가 연결되어 있으면 원격 점검 흐름을 시작할 수 있습니다.',
+    description: '연결된 Local Agent를 통해 실제 서버나 실행 환경 기준으로 점검합니다.',
   },
 ];
 
@@ -78,6 +78,18 @@ function getAgentTone(project: ProjectSummary, isSelected: boolean) {
   }
 
   return isSelected ? 'text-[#D4FC64]' : 'text-[#8CC319]';
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.ceil(bytes / 1024)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 function ProjectListPage() {
@@ -114,7 +126,7 @@ function ProjectListPage() {
     targetProject,
   } = useProjectDeleteFlow({
     onDeleted: (project) => {
-      toast.success(`${project.name} 프로젝트를 삭제했습니다.`);
+      toast.success(`${project.name} 프로젝트가 삭제되었습니다.`);
     },
   });
 
@@ -298,6 +310,16 @@ function ProjectListPage() {
     [latestCompletedScans, projects],
   );
 
+  const uploadStats = useMemo(() => {
+    const totalBytes = selectedUploadFiles.reduce((sum, file) => sum + file.size, 0);
+    return {
+      count: selectedUploadFiles.length,
+      totalBytes,
+      remainingCount: Math.max(3 - selectedUploadFiles.length, 0),
+      remainingBytes: Math.max(1024 * 1024 - totalBytes, 0),
+    };
+  }, [selectedUploadFiles]);
+
   const resetCreateForm = () => {
     setFormValues(initialProjectForm);
     setCreateUploadFiles([]);
@@ -320,7 +342,7 @@ function ProjectListPage() {
     const projectName = normalizeProjectName(formValues.name);
 
     if (projects.some((project) => normalizeProjectName(project.name) === projectName)) {
-      setCreateError('이미 같은 이름의 프로젝트가 있습니다. 다른 이름으로 다시 시도해 주세요.');
+      setCreateError('같은 이름의 프로젝트가 이미 있습니다. 다른 이름으로 다시 시도해 주세요.');
       return;
     }
 
@@ -360,7 +382,7 @@ function ProjectListPage() {
         try {
           const scanData = await requestUploadScan({
             projectName,
-            scanName: `${projectName} 첫 스캔`,
+            scanName: `${projectName} 초기 스캔`,
             files: createUploadFiles,
           });
           navigate(ROUTES.scanDetail.replace(':scanId', String(scanData.scanId)), {
@@ -379,10 +401,10 @@ function ProjectListPage() {
         }
       }
 
-      toast.success('프로젝트를 생성했습니다.');
+      toast.success('프로젝트가 생성되었습니다.');
     } catch (error) {
       console.error('Failed to create project.', error);
-      setCreateError('프로젝트를 생성하지 못했습니다.');
+      setCreateError('프로젝트 생성에 실패했습니다.');
     } finally {
       setIsCreating(false);
     }
@@ -390,12 +412,12 @@ function ProjectListPage() {
 
   const handleStartScan = async () => {
     if (!selectedProject) {
-      setScanError('프로젝트를 먼저 선택해 주세요.');
+      setScanError('먼저 프로젝트를 선택해 주세요.');
       return;
     }
 
     if (selectedMode === 'AGENT' && !selectedProjectScanOptions?.availableScanModes.includes('AGENT')) {
-      setScanError('현재 사용할 수 없는 점검 방식입니다.');
+      setScanError('이 프로젝트에서는 아직 Agent 스캔을 사용할 수 없습니다.');
       return;
     }
 
@@ -442,7 +464,7 @@ function ProjectListPage() {
         return;
       }
 
-      setScanError('스캔을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      setScanError('스캔 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setIsStartingScan(false);
     }
@@ -452,7 +474,9 @@ function ProjectListPage() {
     <section className="space-y-10">
       <header className="flex items-start justify-between gap-6 pt-4">
         <div className="min-w-0">
-          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">무엇을 스캔할까요?</h1>
+          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">
+            뭘 스캔할까요?
+          </h1>
         </div>
         <div className="shrink-0">
           <PixelGoose mood="idle" size={92} />
@@ -489,7 +513,7 @@ function ProjectListPage() {
                 >
                   <span className="truncate text-[clamp(1.35rem,2vw,1.85rem)]">{project.name}</span>
                   <span className={`shrink-0 text-sm font-bold ${getAgentTone(project, isSelected)}`}>
-                    {project.monitorEnabled ? '● Agent' : '○ Agent'}
+                    {project.monitorEnabled ? 'Agent 사용' : 'Agent 없음'}
                   </span>
                 </button>
               );
@@ -501,7 +525,7 @@ function ProjectListPage() {
               type="button"
             >
               <Plus className="h-7 w-7" />
-              새로
+              추가
             </button>
           </div>
         )}
@@ -513,7 +537,7 @@ function ProjectListPage() {
               onClick={() => navigate(ROUTES.projectDetail.replace(':projectId', selectedProject.id))}
               type="button"
             >
-              프로젝트 상세
+              프로젝트 상세 보기
               <ArrowRight className="h-4 w-4" />
             </button>
             <button
@@ -532,16 +556,16 @@ function ProjectListPage() {
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-sm text-neutral-500">최근 결과</div>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-[#080B16]">최근 완료된 스캔</h2>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-[#080B16]">가장 최근에 완료된 스캔</h2>
           </div>
-          <p className="text-sm text-neutral-500">완료된 스캔 결과를 바로 확인할 수 있습니다.</p>
+          <p className="text-sm text-neutral-500">프로젝트별 최신 완료 결과를 바로 열어볼 수 있습니다.</p>
         </div>
 
         {isLoadingCompletedScans ? (
-          <div className="border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500">최근 결과를 불러오는 중입니다.</div>
+          <div className="border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500">최신 완료 결과를 불러오는 중입니다.</div>
         ) : completedProjectEntries.length === 0 ? (
           <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600">
-            완료된 스캔이 있는 프로젝트가 아직 없습니다.
+            아직 완료된 스캔이 없습니다.
           </div>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
@@ -578,7 +602,7 @@ function ProjectListPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center bg-[#D4FC64] px-3 py-2 text-sm font-bold text-black">결과 보러 가기</span>
+                    <span className="inline-flex items-center bg-[#D4FC64] px-3 py-2 text-sm font-bold text-black">결과 바로 보기</span>
                     <button
                       className="border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 transition hover:border-black hover:text-black"
                       onClick={(event) => {
@@ -657,9 +681,9 @@ function ProjectListPage() {
             }}
           >
             <PixelGoose mood={isDragOver ? 'alert' : 'idle'} size={72} />
-            <h2 className="mt-8 text-3xl font-black tracking-tight">설정 파일을 이곳에 올려주세요</h2>
+            <h2 className="mt-8 text-3xl font-black tracking-tight">파일을 드래그하거나 직접 선택해 업로드하세요</h2>
             <p className="mt-3 text-sm text-neutral-500">
-              허용 파일: .env, .env.local 같은 .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml, compose*.yml/.yaml
+              지원 파일: .env, .env.local, .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml, compose*.yml/.yaml
             </p>
             <label className="mt-8 cursor-pointer text-base text-neutral-700 underline underline-offset-4 hover:text-black">
               파일 선택
@@ -670,15 +694,27 @@ function ProjectListPage() {
                 type="file"
               />
             </label>
+            <div className="mt-6 flex flex-wrap justify-center gap-3 text-xs text-neutral-500">
+              <span>파일 {uploadStats.count}/3개</span>
+              <span>현재 용량 {formatFileSize(uploadStats.totalBytes)}</span>
+              <span>남은 용량 {formatFileSize(uploadStats.remainingBytes)}</span>
+            </div>
             {selectedUploadFiles.length > 0 ? (
-              <div className="mt-8 flex flex-col gap-3 bg-[#111111] px-4 py-3 text-sm text-white">
+              <div className="mt-8 flex w-full max-w-xl flex-col gap-3 bg-[#111111] px-4 py-3 text-left text-sm text-white">
                 {selectedUploadFiles.map((file) => (
-                  <span className="font-mono" key={`${file.name}-${file.size}-${file.lastModified}`}>
-                    {file.name}
-                  </span>
+                  <div className="flex items-center justify-between gap-3 font-mono" key={`${file.name}-${file.size}-${file.lastModified}`}>
+                    <span className="truncate">{file.name}</span>
+                    <span className="shrink-0 text-xs text-neutral-300">{formatFileSize(file.size)}</span>
+                  </div>
                 ))}
-                <button aria-label="선택한 파일 제거" onClick={() => handleUploadFileChange(null)} type="button">
+                <button
+                  aria-label="선택한 파일 비우기"
+                  className="inline-flex items-center gap-2 self-end text-xs text-neutral-300 hover:text-white"
+                  onClick={() => handleUploadFileChange(null)}
+                  type="button"
+                >
                   <X className="h-4 w-4" />
+                  파일 비우기
                 </button>
               </div>
             ) : null}
@@ -687,12 +723,12 @@ function ProjectListPage() {
           <div className="min-h-[360px] bg-white p-10">
             <p className="font-mono text-[11px] tracking-[0.24em] text-neutral-400">{selectedMode}</p>
             <h2 className="mt-4 text-3xl font-black tracking-tight">
-              {selectedMode === 'CLI' ? 'CLI 흐름으로 스캔을 시작합니다.' : 'Agent 연결 상태로 스캔을 시작합니다.'}
+              {selectedMode === 'CLI' ? 'CLI 명령어로 스캔을 시작합니다' : 'Agent가 연결된 환경에서 스캔을 시작합니다'}
             </h2>
             <p className="mt-4 max-w-xl text-sm leading-7 text-neutral-600">
               {selectedMode === 'CLI'
-                ? 'CLI 결과 파일을 업로드하거나 자동화된 실행 흐름과 연결해 스캔을 이어갈 수 있습니다.'
-                : '프로젝트에 Agent가 연결되어 있으면 원격 점검 흐름을 바로 시작할 수 있습니다.'}
+                ? 'CLI 흐름은 실제 개발 환경이나 CI에서 반복 실행하기 좋습니다. 현재 화면에서는 스캔 요청만 등록하고, 상세 화면에서 진행 상태를 확인할 수 있습니다.'
+                : 'Agent 흐름은 연결된 로컬 환경을 기준으로 실행됩니다. 프로젝트에 Agent가 준비되어 있어야 사용할 수 있습니다.'}
             </p>
             <div className="mt-8 bg-neutral-950 p-5 font-mono text-sm text-[#D4FC64]">
               {selectedMode === 'CLI'
@@ -711,9 +747,9 @@ function ProjectListPage() {
             </p>
           </div>
           <div className="bg-[#111111] p-8 text-white">
-            <p className="font-mono text-[11px] tracking-[0.24em] text-[#D4FC64]">평균 첫 결과 확인</p>
+            <p className="font-mono text-[11px] tracking-[0.24em] text-[#D4FC64]">예상 결과 확인 시간</p>
             <div className="mt-6 text-5xl font-black tracking-tight">~30초</div>
-            <p className="mt-4 text-sm text-neutral-500">P95 기준</p>
+            <p className="mt-4 text-sm text-neutral-500">파일 업로드 스캔 기준</p>
           </div>
           <button
             className="inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-6 py-4 text-sm font-black text-black transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
@@ -721,7 +757,7 @@ function ProjectListPage() {
             onClick={() => void handleStartScan()}
             type="button"
           >
-            {isStartingScan ? '스캔 시작 중' : selectedMode === 'UPLOAD' ? '파일 업로드 후 스캔 시작' : '스캔 시작하기'}
+            {isStartingScan ? '스캔 요청 중...' : selectedMode === 'UPLOAD' ? '파일 업로드 후 스캔 시작' : '스캔 요청 보내기'}
             {isStartingScan ? <Clock className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
           </button>
         </aside>
@@ -767,7 +803,7 @@ function ProjectListPage() {
         onClick={() => setIsCreateOpen(true)}
         type="button"
       >
-        <FolderPlus className="h-4 w-4" /> 프로젝트 만들기
+        <FolderPlus className="h-4 w-4" /> 새 프로젝트 만들기
       </button>
     </section>
   );

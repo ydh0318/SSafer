@@ -12,8 +12,8 @@ import useGuestEntry from '../../features/auth/hooks/useGuestEntry';
 import { hasStoredMemberSession } from '../../features/auth/utils/session';
 import LandingEntryModal from '../../features/home/components/LandingEntryModal';
 import LoopingNumberTicker from '../../features/home/components/LoopingNumberTicker';
-import { getHistoryScans } from '../../features/history/api/history';
 import HomeFeatureCard from '../../features/home/components/HomeFeatureCard';
+import { getHistoryScans } from '../../features/history/api/history';
 
 type ComparisonItem = {
   step: string;
@@ -181,10 +181,14 @@ function LandingPage() {
             <div className="text-[10px] font-mono tracking-[0.42em] text-neutral-400">MEET SSAFER</div>
 
             <div className="mt-6">
-              <h1 className="text-5xl font-black leading-[0.9] text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]">취약점,</h1>
+              <h1 className="text-5xl font-black leading-[0.9] text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]">
+                취약점,
+              </h1>
 
               <div className="mt-2 grid gap-2 xl:grid-cols-[auto_auto_minmax(0,1fr)] xl:items-end xl:gap-6">
-                <div className="text-5xl font-black leading-[0.9] text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]">지금</div>
+                <div className="text-5xl font-black leading-[0.9] text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]">
+                  지금
+                </div>
                 <div className="inline-flex h-[0.9em] w-[4.8ch] items-center justify-center bg-[var(--landing-accent)] px-3 text-5xl font-black leading-none text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]">
                   <LoopingNumberTicker durationMs={2500} edgeHoldMs={320} to={5000} />
                 </div>

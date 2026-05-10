@@ -1,6 +1,6 @@
 import { ArrowLeft, FileSearch } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { ROUTES } from '../../constants/routes';
 import { useToast } from '../../features/feedback/useToast';
@@ -14,14 +14,17 @@ type ScanRouteState = {
   autoOpenedFromScanRequest?: boolean;
 };
 
-const LOAD_STATUS_ERROR_MESSAGE = '스캔 진행 상태를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
-const REFRESH_STATUS_ERROR_MESSAGE = '새로고침 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
+const LOAD_STATUS_ERROR_MESSAGE = '스캔 진행 상태를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const REFRESH_STATUS_ERROR_MESSAGE = '자동 새로고침에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 
 function ScanDetailPage() {
   const { scanId = '' } = useParams<{ scanId: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const routeState = (location.state ?? {}) as ScanRouteState;
   const toast = useToast();
+  const hasShownSuccessToastRef = useRef(false);
+  const hasAutoNavigatedRef = useRef(false);
 
   const [statusData, setStatusData] = useState<ScanProgressStatusData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,10 +97,11 @@ function ScanDetailPage() {
   }, [isAutoRefreshEnabled, scanId, statusData]);
 
   useEffect(() => {
-    if (!routeState.autoOpenedFromScanRequest) {
+    if (!routeState.autoOpenedFromScanRequest || hasShownSuccessToastRef.current) {
       return;
     }
 
+    hasShownSuccessToastRef.current = true;
     toast.success('스캔 요청이 접수되었습니다.', { durationMs: 2000 });
   }, [routeState.autoOpenedFromScanRequest, toast]);
 
@@ -109,6 +113,18 @@ function ScanDetailPage() {
     toast.warning(refreshNotice, { durationMs: 2000 });
     setRefreshNotice(null);
   }, [refreshNotice, toast]);
+
+  useEffect(() => {
+    if (!statusData || statusData.status !== 'DONE' || hasAutoNavigatedRef.current) {
+      return;
+    }
+
+    hasAutoNavigatedRef.current = true;
+    toast.success('분석이 완료되어 결과 화면으로 이동합니다.', { durationMs: 2000 });
+    window.setTimeout(() => {
+      navigate(ROUTES.resultDetail.replace(':scanId', scanId), { state: routeState });
+    }, 500);
+  }, [navigate, routeState, scanId, statusData, toast]);
 
   const handleRefresh = async () => {
     if (!scanId) {
@@ -141,7 +157,7 @@ function ScanDetailPage() {
           to={backTo}
         >
           <ArrowLeft className="h-4 w-4" />
-          프로젝트로 돌아가기
+          프로젝트 화면으로 돌아가기
         </Link>
 
         {canOpenResult ? (
@@ -160,16 +176,6 @@ function ScanDetailPage() {
           </span>
         )}
       </div>
-
-      {false ? (
-        <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-          스캔 요청이 접수되었습니다. 완료되면 결과 화면으로 이동할 수 있습니다.
-        </div>
-      ) : null}
-
-      {false ? (
-        <div className="border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">{refreshNotice}</div>
-      ) : null}
 
       <ScanProgressPanel
         errorMessage={errorMessage}

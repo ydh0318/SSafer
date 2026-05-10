@@ -2,7 +2,7 @@ import { Check, Circle, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import type { ScanProgressStatusData } from '../../../types/scan';
-import { isTerminalScanStatus } from '../utils/scanPresentation';
+import { formatDateTime, isTerminalScanStatus } from '../utils/scanPresentation';
 
 type ScanProgressPanelProps = {
   statusData: ScanProgressStatusData | null;
@@ -14,12 +14,12 @@ type ScanProgressPanelProps = {
 };
 
 const progressSteps = [
-  { key: 'SCAN_REGISTERED', statusKey: 'REQUESTED', code: 'SCAN_REGISTERED', label: '요청 접수' },
-  { key: 'AGENT_DISPATCHED', statusKey: 'QUEUED', code: 'AGENT_DISPATCHED', label: 'Agent에 푸시' },
-  { key: 'SCAN_RUNNING', statusKey: 'RUNNING', code: 'SCAN_RUNNING', label: '스캔' },
-  { key: 'RAW_UPLOADED', statusKey: 'RAW_UPLOADED', code: 'RAW_UPLOADED', label: 'raw 업로드' },
-  { key: 'ANALYSIS_RUNNING', statusKey: 'RAW_UPLOADED', code: 'ANALYSIS_RUNNING', label: 'AI 분석' },
-  { key: 'DONE', statusKey: 'DONE', code: 'DONE', label: '끝' },
+  { key: 'SCAN_REGISTERED', statusKey: 'REQUESTED', code: 'SCAN_REGISTERED', label: '스캔 요청 등록' },
+  { key: 'AGENT_DISPATCHED', statusKey: 'QUEUED', code: 'AGENT_DISPATCHED', label: '작업 대기열 등록' },
+  { key: 'SCAN_RUNNING', statusKey: 'RUNNING', code: 'SCAN_RUNNING', label: '보안 점검 실행' },
+  { key: 'RAW_UPLOADED', statusKey: 'RAW_UPLOADED', code: 'RAW_UPLOADED', label: '원본 결과 업로드' },
+  { key: 'ANALYSIS_RUNNING', statusKey: 'RAW_UPLOADED', code: 'ANALYSIS_RUNNING', label: 'AI 분석 진행' },
+  { key: 'DONE', statusKey: 'DONE', code: 'DONE', label: '결과 생성 완료' },
 ] as const;
 
 const typingTips = [
@@ -58,6 +58,46 @@ function resolveActiveStepIndex(statusData: ScanProgressStatusData | null) {
   );
 }
 
+function getHeadline(statusData: ScanProgressStatusData | null, activeStepLabel: string) {
+  if (!statusData) {
+    return '스캔 상태를 확인하는 중입니다.';
+  }
+
+  if (statusData.status === 'DONE') {
+    return '분석이 완료되었습니다.';
+  }
+
+  if (statusData.status === 'FAILED') {
+    return '분석이 중단되었습니다.';
+  }
+
+  if (statusData.status === 'CANCELED') {
+    return '스캔이 취소되었습니다.';
+  }
+
+  return activeStepLabel;
+}
+
+function getGuideMessage(statusData: ScanProgressStatusData | null) {
+  if (!statusData) {
+    return '잠시만 기다려 주세요. 스캔 상태를 불러오고 있습니다.';
+  }
+
+  if (statusData.status === 'DONE') {
+    return '결과 화면으로 이동해 탐지된 항목과 수정 가이드를 확인해 보세요.';
+  }
+
+  if (statusData.status === 'FAILED') {
+    return statusData.errorMessage || '분석 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+  }
+
+  if (statusData.status === 'CANCELED') {
+    return '스캔이 취소되었습니다. 다시 요청하면 처음부터 분석을 시작합니다.';
+  }
+
+  return '보통 10초에서 30초 정도 소요됩니다. 화면을 벗어나더라도 다시 돌아오면 상태를 이어서 확인할 수 있습니다.';
+}
+
 function ScanProgressPanel({
   statusData,
   isLoading,
@@ -91,25 +131,8 @@ function ScanProgressPanel({
   }, [tipIndex]);
 
   const activeStep = progressSteps[activeStepIndex];
-  const headline = useMemo(() => {
-    if (!statusData) {
-      return '스캔 상태를 확인하고 있어요';
-    }
-
-    if (statusData.status === 'DONE') {
-      return '분석이 끝났어요';
-    }
-
-    if (statusData.status === 'FAILED') {
-      return '스캔이 실패했어요';
-    }
-
-    if (statusData.status === 'CANCELED') {
-      return '스캔이 취소됐어요';
-    }
-
-    return activeStep.label;
-  }, [activeStep.label, statusData]);
+  const headline = useMemo(() => getHeadline(statusData, activeStep.label), [activeStep.label, statusData]);
+  const guideMessage = useMemo(() => getGuideMessage(statusData), [statusData]);
 
   if (isLoading) {
     return <div className="bg-white px-6 py-12 text-sm text-neutral-500">스캔 상태를 불러오는 중입니다.</div>;
@@ -120,7 +143,7 @@ function ScanProgressPanel({
   }
 
   if (!statusData) {
-    return <div className="bg-white px-6 py-12 text-sm text-neutral-500">표시할 스캔 상태가 없습니다.</div>;
+    return <div className="bg-white px-6 py-12 text-sm text-neutral-500">확인할 수 있는 스캔 상태가 없습니다.</div>;
   }
 
   return (
@@ -128,7 +151,7 @@ function ScanProgressPanel({
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
           <div className="flex items-baseline gap-3">
-            <span className="font-mono text-[11px] tracking-[0.24em] text-[#9FCC2E]">● 진행 중</span>
+            <span className="font-mono text-[11px] tracking-[0.24em] text-[#9FCC2E]">SCAN STATUS</span>
             <span className="font-mono text-xs text-neutral-400">scanId #{statusData.scanId}</span>
           </div>
           <h1 className="mt-8 text-6xl font-black leading-none tracking-[-0.05em] text-[#080B16] md:text-8xl">
@@ -136,7 +159,12 @@ function ScanProgressPanel({
             <span className="ml-3 text-4xl text-neutral-400 md:text-5xl">%</span>
           </h1>
           <p className="mt-6 text-2xl font-black">{headline}</p>
-          <p className="mt-2 font-mono text-xs text-neutral-400">progressStep: {statusData.progressStep ?? activeStep.code}</p>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-neutral-600">{guideMessage}</p>
+          <div className="mt-3 flex flex-wrap gap-4 font-mono text-xs text-neutral-400">
+            <span>requestedAt {formatDateTime(statusData.requestedAt)}</span>
+            {statusData.startedAt ? <span>startedAt {formatDateTime(statusData.startedAt)}</span> : null}
+            {statusData.completedAt ? <span>completedAt {formatDateTime(statusData.completedAt)}</span> : null}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -155,7 +183,7 @@ function ScanProgressPanel({
             type="button"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            새로고침
+            상태 새로고침
           </button>
         </div>
       </div>
@@ -195,8 +223,8 @@ function ScanProgressPanel({
       <div className="bg-[#111111] p-8 text-white md:p-10">
         <div className="flex items-start justify-between gap-6">
           <div>
-            <p className="font-mono text-[11px] tracking-[0.24em] text-[#D4FC64]">기다리는 동안</p>
-            <h2 className="mt-4 text-2xl font-black">안전한 한 줄, 익혀보세요</h2>
+            <p className="font-mono text-[11px] tracking-[0.24em] text-[#D4FC64]">SECURITY TIP</p>
+            <h2 className="mt-4 text-2xl font-black">분석이 진행되는 동안 이런 설정도 확인해 보세요.</h2>
           </div>
           <span className="font-mono text-sm text-neutral-400">
             {tipIndex + 1} / {typingTips.length}

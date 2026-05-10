@@ -4,9 +4,7 @@ import { useAuthStore } from '../../../store/authStore';
 import { enterGuestMode } from '../api/guest';
 
 function getGuestErrorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : '게스트 모드 진입에 실패했습니다. 잠시 후 다시 시도해주세요.';
+  return error instanceof Error ? error.message : '게스트 모드 진입에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
 function useGuestEntry() {

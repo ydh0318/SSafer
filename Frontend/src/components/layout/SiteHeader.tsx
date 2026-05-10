@@ -11,6 +11,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { ROUTES } from '../../constants/routes';
+import { logoutCurrentUser } from '../../features/auth/api/member';
 import { hasStoredMemberSession, isStoredGuestSession } from '../../features/auth/utils/session';
 import { useAuthStore } from '../../store/authStore';
 import AppBrand from '../common/AppBrand';
@@ -37,11 +38,18 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
     Boolean(refreshToken) || user?.role === 'USER' || user?.role === 'ADMIN' || hasStoredMemberSession();
   const isGuestSession = user?.role === 'GUEST' || isStoredGuestSession();
   void showSessionBar;
-  void isMemberSession;
 
-  const handleLogout = () => {
-    logout();
-    navigate(ROUTES.root, { replace: true });
+  const handleLogout = async () => {
+    try {
+      if (isMemberSession && !isGuestSession) {
+        await logoutCurrentUser();
+      }
+    } catch {
+      // Clear local session even if the logout API fails.
+    } finally {
+      logout();
+      navigate(ROUTES.root, { replace: true });
+    }
   };
 
   const navItems = [
@@ -130,7 +138,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
               <button
                 aria-label="로그아웃"
                 className="site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
-                onClick={handleLogout}
+                onClick={() => void handleLogout()}
                 type="button"
               >
                 <LogOut className="h-4 w-4" />
@@ -150,7 +158,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
               <button
                 aria-label="게스트 로그아웃"
                 className="site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
-                onClick={handleLogout}
+                onClick={() => void handleLogout()}
                 type="button"
               >
                 <LogOut className="h-4 w-4" />

@@ -3,7 +3,7 @@ import type { AgentStatus, AgentTaskStatus, ScanMode, ScanStatus, ScanType } fro
 const scanStatusLabelMap: Record<ScanStatus, string> = {
   REQUESTED: '요청됨',
   QUEUED: '대기 중',
-  RUNNING: '진행 중',
+  RUNNING: '분석 중',
   RAW_UPLOADED: '원본 업로드 완료',
   DONE: '완료',
   FAILED: '실패',
@@ -20,7 +20,7 @@ const taskStatusLabelMap: Record<AgentTaskStatus, string> = {
   PENDING: '대기 중',
   SENT: '전송됨',
   ACKED: '수신 확인',
-  RUNNING: '진행 중',
+  RUNNING: '실행 중',
   DONE: '완료',
   FAILED: '실패',
   CANCELED: '취소됨',
@@ -133,14 +133,14 @@ export function getTaskStatusClassName(status: AgentTaskStatus) {
 
 export function getScanModeLabel(scanMode: ScanMode) {
   if (scanMode === 'AGENT') {
-    return '에이전트 기반';
+    return '로컬 Agent 스캔';
   }
 
   if (scanMode === 'CLI') {
-    return 'CLI';
+    return 'CLI 스캔';
   }
 
-  return '파일 업로드';
+  return '파일 업로드 스캔';
 }
 
 export function getSafeScanType(scanType?: ScanType | null): ScanType {
@@ -148,7 +148,7 @@ export function getSafeScanType(scanType?: ScanType | null): ScanType {
 }
 
 export function getScanTypeLabel(scanType?: ScanType | null) {
-  return getSafeScanType(scanType) === 'SERVER_AUDIT' ? 'Server Audit' : 'Project Scan';
+  return getSafeScanType(scanType) === 'SERVER_AUDIT' ? '서버 점검' : '프로젝트 스캔';
 }
 
 export function isTerminalScanStatus(status: ScanStatus) {
@@ -165,7 +165,7 @@ export function getDeleteBlockedReason(status: ScanStatus) {
   }
 
   if (status === 'QUEUED' || status === 'RUNNING' || status === 'RAW_UPLOADED') {
-    return '스캔이 아직 진행 중이라 삭제할 수 없습니다.';
+    return '진행 중인 스캔은 삭제할 수 없습니다.';
   }
 
   return '현재 상태에서는 스캔을 삭제할 수 없습니다.';
