@@ -587,6 +587,22 @@ def _run_agent_watch(
         if event_type == "ping":
             console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
             return
+        if event_type == "task_result_reported":
+            task_id = "-"
+            count = "-"
+            if isinstance(payload, dict):
+                task_id = str(payload.get("taskId", "-"))
+                count = str(payload.get("count", "-"))
+            console.print(f"[green]Agent task result reported.[/green] taskId={task_id}, count={count}")
+            return
+        if event_type == "task_result_report_failed":
+            task_id = "-"
+            error = "-"
+            if isinstance(payload, dict):
+                task_id = str(payload.get("taskId", "-"))
+                error = str(payload.get("error", "-"))
+            console.print(f"[yellow]Agent task result report failed.[/yellow] taskId={task_id}, error={error}")
+            return
         if isinstance(payload, AgentTaskResult):
             _print_agent_task_result(payload)
 

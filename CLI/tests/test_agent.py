@@ -76,6 +76,143 @@ def test_fetch_pending_agent_tasks_parses_backend_response(monkeypatch):
     assert tasks[0].payload == {"patches": []}
 
 
+def test_report_patch_apply_task_result_posts_backend_payload(monkeypatch, tmp_path: Path):
+    requests = []
+    backup = tmp_path / "Dockerfile.20260511120000.bak"
+    backup.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": {"findingId": 3, "patchStatus": "SUCCEEDED"}}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def post(self, url, headers, json):
+            requests.append((url, headers, json, self.kwargs))
+            return FakeResponse()
+
+    monkeypatch.setattr(agent.httpx, "Client", FakeClient)
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        task_status="SENT",
+        project_id=1,
+        scan_id=2,
+        finding_id=3,
+        payload={"patches": []},
+    )
+    result = agent.AgentTaskResult(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        status="SUCCESS",
+        message="Applied 1 patch candidate(s).",
+        patch_results=[
+            agent.PatchApplyResult(
+                patch_id="PATCH-1",
+                finding_id="3",
+                file_path="Dockerfile",
+                status="SUCCESS",
+                message="Patch applied successfully.",
+                backup_path=str(backup),
+            )
+        ],
+    )
+
+    reports = agent.report_patch_apply_task_result("https://api.example.com", "agent-token", task, result)
+
+    assert reports == [{"data": {"findingId": 3, "patchStatus": "SUCCEEDED"}}]
+    assert requests == [
+        (
+            "https://api.example.com/api/v1/internal/scans/2/findings/3/patch-results",
+            {"Authorization": "Bearer agent-token"},
+            {
+                "patchStatus": "SUCCEEDED",
+                "resultMessage": "Patch applied successfully.",
+                "backupFileName": backup.name,
+                "backupFilePath": str(backup),
+                "backupMetadata": {
+                    "taskId": 10,
+                    "taskType": "PATCH_APPLY",
+                    "patchId": "PATCH-1",
+                    "filePath": "Dockerfile",
+                },
+            },
+            {"timeout": 20.0, "follow_redirects": True},
+        )
+    ]
+
+
+def test_report_patch_apply_task_result_reports_task_failure(monkeypatch):
+    requests = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": {"findingId": 3, "patchStatus": "FAILED"}}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def post(self, url, headers, json):
+            requests.append((url, headers, json))
+            return FakeResponse()
+
+    monkeypatch.setattr(agent.httpx, "Client", FakeClient)
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        task_status="SENT",
+        project_id=1,
+        scan_id=2,
+        finding_id=3,
+        payload={"patches": []},
+    )
+    result = agent.AgentTaskResult(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        status="FAILED",
+        message="Patch oldText was not found: Dockerfile",
+        patch_results=[],
+    )
+
+    agent.report_patch_apply_task_result("https://api.example.com", "agent-token", task, result)
+
+    assert requests == [
+        (
+            "https://api.example.com/api/v1/internal/scans/2/findings/3/patch-results",
+            {"Authorization": "Bearer agent-token"},
+            {
+                "patchStatus": "FAILED",
+                "resultMessage": "Patch oldText was not found: Dockerfile",
+                "backupMetadata": {
+                    "taskId": 10,
+                    "taskType": "PATCH_APPLY",
+                },
+            },
+        )
+    ]
+
+
 def test_handle_agent_task_applies_patch_payload(tmp_path: Path):
     target = tmp_path / "Dockerfile"
     target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
