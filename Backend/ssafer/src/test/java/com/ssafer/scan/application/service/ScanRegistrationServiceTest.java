@@ -51,7 +51,7 @@ class ScanRegistrationServiceTest {
   @Test
   void registerReusesExistingProjectForMember() throws Exception {
     // 같은 소유자 범위에서 정규화 이름이 같으면 기존 프로젝트를 재사용해야 한다.
-    Project existing = new Project(1L, null, "sample app", null, ScanMode.AGENT, false);
+    Project existing = new Project(1L, null, "Sample App", null, ScanMode.AGENT, false);
     ReflectionTestUtils.setField(existing, "id", 2001L);
     given(projectRepository.findByUserIdAndDeletedAtIsNull(1L)).willReturn(List.of(existing));
     given(scanRepository.save(any(Scan.class))).willAnswer(invocation -> {
@@ -107,7 +107,7 @@ class ScanRegistrationServiceTest {
     // 게스트 소유 범위에 매칭 프로젝트가 없으면 자동 생성 후 스캔을 등록해야 한다.
     given(projectRepository.findByGuestOwnerKeyHashAndDeletedAtIsNull("guest-hash")).willReturn(List.of());
 
-    Project created = new Project(null, "guest-hash", "sample app", null, ScanMode.AGENT, false);
+    Project created = new Project(null, "guest-hash", "Sample App", null, ScanMode.AGENT, false);
     ReflectionTestUtils.setField(created, "id", 3001L);
     given(projectRepository.save(any(Project.class))).willReturn(created);
 
@@ -136,7 +136,7 @@ class ScanRegistrationServiceTest {
     Project savedProject = projectCaptor.getValue();
     assertThat(savedProject.getGuestOwnerKeyHash()).isEqualTo("guest-hash");
     assertThat(savedProject.getUserId()).isNull();
-    assertThat(savedProject.getName()).isEqualTo("sample app");
+    assertThat(savedProject.getName()).isEqualTo("Sample   App");
 
     ArgumentCaptor<String> guestPathCaptor = ArgumentCaptor.forClass(String.class);
     then(scanRepository).should().updateRawResultPath(eq(4001L), guestPathCaptor.capture());

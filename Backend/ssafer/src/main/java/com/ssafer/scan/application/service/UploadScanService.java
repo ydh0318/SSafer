@@ -38,9 +38,11 @@ public class UploadScanService {
 
   public UploadScanResult requestUploadScan(String projectName, String scanName, List<MultipartFile> files) {
     // projectName 기준으로 프로젝트를 find-or-create 하고 업로드 처리 파이프라인을 수행한다.
+    // 매칭용 정규화 값과 표시용 저장 값을 분리해서 다룬다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
+    String displayProjectName = normalizeDisplayProjectName(projectName);
     String normalizedProjectName = normalizeProjectName(projectName);
-    if (normalizedProjectName == null) {
+    if (displayProjectName == null || normalizedProjectName == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
 
@@ -52,7 +54,7 @@ public class UploadScanService {
     }
 
     try {
-      Project project = findOrCreateProject(actor, normalizedProjectName);
+      Project project = findOrCreateProject(actor, displayProjectName, normalizedProjectName);
       Scan saved = scanRepository.save(buildRequestedScan(actor, project.getId(), scanName, files));
       // scan_result.json에 실제 프로젝트 이름이 기록되도록 command에 함께 전달한다.
       UploadScanProcessingResult processingResult = webUploadScanProcessor.process(
@@ -76,8 +78,13 @@ public class UploadScanService {
     }
   }
 
-  private Project findOrCreateProject(AuthenticatedActor actor, String normalizedProjectName) {
+  private Project findOrCreateProject(
+      AuthenticatedActor actor,
+      String displayProjectName,
+      String normalizedProjectName
+  ) {
     // 동일 소유 범위 내 같은 이름 프로젝트가 있으면 재사용한다.
+    // 같은 owner 범위에서 정규화 기준으로 기존 프로젝트를 재사용한다.
     Project matched = findProjectByNormalizedName(actor, normalizedProjectName);
     if (matched != null) {
       return matched;
@@ -85,10 +92,11 @@ public class UploadScanService {
 
     try {
       // 없으면 새 프로젝트를 생성한다.
+      // 새 프로젝트를 만들 때는 사용자가 보게 될 이름을 저장한다.
       Project created = new Project(
           actor.isMember() ? actor.userId() : null,
           actor.isGuest() ? actor.guestOwnerKeyHash() : null,
-          normalizedProjectName,
+          displayProjectName,
           null,
           AGENT,
           false
@@ -127,6 +135,18 @@ public class UploadScanService {
     }
     String collapsed = trimmed.replaceAll("\\s+", " ");
     return collapsed.toLowerCase(Locale.ROOT);
+  }
+
+  private String normalizeDisplayProjectName(String rawName) {
+    // 저장용 이름은 trim만 적용해서 표시 값을 최대한 보존한다.
+    if (rawName == null) {
+      return null;
+    }
+    String trimmed = rawName.trim();
+    if (trimmed.isEmpty()) {
+      return null;
+    }
+    return trimmed;
   }
 
   private Scan buildRequestedScan(

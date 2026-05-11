@@ -57,7 +57,7 @@ class UploadScanServiceTest {
   void requestUploadScanCreatesRequestedScanAndReturnsQueued() {
     // 기존 프로젝트가 있으면 재사용하고 REQUESTED 생성 후 processor 결과를 그대로 반환한다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
-    Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
+    Project project = new Project(10L, null, "Project A", null, ScanMode.UPLOAD, false);
     ReflectionTestUtils.setField(project, "id", 2001L);
     MockMultipartFile file = new MockMultipartFile(
         "files",
@@ -77,7 +77,7 @@ class UploadScanServiceTest {
     });
     when(webUploadScanProcessor.process(any())).thenReturn(UploadScanProcessingResult.queued());
 
-    UploadScanResult result = uploadScanService.requestUploadScan("project-a", "scan-1", List.of(file));
+    UploadScanResult result = uploadScanService.requestUploadScan("  project   a  ", "scan-1", List.of(file));
 
     assertThat(result.scanId()).isEqualTo(3001L);
     assertThat(result.status()).isEqualTo(ScanStatus.QUEUED);
@@ -95,7 +95,8 @@ class UploadScanServiceTest {
     ArgumentCaptor<UploadScanProcessingCommand> commandCaptor = ArgumentCaptor.forClass(UploadScanProcessingCommand.class);
     verify(webUploadScanProcessor).process(commandCaptor.capture());
     // scan_result.json 생성을 위해 프로젝트 이름이 processor command에 전달되어야 한다.
-    assertThat(commandCaptor.getValue().projectName()).isEqualTo("project-a");
+    assertThat(commandCaptor.getValue().projectName()).isEqualTo("Project A");
+    verify(projectRepository, never()).save(any(Project.class));
     verify(scanExecutionPermit).release();
   }
 
@@ -103,7 +104,7 @@ class UploadScanServiceTest {
   void requestUploadScanWhenProjectMissingCreatesNewProject() {
     // 동일 이름 프로젝트가 없으면 새 프로젝트를 생성한 뒤 업로드를 진행한다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
-    Project createdProject = new Project(10L, null, "project-a", null, ScanMode.AGENT, false);
+    Project createdProject = new Project(10L, null, "Project A", null, ScanMode.AGENT, false);
     ReflectionTestUtils.setField(createdProject, "id", 2001L);
     MockMultipartFile file = new MockMultipartFile(
         "files",
@@ -124,10 +125,15 @@ class UploadScanServiceTest {
     });
     when(webUploadScanProcessor.process(any())).thenReturn(UploadScanProcessingResult.queued());
 
-    UploadScanResult result = uploadScanService.requestUploadScan("Project A", "scan-1", List.of(file));
+    UploadScanResult result = uploadScanService.requestUploadScan("  Project A  ", "scan-1", List.of(file));
 
     assertThat(result.scanId()).isEqualTo(3001L);
-    verify(projectRepository).save(any(Project.class));
+    ArgumentCaptor<Project> projectCaptor = ArgumentCaptor.forClass(Project.class);
+    verify(projectRepository).save(projectCaptor.capture());
+    assertThat(projectCaptor.getValue().getName()).isEqualTo("Project A");
+    ArgumentCaptor<UploadScanProcessingCommand> commandCaptor = ArgumentCaptor.forClass(UploadScanProcessingCommand.class);
+    verify(webUploadScanProcessor).process(commandCaptor.capture());
+    assertThat(commandCaptor.getValue().projectName()).isEqualTo("Project A");
   }
 
   @Test

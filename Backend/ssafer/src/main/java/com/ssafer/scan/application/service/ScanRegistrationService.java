@@ -42,13 +42,17 @@ public class ScanRegistrationService {
   @Transactional
   public ScanRegistrationResult register(AuthenticatedActor actor, CreateScanRequest request) {
     // projectName은 소유자 범위 내 재사용/자동생성 기준이므로 정규화해서 비교한다.
+    // CLI 등록도 업로드 요청과 같은 규칙을 사용한다.
+    // 매칭은 정규화 값으로, 저장은 표시용 이름으로 처리한다.
+    String displayProjectName = normalizeDisplayProjectName(request.projectName());
     String normalizedProjectName = normalizeProjectName(request.projectName());
-    if (normalizedProjectName == null) {
+    if (displayProjectName == null || normalizedProjectName == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
 
     // 회원/게스트 소유 범위에서 프로젝트를 찾고, 없으면 새로 만든다.
-    Project project = findOrCreateProject(actor, normalizedProjectName);
+    // owner 범위에서 기존 프로젝트를 찾고, 없으면 같은 규칙으로 새로 만든다.
+    Project project = findOrCreateProject(actor, displayProjectName, normalizedProjectName);
     ScanRequestSource source = resolveSource(request.source());
 
     LocalDateTime now = LocalDateTime.now();
@@ -80,7 +84,11 @@ public class ScanRegistrationService {
     );
   }
 
-  private Project findOrCreateProject(AuthenticatedActor actor, String normalizedProjectName) {
+  private Project findOrCreateProject(
+      AuthenticatedActor actor,
+      String displayProjectName,
+      String normalizedProjectName
+  ) {
     Project matched = findProjectByNormalizedName(actor, normalizedProjectName);
     if (matched != null) {
       return matched;
@@ -88,10 +96,11 @@ public class ScanRegistrationService {
 
     try {
       // 동일 소유자 범위에서 프로젝트가 없으면 기본 옵션으로 자동 생성한다.
+      // 생성 시에는 사용자 입력의 표시용 이름을 저장한다.
       Project created = new Project(
           actor.isMember() ? actor.userId() : null,
           actor.isGuest() ? actor.guestOwnerKeyHash() : null,
-          normalizedProjectName,
+          displayProjectName,
           null,
           AGENT,
           false
@@ -129,6 +138,18 @@ public class ScanRegistrationService {
     }
     String collapsed = trimmed.replaceAll("\\s+", " ");
     return collapsed.toLowerCase(Locale.ROOT);
+  }
+
+  private String normalizeDisplayProjectName(String rawName) {
+    // 저장용 이름은 trim만 적용해서 표시 값을 유지한다.
+    if (rawName == null) {
+      return null;
+    }
+    String trimmed = rawName.trim();
+    if (trimmed.isEmpty()) {
+      return null;
+    }
+    return trimmed;
   }
 
   private String buildRawResultKey(Long scanId) {
