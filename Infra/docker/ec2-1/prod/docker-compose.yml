@@ -86,6 +86,23 @@ services:
       retries: 5
       start_period: 20s
 
+  engine:
+    image: ${ENGINE_IMAGE}
+    container_name: ssafer-engine
+    restart: always
+    environment:
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      SCAN_MAX_FILE_COUNT: ${SCAN_MAX_FILE_COUNT:-20}
+      SCAN_MAX_UPLOAD_BYTES: ${SCAN_MAX_UPLOAD_BYTES:-10485760}
+    networks:
+      - ec1-internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   spring:
     image: ${SPRING_IMAGE}
     container_name: ssafer-spring
@@ -107,6 +124,7 @@ services:
       SPRING_FLYWAY_OUT_OF_ORDER: "true"
       ANALYSIS_SERVER_URL: http://${EC2_2_PRIVATE_IP}:8000
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      APP_SCAN_ENGINE_URL: http://engine:8100
       JWT_SECRET: ${JWT_SECRET}
       JWT_ISSUER: ${JWT_ISSUER:-ssafer}
       JWT_ACCESS_TOKEN_EXPIRES_SECONDS: ${JWT_ACCESS_TOKEN_EXPIRES_SECONDS:-7200}
@@ -126,6 +144,8 @@ services:
       redis:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      engine:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
