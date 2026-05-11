@@ -65,9 +65,14 @@ pipeline {
                       grep "^${key}=" "$ENV_FILE" | tail -n 1 | cut -d'=' -f2-
                     }
 
+                    APP_BASE_URL="$(read_env_value APP_BASE_URL)"
                     VITE_API_BASE_URL="$(read_env_value VITE_API_BASE_URL)"
                     VITE_GOOGLE_CLIENT_ID="$(read_env_value VITE_GOOGLE_CLIENT_ID)"
                     VITE_GITHUB_CLIENT_ID="$(read_env_value VITE_GITHUB_CLIENT_ID)"
+
+                    if [ -z "$VITE_API_BASE_URL" ] && [ -n "$APP_BASE_URL" ]; then
+                      VITE_API_BASE_URL="${APP_BASE_URL%/}/api/v1"
+                    fi
 
                     : "${VITE_API_BASE_URL:?VITE_API_BASE_URL is required for frontend build}"
                     : "${VITE_GOOGLE_CLIENT_ID:?VITE_GOOGLE_CLIENT_ID is required for frontend OAuth build}"

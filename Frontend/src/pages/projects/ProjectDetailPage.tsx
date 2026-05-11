@@ -356,7 +356,9 @@ function ProjectDetailPage() {
       const validationIssue = getScanUploadValidationIssue(selectedUploadFiles);
 
       if (validationIssue) {
-        toast.warning(getUploadScanValidationToastMessage(validationIssue), { durationMs: 3000 });
+        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? '업로드 파일을 다시 확인해주세요.', {
+          durationMs: 3000,
+        });
         return;
       }
     }
@@ -498,26 +500,7 @@ function ProjectDetailPage() {
         <MetricCard helper="실패했거나 취소된 스캔 수입니다." label="실패/취소" tone="red" value={failedScans.length} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-        <SectionPanel
-          description="Agent, CLI, 업로드 방식 중 하나를 골라 새 스캔을 시작할 수 있습니다."
-          eyebrow="NEW SCAN"
-          title="새 스캔 요청"
-        >
-          <ScanRequestForm
-            agentAvailable={Boolean(scanOptions?.availableScanModes.includes('AGENT'))}
-            errorMessage={scanRequestError}
-            isSubmitting={isScanRequestSubmitting}
-            onChange={setScanRequestForm}
-            onFileChange={setSelectedUploadFiles}
-            onMethodChange={setScanRequestMethod}
-            onSubmit={() => void handleSubmitScanRequest()}
-            scanRequestMethod={scanRequestMethod}
-            selectedFiles={selectedUploadFiles}
-            value={scanRequestForm}
-          />
-        </SectionPanel>
-
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <div className="grid gap-4">
           <article className="border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="inline-flex bg-black p-3 text-white">
@@ -544,6 +527,18 @@ function ProjectDetailPage() {
             </dl>
           </article>
 
+          <article className="border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="inline-flex bg-black p-3 text-white">
+              <Activity className="h-5 w-5" />
+            </div>
+            <h3 className="mt-4 text-xl font-black tracking-tight text-black">운영 메모</h3>
+            <p className="mt-3 text-sm leading-7 text-neutral-600">
+              {projectDetail?.description?.trim()
+                ? projectDetail.description
+                : '이 화면은 프로젝트 상세, Agent 상태, 스캔 목록, 새 스캔 요청 API를 한 번에 확인하는 운영 화면입니다.'}
+            </p>
+          </article>
+
           <article className="border border-neutral-200 bg-black p-5 text-white shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -556,7 +551,9 @@ function ProjectDetailPage() {
               <PixelGoose mood="working" size={72} />
             </div>
           </article>
+        </div>
 
+        <div className="grid gap-4">
           <article className="border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="inline-flex bg-black p-3 text-white">
               <ShieldCheck className="h-5 w-5" />
@@ -579,13 +576,6 @@ function ProjectDetailPage() {
         </div>
       </div>
 
-      <AgentStatusCard
-        agentStatus={agentStatus}
-        errorMessage={agentError}
-        isLoading={isAgentLoading}
-        onRefresh={() => void handleRefreshAgentStatus()}
-      />
-
       <ProjectScanList
         deletingScanIds={deletingScanIds}
         errorMessage={scanListError}
@@ -596,6 +586,13 @@ function ProjectDetailPage() {
         onRefresh={() => void handleRefreshScans()}
         projectId={projectId}
         scans={scans}
+      />
+
+      <AgentStatusCard
+        agentStatus={agentStatus}
+        errorMessage={agentError}
+        isLoading={isAgentLoading}
+        onRefresh={() => void handleRefreshAgentStatus()}
       />
 
       <article className="border border-neutral-200 bg-white p-5 shadow-sm">
@@ -611,6 +608,25 @@ function ProjectDetailPage() {
           </div>
         </div>
       </article>
+
+      <SectionPanel
+        description="Agent, CLI, 업로드 방식 중 하나를 골라 새 스캔을 시작할 수 있습니다."
+        eyebrow="NEW SCAN"
+        title="새 스캔 요청"
+      >
+        <ScanRequestForm
+          agentAvailable={Boolean(scanOptions?.availableScanModes.includes('AGENT'))}
+          errorMessage={scanRequestError}
+          isSubmitting={isScanRequestSubmitting}
+          onChange={setScanRequestForm}
+          onFileChange={setSelectedUploadFiles}
+          onMethodChange={setScanRequestMethod}
+          onSubmit={() => void handleSubmitScanRequest()}
+          scanRequestMethod={scanRequestMethod}
+          selectedFiles={selectedUploadFiles}
+          value={scanRequestForm}
+        />
+      </SectionPanel>
 
       {isDeleteModalOpen && targetProject ? (
         <ProjectDeleteModal

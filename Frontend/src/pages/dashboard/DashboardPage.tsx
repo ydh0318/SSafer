@@ -19,6 +19,7 @@ import { ROUTES } from '../../constants/routes';
 import { getProjects } from '../../features/projects/api/projects';
 import { getScanSummary } from '../../features/results/api/results';
 import { getProjectScans } from '../../features/scans/api/scans';
+import { useAuthStore } from '../../store/authStore';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
 import type { ProjectListItemData } from '../../types/project';
 import type { ProjectScanListItemData, ScanMode, ScanStatus, ScanSummaryData } from '../../types/scan';
@@ -175,6 +176,7 @@ function getDashboardMonitorStatusClassName(status: DashboardMonitorStatus) {
 
 function DashboardPage() {
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectListItemData[]>([]);
@@ -256,6 +258,7 @@ function DashboardPage() {
     [recentDoneScan, scans],
   );
   const monitorProjects = useMemo(() => buildDashboardMonitorProjects(projects), [projects]);
+  const isGuestSession = user?.role === 'GUEST';
 
   const displayErrorMessage =
     errorMessage && errorMessage.includes('Authentication is required or token is invalid')
@@ -274,6 +277,25 @@ function DashboardPage() {
   return (
     <section className="space-y-10">
       {displayErrorMessage ? <PageBanner message={displayErrorMessage} tone="error" /> : null}
+      {isGuestSession ? (
+        <div className="border border-neutral-200 bg-[#FAFAF7] px-6 py-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-black tracking-[0.18em] text-neutral-500">GUEST SESSION</p>
+              <p className="text-lg font-bold text-black">게스트 모드의 스캔 결과와 이력은 세션이 종료되면 저장되지 않습니다.</p>
+              <p className="text-sm leading-6 text-neutral-600">로그인하면 프로젝트별 스캔 이력을 계속 보관하고, 이후에도 다시 확인할 수 있습니다.</p>
+            </div>
+            <button
+              className="inline-flex items-center gap-2 self-start border border-black px-4 py-3 text-sm font-bold text-black transition hover:bg-black hover:text-white"
+              onClick={() => navigate(ROUTES.login)}
+              type="button"
+            >
+              로그인하고 이력 저장하기
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <section className="border-b border-neutral-200 pb-12">
         <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
@@ -367,6 +389,24 @@ function DashboardPage() {
 
           {isLoading ? (
             <div className="px-6 py-16 text-center text-sm text-neutral-500">대시보드 정보를 불러오는 중입니다.</div>
+          ) : filteredScans.length === 0 && isGuestSession ? (
+            <div className="px-6 py-16">
+              <div className="mx-auto max-w-2xl border border-dashed border-neutral-300 bg-[#FCFCF8] px-6 py-10 text-center">
+                <p className="text-sm font-black tracking-[0.18em] text-neutral-500">NO SAVED HISTORY</p>
+                <h3 className="mt-4 text-2xl font-black text-black">게스트 모드에서는 스캔 이력이 누적 저장되지 않습니다.</h3>
+                <p className="mt-3 text-sm leading-6 text-neutral-600">
+                  체험 업로드는 현재 세션에서만 확인할 수 있습니다. 로그인하면 프로젝트별 스캔 결과를 저장하고 이후에도 계속 추적할 수 있습니다.
+                </p>
+                <button
+                  className="mt-6 inline-flex items-center gap-2 border border-black px-4 py-3 text-sm font-bold text-black transition hover:bg-black hover:text-white"
+                  onClick={() => navigate(ROUTES.login)}
+                  type="button"
+                >
+                  로그인하고 대시보드 채우기
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
           ) : filteredScans.length === 0 ? (
             <div className="px-6 py-16 text-center text-sm text-neutral-500">조건에 맞는 스캔이 없습니다.</div>
           ) : (

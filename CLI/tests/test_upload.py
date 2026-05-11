@@ -118,6 +118,74 @@ def test_upload_last_scan_registers_uploads_to_s3_and_reports_completion(tmp_pat
     ]
 
 
+def test_upload_last_scan_redirect_keeps_post_method(tmp_path: Path, monkeypatch):
+    scan = {
+        "scanId": "local-scan-test",
+        "projectName": "sample-app",
+        "artifacts": [],
+        "findings": [{"id": "FND-0001"}],
+    }
+    _write_scan(tmp_path, scan)
+    calls: list[tuple[str, str, Any]] = []
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            assert timeout == 30
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            calls.append(("POST", url, json))
+            request = httpx.Request("POST", url)
+            if url == "http://backend.test/api/v1/scans":
+                return httpx.Response(
+                    301,
+                    headers={"location": "/api/v1/scans/"},
+                    request=request,
+                )
+            if url == "http://backend.test/api/v1/scans/":
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            if url == "http://backend.test/api/v1/scans/1001/raw-results":
+                return httpx.Response(
+                    301,
+                    headers={"location": "/api/v1/scans/1001/raw-results/"},
+                    request=request,
+                )
+            return httpx.Response(200, json={"scanId": 1001, "status": "RAW_UPLOADED"}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            calls.append(("PUT", url, json.loads(content.decode("utf-8"))))
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    response = upload.upload_last_scan(tmp_path, api_url="http://backend.test/")
+
+    assert response == {"scanId": 1001, "status": "RAW_UPLOADED"}
+    assert [call[:2] for call in calls] == [
+        ("POST", "http://backend.test/api/v1/scans"),
+        ("POST", "http://backend.test/api/v1/scans/"),
+        ("PUT", "https://s3.example.com/upload"),
+        ("POST", "http://backend.test/api/v1/scans/1001/raw-results"),
+        ("POST", "http://backend.test/api/v1/scans/1001/raw-results/"),
+    ]
+
+
 def test_upload_last_server_audit_uses_server_audit_scan_type(tmp_path: Path, monkeypatch):
     audit = {
         "auditId": "audit-test",
