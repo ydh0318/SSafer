@@ -6,7 +6,7 @@ function mapProjectListItem(item: ProjectListItemData): ProjectSummary {
   return {
     id: String(item.projectId),
     name: item.name,
-    owner: item.ownerType,
+    owner: 'MY WORKSPACE',
     scans: 0,
     lastStatus: 'NEW',
     risk: 'LOW',
