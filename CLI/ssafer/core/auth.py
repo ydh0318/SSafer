@@ -9,6 +9,7 @@ import httpx
 import yaml
 
 CONFIG_PATH = Path.home() / ".ssafer" / "config.yml"
+PROJECT_AGENT_CONFIG_NAME = "agent.yml"
 ENV_TOKEN_KEY = "SSAFER_TOKEN"
 DEFAULT_API_URL = "https://ssafer.co.kr"
 LEGACY_API_HOST_ALIASES = {
@@ -136,6 +137,37 @@ def issue_project_agent_token(endpoint: str, project_id: int, access_token: str)
     return data if isinstance(data, dict) else payload
 
 
+def create_project(
+    endpoint: str,
+    access_token: str,
+    *,
+    name: str,
+    description: str | None = None,
+    default_scan_mode: str = "AGENT",
+    monitor_enabled: bool = False,
+) -> dict[str, Any]:
+    """Create a SSAfer project visible to the logged-in user."""
+    base_url = normalize_api_url(endpoint)
+    body: dict[str, Any] = {
+        "name": name,
+        "description": description,
+        "defaultScanMode": default_scan_mode,
+        "monitorEnabled": monitor_enabled,
+    }
+    headers = {"Authorization": f"Bearer {access_token}"}
+    with httpx.Client(timeout=30) as client:
+        response = _post_preserving_redirects(
+            client,
+            f"{base_url}/api/v1/projects",
+            json=body,
+            headers=headers,
+        )
+        response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data")
+    return data if isinstance(data, dict) else payload
+
+
 def list_projects(endpoint: str, access_token: str, *, page: int = 0, size: int = 100) -> list[dict[str, Any]]:
     """Return projects visible to the logged-in user."""
     base_url = normalize_api_url(endpoint)
@@ -177,28 +209,45 @@ def save_auth_tokens(auth_data: dict[str, Any], endpoint: str | None = None) -> 
     CONFIG_PATH.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
 
 
-def save_agent_config(agent_data: dict[str, Any], endpoint: str | None = None) -> None:
+def project_agent_config_path(project_root: Path | None = None) -> Path:
+    return (project_root or Path(".")).resolve() / ".ssafer" / PROJECT_AGENT_CONFIG_NAME
+
+
+def save_agent_config(agent_data: dict[str, Any], endpoint: str | None = None, project_root: Path | None = None) -> None:
     agent_id = agent_data.get("agentId")
     project_id = agent_data.get("projectId")
     agent_token = agent_data.get("agentToken")
     if agent_id is None or project_id is None or not agent_token:
         raise ValueError("Agent token response is missing agentId, projectId, or agentToken.")
 
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    config = _load_config()
-    agent_config = config.setdefault("agent", {})
+    path = project_agent_config_path(project_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    agent_config: dict[str, Any] = {}
     agent_config["agentId"] = int(agent_id)
     agent_config["projectId"] = int(project_id)
     agent_config["agentToken"] = str(agent_token)
     if endpoint:
         agent_config["endpoint"] = normalize_api_url(endpoint)
-    CONFIG_PATH.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
+    path.write_text(yaml.safe_dump(agent_config, allow_unicode=True), encoding="utf-8")
 
 
-def load_agent_config() -> dict[str, Any]:
-    config = _load_config()
-    agent_config = config.get("agent", {})
+def load_agent_config(project_root: Path | None = None) -> dict[str, Any]:
+    path = project_agent_config_path(project_root)
+    if not path.exists():
+        return {}
+    try:
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return {}
+    agent_config = loaded if isinstance(loaded, dict) else {}
     return agent_config if isinstance(agent_config, dict) else {}
+
+
+def clear_agent_config(project_root: Path | None = None) -> None:
+    """Remove saved project-local agent credentials."""
+    path = project_agent_config_path(project_root)
+    if path.exists():
+        path.unlink()
 
 
 def save_token(token: str, endpoint: str | None = None) -> None:

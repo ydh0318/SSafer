@@ -20,6 +20,7 @@ from app.services.result_service import (
     DEFAULT_ANALYSIS_RESULT_PATH,
     build_analysis_result_from_results,
     build_structured_analysis_result,
+    normalize_analysis_result_patches,
     save_analysis_result,
     validate_finding_id_mapping,
 )
@@ -603,6 +604,11 @@ def run_analysis_pipeline_from_scan_result(
         analysis_result = build_analysis_result_from_results(
             scan_result=context.scan_result,
             structured_results=structured_results,
+        )
+        normalize_analysis_result_patches(
+            findings=context.valid_findings,
+            scan_result=context.scan_result,
+            analysis_result=analysis_result,
         )
         validate_finding_id_mapping(context.valid_findings, analysis_result)
         if upload_to_s3:

@@ -162,7 +162,19 @@ def is_secret_key(key: str) -> bool:
 
 def is_safe_key(key: str) -> bool:
     normalized = key.upper().replace("-", "_")
-    return normalized in SAFE_KEYS
+    return (
+        normalized in SAFE_KEYS
+        or normalized.endswith("_EXPIRES_SECONDS")
+        or normalized.endswith("_EXPIRES_MS")
+        or normalized.endswith("_EXPIRES_IN")
+        or normalized.endswith("_TTL")
+        or normalized.endswith("_TIMEOUT")
+        or normalized.endswith("_INTERVAL")
+        or normalized.endswith("_ACCESS_KEY_ID")
+        or normalized.endswith("_CLIENT_ID")
+        or normalized.endswith("_USER")
+        or normalized.endswith("_USERNAME")
+    )
 
 
 def make_masked_evidence(key: str, masked_value: str = MASK, max_len: int = 120) -> str:
@@ -189,16 +201,24 @@ def is_placeholder(value: str) -> bool:
         normalized in {
             "changeme",
             "change-me",
+            "change_me",
             "todo",
             "example",
             "password",
             "admin",
             "root",
+            "guest",
             "test",
             "dummy",
             "sample",
+            "replace",
             "replace_me",
             "replace-me",
+            "required",
+            "unset",
+            "not_set",
+            "none",
+            "null",
             "your-token",
             "your_token",
             "xxx",
@@ -208,6 +228,10 @@ def is_placeholder(value: str) -> bool:
         or compact.startswith("your_") and compact.endswith("_here")
         or compact.endswith("_here")
         or compact.startswith("replace_")
+        or compact.startswith("replace_with_")
+        or compact.startswith("change_me_")
+        or "replace" in compact
+        or "change_me" in compact
         or set(compact) == {"x"}
     )
 

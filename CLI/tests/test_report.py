@@ -91,6 +91,39 @@ def test_group_report_findings_keeps_different_evidence_separate():
     assert [group["count"] for group in grouped] == [1, 1]
 
 
+def test_group_report_findings_prefers_file_path_and_line():
+    grouped = _group_report_findings([
+        {
+            "id": "FND-0001",
+            "ruleId": "COMPOSE_EXPOSED_DB_PORT",
+            "severity": "CRITICAL",
+            "file": "docker-compose (front)",
+            "filePath": "Frontend\\docker-compose.front.yml",
+            "line": 12,
+            "title": "db port exposed",
+            "maskedEvidence": "services.postgres.ports=5432:5432",
+        }
+    ])
+
+    assert grouped[0]["location"] == "Frontend\\docker-compose.front.yml:12"
+
+
+def test_group_report_findings_uses_target_files_when_file_path_is_ambiguous():
+    grouped = _group_report_findings([
+        {
+            "id": "FND-0001",
+            "ruleId": "COMPOSE_EXPOSED_DB_PORT",
+            "severity": "CRITICAL",
+            "file": "docker-compose (default)",
+            "targetFiles": ["a.yml", "b.yml", "c.yml", "d.yml"],
+            "title": "db port exposed",
+            "maskedEvidence": "services.postgres.ports=5432:5432",
+        }
+    ])
+
+    assert grouped[0]["location"] == "a.yml, b.yml, c.yml +1"
+
+
 def test_join_compact_shows_remaining_count():
     assert _join_compact(["a", "b", "c", "d"], max_items=2) == "a, b +2"
 

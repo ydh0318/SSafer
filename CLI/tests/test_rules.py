@@ -165,6 +165,59 @@ services:
     assert findings == []
 
 
+def test_compose_hardcoded_secret_ignores_token_expiry_setting():
+    yaml = """
+services:
+  app:
+    image: myapp:1.0
+    environment:
+      JWT_ACCESS_TOKEN_EXPIRES_SECONDS: "7200"
+      JWT_REFRESH_TOKEN_EXPIRES_SECONDS: "1209600"
+"""
+    findings = ComposeHardcodedSecretRule().check(_ctx({"default": yaml}))
+    assert findings == []
+
+
+def test_compose_hardcoded_secret_ignores_access_key_id():
+    yaml = """
+services:
+  app:
+    image: myapp:1.0
+    environment:
+      AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+"""
+    findings = ComposeHardcodedSecretRule().check(_ctx({"default": yaml}))
+    assert findings == []
+
+
+def test_compose_hardcoded_secret_ignores_guest_placeholder():
+    yaml = """
+services:
+  rabbitmq:
+    image: rabbitmq:3
+    environment:
+      RABBITMQ_DEFAULT_PASS: guest
+"""
+    findings = ComposeHardcodedSecretRule().check(_ctx({"default": yaml}))
+    assert findings == []
+
+
+def test_compose_hardcoded_secret_ignores_local_default_value():
+    yaml = """
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_PASSWORD: ssafer
+  backend:
+    image: backend
+    environment:
+      SPRING_DATASOURCE_PASSWORD: ssafer
+"""
+    findings = ComposeHardcodedSecretRule().check(_ctx({"default": yaml}))
+    assert findings == []
+
+
 def test_compose_hardcoded_secret_ignores_empty():
     yaml = """
 services:
@@ -318,6 +371,11 @@ def test_env_plain_secret_ignores_placeholder(tmp_path: Path):
         "your_gms_api_key_here",
         "your-token",
         "replace_me",
+        "REPLACE",
+        "REPLACE_WITH_STRONG_PASSWORD",
+        "change_me_internal_token_min_32_chars",
+        "your_secret_access_key",
+        "guest",
         "dummy",
         "sample",
         "xxx",
@@ -332,11 +390,25 @@ def test_env_plain_secret_ignores_common_placeholder_values(tmp_path: Path, valu
 
 def test_env_example_secret_like_value_is_medium(tmp_path: Path):
     env_file = tmp_path / ".env.example"
-    env_file.write_text("GMS_API_KEY=real-looking-key-1234567890\n", encoding="utf-8")
+    env_file.write_text("GMS_API_KEY=Abcdefghijklmnop1234567890secret\n", encoding="utf-8")
     findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
     assert len(findings) == 1
     assert findings[0].severity == "MEDIUM"
     assert "예시 파일" in findings[0].title
+
+
+def test_env_example_ignores_plain_template_secret_words(tmp_path: Path):
+    env_file = tmp_path / ".env.example"
+    env_file.write_text("WORKER_API_SECRET=replace-with-worker-internal-api-secret\n", encoding="utf-8")
+    findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
+    assert findings == []
+
+
+def test_env_sample_uses_example_policy(tmp_path: Path):
+    env_file = tmp_path / ".env.sample"
+    env_file.write_text("JWT_SECRET=replace-with-at-least-32-byte-secret-key\n", encoding="utf-8")
+    findings = EnvPlainSecretRule().check(_ctx(env_files=[env_file], root=tmp_path))
+    assert findings == []
 
 
 def test_env_plain_secret_ignores_empty(tmp_path: Path):

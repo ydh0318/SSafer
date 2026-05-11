@@ -61,7 +61,7 @@ REQUIRED_FIX_STRING_FIELDS = (
 ALLOWED_FIX_PRIORITIES = ("high", "medium", "low")
 REQUIRED_FIX_PATCH_FIELDS = (
     "patchId",
-    "targetFile",
+    "filePath",
     "operation",
     "oldText",
     "newText",
@@ -69,7 +69,7 @@ REQUIRED_FIX_PATCH_FIELDS = (
 )
 REQUIRED_FIX_PATCH_STRING_FIELDS = (
     "patchId",
-    "targetFile",
+    "filePath",
     "operation",
     "oldText",
     "newText",
@@ -143,7 +143,7 @@ def build_structured_analysis_result(
     explanation: str,
     fix: dict[str, Any],
 ) -> dict[str, Any]:
-    return {
+    result = {
         "findingId": finding["id"],
         "ruleId": finding["ruleId"],
         "source": finding["source"],
@@ -155,6 +155,11 @@ def build_structured_analysis_result(
         "explanation": explanation,
         "fix": fix,
     }
+    if finding.get("filePath"):
+        result["filePath"] = finding["filePath"]
+    if finding.get("targetFiles"):
+        result["targetFiles"] = finding["targetFiles"]
+    return result
 
 
 def build_structured_analysis_results(
@@ -215,7 +220,7 @@ def build_analysis_result(
         fix_results=fix_results,
     )
 
-    return {
+    analysis_result = {
         "schemaVersion": ANALYSIS_RESULT_SCHEMA_VERSION,
         "scanId": scan_result.get("scanId"),
         "source": scan_result.get("source"),
@@ -224,6 +229,12 @@ def build_analysis_result(
         "resultCount": len(results),
         "results": results,
     }
+    normalize_analysis_result_patches(
+        findings=findings,
+        scan_result=scan_result,
+        analysis_result=analysis_result,
+    )
+    return analysis_result
 
 
 def build_analysis_result_from_results(
@@ -239,6 +250,140 @@ def build_analysis_result_from_results(
         "resultCount": len(structured_results),
         "results": structured_results,
     }
+
+
+def normalize_analysis_result_patches(
+    *,
+    findings: list[dict[str, Any]],
+    scan_result: dict[str, Any],
+    analysis_result: dict[str, Any],
+) -> None:
+    findings_by_id = {
+        finding["id"]: finding
+        for finding in findings
+        if isinstance(finding.get("id"), str)
+    }
+    source_hashes = scan_result.get("sourceFileHashes") or {}
+    content_by_target = _artifact_text_content_by_target(scan_result)
+
+    for result in analysis_result.get("results") or []:
+        if not isinstance(result, dict):
+            continue
+        finding = findings_by_id.get(result.get("findingId"))
+        fix = result.get("fix")
+        if finding is None or not isinstance(fix, dict):
+            continue
+        patches = fix.get("patches")
+        if not isinstance(patches, list):
+            continue
+
+        normalized_patches: list[dict[str, Any]] = []
+        for patch in patches:
+            normalized_patch = normalize_fix_patch_for_finding(
+                patch=patch,
+                finding=finding,
+                source_hashes=source_hashes,
+                content_by_target=content_by_target,
+            )
+            if normalized_patch is not None:
+                normalized_patches.append(normalized_patch)
+
+        if normalized_patches:
+            fix["patches"] = normalized_patches
+        else:
+            fix.pop("patches", None)
+
+
+def normalize_fix_patch_for_finding(
+    *,
+    patch: Any,
+    finding: dict[str, Any],
+    source_hashes: dict[str, str],
+    content_by_target: dict[str, str],
+) -> dict[str, Any] | None:
+    if not isinstance(patch, dict):
+        return None
+
+    normalized_patch = dict(patch)
+    legacy_target_file = normalized_patch.pop("targetFile", None)
+    if not normalized_patch.get("filePath") and legacy_target_file:
+        normalized_patch["filePath"] = legacy_target_file
+
+    old_text = normalized_patch.get("oldText")
+    if not isinstance(old_text, str) or not old_text:
+        return None
+
+    file_path = _select_patch_file_path(
+        finding=finding,
+        patch_file_path=normalized_patch.get("filePath"),
+        old_text=old_text,
+        content_by_target=content_by_target,
+    )
+    if file_path is None:
+        return None
+
+    target_content = content_by_target.get(file_path)
+    if target_content is not None and target_content.count(old_text) != 1:
+        return None
+
+    expected_file_hash = source_hashes.get(file_path)
+    if not isinstance(expected_file_hash, str) or not expected_file_hash.startswith("sha256:"):
+        return None
+
+    normalized_patch["filePath"] = file_path
+    normalized_patch["expectedFileHash"] = expected_file_hash
+    normalized_patch["requiresApproval"] = True
+    return normalized_patch
+
+
+def _select_patch_file_path(
+    *,
+    finding: dict[str, Any],
+    patch_file_path: Any,
+    old_text: str,
+    content_by_target: dict[str, str],
+) -> str | None:
+    finding_file_path = finding.get("filePath")
+    if isinstance(finding_file_path, str) and finding_file_path.strip():
+        if isinstance(patch_file_path, str) and patch_file_path.strip() and patch_file_path != finding_file_path:
+            return None
+        return finding_file_path
+
+    target_files = finding.get("targetFiles")
+    if not isinstance(target_files, list):
+        return None
+    candidate_files = [
+        value
+        for value in target_files
+        if isinstance(value, str) and value.strip()
+    ]
+    if not candidate_files:
+        return None
+
+    exact_matches = [
+        candidate
+        for candidate in candidate_files
+        if content_by_target.get(candidate, "").count(old_text) == 1
+    ]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    return None
+
+
+def _artifact_text_content_by_target(scan_result: dict[str, Any]) -> dict[str, str]:
+    content_by_target: dict[str, str] = {}
+    artifacts = scan_result.get("artifacts")
+    if not isinstance(artifacts, list):
+        return content_by_target
+
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        target = artifact.get("target")
+        content = artifact.get("content")
+        if isinstance(target, str) and isinstance(content, str):
+            content_by_target[target] = content
+    return content_by_target
 
 
 def _collect_unique_ids(
@@ -434,6 +579,10 @@ def validate_fix_patches_schema(patches: Any, path: str = "fix.patches") -> None
 def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
     if not isinstance(patch, dict):
         raise ValueError(f"{path} must be an object.")
+    if "filePath" not in patch and "targetFile" in patch:
+        patch["filePath"] = patch.pop("targetFile")
+    else:
+        patch.pop("targetFile", None)
 
     missing_fields = [
         field for field in REQUIRED_FIX_PATCH_FIELDS if field not in patch
@@ -448,7 +597,7 @@ def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{path}.{field} must be a non-empty string.")
 
-    validate_patch_target_file(patch["targetFile"], f"{path}.targetFile")
+    validate_patch_target_file(patch["filePath"], f"{path}.filePath")
     validate_patch_replacement_text(
         old_text=patch["oldText"],
         new_text=patch["newText"],
