@@ -138,4 +138,30 @@ public class ScanFinding {
     this.patchApprovedAt = approvedAt;
     this.resolutionStatus = ResolutionStatus.IN_PROGRESS;
   }
+
+  public void markPatchResolved(
+      String patchResultMessage,
+      String backupFileName,
+      String backupFilePath,
+      String backupMetadataJson,
+      LocalDateTime patchedAt
+  ) {
+    // Local Agent가 패치를 성공했다고 보고하면 finding을 조치 완료 상태로 확정한다.
+    this.resolutionStatus = ResolutionStatus.RESOLVED;
+    this.patchResultMessage = patchResultMessage;
+    this.backupFileName = backupFileName;
+    this.backupFilePath = backupFilePath;
+    this.backupMetadataJson = backupMetadataJson;
+    this.patchedAt = patchedAt;
+  }
+
+  public void markPatchFailed(String patchResultMessage, String backupMetadataJson) {
+    // 패치 실패 시에는 다시 승인/재시도할 수 있도록 OPEN 상태로 되돌린다.
+    this.resolutionStatus = ResolutionStatus.OPEN;
+    this.patchResultMessage = patchResultMessage;
+    this.backupFileName = null;
+    this.backupFilePath = null;
+    this.backupMetadataJson = backupMetadataJson;
+    this.patchedAt = null;
+  }
 }
