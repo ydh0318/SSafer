@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -143,7 +144,6 @@ class UploadScanServiceTest {
     );
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
-    when(projectRepository.findByUserIdAndDeletedAtIsNull(10L)).thenReturn(List.of(project));
     when(scanExecutionPermit.tryAcquire()).thenReturn(false);
 
     assertThatThrownBy(() -> uploadScanService.requestUploadScan("project-a", "scan-1", List.of(file)))
@@ -151,6 +151,8 @@ class UploadScanServiceTest {
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.SCAN_EXECUTION_BUSY);
 
+    verify(projectRepository, never()).findByUserIdAndDeletedAtIsNull(any());
+    verify(projectRepository, never()).save(any());
     verify(scanRepository, never()).save(any());
     verify(webUploadScanProcessor, never()).process(any());
     verify(scanExecutionPermit, never()).release();
@@ -160,8 +162,6 @@ class UploadScanServiceTest {
   void requestUploadScanWhenValidationFailsSkipsPermitAcquire() {
     // 파일 검증에서 실패하면 permit 획득/Scan 생성/processor 호출을 모두 건너뛴다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
-    Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
-    ReflectionTestUtils.setField(project, "id", 2001L);
     MockMultipartFile file = new MockMultipartFile(
         "files",
         ".env",
@@ -170,8 +170,7 @@ class UploadScanServiceTest {
     );
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
-    when(projectRepository.findByUserIdAndDeletedAtIsNull(10L)).thenReturn(List.of(project));
-    org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.INVALID_PARAMETER))
+    doThrow(new BusinessException(ErrorCode.INVALID_PARAMETER))
         .when(uploadScanFileValidator)
         .validate(eq(List.of(file)));
 
@@ -180,6 +179,8 @@ class UploadScanServiceTest {
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.INVALID_PARAMETER);
 
+    verify(projectRepository, never()).findByUserIdAndDeletedAtIsNull(any());
+    verify(projectRepository, never()).save(any());
     verify(scanExecutionPermit, never()).tryAcquire();
     verify(scanRepository, never()).save(any());
     verify(webUploadScanProcessor, never()).process(any());

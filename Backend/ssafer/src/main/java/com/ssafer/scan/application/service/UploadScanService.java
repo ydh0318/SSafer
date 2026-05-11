@@ -44,7 +44,6 @@ public class UploadScanService {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
 
-    Project project = findOrCreateProject(actor, normalizedProjectName);
     uploadScanFileValidator.validate(files);
 
     boolean acquired = scanExecutionPermit.tryAcquire();
@@ -53,6 +52,7 @@ public class UploadScanService {
     }
 
     try {
+      Project project = findOrCreateProject(actor, normalizedProjectName);
       Scan saved = scanRepository.save(buildRequestedScan(actor, project.getId(), scanName, files));
       // scan_result.json에 실제 프로젝트 이름이 기록되도록 command에 함께 전달한다.
       UploadScanProcessingResult processingResult = webUploadScanProcessor.process(
