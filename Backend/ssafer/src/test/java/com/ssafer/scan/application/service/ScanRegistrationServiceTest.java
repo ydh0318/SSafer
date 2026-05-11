@@ -15,6 +15,7 @@ import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +51,6 @@ class ScanRegistrationServiceTest {
 
   @Test
   void registerReusesExistingProjectForMember() throws Exception {
-    // 같은 소유자 범위에서 정규화 이름이 같으면 기존 프로젝트를 재사용해야 한다.
     Project existing = new Project(1L, null, "Sample App", null, ScanMode.AGENT, false);
     ReflectionTestUtils.setField(existing, "id", 2001L);
     given(projectRepository.findByUserIdAndDeletedAtIsNull(1L)).willReturn(List.of(existing));
@@ -65,7 +65,7 @@ class ScanRegistrationServiceTest {
 
     ScanRegistrationResult result = scanRegistrationService.register(
         AuthenticatedActor.member(1L),
-        new CreateScanRequest(" Sample   App ", ScanRequestSource.AGENT, "로컬 서버 점검", "/opt/app", false)
+        new CreateScanRequest(" Sample   App ", ScanRequestSource.AGENT, "local scan", "/opt/app", false, null)
     );
 
     assertThat(result.scanId()).isEqualTo(1001L);
@@ -84,10 +84,12 @@ class ScanRegistrationServiceTest {
     assertThat(saved.getRequestActorType()).isEqualTo(RequestActorType.USER);
     assertThat(saved.getRequestedByUserId()).isEqualTo(1L);
     assertThat(saved.getStatus()).isEqualTo(ScanStatus.REQUESTED);
+    assertThat(saved.getScanType()).isEqualTo(ScanType.PROJECT_FILE);
 
     Map<?, ?> snapshot = objectMapper.readValue(saved.getTargetSnapshotJson(), Map.class);
     assertThat(snapshot.get("source")).isEqualTo("AGENT");
-    assertThat(snapshot.get("scanName")).isEqualTo("로컬 서버 점검");
+    assertThat(snapshot.get("scanType")).isEqualTo("PROJECT_FILE");
+    assertThat(snapshot.get("scanName")).isEqualTo("local scan");
     assertThat(snapshot.get("targetPath")).isEqualTo("/opt/app");
     assertThat(snapshot.get("includeLogs")).isEqualTo(false);
 
@@ -104,7 +106,6 @@ class ScanRegistrationServiceTest {
 
   @Test
   void registerCreatesProjectWhenNoGuestProjectMatches() {
-    // 게스트 소유 범위에 매칭 프로젝트가 없으면 자동 생성 후 스캔을 등록해야 한다.
     given(projectRepository.findByGuestOwnerKeyHashAndDeletedAtIsNull("guest-hash")).willReturn(List.of());
 
     Project created = new Project(null, "guest-hash", "Sample App", null, ScanMode.AGENT, false);
@@ -122,7 +123,7 @@ class ScanRegistrationServiceTest {
 
     ScanRegistrationResult result = scanRegistrationService.register(
         AuthenticatedActor.guest("guest-hash"),
-        new CreateScanRequest("  Sample   App ", ScanRequestSource.AGENT, null, null, null)
+        new CreateScanRequest("  Sample   App ", ScanRequestSource.AGENT, null, null, null, null)
     );
 
     assertThat(result.projectId()).isEqualTo(3001L);
@@ -147,5 +148,36 @@ class ScanRegistrationServiceTest {
     then(rawUploadUrlIssuer).should().issuePutUrl(guestKeyCaptor.capture());
     assertThat(guestKeyCaptor.getValue()).startsWith("raw/4001/");
     assertThat(guestKeyCaptor.getValue()).endsWith("/scan_result.json");
+  }
+
+  @Test
+  void registerStoresServerAuditScanType() throws Exception {
+    given(projectRepository.findByUserIdAndDeletedAtIsNull(1L)).willReturn(List.of());
+
+    Project created = new Project(1L, null, "Server Audit", null, ScanMode.AGENT, false);
+    ReflectionTestUtils.setField(created, "id", 5001L);
+    given(projectRepository.save(any(Project.class))).willReturn(created);
+    given(scanRepository.save(any(Scan.class))).willAnswer(invocation -> {
+      Scan scan = invocation.getArgument(0);
+      ReflectionTestUtils.setField(scan, "id", 6001L);
+      return scan;
+    });
+    given(scanRepository.updateRawResultPath(eq(6001L), any(String.class))).willReturn(1);
+    given(rawUploadUrlIssuer.issuePutUrl(any(String.class)))
+        .willReturn("https://presigned-url.example.com/upload");
+
+    ScanRegistrationResult result = scanRegistrationService.register(
+        AuthenticatedActor.member(1L),
+        new CreateScanRequest("Server Audit", ScanRequestSource.CLI, "server-audit", "/var/log", true, ScanType.SERVER_AUDIT)
+    );
+
+    assertThat(result.scanId()).isEqualTo(6001L);
+    assertThat(result.rawResultPath()).startsWith("s3://ssafer/raw/6001/");
+
+    ArgumentCaptor<Scan> scanCaptor = ArgumentCaptor.forClass(Scan.class);
+    then(scanRepository).should().save(scanCaptor.capture());
+    assertThat(scanCaptor.getValue().getScanType()).isEqualTo(ScanType.SERVER_AUDIT);
+    Map<?, ?> snapshot = objectMapper.readValue(scanCaptor.getValue().getTargetSnapshotJson(), Map.class);
+    assertThat(snapshot.get("scanType")).isEqualTo("SERVER_AUDIT");
   }
 }

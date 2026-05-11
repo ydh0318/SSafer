@@ -28,7 +28,9 @@ import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.enums.Severity;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -190,6 +192,8 @@ class ScanQueryControllerTest {
         1001L,
         101L,
         ScanMode.AGENT,
+        ScanRequestSource.CLI,
+        ScanType.PROJECT_FILE,
         ScanStatus.DONE,
         "completed",
         null,
@@ -206,6 +210,8 @@ class ScanQueryControllerTest {
         .andExpect(jsonPath("$.data.scanId").value(1001))
         .andExpect(jsonPath("$.data.projectId").value(101))
         .andExpect(jsonPath("$.data.scanMode").value("AGENT"))
+        .andExpect(jsonPath("$.data.source").value("CLI"))
+        .andExpect(jsonPath("$.data.scanType").value("PROJECT_FILE"))
         .andExpect(jsonPath("$.data.status").value("DONE"))
         .andExpect(jsonPath("$.data.progressStep").value("completed"))
         .andExpect(jsonPath("$.data.rawResultPath").value("s3://ssafer/raw/1001/scan_result.json"));
@@ -217,6 +223,8 @@ class ScanQueryControllerTest {
     when(scanStatusQueryService.getScanStatus(1001L)).thenReturn(new ScanStatusResponse(
         1001L,
         ScanStatus.FAILED,
+        ScanRequestSource.CLI,
+        ScanType.SERVER_AUDIT,
         "ANALYSIS_FAILED",
         LocalDateTime.of(2026, 4, 27, 9, 0),
         LocalDateTime.of(2026, 4, 27, 9, 1),
@@ -229,6 +237,8 @@ class ScanQueryControllerTest {
         .andExpect(jsonPath("$.message").value("스캔 진행 상태 조회 성공"))
         .andExpect(jsonPath("$.data.scanId").value(1001))
         .andExpect(jsonPath("$.data.status").value("FAILED"))
+        .andExpect(jsonPath("$.data.source").value("CLI"))
+        .andExpect(jsonPath("$.data.scanType").value("SERVER_AUDIT"))
         .andExpect(jsonPath("$.data.progressStep").value("ANALYSIS_FAILED"))
         .andExpect(jsonPath("$.data.errorMessage").value("Agent timeout"));
   }

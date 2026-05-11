@@ -2,6 +2,7 @@ package com.ssafer.agent.application.service;
 
 import com.ssafer.agent.domain.entity.AgentTask;
 import com.ssafer.agent.domain.enums.AgentTaskType;
+import com.ssafer.scan.domain.enums.ScanType;
 import java.time.Instant;
 
 // 워커가 consume 하는 scan 요청 메시지 규격이다.
@@ -14,6 +15,7 @@ public record ScanRequestTaskMessage(
     Long agentId,
     Long projectId,
     Long scanId,
+    ScanType scanType,
     String rawResultPath,
     Integer resultCount,
     String tool,
@@ -23,7 +25,7 @@ public record ScanRequestTaskMessage(
 ) {
 
   public static final String MESSAGE_TYPE = "SCAN_REQUEST";
-  public static final int MESSAGE_VERSION = 1;
+  public static final int MESSAGE_VERSION = 2;
 
   public static ScanRequestTaskMessage of(
       AgentTask task,
@@ -41,6 +43,7 @@ public record ScanRequestTaskMessage(
         task.getAgent().getId(),
         task.getProject().getId(),
         task.getScan().getId(),
+        task.getScan().getScanType(),
         rawResultPath,
         resultCount,
         tool,

@@ -3,6 +3,7 @@ package com.ssafer.scan.domain.entity;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -62,6 +63,11 @@ public class Scan {
   @Enumerated(EnumType.STRING)
   @Column(name = "scan_mode", nullable = false, length = 20)
   private ScanMode scanMode;
+
+  @Builder.Default
+  @Enumerated(EnumType.STRING)
+  @Column(name = "scan_type", nullable = false, length = 30)
+  private ScanType scanType = ScanType.PROJECT_FILE;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)

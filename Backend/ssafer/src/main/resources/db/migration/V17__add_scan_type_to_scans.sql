@@ -1,0 +1,6 @@
+ALTER TABLE scans
+    ADD COLUMN scan_type VARCHAR(30) NOT NULL DEFAULT 'PROJECT_FILE';
+
+ALTER TABLE scans
+    ADD CONSTRAINT chk_scans_scan_type
+        CHECK (scan_type IN ('PROJECT_FILE', 'SERVER_AUDIT'));

@@ -13,7 +13,9 @@ import com.ssafer.scan.api.dto.HistoryScanListResponse;
 import com.ssafer.scan.api.dto.HistoryScanSummaryCountResponse;
 import com.ssafer.scan.application.service.HistoryScanQueryService;
 import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -52,6 +54,8 @@ class HistoryScanQueryControllerTest {
                 101L,
                 ScanStatus.DONE,
                 ScanMode.AGENT,
+                ScanRequestSource.CLI,
+                ScanType.PROJECT_FILE,
                 12L,
                 1L,
                 3L,
@@ -87,6 +91,8 @@ class HistoryScanQueryControllerTest {
         .andExpect(jsonPath("$.data.items[0].projectId").value(101))
         .andExpect(jsonPath("$.data.items[0].status").value("DONE"))
         .andExpect(jsonPath("$.data.items[0].scanMode").value("AGENT"))
+        .andExpect(jsonPath("$.data.items[0].source").value("CLI"))
+        .andExpect(jsonPath("$.data.items[0].scanType").value("PROJECT_FILE"))
         .andExpect(jsonPath("$.data.items[0].totalFindingCount").value(12))
         .andExpect(jsonPath("$.data.items[0].criticalCount").value(1))
         .andExpect(jsonPath("$.data.items[0].mediumCount").value(5));

@@ -18,6 +18,7 @@ import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
@@ -104,6 +105,9 @@ public class ScanFindingPatchApprovalService {
   private void validatePatchApproval(Scan scan, ScanFinding finding) {
     if (scan.getStatus() != ScanStatus.DONE) {
       throw new BusinessException(ErrorCode.SCAN_STATUS_CONFLICT);
+    }
+    if (scan.getScanType() != ScanType.PROJECT_FILE) {
+      throw new BusinessException(ErrorCode.PATCH_APPROVAL_NOT_ALLOWED);
     }
     if (finding.getPatchPayloadJson() == null || finding.getPatchPayloadJson().isBlank()) {
       throw new BusinessException(ErrorCode.PATCH_PAYLOAD_NOT_FOUND);

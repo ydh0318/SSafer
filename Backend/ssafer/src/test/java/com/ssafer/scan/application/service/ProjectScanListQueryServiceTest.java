@@ -17,7 +17,9 @@ import com.ssafer.scan.api.dto.ProjectScanListResponse;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -53,6 +55,8 @@ class ProjectScanListQueryServiceTest {
         .requestedByUserId(1L)
         .requestActorType(RequestActorType.USER)
         .scanMode(ScanMode.AGENT)
+        .scanType(ScanType.SERVER_AUDIT)
+        .targetSnapshotJson("{\"source\":\"CLI\"}")
         .status(ScanStatus.DONE)
         .requestedAt(LocalDateTime.of(2026, 4, 27, 9, 0))
         .completedAt(LocalDateTime.of(2026, 4, 27, 9, 10))
@@ -70,6 +74,8 @@ class ProjectScanListQueryServiceTest {
     assertThat(response.items()).hasSize(1);
     assertThat(response.items().get(0).scanId()).isEqualTo(1001L);
     assertThat(response.items().get(0).status()).isEqualTo(ScanStatus.DONE);
+    assertThat(response.items().get(0).source()).isEqualTo(ScanRequestSource.CLI);
+    assertThat(response.items().get(0).scanType()).isEqualTo(ScanType.SERVER_AUDIT);
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);
   }
 

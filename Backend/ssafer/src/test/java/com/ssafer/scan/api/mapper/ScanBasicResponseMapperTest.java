@@ -6,7 +6,9 @@ import com.ssafer.scan.api.dto.ScanBasicResponse;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +27,8 @@ class ScanBasicResponseMapperTest {
         .requestedByUserId(1L)
         .requestActorType(RequestActorType.USER)
         .scanMode(ScanMode.AGENT)
+        .scanType(ScanType.SERVER_AUDIT)
+        .targetSnapshotJson("{\"source\":\"CLI\"}")
         .status(ScanStatus.DONE)
         .progressStep("completed")
         .failureReason(null)
@@ -40,6 +44,8 @@ class ScanBasicResponseMapperTest {
     assertThat(response.scanId()).isEqualTo(1001L);
     assertThat(response.projectId()).isEqualTo(101L);
     assertThat(response.scanMode()).isEqualTo(ScanMode.AGENT);
+    assertThat(response.source()).isEqualTo(ScanRequestSource.CLI);
+    assertThat(response.scanType()).isEqualTo(ScanType.SERVER_AUDIT);
     assertThat(response.status()).isEqualTo(ScanStatus.DONE);
     assertThat(response.progressStep()).isEqualTo("completed");
     assertThat(response.failureReason()).isNull();

@@ -12,6 +12,7 @@ import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -162,6 +163,7 @@ public class UploadScanService {
         .requestedByUserId(actor.isMember() ? actor.userId() : null)
         .requestActorType(actor.isMember() ? RequestActorType.USER : RequestActorType.GUEST)
         .scanMode(ScanMode.UPLOAD)
+        .scanType(ScanType.PROJECT_FILE)
         .status(ScanStatus.REQUESTED)
         .targetSnapshotJson(serializeTargetSnapshot(scanName, files))
         .requestedAt(now)

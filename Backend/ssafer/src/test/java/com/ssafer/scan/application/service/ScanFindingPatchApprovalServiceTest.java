@@ -26,6 +26,7 @@ import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.enums.Severity;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
@@ -182,6 +183,7 @@ class ScanFindingPatchApprovalServiceTest {
         .requestedByUserId(1L)
         .requestActorType(RequestActorType.USER)
         .scanMode(com.ssafer.scan.domain.enums.ScanMode.AGENT)
+        .scanType(ScanType.PROJECT_FILE)
         .status(ScanStatus.RUNNING)
         .requestedAt(LocalDateTime.of(2026, 5, 8, 10, 0))
         .lastUpdatedAt(LocalDateTime.of(2026, 5, 8, 10, 5))
@@ -199,6 +201,26 @@ class ScanFindingPatchApprovalServiceTest {
         .isEqualTo(ErrorCode.SCAN_STATUS_CONFLICT);
   }
 
+  @Test
+  void approveWhenServerAuditScanThrowsNotAllowed() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Project project = new Project(1L, null, "project", null, ScanMode.AGENT, false);
+    ReflectionTestUtils.setField(project, "id", 101L);
+    Scan scan = scan(project.getId());
+    ReflectionTestUtils.setField(scan, "scanType", ScanType.SERVER_AUDIT);
+    ScanFinding finding = finding(scan.getId(), ResolutionStatus.OPEN, "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}");
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(scanRepository.findByIdAndDeletedAtIsNull(scan.getId())).thenReturn(Optional.of(scan));
+    when(projectAuthorizationService.loadAuthorizedProjectForUpdateOrThrow(project.getId(), actor)).thenReturn(project);
+    when(scanFindingRepository.findByIdAndScanIdForUpdate(finding.getId(), scan.getId())).thenReturn(Optional.of(finding));
+
+    assertThatThrownBy(() -> scanFindingPatchApprovalService.approve(scan.getId(), finding.getId()))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.PATCH_APPROVAL_NOT_ALLOWED);
+  }
+
   private Scan scan(Long projectId) {
     return Scan.builder()
         .id(1001L)
@@ -206,6 +228,7 @@ class ScanFindingPatchApprovalServiceTest {
         .requestedByUserId(1L)
         .requestActorType(RequestActorType.USER)
         .scanMode(com.ssafer.scan.domain.enums.ScanMode.AGENT)
+        .scanType(ScanType.PROJECT_FILE)
         .status(ScanStatus.DONE)
         .requestedAt(LocalDateTime.of(2026, 5, 8, 10, 0))
         .lastUpdatedAt(LocalDateTime.of(2026, 5, 8, 10, 5))

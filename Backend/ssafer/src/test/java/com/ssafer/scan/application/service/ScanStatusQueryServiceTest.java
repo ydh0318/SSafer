@@ -15,7 +15,9 @@ import com.ssafer.scan.api.dto.ScanStatusResponse;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -50,6 +52,8 @@ class ScanStatusQueryServiceTest {
         .requestedByUserId(1L)
         .requestActorType(RequestActorType.USER)
         .scanMode(ScanMode.AGENT)
+        .scanType(ScanType.SERVER_AUDIT)
+        .targetSnapshotJson("{\"source\":\"CLI\"}")
         .status(ScanStatus.FAILED)
         .progressStep("ANALYSIS_FAILED")
         .failureReason("Agent timeout")
@@ -66,6 +70,8 @@ class ScanStatusQueryServiceTest {
 
     assertThat(response.scanId()).isEqualTo(1001L);
     assertThat(response.status()).isEqualTo(ScanStatus.FAILED);
+    assertThat(response.source()).isEqualTo(ScanRequestSource.CLI);
+    assertThat(response.scanType()).isEqualTo(ScanType.SERVER_AUDIT);
     assertThat(response.progressStep()).isEqualTo("ANALYSIS_FAILED");
     assertThat(response.errorMessage()).isEqualTo("Agent timeout");
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);

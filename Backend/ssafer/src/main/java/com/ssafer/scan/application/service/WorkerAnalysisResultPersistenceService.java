@@ -9,6 +9,7 @@ import com.ssafer.scan.domain.entity.ScanNode;
 import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.enums.Severity;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanNodeRepository;
@@ -159,7 +160,7 @@ public class WorkerAnalysisResultPersistenceService {
     List<ScanFinding> findingsToSave = new ArrayList<>();
     for (JsonNode result : results) {
       String fingerprint = resolveFingerprint(result);
-      String patchPayloadJson = buildPatchPayloadJson(result.path("fix"));
+      String patchPayloadJson = supportsPatchGeneration(scan) ? buildPatchPayloadJson(result.path("fix")) : null;
       if (existingFingerprints.contains(fingerprint)) {
         ScanFinding existingFinding = existingFindingsByFingerprint.get(fingerprint);
         if (existingFinding != null) {
@@ -245,6 +246,10 @@ public class WorkerAnalysisResultPersistenceService {
     }
   }
 
+  private boolean supportsPatchGeneration(Scan scan) {
+    return scan.getScanType() == ScanType.PROJECT_FILE;
+  }
+
   private String buildRemediationGuide(JsonNode fix) {
     if (fix == null || fix.isMissingNode() || fix.isNull()) {
       return null;
@@ -298,6 +303,7 @@ public class WorkerAnalysisResultPersistenceService {
       case "trivy" -> FindingSourceType.TRIVY;
       case "custom-rule", "custom_rule" -> FindingSourceType.CUSTOM_RULE;
       case "ai" -> FindingSourceType.AI;
+      case "server-audit", "server_audit" -> FindingSourceType.SERVER_AUDIT;
       default -> throw new IllegalStateException("Unsupported finding source: " + rawSource);
     };
   }

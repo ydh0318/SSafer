@@ -17,8 +17,10 @@ import com.ssafer.project.domain.enums.ScanMode;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.entity.ScanNode;
+import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanNodeRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
@@ -119,6 +121,38 @@ class WorkerAnalysisResultPersistenceServiceTest {
               "codeGuidance": "code guidance 3",
               "verification": "verification 3",
               "cautions": ["caution-3"]
+            }
+          }
+        ]
+      }
+      """;
+
+  private static final String SERVER_AUDIT_ANALYSIS_RESULT_JSON = """
+      {
+        "schemaVersion": "0.2",
+        "scanId": "server-audit-1",
+        "source": "server-audit",
+        "scannedAt": "2026-04-27T00:26:05Z",
+        "generatedAt": "2026-05-04T01:57:29.596745+00:00",
+        "resultCount": 1,
+        "results": [
+          {
+            "findingId": "SRV-0001",
+            "ruleId": "SSH-OPEN",
+            "source": "server-audit",
+            "severity": "HIGH",
+            "file": "/etc/ssh/sshd_config",
+            "line": 12,
+            "title": "SSH port is publicly exposed",
+            "maskedEvidence": "0.0.0.0:22",
+            "explanation": "SSH is exposed to the public network",
+            "fix": {
+              "summary": "Restrict network access",
+              "priority": "high",
+              "recommendedActions": ["Check security group", "Restrict firewall rules"],
+              "codeGuidance": "Review inbound rules",
+              "verification": "Run firewall-cmd --list-all",
+              "cautions": ["Coordinate maintenance window"]
             }
           }
         ]
@@ -301,6 +335,72 @@ class WorkerAnalysisResultPersistenceServiceTest {
   }
 
   @Test
+  void persistSkipsPatchPayloadGenerationForServerAudit() {
+    Scan scan = runningScan();
+    ReflectionTestUtils.setField(scan, "scanType", ScanType.SERVER_AUDIT);
+    AgentTask task = ackedTask(scan);
+    WorkerAnalysisResultIngestionRequestedEvent event = event();
+    ScanNode savedNode = ScanNode.builder()
+        .id(200L)
+        .scanId(scan.getId())
+        .nodeKey("a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd")
+        .nodeName("cli")
+        .nodeType("ANALYSIS_RESULT")
+        .metadataJson("{}")
+        .createdAt(LocalDateTime.now())
+        .build();
+
+    when(scanRepository.findByIdForUpdate(scan.getId())).thenReturn(Optional.of(scan));
+    when(agentTaskRepository.findByIdAndScanId(task.getId(), scan.getId())).thenReturn(Optional.of(task));
+    when(analysisResultObjectReader.read(scan.getAnalysisResultPath())).thenReturn(ANALYSIS_RESULT_JSON);
+    when(scanNodeRepository.findByScanIdAndNodeKey(scan.getId(), "a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd"))
+        .thenReturn(Optional.empty());
+    when(scanNodeRepository.save(any(ScanNode.class))).thenReturn(savedNode);
+    when(scanFindingRepository.findAllByScanId(scan.getId())).thenReturn(List.of());
+    when(scanFindingRepository.countByScanId(scan.getId())).thenReturn(3L);
+
+    workerAnalysisResultPersistenceService.persist(event);
+
+    ArgumentCaptor<List<ScanFinding>> findingsCaptor = ArgumentCaptor.forClass(List.class);
+    verify(scanFindingRepository).saveAll(findingsCaptor.capture());
+    assertThat(findingsCaptor.getValue())
+        .extracting(ScanFinding::getPatchPayloadJson)
+        .containsOnlyNulls();
+  }
+
+  @Test
+  void persistMapsServerAuditFindingSource() {
+    Scan scan = runningScan();
+    ReflectionTestUtils.setField(scan, "scanType", ScanType.SERVER_AUDIT);
+    AgentTask task = ackedTask(scan);
+    ScanNode savedNode = ScanNode.builder()
+        .id(200L)
+        .scanId(scan.getId())
+        .nodeKey("server-audit-1")
+        .nodeName("server-audit")
+        .nodeType("ANALYSIS_RESULT")
+        .metadataJson("{}")
+        .createdAt(LocalDateTime.now())
+        .build();
+
+    when(scanRepository.findByIdForUpdate(scan.getId())).thenReturn(Optional.of(scan));
+    when(agentTaskRepository.findByIdAndScanId(task.getId(), scan.getId())).thenReturn(Optional.of(task));
+    when(analysisResultObjectReader.read(scan.getAnalysisResultPath())).thenReturn(SERVER_AUDIT_ANALYSIS_RESULT_JSON);
+    when(scanNodeRepository.findByScanIdAndNodeKey(scan.getId(), "server-audit-1")).thenReturn(Optional.empty());
+    when(scanNodeRepository.save(any(ScanNode.class))).thenReturn(savedNode);
+    when(scanFindingRepository.findAllByScanId(scan.getId())).thenReturn(List.of());
+    when(scanFindingRepository.countByScanId(scan.getId())).thenReturn(1L);
+
+    workerAnalysisResultPersistenceService.persist(event());
+
+    ArgumentCaptor<List<ScanFinding>> findingsCaptor = ArgumentCaptor.forClass(List.class);
+    verify(scanFindingRepository).saveAll(findingsCaptor.capture());
+    assertThat(findingsCaptor.getValue()).hasSize(1);
+    assertThat(findingsCaptor.getValue().getFirst().getSourceType()).isEqualTo(FindingSourceType.SERVER_AUDIT);
+    assertThat(findingsCaptor.getValue().getFirst().getPatchPayloadJson()).isNull();
+  }
+
+  @Test
   void markFailedKeepsRunningStateForRetry() {
     Scan scan = runningScan();
     AgentTask task = ackedTask(scan);
@@ -334,6 +434,7 @@ class WorkerAnalysisResultPersistenceServiceTest {
         .requestedByUserId(20L)
         .requestActorType(RequestActorType.USER)
         .scanMode(com.ssafer.scan.domain.enums.ScanMode.AGENT)
+        .scanType(ScanType.PROJECT_FILE)
         .status(ScanStatus.RUNNING)
         .progressStep(WorkerAnalysisResultPersistenceService.INGESTING_PROGRESS_STEP)
         .analysisResultPath("s3://ssafer/result/1/analysis_result.json")
@@ -350,6 +451,7 @@ class WorkerAnalysisResultPersistenceServiceTest {
         .requestedByUserId(20L)
         .requestActorType(RequestActorType.USER)
         .scanMode(com.ssafer.scan.domain.enums.ScanMode.AGENT)
+        .scanType(ScanType.PROJECT_FILE)
         .status(ScanStatus.DONE)
         .analysisResultPath("s3://ssafer/result/1/analysis_result.json")
         .requestedAt(LocalDateTime.of(2026, 5, 6, 10, 0))

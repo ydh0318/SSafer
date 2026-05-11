@@ -19,7 +19,9 @@ import com.ssafer.scan.api.dto.HistoryScanListResponse;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.enums.Severity;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
@@ -105,6 +107,8 @@ class HistoryScanQueryServiceTest {
     assertThat(result.items()).hasSize(1);
     assertThat(result.items().get(0).scanId()).isEqualTo(1002L);
     assertThat(result.items().get(0).projectId()).isEqualTo(102L);
+    assertThat(result.items().get(0).source()).isEqualTo(ScanRequestSource.CLI);
+    assertThat(result.items().get(0).scanType()).isEqualTo(ScanType.SERVER_AUDIT);
     assertThat(result.items().get(0).totalFindingCount()).isEqualTo(5L);
     assertThat(result.items().get(0).criticalCount()).isEqualTo(1L);
     assertThat(result.items().get(0).highCount()).isEqualTo(2L);
@@ -188,6 +192,8 @@ class HistoryScanQueryServiceTest {
         .requestedByUserId(1L)
         .requestActorType(RequestActorType.USER)
         .scanMode(scanMode)
+        .scanType(ScanType.SERVER_AUDIT)
+        .targetSnapshotJson("{\"source\":\"CLI\"}")
         .status(status)
         .requestedAt(LocalDateTime.of(2026, 4, 30, 10, 0))
         .completedAt(LocalDateTime.of(2026, 4, 30, 10, 10))

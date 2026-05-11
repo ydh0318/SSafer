@@ -6,6 +6,7 @@ import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.global.security.CurrentActorProvider;
 import com.ssafer.project.application.service.ProjectAuthorizationService;
 import com.ssafer.scan.api.dto.ScanStatusResponse;
+import com.ssafer.scan.api.mapper.ScanRequestSourceResolver;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,8 @@ public class ScanStatusQueryService {
     return new ScanStatusResponse(
         scan.getId(),
         scan.getStatus(),
+        ScanRequestSourceResolver.resolve(scan),
+        scan.getScanType(),
         scan.getProgressStep(),
         scan.getRequestedAt(),
         scan.getStartedAt(),
