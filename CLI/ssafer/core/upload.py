@@ -14,7 +14,7 @@ from ssafer.core.sanitize import AWS_KEY_RE, PRIVATE_KEY_RE, is_placeholder, is_
 from ssafer.server.audit import load_last_server_audit
 
 
-DEFAULT_API_URL = "https://k14b105.p.ssafy.io"
+DEFAULT_API_URL = "https://ssafer.co.kr"
 IGNORED_SECRET_PATH_KEYS = {
     "id",
     "ruleId",

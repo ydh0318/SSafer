@@ -51,7 +51,7 @@ def _agent_ws_netloc(netloc: str) -> str:
 def fetch_pending_agent_tasks(api_url: str, agent_id: int, agent_token: str) -> list[AgentTask]:
     endpoint = f"{api_url.rstrip('/')}/api/v1/internal/agents/{agent_id}/tasks"
     headers = {"Authorization": f"Bearer {agent_token}"}
-    with httpx.Client(timeout=20.0) as client:
+    with httpx.Client(timeout=20.0, follow_redirects=True) as client:
         response = client.get(endpoint, headers=headers)
         response.raise_for_status()
     payload = response.json()
@@ -61,63 +61,26 @@ def fetch_pending_agent_tasks(api_url: str, agent_id: int, agent_token: str) -> 
     return [_parse_agent_task(item) for item in data if isinstance(item, dict)]
 
 
-def report_patch_apply_task_result(
+def report_agent_task_result(
     api_url: str,
+    agent_id: int,
     agent_token: str,
     task: AgentTask,
     result: AgentTaskResult,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any] | None:
     if task.task_type != "PATCH_APPLY" or result.status == "DRY_RUN":
-        return []
-    if task.scan_id is None:
-        raise ValueError("PATCH_APPLY result report requires scanId.")
+        return None
+    if result.status not in {"SUCCESS", "FAILED"}:
+        return None
 
-    reports: list[dict[str, Any]] = []
-    if result.patch_results:
-        for patch_result in result.patch_results:
-            finding_id = _resolve_report_finding_id(task, patch_result.finding_id)
-            if finding_id is None:
-                raise ValueError("PATCH_APPLY result report requires findingId.")
-            reports.append(
-                _post_patch_apply_result(
-                    api_url,
-                    agent_token,
-                    scan_id=task.scan_id,
-                    finding_id=finding_id,
-                    payload=_build_patch_apply_result_payload(
-                        status=patch_result.status,
-                        message=patch_result.message,
-                        backup_path=patch_result.backup_path,
-                        backup_metadata={
-                            "taskId": task.task_id,
-                            "taskType": task.task_type,
-                            "patchId": patch_result.patch_id,
-                            "filePath": patch_result.file_path,
-                        },
-                    ),
-                )
-            )
-        return reports
-
-    if task.finding_id is None:
-        raise ValueError("PATCH_APPLY failure report requires findingId.")
-    reports.append(
-        _post_patch_apply_result(
-            api_url,
-            agent_token,
-            scan_id=task.scan_id,
-            finding_id=task.finding_id,
-            payload=_build_patch_apply_result_payload(
-                status=result.status,
-                message=result.message,
-                backup_metadata={
-                    "taskId": task.task_id,
-                    "taskType": task.task_type,
-                },
-            ),
-        )
-    )
-    return reports
+    endpoint = f"{api_url.rstrip('/')}/api/v1/internal/agents/{agent_id}/tasks/{task.task_id}/result"
+    headers = {"Authorization": f"Bearer {agent_token}"}
+    payload = _build_agent_task_result_payload(result)
+    with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+        response = client.post(endpoint, headers=headers, json=payload)
+        response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, dict) else {}
 
 
 def handle_agent_task(
@@ -326,6 +289,9 @@ async def watch_agent(
             )
             return
         except Exception as exc:
+            if _is_agent_auth_error(exc):
+                on_event("auth_failed", {"error": str(exc)})
+                raise
             if once or not reconnect:
                 raise
             attempt += 1
@@ -382,17 +348,17 @@ async def _watch_agent_session(
                 on_event("task", result)
                 if not dry_run:
                     try:
-                        reports = report_patch_apply_task_result(api_url, agent_token, task, result)
+                        report = report_agent_task_result(api_url, agent_id, agent_token, task, result)
                     except Exception as exc:  # noqa: BLE001 - report failure must not stop the agent.
                         on_event(
                             "task_result_report_failed",
                             {"taskId": task.task_id, "taskType": task.task_type, "error": str(exc)},
                         )
                     else:
-                        if reports:
+                        if report is not None:
                             on_event(
                                 "task_result_reported",
-                                {"taskId": task.task_id, "taskType": task.task_type, "count": len(reports)},
+                                {"taskId": task.task_id, "taskType": task.task_type, "count": 1},
                             )
 
             if once:
@@ -410,6 +376,12 @@ def _connect_websocket(websockets: Any, ws_url: str, headers: dict[str, str]) ->
         return websockets.connect(ws_url, additional_headers=headers)
     except TypeError:
         return websockets.connect(ws_url, extra_headers=headers)
+
+
+def _is_agent_auth_error(exc: Exception) -> bool:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return False
+    return exc.response.status_code in {401, 403}
 
 
 def _connect_message(agent_id: int, project_id: int) -> dict[str, Any]:
@@ -441,46 +413,22 @@ def _parse_agent_task(item: dict[str, Any]) -> AgentTask:
     )
 
 
-def _resolve_report_finding_id(task: AgentTask, finding_id: str | None) -> int | None:
-    if finding_id is not None:
-        try:
-            return int(finding_id)
-        except ValueError:
-            pass
-    return task.finding_id
-
-
-def _post_patch_apply_result(
-    api_url: str,
-    agent_token: str,
-    *,
-    scan_id: int,
-    finding_id: int,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    endpoint = f"{api_url.rstrip('/')}/api/v1/internal/scans/{scan_id}/findings/{finding_id}/patch-results"
-    headers = {"Authorization": f"Bearer {agent_token}"}
-    with httpx.Client(timeout=20.0, follow_redirects=True) as client:
-        response = client.post(endpoint, headers=headers, json=payload)
-        response.raise_for_status()
-    data = response.json()
-    return data if isinstance(data, dict) else {}
-
-
-def _build_patch_apply_result_payload(
-    *,
-    status: str,
-    message: str,
-    backup_path: str | None = None,
-    backup_metadata: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+def _build_agent_task_result_payload(result: AgentTaskResult) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "patchStatus": "SUCCEEDED" if status == "SUCCESS" else "FAILED",
-        "resultMessage": message,
+        "taskStatus": "SUCCEEDED" if result.status == "SUCCESS" else "FAILED",
+        "resultMessage": result.message,
+        "patchResults": [_build_patch_result_item(item) for item in result.patch_results],
     }
-    if backup_path:
-        payload["backupFileName"] = Path(backup_path).name
-        payload["backupFilePath"] = backup_path
-    if backup_metadata:
-        payload["backupMetadata"] = backup_metadata
     return payload
+
+
+def _build_patch_result_item(result: PatchApplyResult) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "patchId": result.patch_id,
+        "filePath": result.file_path,
+        "status": "SUCCESS" if result.status == "SUCCESS" else "FAILED",
+        "message": result.message,
+    }
+    if result.backup_path:
+        item["backupPath"] = result.backup_path
+    return item
