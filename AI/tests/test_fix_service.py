@@ -6,15 +6,15 @@ from app.services.fix_service import generate_finding_fix, parse_fix_response
 
 
 DESCRIPTION_ONLY_FIX = {
-    "summary": "Dockerfile에서 root 사용자 실행을 제거합니다.",
+    "summary": "Run Dockerfile with a non-root user.",
     "priority": "high",
     "recommendedActions": [
-        "비 root 사용자를 생성합니다.",
-        "USER 지시문을 비 root 사용자로 변경합니다.",
+        "Create a non-root user in the Dockerfile.",
+        "Switch to the non-root user before the runtime command.",
     ],
-    "codeGuidance": "Dockerfile의 USER root 지시문을 비 root 사용자로 바꿉니다.",
-    "verification": "컨테이너가 비 root 사용자로 실행되는지 확인합니다.",
-    "cautions": ["기존 권한이 필요한 경로는 소유자를 함께 조정합니다."],
+    "codeGuidance": "Add a USER instruction that uses a non-root account.",
+    "verification": "Build the image and verify the container user is not root.",
+    "cautions": ["Ensure the new user can read application files."],
 }
 
 
@@ -23,7 +23,8 @@ PATCH_FIX = {
     "patches": [
         {
             "patchId": "PATCH-0001",
-            "targetFile": "Dockerfile",
+            "findingId": "FND-0001",
+            "filePath": "Dockerfile",
             "operation": "replace",
             "oldText": "USER root",
             "newText": "USER appuser",
@@ -46,8 +47,9 @@ def build_finding():
         "source": "custom-rule",
         "severity": "HIGH",
         "file": "Dockerfile",
+        "filePath": "Dockerfile",
         "line": 12,
-        "title": "Dockerfile이 root 사용자로 실행됨",
+        "title": "Dockerfile runs as root",
         "maskedEvidence": "USER root",
     }
 
@@ -63,7 +65,25 @@ class FixServiceTest(unittest.TestCase):
         parsed = parse_fix_response(json.dumps(PATCH_FIX))
 
         self.assertEqual(parsed["patches"][0]["patchId"], "PATCH-0001")
+        self.assertEqual(parsed["patches"][0]["filePath"], "Dockerfile")
         self.assertTrue(parsed["patches"][0]["requiresApproval"])
+
+    def test_parse_fix_response_accepts_legacy_target_file_and_normalizes(self):
+        legacy_fix = {
+            **DESCRIPTION_ONLY_FIX,
+            "patches": [
+                {
+                    **PATCH_FIX["patches"][0],
+                    "targetFile": "Dockerfile",
+                }
+            ],
+        }
+        legacy_fix["patches"][0].pop("filePath")
+
+        parsed = parse_fix_response(json.dumps(legacy_fix))
+
+        self.assertEqual(parsed["patches"][0]["filePath"], "Dockerfile")
+        self.assertNotIn("targetFile", parsed["patches"][0])
 
     def test_parse_fix_response_rejects_invalid_patch_fixture(self):
         invalid_fix = {
@@ -111,9 +131,9 @@ class FixServiceTest(unittest.TestCase):
         self.assertEqual(fix["summary"], DESCRIPTION_ONLY_FIX["summary"])
         self.assertEqual(invoke.call_count, 2)
         retry_prompt = invoke.call_args_list[1].args[1]["finding_input"]
-        self.assertIn("실패 사유", retry_prompt)
+        self.assertIn("Validation error:", retry_prompt)
         self.assertIn("Fix Chain output failed schema validation", retry_prompt)
-        self.assertIn("patches[].operation은 replace만 사용하세요.", retry_prompt)
+        self.assertIn("patches[].operation must be replace.", retry_prompt)
 
 
 if __name__ == "__main__":

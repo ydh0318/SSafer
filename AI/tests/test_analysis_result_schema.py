@@ -1,19 +1,22 @@
 import unittest
 
-from app.services.result_service import validate_fix_schema
+from app.services.result_service import (
+    normalize_analysis_result_patches,
+    validate_fix_schema,
+)
 
 
 def build_fix(**overrides):
     fix = {
-        "summary": "Dockerfile에서 root 사용자 실행을 제거합니다.",
+        "summary": "Run Dockerfile with a non-root user.",
         "priority": "high",
         "recommendedActions": [
-            "비 root 사용자를 생성합니다.",
-            "USER 지시문을 비 root 사용자로 변경합니다.",
+            "Create a non-root user in the Dockerfile.",
+            "Switch to the non-root user before the runtime command.",
         ],
-        "codeGuidance": "Dockerfile의 USER root 지시문을 비 root 사용자로 바꿉니다.",
-        "verification": "컨테이너가 비 root 사용자로 실행되는지 확인합니다.",
-        "cautions": ["기존 권한이 필요한 경로는 소유자를 함께 조정합니다."],
+        "codeGuidance": "Add a USER instruction that uses a non-root account.",
+        "verification": "Build the image and verify the container user is not root.",
+        "cautions": ["Ensure the new user can read application files."],
     }
     fix.update(overrides)
     return fix
@@ -22,14 +25,43 @@ def build_fix(**overrides):
 def build_patch(**overrides):
     patch = {
         "patchId": "PATCH-0001",
-        "targetFile": "Dockerfile",
+        "findingId": "FND-0001",
+        "filePath": "Dockerfile",
         "operation": "replace",
         "oldText": "USER root",
         "newText": "USER appuser",
+        "expectedFileHash": "sha256:abc123",
         "requiresApproval": True,
     }
     patch.update(overrides)
     return patch
+
+
+def build_finding(**overrides):
+    finding = {
+        "id": "FND-0001",
+        "ruleId": "DOCKER_ROOT_USER",
+        "source": "custom-rule",
+        "severity": "HIGH",
+        "file": "Dockerfile",
+        "filePath": "Dockerfile",
+        "line": None,
+        "title": "Dockerfile runs as root",
+        "maskedEvidence": "USER root",
+    }
+    finding.update(overrides)
+    return finding
+
+
+def build_analysis_result_with_patch(patch):
+    return {
+        "results": [
+            {
+                "findingId": "FND-0001",
+                "fix": build_fix(patches=[patch]),
+            }
+        ]
+    }
 
 
 class AnalysisResultFixSchemaTest(unittest.TestCase):
@@ -41,7 +73,6 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
             build_fix(
                 patches=[
                     build_patch(
-                        expectedFileHash="sha256:abc123",
                         rollback={
                             "operation": "replace",
                             "oldText": "USER appuser",
@@ -51,6 +82,16 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
                 ]
             )
         )
+
+    def test_validate_fix_schema_accepts_legacy_target_file_and_normalizes(self):
+        patch = build_patch(targetFile="Dockerfile")
+        patch.pop("filePath")
+        fix = build_fix(patches=[patch])
+
+        validate_fix_schema(fix)
+
+        self.assertEqual(fix["patches"][0]["filePath"], "Dockerfile")
+        self.assertNotIn("targetFile", fix["patches"][0])
 
     def test_validate_fix_schema_rejects_patch_missing_required_field(self):
         with self.assertRaisesRegex(ValueError, "fix.patches\\[0\\] missing required fields"):
@@ -68,33 +109,16 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
 
     def test_validate_fix_schema_rejects_unsupported_patch_operation(self):
         with self.assertRaisesRegex(ValueError, "fix.patches\\[0\\].operation"):
-            validate_fix_schema(
-                build_fix(
-                    patches=[
-                        build_patch(
-                            operation="append",
-                        )
-                    ]
-                )
-            )
+            validate_fix_schema(build_fix(patches=[build_patch(operation="append")]))
 
     def test_validate_fix_schema_rejects_invalid_patch_metadata(self):
         with self.assertRaisesRegex(ValueError, "fix.patches\\[0\\].expectedFileHash"):
             validate_fix_schema(
-                build_fix(
-                    patches=[
-                        build_patch(
-                            expectedFileHash="abc123",
-                        )
-                    ]
-                )
+                build_fix(patches=[build_patch(expectedFileHash="abc123")])
             )
 
     def test_validate_fix_schema_rejects_invalid_rollback_operation(self):
-        with self.assertRaisesRegex(
-            ValueError,
-            "fix.patches\\[0\\].rollback.operation",
-        ):
+        with self.assertRaisesRegex(ValueError, "fix.patches\\[0\\].rollback.operation"):
             validate_fix_schema(
                 build_fix(
                     patches=[
@@ -109,7 +133,7 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
                 )
             )
 
-    def test_validate_fix_schema_rejects_unsafe_target_file(self):
+    def test_validate_fix_schema_rejects_unsafe_file_path(self):
         unsafe_paths = (
             "/etc/passwd",
             "../Dockerfile",
@@ -122,10 +146,10 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
             with self.subTest(unsafe_path=unsafe_path):
                 with self.assertRaisesRegex(
                     ValueError,
-                    "fix.patches\\[0\\].targetFile",
+                    "fix.patches\\[0\\].filePath",
                 ):
                     validate_fix_schema(
-                        build_fix(patches=[build_patch(targetFile=unsafe_path)])
+                        build_fix(patches=[build_patch(filePath=unsafe_path)])
                     )
 
     def test_validate_fix_schema_rejects_patch_without_user_approval(self):
@@ -133,9 +157,7 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
             ValueError,
             "fix.patches\\[0\\].requiresApproval must be true",
         ):
-            validate_fix_schema(
-                build_fix(patches=[build_patch(requiresApproval=False)])
-            )
+            validate_fix_schema(build_fix(patches=[build_patch(requiresApproval=False)]))
 
     def test_validate_fix_schema_rejects_noop_replacement(self):
         with self.assertRaisesRegex(ValueError, "oldText.*newText"):
@@ -162,6 +184,85 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
                     ]
                 )
             )
+
+    def test_normalize_analysis_result_patches_adds_file_hash_from_finding_file_path(self):
+        analysis_result = build_analysis_result_with_patch(
+            build_patch(expectedFileHash="sha256:stale")
+        )
+
+        normalize_analysis_result_patches(
+            findings=[build_finding()],
+            scan_result={"sourceFileHashes": {"Dockerfile": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        patch = analysis_result["results"][0]["fix"]["patches"][0]
+        self.assertEqual(patch["filePath"], "Dockerfile")
+        self.assertEqual(patch["expectedFileHash"], "sha256:fresh")
+        self.assertNotIn("targetFile", patch)
+
+    def test_normalize_analysis_result_patches_removes_patch_when_file_path_conflicts(self):
+        analysis_result = build_analysis_result_with_patch(
+            build_patch(filePath="OtherDockerfile")
+        )
+
+        normalize_analysis_result_patches(
+            findings=[build_finding()],
+            scan_result={"sourceFileHashes": {"Dockerfile": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        self.assertNotIn("patches", analysis_result["results"][0]["fix"])
+
+    def test_normalize_analysis_result_patches_selects_single_target_file_by_old_text(self):
+        finding = build_finding(filePath=None, targetFiles=["a.yml", "b.yml"])
+        finding.pop("filePath")
+        analysis_result = build_analysis_result_with_patch(
+            build_patch(filePath="a.yml", oldText="ports:\n  - 5432:5432")
+        )
+
+        normalize_analysis_result_patches(
+            findings=[finding],
+            scan_result={
+                "sourceFileHashes": {"a.yml": "sha256:a", "b.yml": "sha256:b"},
+                "artifacts": [
+                    {
+                        "target": "a.yml",
+                        "content": "services:\n  db:\n    ports:\n  - 5432:5432\n",
+                    },
+                    {
+                        "target": "b.yml",
+                        "content": "services:\n  cache: {}\n",
+                    },
+                ],
+            },
+            analysis_result=analysis_result,
+        )
+
+        patch = analysis_result["results"][0]["fix"]["patches"][0]
+        self.assertEqual(patch["filePath"], "a.yml")
+        self.assertEqual(patch["expectedFileHash"], "sha256:a")
+
+    def test_normalize_analysis_result_patches_removes_ambiguous_target_file_patch(self):
+        finding = build_finding(filePath=None, targetFiles=["a.yml", "b.yml"])
+        finding.pop("filePath")
+        analysis_result = build_analysis_result_with_patch(
+            build_patch(filePath="a.yml", oldText="USER root")
+        )
+
+        normalize_analysis_result_patches(
+            findings=[finding],
+            scan_result={
+                "sourceFileHashes": {"a.yml": "sha256:a", "b.yml": "sha256:b"},
+                "artifacts": [
+                    {"target": "a.yml", "content": "USER root\n"},
+                    {"target": "b.yml", "content": "USER root\n"},
+                ],
+            },
+            analysis_result=analysis_result,
+        )
+
+        self.assertNotIn("patches", analysis_result["results"][0]["fix"])
 
 
 if __name__ == "__main__":
