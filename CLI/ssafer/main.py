@@ -23,7 +23,7 @@ from ssafer.core.doctor import collect_doctor_status, install_trivy_with_winget
 from ssafer.core.result_store import load_last_scan, run_scan
 from ssafer.core.upload import upload_last_scan, upload_last_server_audit
 
-app = typer.Typer(help="SSAfer security configuration CLI.")
+app = typer.Typer(help="SSAfer 보안 점검 CLI.")
 console = Console()
 
 _STATUS_KO = {
@@ -100,13 +100,40 @@ def callback() -> None:
     """SSAfer CLI."""
 
 
-@app.command()
+@app.command(help="CLI 버전을 출력합니다.")
 def version() -> None:
     """Print the SSAfer CLI version."""
     console.print(__version__)
 
 
-@app.command()
+@app.command(help="로그인/Agent 설정 상태를 확인합니다.")
+def status() -> None:
+    """Show saved login and local-agent status."""
+    from ssafer.core.auth import CONFIG_PATH, load_agent_config, load_endpoint, load_token
+
+    token = load_token()
+    endpoint = load_endpoint()
+    agent_config = load_agent_config()
+
+    table = Table(title="SSAfer 상태")
+    table.add_column("항목")
+    table.add_column("상태")
+    table.add_column("설명", overflow="fold")
+    table.add_row("로그인", "[green]됨[/green]" if token else "[red]안 됨[/red]", "저장된 access token 기준")
+    table.add_row("Endpoint", endpoint, "현재 사용할 백엔드 API")
+    if _has_saved_agent_config(agent_config):
+        table.add_row(
+            "Local Agent",
+            "[green]설정됨[/green]",
+            f"agentId={agent_config.get('agentId')}, projectId={agent_config.get('projectId')}",
+        )
+    else:
+        table.add_row("Local Agent", "[yellow]미설정[/yellow]", "ssafer agent 실행 시 설정 가능")
+    table.add_row("Config", str(CONFIG_PATH), "토큰 값은 출력하지 않음")
+    console.print(table)
+
+
+@app.command(hidden=True)
 def doctor() -> None:
     """Check local tools needed by SSAfer."""
     status = collect_doctor_status()
@@ -122,7 +149,7 @@ def doctor() -> None:
         console.print("[yellow]Trivy 설치:[/yellow] ssafer install-tools")
 
 
-@app.command("install-tools")
+@app.command("install-tools", help="Trivy 등 선택 도구를 설치합니다.")
 def install_tools() -> None:
     """Install optional local tools used by SSAfer."""
     console.print("[cyan]Installing Trivy. This can take a few minutes...[/cyan]")
@@ -135,7 +162,7 @@ def install_tools() -> None:
     raise typer.Exit(code=1)
 
 
-@app.command("server-audit")
+@app.command("server-audit", help="서버 내부 런타임 보안 상태를 점검합니다.")
 def server_audit(
     path: Optional[Path] = typer.Option(None, "--path", "-p", help="Output root for .ssafer server-audit files."),
     upload: bool = typer.Option(False, "--upload", help="Upload the generated server audit package."),
@@ -208,7 +235,7 @@ def _can_prompt_for_sudo() -> bool:
     return bool(getattr(sys.stdin, "isatty", lambda: False)())
 
 
-@app.command()
+@app.command(help="현재 프로젝트를 스캔하고 로컬 결과 JSON을 생성합니다.")
 def run(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to scan."),
     upload: bool = typer.Option(False, "--upload", help="Upload the generated scan package after run."),
@@ -260,7 +287,7 @@ def run(
         _print_upload_response(response)
 
 
-@app.command()
+@app.command(help="최근 로컬 스캔 결과를 백엔드/S3에 업로드합니다.")
 def upload(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root containing .ssafer results."),
     api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL."),
@@ -272,11 +299,13 @@ def upload(
     _print_upload_response(response)
 
 
-@app.command("apply")
+@app.command("apply", help="승인된 수정안을 로컬 프로젝트 파일에 적용합니다.")
 def apply_fix(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to patch."),
     analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="Worker analysis_result.json with patch payloads."),
     scan_id: Optional[int] = typer.Option(None, "--scan-id", help="Download analysis_result.json for this backend scan ID."),
+    latest: bool = typer.Option(False, "--latest", help="Use the latest DONE scan for the selected project."),
+    project_id: Optional[int] = typer.Option(None, "--project-id", help="Project ID used with --latest."),
     api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL for --scan-id."),
     patch_id: Optional[str] = typer.Option(None, "--patch-id", help="Apply only one patch ID."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch payloads without modifying files."),
@@ -293,9 +322,13 @@ def apply_fix(
 
     try:
         project_root = path.resolve()
-        if analysis_result is not None and scan_id is not None:
-            raise PatchError("Use either --analysis-result or --scan-id, not both.")
-        if scan_id is not None:
+        remote_options = sum(1 for enabled in (analysis_result is not None, scan_id is not None, latest) if enabled)
+        if remote_options > 1:
+            raise PatchError("Use only one of --analysis-result, --scan-id, or --latest.")
+        if latest:
+            scan_id = _latest_done_scan_id_or_exit(project_root, project_id=project_id, api_url=api_url)
+            analysis_path = _download_analysis_result_or_exit(project_root, scan_id=scan_id, api_url=api_url)
+        elif scan_id is not None:
             analysis_path = _download_analysis_result_or_exit(project_root, scan_id=scan_id, api_url=api_url)
         else:
             analysis_path = analysis_result or find_default_analysis_result(project_root)
@@ -304,6 +337,14 @@ def apply_fix(
                 "analysis_result.json not found. Use --analysis-result or place it under .ssafer/analysis_result.json."
             )
         console.print(f"[dim]Analysis result: {analysis_path}[/dim]")
+        if analysis_result is None and scan_id is None and not latest and not yes:
+            console.print(
+                "[yellow]Using a local analysis_result.json that was not downloaded by this command. "
+                "Make sure it belongs to the current project.[/yellow]"
+            )
+            if not typer.confirm("Continue with local analysis_result.json?"):
+                console.print("[yellow]Patch apply canceled.[/yellow]")
+                raise typer.Exit(code=1)
 
         candidates = load_patch_candidates_from_file(analysis_path)
         selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
@@ -349,7 +390,7 @@ def apply_fix(
     console.print(result_table)
 
 
-@app.command("agent-watch")
+@app.command("agent-watch", hidden=True)
 def agent_watch(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root where patches are applied."),
     api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL."),
@@ -379,21 +420,25 @@ def agent_watch(
     )
 
 
-@app.command("agent")
+@app.command("agent", help="Local Agent를 설정하고 실행합니다.")
 def agent(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root where patches are applied."),
 ) -> None:
     """Initialize the local agent if needed, then keep it running."""
+    _start_agent(path=path)
+
+
+def _start_agent(*, path: Path, refresh_token: bool = False) -> None:
     from ssafer.core.auth import load_agent_config, load_endpoint, load_token
 
     agent_config = load_agent_config()
-    if not _has_saved_agent_config(agent_config):
+    if refresh_token or not _has_saved_agent_config(agent_config):
         endpoint = load_endpoint()
         access_token = load_token()
         if access_token is None:
             console.print("[red]Login token is required. Run ssafer login first.[/red]")
             raise typer.Exit(code=1)
-        project_id = _select_agent_project_id(endpoint, access_token)
+        project_id = _saved_agent_project_id(agent_config) or _select_agent_project_id(endpoint, access_token)
         agent_config = _issue_and_save_agent_token(project_id, endpoint, "Agent setup", access_token=access_token)
         console.print("[green]Agent setup complete.[/green]")
     _run_agent_watch(
@@ -412,7 +457,7 @@ def agent(
     )
 
 
-@app.command("agent-init")
+@app.command("agent-init", hidden=True)
 def agent_init(
     project_id: int = typer.Option(..., "--project-id", help="Project ID to issue a local-agent token for."),
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL."),
@@ -431,6 +476,16 @@ def agent_init(
 
 def _has_saved_agent_config(config: dict) -> bool:
     return bool(config.get("agentId") and config.get("projectId") and config.get("agentToken"))
+
+
+def _saved_agent_project_id(config: dict) -> int | None:
+    value = config.get("projectId")
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _issue_and_save_agent_token(
@@ -590,6 +645,16 @@ def _run_agent_watch(
                 attempt = str(payload.get("attempt", "-"))
                 error = str(payload.get("error", "-"))
             console.print(f"[red]Agent reconnect attempts exhausted.[/red] attempts={attempt}, error={error}")
+            return
+        if event_type == "auth_failed":
+            error = "-"
+            if isinstance(payload, dict):
+                error = str(payload.get("error", "-"))
+            console.print(f"[red]Agent authentication failed.[/red] {error}")
+            console.print(
+                "[yellow]Saved agent token is invalid. Run "
+                "[bold]ssafer login --endpoint https://ssafer.co.kr[/bold] and start the agent again.[/yellow]"
+            )
             return
         if event_type == "ping":
             console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
@@ -753,7 +818,7 @@ def _format_patch_diff(old_text: str, new_text: str) -> str:
     return "\n".join(diff_lines)
 
 
-@app.command()
+@app.command(help="SSAfer 서버에 로그인합니다.")
 def login(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer 서버 API URL"),
     logout: bool = typer.Option(False, "--logout", help="저장된 토큰 삭제"),
@@ -790,10 +855,12 @@ def login(
 
 def _prompt_start_agent_after_login() -> None:
     if typer.confirm("Start local agent now?", default=False):
-        agent()
+        _start_agent(path=Path("."), refresh_token=True)
+        return
+    console.print("[dim]Local agent not started. Run [bold]ssafer agent[/bold] when you want to connect it.[/dim]")
 
 
-@app.command()
+@app.command(hidden=True)
 def signup(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
 ) -> None:
@@ -830,7 +897,7 @@ def signup(
     console.print("[green]Signup succeeded. Run 'ssafer login' to save login tokens.[/green]")
 
 
-@app.command("send-email-code")
+@app.command("send-email-code", hidden=True)
 def send_email_code(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
 ) -> None:
@@ -853,7 +920,7 @@ def send_email_code(
     console.print("[green]Verification code sent. Check your email.[/green]")
 
 
-@app.command("verify-email")
+@app.command("verify-email", hidden=True)
 def verify_email(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
 ) -> None:
@@ -877,7 +944,7 @@ def verify_email(
     console.print("[green]Email verified. Run 'ssafer signup' to create your account.[/green]")
 
 
-@app.command()
+@app.command(help="저장된 로그인 토큰을 삭제합니다.")
 def logout() -> None:
     """Clear the saved SSAfer upload token."""
     from ssafer.core.auth import clear_token
@@ -886,7 +953,7 @@ def logout() -> None:
     console.print("[green]Saved SSAfer token cleared.[/green]")
 
 
-@app.command()
+@app.command(help="최근 로컬 스캔 결과 요약을 출력합니다.")
 def report(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root containing .ssafer results."),
     details: bool = typer.Option(False, "--details", "-d", help="Print targets, artifacts, and output paths."),
@@ -1359,6 +1426,51 @@ def _download_analysis_result_or_exit(project_root: Path, *, scan_id: int, api_u
         console.print(f"[red]Analysis result download failed:[/red] {_format_http_transport_error(exc)}")
     except (OSError, ValueError, RuntimeError) as exc:
         console.print(f"[red]Analysis result download failed:[/red] {exc}")
+    raise typer.Exit(code=1)
+
+
+def _latest_done_scan_id_or_exit(project_root: Path, *, project_id: int | None, api_url: str | None) -> int:
+    from ssafer.core.analysis_result import find_latest_done_scan_id
+    from ssafer.core.auth import load_agent_config, load_endpoint, load_token
+    from ssafer.core.config import load_project_config
+
+    config_warnings: list[str] = []
+    project_config = load_project_config(project_root, config_warnings)
+    for warning in config_warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
+
+    token = load_token(project_config.upload.token_env)
+    effective_url = api_url or project_config.upload.endpoint or load_endpoint()
+    if token is None:
+        console.print(
+            "[yellow]Latest scan lookup requires authentication. Run [bold]ssafer login[/bold] first "
+            "or set SSAFER_TOKEN.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+
+    effective_project_id = project_id
+    if effective_project_id is None:
+        agent_config = load_agent_config()
+        saved_project_id = agent_config.get("projectId")
+        if saved_project_id is not None:
+            try:
+                effective_project_id = int(saved_project_id)
+            except (TypeError, ValueError):
+                effective_project_id = None
+    if effective_project_id is None:
+        effective_project_id = _select_agent_project_id(effective_url, token)
+
+    try:
+        scan_id = find_latest_done_scan_id(effective_url, project_id=effective_project_id, token=token)
+        console.print(f"[cyan]Using latest DONE scan.[/cyan] projectId={effective_project_id}, scanId={scan_id}")
+        return scan_id
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]Latest scan lookup failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Latest scan lookup failed:[/red] {_format_http_transport_error(exc)}")
+    except (ValueError, RuntimeError) as exc:
+        console.print(f"[red]Latest scan lookup failed:[/red] {exc}")
     raise typer.Exit(code=1)
 
 

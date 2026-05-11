@@ -272,6 +272,72 @@ def test_apply_command_downloads_analysis_result_by_scan_id(monkeypatch, tmp_pat
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
 
 
+def test_apply_command_uses_latest_done_scan(monkeypatch, tmp_path: Path):
+    target = tmp_path / "Dockerfile"
+    target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+    downloaded = tmp_path / ".ssafer" / "analysis" / "scans" / "321" / "analysis_result.json"
+    calls = {}
+
+    def fake_find_latest(api_url: str, *, project_id: int, token: str) -> int:
+        calls["latest"] = {"api_url": api_url, "project_id": project_id, "token": token}
+        return 321
+
+    def fake_download(project_root: Path, *, scan_id: int, api_url: str, token: str) -> Path:
+        calls["download"] = {
+            "project_root": project_root,
+            "scan_id": scan_id,
+            "api_url": api_url,
+            "token": token,
+        }
+        downloaded.parent.mkdir(parents=True)
+        downloaded.write_text(
+            json.dumps(
+                {
+                    "patches": [
+                        {
+                            "patchId": "P1",
+                            "filePath": "Dockerfile",
+                            "oldText": "USER root",
+                            "newText": "USER appuser",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        return downloaded
+
+    monkeypatch.setenv("SSAFER_TOKEN", "access-token")
+    monkeypatch.setattr("ssafer.core.analysis_result.find_latest_done_scan_id", fake_find_latest)
+    monkeypatch.setattr("ssafer.core.analysis_result.download_analysis_result_for_scan", fake_download)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "apply",
+            "--path",
+            str(tmp_path),
+            "--latest",
+            "--project-id",
+            "7",
+            "--api-url",
+            "https://api.example.com",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls["latest"] == {"api_url": "https://api.example.com", "project_id": 7, "token": "access-token"}
+    assert calls["download"] == {
+        "project_root": tmp_path.resolve(),
+        "scan_id": 321,
+        "api_url": "https://api.example.com",
+        "token": "access-token",
+    }
+    assert "Using latest DONE scan." in result.output
+    assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
+
+
 def test_apply_command_rejects_analysis_result_and_scan_id(tmp_path: Path):
     analysis_result = tmp_path / "analysis_result.json"
     analysis_result.write_text(json.dumps({"patches": []}), encoding="utf-8")
@@ -282,7 +348,7 @@ def test_apply_command_rejects_analysis_result_and_scan_id(tmp_path: Path):
     )
 
     assert result.exit_code == 1
-    assert "Use either --analysis-result or --scan-id" in result.output
+    assert "Use only one of --analysis-result, --scan-id, or --latest" in result.output
 
 
 def test_apply_command_uses_default_analysis_result_and_interactive_selection(tmp_path: Path):
@@ -316,9 +382,10 @@ def test_apply_command_uses_default_analysis_result_and_interactive_selection(tm
         encoding="utf-8",
     )
 
-    result = CliRunner().invoke(app, ["apply", "--path", str(tmp_path)], input="2\ny\n")
+    result = CliRunner().invoke(app, ["apply", "--path", str(tmp_path)], input="y\n2\ny\n")
 
     assert result.exit_code == 0
+    assert "Using a local analysis_result.json" in result.output
     assert "P1" in result.output
     assert "P2" in result.output
     assert first.read_text(encoding="utf-8") == "USER root\n"

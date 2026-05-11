@@ -76,7 +76,7 @@ def test_fetch_pending_agent_tasks_parses_backend_response(monkeypatch):
     assert tasks[0].payload == {"patches": []}
 
 
-def test_report_patch_apply_task_result_posts_backend_payload(monkeypatch, tmp_path: Path):
+def test_report_agent_task_result_posts_backend_payload(monkeypatch, tmp_path: Path):
     requests = []
     backup = tmp_path / "Dockerfile.20260511120000.bak"
     backup.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
@@ -86,7 +86,7 @@ def test_report_patch_apply_task_result_posts_backend_payload(monkeypatch, tmp_p
             return None
 
         def json(self):
-            return {"data": {"findingId": 3, "patchStatus": "SUCCEEDED"}}
+            return {"data": {"taskId": 10, "taskStatus": "SUCCEEDED", "findingId": 3}}
 
     class FakeClient:
         def __init__(self, **kwargs):
@@ -129,31 +129,32 @@ def test_report_patch_apply_task_result_posts_backend_payload(monkeypatch, tmp_p
         ],
     )
 
-    reports = agent.report_patch_apply_task_result("https://api.example.com", "agent-token", task, result)
+    report = agent.report_agent_task_result("https://api.example.com", 7, "agent-token", task, result)
 
-    assert reports == [{"data": {"findingId": 3, "patchStatus": "SUCCEEDED"}}]
+    assert report == {"data": {"taskId": 10, "taskStatus": "SUCCEEDED", "findingId": 3}}
     assert requests == [
         (
-            "https://api.example.com/api/v1/internal/scans/2/findings/3/patch-results",
+            "https://api.example.com/api/v1/internal/agents/7/tasks/10/result",
             {"Authorization": "Bearer agent-token"},
             {
-                "patchStatus": "SUCCEEDED",
-                "resultMessage": "Patch applied successfully.",
-                "backupFileName": backup.name,
-                "backupFilePath": str(backup),
-                "backupMetadata": {
-                    "taskId": 10,
-                    "taskType": "PATCH_APPLY",
-                    "patchId": "PATCH-1",
-                    "filePath": "Dockerfile",
-                },
+                "taskStatus": "SUCCEEDED",
+                "resultMessage": "Applied 1 patch candidate(s).",
+                "patchResults": [
+                    {
+                        "patchId": "PATCH-1",
+                        "filePath": "Dockerfile",
+                        "status": "SUCCESS",
+                        "message": "Patch applied successfully.",
+                        "backupPath": str(backup),
+                    }
+                ],
             },
             {"timeout": 20.0, "follow_redirects": True},
         )
     ]
 
 
-def test_report_patch_apply_task_result_reports_task_failure(monkeypatch):
+def test_report_agent_task_result_reports_task_failure(monkeypatch):
     requests = []
 
     class FakeResponse:
@@ -161,7 +162,7 @@ def test_report_patch_apply_task_result_reports_task_failure(monkeypatch):
             return None
 
         def json(self):
-            return {"data": {"findingId": 3, "patchStatus": "FAILED"}}
+            return {"data": {"taskId": 10, "taskStatus": "FAILED", "findingId": 3}}
 
     class FakeClient:
         def __init__(self, **kwargs):
@@ -195,19 +196,16 @@ def test_report_patch_apply_task_result_reports_task_failure(monkeypatch):
         patch_results=[],
     )
 
-    agent.report_patch_apply_task_result("https://api.example.com", "agent-token", task, result)
+    agent.report_agent_task_result("https://api.example.com", 7, "agent-token", task, result)
 
     assert requests == [
         (
-            "https://api.example.com/api/v1/internal/scans/2/findings/3/patch-results",
+            "https://api.example.com/api/v1/internal/agents/7/tasks/10/result",
             {"Authorization": "Bearer agent-token"},
             {
-                "patchStatus": "FAILED",
+                "taskStatus": "FAILED",
                 "resultMessage": "Patch oldText was not found: Dockerfile",
-                "backupMetadata": {
-                    "taskId": 10,
-                    "taskType": "PATCH_APPLY",
-                },
+                "patchResults": [],
             },
         )
     ]
@@ -734,3 +732,49 @@ def test_watch_agent_once_does_not_reconnect(monkeypatch, tmp_path: Path):
         raise AssertionError("watch_agent should raise when --once connection drops")
 
     assert calls["count"] == 1
+
+
+def test_watch_agent_does_not_reconnect_on_agent_auth_error(monkeypatch, tmp_path: Path):
+    events = []
+    calls = {"count": 0}
+
+    async def fake_session(**kwargs):
+        calls["count"] += 1
+        request = agent.httpx.Request("GET", "https://api.example.com/api/v1/internal/agents/7/tasks")
+        response = agent.httpx.Response(401, request=request)
+        raise agent.httpx.HTTPStatusError("unauthorized", request=request, response=response)
+
+    async def fail_sleep(delay: float):
+        raise AssertionError("auth failure should not reconnect")
+
+    monkeypatch.setitem(sys.modules, "websockets", SimpleNamespace())
+    monkeypatch.setattr(agent, "_watch_agent_session", fake_session)
+    monkeypatch.setattr(agent.asyncio, "sleep", fail_sleep)
+
+    async def run_watch():
+        await agent.watch_agent(
+            api_url="https://example.com",
+            agent_id=7,
+            project_id=3,
+            agent_token="bad-agent-token",
+            project_root=tmp_path,
+            interval_seconds=5,
+            once=False,
+            dry_run=False,
+            reconnect=True,
+            max_retries=None,
+            reconnect_max_delay_seconds=30,
+            on_event=lambda event_type, payload: events.append((event_type, payload)),
+        )
+
+    import asyncio
+
+    try:
+        asyncio.run(run_watch())
+    except agent.httpx.HTTPStatusError:
+        pass
+    else:
+        raise AssertionError("watch_agent should raise auth failure")
+
+    assert calls["count"] == 1
+    assert events[0][0] == "auth_failed"

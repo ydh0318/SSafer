@@ -83,6 +83,39 @@ def test_load_token_returns_none_when_missing(monkeypatch, tmp_path):
     assert load_token() is None
 
 
+def test_help_shows_user_facing_commands_only():
+    result = CliRunner().invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "status" in result.output
+    assert "로그인/Agent 설정 상태를 확인합니다." in result.output
+    assert "agent-watch" not in result.output
+    assert "agent-init" not in result.output
+    assert "send-email-code" not in result.output
+    assert "verify-email" not in result.output
+
+
+def test_status_command_prints_saved_login_and_agent_config(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.delenv("SSAFER_TOKEN", raising=False)
+    save_auth_tokens({"accessToken": "access-token-123"}, endpoint="https://api.example.com")
+    save_agent_config(
+        {"agentId": 7, "projectId": 10, "agentToken": "agent-token-123"},
+        endpoint="https://api.example.com",
+    )
+
+    result = CliRunner().invoke(app, ["status"])
+
+    assert result.exit_code == 0
+    assert "로그인" in result.output
+    assert "됨" in result.output
+    assert "https://api.example.com" in result.output
+    assert "agentId=7, projectId=10" in result.output
+    assert "agent-token-123" not in result.output
+    assert "access-token-123" not in result.output
+
+
 def test_save_token_creates_config_dir(monkeypatch, tmp_path):
     nested = tmp_path / "nested" / "dir"
     config_path = nested / "config.yml"
@@ -439,21 +472,23 @@ def test_login_command_authenticates_with_backend_and_saves_tokens(monkeypatch, 
     assert load_token() == "access-token"
     assert load_endpoint() == "https://api.example.com"
     assert "Start local agent now?" in result.output
+    assert "Local agent not started" in result.output
 
 
 def test_login_command_can_start_agent_after_login(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
-    started: dict[str, bool] = {}
+    started: dict[str, object] = {}
 
     def fake_login(endpoint: str, email: str, password: str) -> dict[str, str]:
         return {"accessToken": "access-token", "refreshToken": "refresh-token"}
 
-    def fake_agent() -> None:
-        started["agent"] = True
+    def fake_start_agent(*, path: Path, refresh_token: bool = False) -> None:
+        started["path"] = path
+        started["refresh_token"] = refresh_token
 
     monkeypatch.setattr(auth_module, "login_with_credentials", fake_login)
-    monkeypatch.setattr(main_module, "agent", fake_agent)
+    monkeypatch.setattr(main_module, "_start_agent", fake_start_agent)
 
     result = CliRunner().invoke(
         app,
@@ -462,7 +497,7 @@ def test_login_command_can_start_agent_after_login(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert started == {"agent": True}
+    assert started == {"path": Path("."), "refresh_token": True}
 
 
 def test_signup_command_registers_backend_user(monkeypatch):
@@ -611,7 +646,7 @@ def test_auth_commands_print_backend_error_code(monkeypatch):
 
 def test_load_endpoint_returns_default_when_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(auth_module, "CONFIG_PATH", tmp_path / "config.yml")
-    assert load_endpoint() == "https://k14b105.p.ssafy.io"
+    assert load_endpoint() == "https://ssafer.co.kr"
 
 
 def test_load_endpoint_returns_saved_endpoint(monkeypatch, tmp_path):
