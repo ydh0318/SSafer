@@ -221,7 +221,7 @@ function FindingDetailPage() {
         </div>
       ) : null}
 
-      {!isLoading && currentScanType === 'PROJECT_SCAN' && finding ? (
+      {!isLoading && currentScanType === 'PROJECT_FILE' && finding ? (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div>
             <div className="border border-neutral-200 bg-white p-6">

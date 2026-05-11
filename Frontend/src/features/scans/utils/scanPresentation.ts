@@ -144,7 +144,7 @@ export function getScanModeLabel(scanMode: ScanMode) {
 }
 
 export function getSafeScanType(scanType?: ScanType | null): ScanType {
-  return scanType ?? 'PROJECT_SCAN';
+  return scanType ?? 'PROJECT_FILE';
 }
 
 export function getScanTypeLabel(scanType?: ScanType | null) {

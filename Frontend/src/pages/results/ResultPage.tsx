@@ -323,7 +323,7 @@ function ResultPage() {
         <ServerAuditResultView result={serverAuditResult} routeState={routeState} />
       ) : null}
 
-      {!isInitialLoading && currentScanType === 'PROJECT_SCAN' && summary ? (
+      {!isInitialLoading && currentScanType === 'PROJECT_FILE' && summary ? (
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             {severityOrder.map((severity) => (
