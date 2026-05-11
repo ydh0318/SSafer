@@ -215,10 +215,20 @@ export default function TypingGamePage() {
   };
 
   // Auto-scroll to the current typing line whenever the command changes
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
   useEffect(() => {
-    if (currentLineRef.current) {
-      currentLineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (currentLineRef.current) {
+        currentLineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+    
+    return () => {
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
   }, [cmdIdx, stageIdx]);
 
   // theme-aware classes
