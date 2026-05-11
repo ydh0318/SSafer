@@ -60,6 +60,22 @@ class AnalyzeEndpointTest(unittest.TestCase):
             "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",
         )
 
+    def test_analysis_result_callback_accepts_running_status(self):
+        callback = AnalysisResultCallbackRequest(
+            taskId=123,
+            status="RUNNING",
+            progressStep="analysis_started",
+            startedAt="2026-05-06T04:00:00",
+            lastUpdatedAt="2026-05-06T04:00:00",
+        )
+
+        payload = callback.model_dump(by_alias=True)
+
+        self.assertEqual(payload["taskId"], 123)
+        self.assertEqual(payload["status"], "RUNNING")
+        self.assertEqual(payload["progressStep"], "analysis_started")
+        self.assertIsNone(payload["analysisResultPath"])
+
     def test_analyze_endpoint_runs_analysis_pipeline(self):
         captured_args = {}
 

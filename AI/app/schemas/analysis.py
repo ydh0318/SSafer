@@ -26,7 +26,7 @@ class AnalysisResultCallbackRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     task_id: int = Field(alias="taskId")
-    status: Literal["DONE", "FAILED"] = "DONE"
+    status: Literal["RUNNING", "DONE", "FAILED"] = "DONE"
     progress_step: str | None = Field(default=None, alias="progressStep")
     error_code: str | None = Field(default=None, alias="errorCode")
     failure_reason: str | None = Field(default=None, alias="failureReason")
@@ -37,6 +37,8 @@ class AnalysisResultCallbackRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_callback_contract(self):
+        if self.status == "DONE" and not self.analysis_result_path:
+            raise ValueError("analysisResultPath is required when status is DONE.")
         if self.status == "FAILED" and not self.error_code:
             raise ValueError("errorCode is required when status is FAILED.")
         if self.status == "FAILED" and not self.failure_reason:

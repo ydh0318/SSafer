@@ -22,6 +22,8 @@ from app.worker.spring_client import SpringClient
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+ANALYSIS_STARTED_PROGRESS_STEP = "analysis_started"
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
@@ -73,6 +75,10 @@ class ScanTaskProcessor:
             stage="ANALYZE_REQUEST",
             status="RUNNING",
         )
+        self._send_running_callback(
+            message=message,
+            started_at=started_at,
+        )
 
         try:
             response = self.fastapi_client.analyze(
@@ -117,6 +123,23 @@ class ScanTaskProcessor:
             failure_reason=self._build_failure_reason(response),
         )
         self._log_failed(message, error_code, elapsed_ms(started_ms))
+
+    def _send_running_callback(
+        self,
+        *,
+        message: ScanRequestMessage,
+        started_at: str,
+    ) -> None:
+        self.spring_client.send_analysis_result_callback(
+            message.scan_id,
+            AnalysisResultCallbackRequest(
+                taskId=message.task_id,
+                status="RUNNING",
+                progressStep=ANALYSIS_STARTED_PROGRESS_STEP,
+                startedAt=started_at,
+                lastUpdatedAt=started_at,
+            ),
+        )
 
     def _send_done_callback(
         self,

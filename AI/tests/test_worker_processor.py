@@ -99,8 +99,17 @@ class WorkerProcessorTest(unittest.TestCase):
             fastapi_client.requests[0].analysis_result_path,
             "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",
         )
-        self.assertEqual(len(spring_client.callbacks), 1)
-        scan_id, callback = spring_client.callbacks[0]
+        self.assertEqual(len(spring_client.callbacks), 2)
+        running_scan_id, running_callback = spring_client.callbacks[0]
+        self.assertEqual(running_scan_id, 5)
+        self.assertEqual(running_callback.task_id, 123)
+        self.assertEqual(running_callback.status, "RUNNING")
+        self.assertEqual(running_callback.progress_step, "analysis_started")
+        self.assertIsNone(running_callback.analysis_result_path)
+        self.assertIsNotNone(running_callback.started_at)
+        self.assertEqual(running_callback.last_updated_at, running_callback.started_at)
+
+        scan_id, callback = spring_client.callbacks[1]
         self.assertEqual(scan_id, 5)
         self.assertEqual(callback.task_id, 123)
         self.assertEqual(callback.status, "DONE")
@@ -139,7 +148,7 @@ class WorkerProcessorTest(unittest.TestCase):
         self.assertIn("stage=TASK_COMPLETED", output)
         self.assertIn("durationMs=", output)
 
-        callback = spring_client.callbacks[0][1]
+        callback = spring_client.callbacks[1][1]
         self.assertNotIn("durationMs", callback.model_dump(by_alias=True))
 
     def test_process_reports_failed_when_fastapi_fails(self):
@@ -153,8 +162,9 @@ class WorkerProcessorTest(unittest.TestCase):
 
         processor.process(build_message())
 
-        self.assertEqual(len(spring_client.callbacks), 1)
-        scan_id, callback = spring_client.callbacks[0]
+        self.assertEqual(len(spring_client.callbacks), 2)
+        self.assertEqual(spring_client.callbacks[0][1].status, "RUNNING")
+        scan_id, callback = spring_client.callbacks[1]
         self.assertEqual(scan_id, 5)
         self.assertEqual(callback.task_id, 123)
         self.assertEqual(callback.status, "FAILED")
@@ -208,7 +218,8 @@ class WorkerProcessorTest(unittest.TestCase):
 
         processor.process(build_message())
 
-        callback = spring_client.callbacks[0][1]
+        self.assertEqual(spring_client.callbacks[0][1].status, "RUNNING")
+        callback = spring_client.callbacks[1][1]
         self.assertEqual(callback.status, "FAILED")
         self.assertEqual(callback.progress_step, "analysis_failed")
         self.assertEqual(callback.error_code, "ANALYSIS_INPUT_ERROR")

@@ -67,7 +67,7 @@ class AnalysisResultCallbackRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     task_id: int = Field(alias="taskId")
-    status: Literal["DONE", "FAILED"] = "DONE"
+    status: Literal["RUNNING", "DONE", "FAILED"] = "DONE"
     progress_step: str | None = Field(default=None, alias="progressStep")
     error_code: str | None = Field(default=None, alias="errorCode")
     failure_reason: str | None = Field(default=None, alias="failureReason")
