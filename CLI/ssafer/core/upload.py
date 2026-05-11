@@ -100,7 +100,8 @@ def _upload_result(
     if token:
         headers["Authorization"] = f"Bearer {token}"
     with httpx.Client(timeout=30) as client:
-        create_response = client.post(
+        create_response = _post_preserving_redirects(
+            client,
             f"{base_url}/api/v1/scans",
             json=_build_create_scan_payload(
                 project_root=project_root,
@@ -127,7 +128,8 @@ def _upload_result(
         )
         upload_response.raise_for_status()
 
-        callback_response = client.post(
+        callback_response = _post_preserving_redirects(
+            client,
             f"{base_url}/api/v1/scans/{remote_scan_id}/raw-results",
             json=_build_raw_upload_report_payload(result, scan_json),
             headers=headers,
@@ -185,6 +187,31 @@ def _payload_hash(content: bytes) -> str:
 def _response_data(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload.get("data")
     return data if isinstance(data, dict) else payload
+
+
+def _post_preserving_redirects(
+    client: httpx.Client,
+    url: str,
+    *,
+    json: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    max_redirects: int = 3,
+) -> httpx.Response:
+    current_url = url
+    for _ in range(max_redirects + 1):
+        kwargs: dict[str, Any] = {}
+        if json is not None:
+            kwargs["json"] = json
+        if headers is not None:
+            kwargs["headers"] = headers
+        response = client.post(current_url, **kwargs)
+        if response.status_code not in {301, 302, 303, 307, 308}:
+            return response
+        location = response.headers.get("location")
+        if not location:
+            return response
+        current_url = str(response.url.join(location))
+    return response
 
 
 def _scan_json_bytes(scan: dict[str, Any]) -> bytes:

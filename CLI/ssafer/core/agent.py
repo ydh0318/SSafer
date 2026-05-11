@@ -36,7 +36,14 @@ class AgentTaskResult:
 def build_agent_ws_url(api_url: str) -> str:
     parsed = urlparse(api_url.rstrip("/"))
     scheme = "wss" if parsed.scheme == "https" else "ws"
-    return urlunparse((scheme, parsed.netloc, "/ws/v1/internal/agents/connect", "", "", ""))
+    netloc = _agent_ws_netloc(parsed.netloc)
+    return urlunparse((scheme, netloc, "/ws/v1/internal/agents/connect", "", "", ""))
+
+
+def _agent_ws_netloc(netloc: str) -> str:
+    if netloc == "k14b105.p.ssafy.io":
+        return "ssafer.co.kr"
+    return netloc
 
 
 def fetch_pending_agent_tasks(api_url: str, agent_id: int, agent_token: str) -> list[AgentTask]:
