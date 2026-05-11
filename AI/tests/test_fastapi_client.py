@@ -116,6 +116,37 @@ class FastApiClientTest(unittest.TestCase):
 
 
 class SpringClientTest(unittest.TestCase):
+    def test_send_analysis_result_callback_accepts_running_status(self):
+        http_client = FakeHttpClient()
+        client = SpringClient(http_client)
+
+        client.send_analysis_result_callback(
+            5,
+            AnalysisResultCallbackRequest(
+                taskId=123,
+                status="RUNNING",
+                progressStep="analysis_started",
+                startedAt="2026-05-06T04:00:00",
+                lastUpdatedAt="2026-05-06T04:00:00",
+            ),
+        )
+
+        path, payload = http_client.posts[0]
+        self.assertEqual(path, "/api/v1/internal/scans/5/analysis-results")
+        self.assertEqual(
+            payload,
+            {
+                "taskId": 123,
+                "status": "RUNNING",
+                "progressStep": "analysis_started",
+                "failureReason": None,
+                "analysisResultPath": None,
+                "startedAt": "2026-05-06T04:00:00",
+                "completedAt": None,
+                "lastUpdatedAt": "2026-05-06T04:00:00",
+            },
+        )
+
     def test_send_analysis_result_callback_posts_latest_spring_contract(self):
         http_client = FakeHttpClient()
         client = SpringClient(http_client)
@@ -147,6 +178,49 @@ class SpringClientTest(unittest.TestCase):
                 "analysisResultPath": (
                     "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
                 ),
+                "startedAt": "2026-05-06T04:00:00",
+                "completedAt": "2026-05-06T04:05:00",
+                "lastUpdatedAt": "2026-05-06T04:05:00",
+            },
+        )
+
+    def test_send_analysis_result_callback_posts_failed_stage(self):
+        http_client = FakeHttpClient()
+        client = SpringClient(http_client)
+
+        client.send_analysis_result_callback(
+            5,
+            AnalysisResultCallbackRequest(
+                taskId=123,
+                status="FAILED",
+                progressStep="analysis_failed",
+                stage="input",
+                errorCode="ANALYSIS_INPUT_ERROR",
+                failureReason=(
+                    "ANALYSIS_INPUT_ERROR: FastAPI analysis failed: "
+                    "Failed to download scan_result.json from S3. (stage=input)"
+                ),
+                startedAt="2026-05-06T04:00:00",
+                completedAt="2026-05-06T04:05:00",
+                lastUpdatedAt="2026-05-06T04:05:00",
+            ),
+        )
+
+        path, payload = http_client.posts[0]
+        self.assertEqual(path, "/api/v1/internal/scans/5/analysis-results")
+        self.assertEqual(
+            payload,
+            {
+                "taskId": 123,
+                "status": "FAILED",
+                "progressStep": "analysis_failed",
+                "stage": "input",
+                "errorCode": "ANALYSIS_INPUT_ERROR",
+                "failureReason": (
+                    "ANALYSIS_INPUT_ERROR: FastAPI analysis failed: "
+                    "Failed to download scan_result.json from S3. (stage=input)"
+                ),
+                "analysisResultPath": None,
                 "startedAt": "2026-05-06T04:00:00",
                 "completedAt": "2026-05-06T04:05:00",
                 "lastUpdatedAt": "2026-05-06T04:05:00",

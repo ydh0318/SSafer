@@ -25,12 +25,13 @@ def build_settings() -> WorkerSettings:
 def build_message() -> ScanRequestMessage:
     return ScanRequestMessage(
         messageType="SCAN_REQUEST",
-        messageVersion=1,
+        messageVersion=2,
         taskType="SCAN_REQUEST",
         taskId=123,
         agentId=10,
         projectId=2,
         scanId=5,
+        scanType="PROJECT_FILE",
         rawResultPath="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
         resultCount=1,
         tool="ssafer-cli",
@@ -63,6 +64,27 @@ class FakeFastApiClient:
 
 
 class WorkerProcessorTest(unittest.TestCase):
+    def test_scan_request_message_accepts_version_2_scan_type(self):
+        message = build_message()
+
+        self.assertEqual(message.message_version, 2)
+        self.assertEqual(message.scan_type, "PROJECT_FILE")
+
+    def test_scan_request_message_accepts_server_audit_scan_type(self):
+        message = ScanRequestMessage(
+            messageType="SCAN_REQUEST",
+            messageVersion=2,
+            taskType="SCAN_REQUEST",
+            taskId=123,
+            agentId=10,
+            projectId=2,
+            scanId=5,
+            scanType="SERVER_AUDIT",
+            rawResultPath="s3://bucket/raw.json",
+        )
+
+        self.assertEqual(message.scan_type, "SERVER_AUDIT")
+
     def test_build_analysis_result_path_uses_configured_bucket(self):
         path = build_analysis_result_path(build_message(), build_settings())
 
@@ -99,8 +121,17 @@ class WorkerProcessorTest(unittest.TestCase):
             fastapi_client.requests[0].analysis_result_path,
             "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",
         )
-        self.assertEqual(len(spring_client.callbacks), 1)
-        scan_id, callback = spring_client.callbacks[0]
+        self.assertEqual(len(spring_client.callbacks), 2)
+        running_scan_id, running_callback = spring_client.callbacks[0]
+        self.assertEqual(running_scan_id, 5)
+        self.assertEqual(running_callback.task_id, 123)
+        self.assertEqual(running_callback.status, "RUNNING")
+        self.assertEqual(running_callback.progress_step, "analysis_started")
+        self.assertIsNone(running_callback.analysis_result_path)
+        self.assertIsNotNone(running_callback.started_at)
+        self.assertEqual(running_callback.last_updated_at, running_callback.started_at)
+
+        scan_id, callback = spring_client.callbacks[1]
         self.assertEqual(scan_id, 5)
         self.assertEqual(callback.task_id, 123)
         self.assertEqual(callback.status, "DONE")
@@ -136,10 +167,11 @@ class WorkerProcessorTest(unittest.TestCase):
         output = "\n".join(logs.output)
         self.assertIn("scanId=5", output)
         self.assertIn("taskId=123", output)
+        self.assertIn("scanType=PROJECT_FILE", output)
         self.assertIn("stage=TASK_COMPLETED", output)
         self.assertIn("durationMs=", output)
 
-        callback = spring_client.callbacks[0][1]
+        callback = spring_client.callbacks[1][1]
         self.assertNotIn("durationMs", callback.model_dump(by_alias=True))
 
     def test_process_reports_failed_when_fastapi_fails(self):
@@ -153,16 +185,18 @@ class WorkerProcessorTest(unittest.TestCase):
 
         processor.process(build_message())
 
-        self.assertEqual(len(spring_client.callbacks), 1)
-        scan_id, callback = spring_client.callbacks[0]
+        self.assertEqual(len(spring_client.callbacks), 2)
+        self.assertEqual(spring_client.callbacks[0][1].status, "RUNNING")
+        scan_id, callback = spring_client.callbacks[1]
         self.assertEqual(scan_id, 5)
         self.assertEqual(callback.task_id, 123)
         self.assertEqual(callback.status, "FAILED")
         self.assertEqual(callback.progress_step, "analysis_failed")
+        self.assertEqual(callback.stage, "analysis")
         self.assertEqual(callback.error_code, "UNKNOWN_ERROR")
         self.assertEqual(
             callback.failure_reason,
-            "UNKNOWN_ERROR: FastAPI analysis failed: FastAPI down",
+            "UNKNOWN_ERROR: FastAPI analysis failed: FastAPI down (stage=analysis)",
         )
         self.assertIsNone(callback.analysis_result_path)
 
@@ -181,6 +215,7 @@ class WorkerProcessorTest(unittest.TestCase):
         output = "\n".join(logs.output)
         self.assertIn("scanId=5", output)
         self.assertIn("taskId=123", output)
+        self.assertIn("scanType=PROJECT_FILE", output)
         self.assertIn("stage=TASK_FAILED", output)
         self.assertIn("status=FAILED", output)
         self.assertIn("errorCode=UNKNOWN_ERROR", output)
@@ -208,9 +243,11 @@ class WorkerProcessorTest(unittest.TestCase):
 
         processor.process(build_message())
 
-        callback = spring_client.callbacks[0][1]
+        self.assertEqual(spring_client.callbacks[0][1].status, "RUNNING")
+        callback = spring_client.callbacks[1][1]
         self.assertEqual(callback.status, "FAILED")
         self.assertEqual(callback.progress_step, "analysis_failed")
+        self.assertEqual(callback.stage, "input")
         self.assertEqual(callback.error_code, "ANALYSIS_INPUT_ERROR")
         self.assertEqual(
             callback.failure_reason,
@@ -220,8 +257,22 @@ class WorkerProcessorTest(unittest.TestCase):
             ),
         )
 
-    def test_rejects_invalid_scan_request_message(self):
+    def test_rejects_legacy_scan_request_message_version(self):
         with self.assertRaisesRegex(ValueError, "messageVersion"):
+            ScanRequestMessage(
+                messageType="SCAN_REQUEST",
+                messageVersion=1,
+                taskType="SCAN_REQUEST",
+                taskId=123,
+                agentId=10,
+                projectId=2,
+                scanId=5,
+                scanType="PROJECT_FILE",
+                rawResultPath="s3://bucket/raw.json",
+            )
+
+    def test_rejects_invalid_scan_type(self):
+        with self.assertRaisesRegex(ValueError, "scanType"):
             ScanRequestMessage(
                 messageType="SCAN_REQUEST",
                 messageVersion=2,
@@ -230,6 +281,7 @@ class WorkerProcessorTest(unittest.TestCase):
                 agentId=10,
                 projectId=2,
                 scanId=5,
+                scanType="PROJECT_SCAN",
                 rawResultPath="s3://bucket/raw.json",
             )
 

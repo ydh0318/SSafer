@@ -60,6 +60,38 @@ class AnalyzeEndpointTest(unittest.TestCase):
             "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",
         )
 
+    def test_analysis_result_callback_accepts_running_status(self):
+        callback = AnalysisResultCallbackRequest(
+            taskId=123,
+            status="RUNNING",
+            progressStep="analysis_started",
+            startedAt="2026-05-06T04:00:00",
+            lastUpdatedAt="2026-05-06T04:00:00",
+        )
+
+        payload = callback.model_dump(by_alias=True)
+
+        self.assertEqual(payload["taskId"], 123)
+        self.assertEqual(payload["status"], "RUNNING")
+        self.assertEqual(payload["progressStep"], "analysis_started")
+        self.assertIsNone(payload["analysisResultPath"])
+
+    def test_analysis_result_callback_uses_structured_failure_stage(self):
+        callback = AnalysisResultCallbackRequest(
+            taskId=123,
+            status="FAILED",
+            progressStep="analysis_failed",
+            stage="input",
+            errorCode="ANALYSIS_INPUT_ERROR",
+            failureReason="ANALYSIS_INPUT_ERROR: FastAPI analysis failed",
+        )
+
+        payload = callback.model_dump(by_alias=True)
+
+        self.assertEqual(payload["status"], "FAILED")
+        self.assertEqual(payload["stage"], "input")
+        self.assertEqual(payload["errorCode"], "ANALYSIS_INPUT_ERROR")
+
     def test_analyze_endpoint_runs_analysis_pipeline(self):
         captured_args = {}
 

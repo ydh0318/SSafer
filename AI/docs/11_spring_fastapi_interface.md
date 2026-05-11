@@ -24,7 +24,7 @@ Spring Boot -> RabbitMQ SCAN_REQUEST publish
 Worker -> RabbitMQ consume
 Worker -> FastAPI POST /analyze 호출
 FastAPI -> raw result 다운로드/분석/result 생성
-Worker -> Spring Boot DONE 또는 FAILED 분석 완료 콜백
+Worker -> Spring Boot RUNNING, DONE 또는 FAILED 분석 상태 콜백
 Spring Boot -> scan, agent_tasks 상태 반영 및 analysis result 비동기 적재
 ```
 
@@ -52,12 +52,13 @@ Worker는 아래 queue에서 메시지를 consume합니다.
 ```json
 {
   "messageType": "SCAN_REQUEST",
-  "messageVersion": 1,
+  "messageVersion": 2,
   "taskType": "SCAN_REQUEST",
   "taskId": 123,
   "agentId": 10,
   "projectId": 2,
   "scanId": 5,
+  "scanType": "PROJECT_FILE",
   "rawResultPath": "s3://ssafer-scan-storage-dev/raw/5/71b37aca-1468-419d-af27-75a56ab97b5e/scan_result.json",
   "resultCount": 1,
   "tool": "ssafer-cli",
@@ -72,10 +73,11 @@ Worker는 아래 queue에서 메시지를 consume합니다.
 | 필드 | 규칙 |
 | --- | --- |
 | `messageType` | `SCAN_REQUEST` |
-| `messageVersion` | `1` |
+| `messageVersion` | `2` |
 | `taskType` | `SCAN_REQUEST` |
 | `taskId` | Spring Boot `agent_tasks.id` |
 | `scanId` | Spring Boot `scans.id`, Long 기반 ID |
+| `scanType` | `PROJECT_FILE` 또는 `SERVER_AUDIT` |
 | `rawResultPath` | `s3://bucket/key` 형식 |
 
 주의: raw `scan_result.json` 내부의 `scanId`는 CLI 원본 UUID입니다. Spring Boot의 numeric `scanId`와 같은 값으로 취급하지 않습니다.
@@ -85,6 +87,7 @@ Worker 처리 규칙:
 | 단계 | 동작 |
 | --- | --- |
 | 메시지 검증 | `messageType`, `messageVersion`, `taskType`, `rawResultPath` 검증 |
+| 분석 시작 | Spring Boot에 `RUNNING` 분석 시작 콜백 |
 | 분석 요청 | FastAPI `/analyze` 호출 |
 | 성공 | Spring Boot에 `DONE` 분석 완료 콜백 후 RabbitMQ ack |
 | 실패 | Spring Boot에 `FAILED` 분석 완료 콜백 후 RabbitMQ ack |
@@ -223,15 +226,30 @@ HTTP status:
 | `result_count` | number | 생성된 분석 결과 개수 |
 | `invalid_findings` | array | 제외된 finding 목록 |
 
-## 5. Spring Boot 분석 완료 콜백 API
+## 5. Spring Boot 분석 상태 콜백 API
 
-Worker는 FastAPI 분석이 끝난 뒤 Spring Boot에 분석 성공 또는 실패 결과를 보고합니다.
+Worker는 FastAPI 분석 시작 전 Spring Boot에 `RUNNING`을 먼저 알리고, 분석이 끝난 뒤 `DONE` 또는 `FAILED` 최종 결과를 보고합니다.
 
 ### Endpoint
 
 ```http
 POST /api/v1/internal/scans/{scanId}/analysis-results
 Content-Type: application/json
+X-Worker-Secret: <worker-secret>
+```
+
+### 진행 시작 요청
+
+```json
+{
+  "taskId": 123,
+  "status": "RUNNING",
+  "progressStep": "analysis_started",
+  "analysisResultPath": null,
+  "startedAt": "2026-05-06T04:00:00",
+  "completedAt": null,
+  "lastUpdatedAt": "2026-05-06T04:00:00"
+}
 ```
 
 ### 성공 요청
@@ -255,8 +273,10 @@ Content-Type: application/json
   "taskId": 123,
   "status": "FAILED",
   "progressStep": "analysis_failed",
+  "stage": "input",
   "errorCode": "ANALYSIS_INPUT_ERROR",
   "failureReason": "ANALYSIS_INPUT_ERROR: FastAPI analysis failed: Failed to download scan_result.json from S3. (stage=input)",
+  "analysisResultPath": null,
   "startedAt": "2026-05-06T04:00:00",
   "completedAt": "2026-05-06T04:05:00",
   "lastUpdatedAt": "2026-05-06T04:05:00"
@@ -274,10 +294,11 @@ Request body:
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
 | `taskId` | number | 예 | 완료 처리할 Spring Boot `agent_tasks.id` |
-| `status` | string | 아니오 | `DONE` 또는 `FAILED`. 생략 시 Spring Boot에서 `DONE` 처리 |
-| `progressStep` | string 또는 null | 아니오 | `analysis_completed` 또는 `analysis_failed` |
+| `status` | string | 아니오 | `RUNNING`, `DONE`, `FAILED`. 생략 시 Spring Boot에서 `DONE` 처리 |
+| `progressStep` | string 또는 null | 아니오 | `analysis_started`, `analysis_completed`, `analysis_failed` |
+| `stage` | string 또는 null | 실패 시 예 | 실패 단계. 예: `input`, `analysis`, `output`, `explain`, `fix` |
 | `errorCode` | string 또는 null | 실패 시 예 | 표준 에러 코드 |
-| `failureReason` | string 또는 null | 실패 시 예 | `{errorCode}: {실패 위치}: {실패 사유}` 형식의 실패 사유 |
+| `failureReason` | string 또는 null | 실패 시 예 | `{errorCode}: {실패 위치}: {실패 사유}` 형식의 실패 사유. 현재 호환성을 위해 `(stage=...)`도 포함 |
 | `analysisResultPath` | string 또는 null | 성공 시 예 | S3에 저장된 analysis result 경로 |
 | `startedAt` | string 또는 null | 아니오 | Worker 분석 시작 시각 |
 | `completedAt` | string 또는 null | 아니오 | Worker 분석 완료 시각 |
@@ -287,6 +308,7 @@ Spring Boot 처리:
 
 | 요청 status | 처리 |
 | --- | --- |
+| `RUNNING` | Spring Boot가 task와 scan을 분석 진행 중 상태로 반영 |
 | `DONE` | Spring Boot가 scan/task를 식별하고 analysisResultPath의 S3 JSON을 비동기 적재 |
 | `FAILED` | Spring Boot가 실패 사유를 기록하고 scan/task를 실패 상태로 반영 |
 
@@ -321,7 +343,8 @@ Spring Boot 처리:
 | --- | --- | --- |
 | Spring Boot task 생성 직후 | `PENDING` | 기존 상태 |
 | RabbitMQ publish 성공 직후 | `SENT` | `QUEUED` |
-| Worker 성공 콜백 접수 | 필요 시 `SENT -> ACKED -> RUNNING` | `RUNNING` |
+| Worker RUNNING 콜백 접수 | 필요 시 `SENT -> ACKED -> RUNNING` | `RUNNING` |
+| Worker DONE 콜백 접수 | 결과 적재 대기 | `RUNNING` |
 | 분석 결과 비동기 적재 성공 | `SUCCEEDED` | `DONE` |
 | Worker 실패 콜백 접수 | 필요 시 `SENT -> ACKED -> RUNNING -> FAILED` | `FAILED` |
 | 취소 | `CANCELED` | `CANCELED` |

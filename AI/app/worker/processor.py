@@ -22,6 +22,8 @@ from app.worker.spring_client import SpringClient
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+ANALYSIS_STARTED_PROGRESS_STEP = "analysis_started"
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
@@ -70,8 +72,13 @@ class ScanTaskProcessor:
             taskId=message.task_id,
             agentId=message.agent_id,
             projectId=message.project_id,
+            scanType=message.scan_type,
             stage="ANALYZE_REQUEST",
             status="RUNNING",
+        )
+        self._send_running_callback(
+            message=message,
+            started_at=started_at,
         )
 
         try:
@@ -90,9 +97,11 @@ class ScanTaskProcessor:
                 message=message,
                 started_at=started_at,
                 error_code=UNKNOWN_ERROR_CODE,
+                stage="analysis",
                 failure_reason=format_failure_reason(
                     error_code=UNKNOWN_ERROR_CODE,
                     message=str(exc),
+                    stage="analysis",
                     prefix="FastAPI analysis failed",
                 ),
             )
@@ -114,9 +123,27 @@ class ScanTaskProcessor:
             message=message,
             started_at=started_at,
             error_code=error_code,
+            stage=response.stage,
             failure_reason=self._build_failure_reason(response),
         )
         self._log_failed(message, error_code, elapsed_ms(started_ms))
+
+    def _send_running_callback(
+        self,
+        *,
+        message: ScanRequestMessage,
+        started_at: str,
+    ) -> None:
+        self.spring_client.send_analysis_result_callback(
+            message.scan_id,
+            AnalysisResultCallbackRequest(
+                taskId=message.task_id,
+                status="RUNNING",
+                progressStep=ANALYSIS_STARTED_PROGRESS_STEP,
+                startedAt=started_at,
+                lastUpdatedAt=started_at,
+            ),
+        )
 
     def _send_done_callback(
         self,
@@ -145,6 +172,7 @@ class ScanTaskProcessor:
         message: ScanRequestMessage,
         started_at: str,
         error_code: str,
+        stage: str | None,
         failure_reason: str,
     ) -> None:
         completed_at = utc_now_iso()
@@ -154,6 +182,7 @@ class ScanTaskProcessor:
                 taskId=message.task_id,
                 status=SPRING_ANALYSIS_FAILED_STATUS,
                 progressStep=ANALYSIS_FAILED_PROGRESS_STEP,
+                stage=stage,
                 errorCode=error_code,
                 failureReason=failure_reason,
                 startedAt=started_at,
@@ -181,6 +210,7 @@ class ScanTaskProcessor:
             taskId=message.task_id,
             agentId=message.agent_id,
             projectId=message.project_id,
+            scanType=message.scan_type,
             stage="TASK_COMPLETED",
             status="DONE",
             durationMs=duration_ms,
@@ -200,6 +230,7 @@ class ScanTaskProcessor:
             taskId=message.task_id,
             agentId=message.agent_id,
             projectId=message.project_id,
+            scanType=message.scan_type,
             stage="TASK_FAILED",
             status=SPRING_ANALYSIS_FAILED_STATUS,
             errorCode=error_code,
