@@ -186,6 +186,63 @@ def test_upload_last_scan_redirect_keeps_post_method(tmp_path: Path, monkeypatch
     ]
 
 
+def test_upload_scan_result_to_registered_scan_uses_existing_scan(tmp_path: Path, monkeypatch):
+    scan = {
+        "scanId": "local-scan-test",
+        "projectName": "sample-app",
+        "artifacts": [],
+        "findings": [{"id": "FND-0001"}],
+    }
+    calls: list[tuple[str, str, Any, dict | None]] = []
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            assert timeout == 30
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            calls.append(("PUT", url, json.loads(content.decode("utf-8")), headers))
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            calls.append(("POST", url, json, headers))
+            request = httpx.Request("POST", url)
+            return httpx.Response(200, json={"scanId": 1001, "status": "RAW_UPLOADED"}, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    response = upload.upload_scan_result_to_registered_scan(
+        tmp_path,
+        scan,
+        api_url="http://backend.test/",
+        token="agent-token",
+        scan_id=1001,
+        raw_upload_url="https://s3.example.com/upload",
+    )
+
+    assert response == {"scanId": 1001, "status": "RAW_UPLOADED"}
+    assert calls == [
+        ("PUT", "https://s3.example.com/upload", scan, {"Content-Type": "application/json"}),
+        (
+            "POST",
+            "http://backend.test/api/v1/scans/1001/raw-results",
+            {
+                "tool": "ssafer-cli",
+                "toolVersion": upload.__version__,
+                "resultCount": 1,
+                "payloadHash": upload._payload_hash(upload._scan_json_bytes(scan)),
+            },
+            {"Authorization": "Bearer agent-token"},
+        ),
+    ]
+
+
 def test_upload_last_server_audit_uses_server_audit_scan_type(tmp_path: Path, monkeypatch):
     audit = {
         "auditId": "audit-test",

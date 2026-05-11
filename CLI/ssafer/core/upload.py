@@ -56,6 +56,50 @@ def upload_last_scan(
     )
 
 
+def upload_scan_result_to_registered_scan(
+    project_root: Path,
+    scan: dict[str, Any],
+    *,
+    api_url: str,
+    token: str | None,
+    scan_id: int,
+    raw_upload_url: str,
+) -> dict[str, Any]:
+    suspicious_paths = find_unmasked_secret_paths(scan)
+    if suspicious_paths:
+        paths = "\n".join(f"- {path}" for path in suspicious_paths[:20])
+        suffix = "\n- ..." if len(suspicious_paths) > 20 else ""
+        raise RuntimeError(
+            "Upload blocked because the scan package may contain unmasked secrets:\n"
+            f"{paths}{suffix}"
+        )
+
+    base_url = api_url.rstrip("/")
+    headers: dict[str, str] = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    scan_json = _scan_json_bytes(scan)
+    with httpx.Client(timeout=30) as client:
+        upload_response = client.put(
+            raw_upload_url,
+            content=scan_json,
+            headers={"Content-Type": "application/json"},
+        )
+        upload_response.raise_for_status()
+
+        callback_response = _post_preserving_redirects(
+            client,
+            f"{base_url}/api/v1/scans/{scan_id}/raw-results",
+            json=_build_raw_upload_report_payload(scan, scan_json),
+            headers=headers,
+        )
+        callback_response.raise_for_status()
+        callback_data = _response_data(callback_response.json())
+        callback_data.setdefault("scanId", scan_id)
+        return callback_data
+
+
 def upload_last_server_audit(
     project_root: Path,
     api_url: str | None = None,

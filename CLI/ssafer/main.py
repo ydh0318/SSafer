@@ -276,6 +276,8 @@ def upload(
 def apply_fix(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to patch."),
     analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="Worker analysis_result.json with patch payloads."),
+    scan_id: Optional[int] = typer.Option(None, "--scan-id", help="Download analysis_result.json for this backend scan ID."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL for --scan-id."),
     patch_id: Optional[str] = typer.Option(None, "--patch-id", help="Apply only one patch ID."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch payloads without modifying files."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirmation prompt."),
@@ -291,7 +293,12 @@ def apply_fix(
 
     try:
         project_root = path.resolve()
-        analysis_path = analysis_result or find_default_analysis_result(project_root)
+        if analysis_result is not None and scan_id is not None:
+            raise PatchError("Use either --analysis-result or --scan-id, not both.")
+        if scan_id is not None:
+            analysis_path = _download_analysis_result_or_exit(project_root, scan_id=scan_id, api_url=api_url)
+        else:
+            analysis_path = analysis_result or find_default_analysis_result(project_root)
         if analysis_path is None:
             raise PatchError(
                 "analysis_result.json not found. Use --analysis-result or place it under .ssafer/analysis_result.json."
@@ -586,6 +593,22 @@ def _run_agent_watch(
             return
         if event_type == "ping":
             console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
+            return
+        if event_type == "task_result_reported":
+            task_id = "-"
+            count = "-"
+            if isinstance(payload, dict):
+                task_id = str(payload.get("taskId", "-"))
+                count = str(payload.get("count", "-"))
+            console.print(f"[green]Agent task result reported.[/green] taskId={task_id}, count={count}")
+            return
+        if event_type == "task_result_report_failed":
+            task_id = "-"
+            error = "-"
+            if isinstance(payload, dict):
+                task_id = str(payload.get("taskId", "-"))
+                error = str(payload.get("error", "-"))
+            console.print(f"[yellow]Agent task result report failed.[/yellow] taskId={task_id}, error={error}")
             return
         if isinstance(payload, AgentTaskResult):
             _print_agent_task_result(payload)
@@ -1305,6 +1328,38 @@ def _format_server_rule_id(rule_id: object) -> str:
         "OS_PACKAGE_VULNERABILITY": "OS_VULN",
     }
     return known.get(text, text)
+
+
+def _download_analysis_result_or_exit(project_root: Path, *, scan_id: int, api_url: str | None) -> Path:
+    from ssafer.core.analysis_result import download_analysis_result_for_scan
+    from ssafer.core.auth import load_endpoint, load_token
+    from ssafer.core.config import load_project_config
+
+    config_warnings: list[str] = []
+    project_config = load_project_config(project_root, config_warnings)
+    for warning in config_warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
+
+    token = load_token(project_config.upload.token_env)
+    effective_url = api_url or project_config.upload.endpoint or load_endpoint()
+    if token is None:
+        console.print(
+            "[yellow]Analysis result download requires authentication. Run [bold]ssafer login[/bold] first "
+            "or set SSAFER_TOKEN.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        console.print(f"[cyan]Downloading analysis_result.json for scanId={scan_id}...[/cyan]")
+        return download_analysis_result_for_scan(project_root, scan_id=scan_id, api_url=effective_url, token=token)
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]Analysis result download failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Analysis result download failed:[/red] {_format_http_transport_error(exc)}")
+    except (OSError, ValueError, RuntimeError) as exc:
+        console.print(f"[red]Analysis result download failed:[/red] {exc}")
+    raise typer.Exit(code=1)
 
 
 def _upload_or_exit(path: Path, api_url: str | None) -> dict:

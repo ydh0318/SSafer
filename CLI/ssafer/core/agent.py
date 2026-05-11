@@ -11,6 +11,8 @@ from urllib.parse import urlparse, urlunparse
 import httpx
 
 from ssafer.core.patches import PatchApplyResult, PatchError, apply_patch_candidates, extract_patch_candidates
+from ssafer.core.result_store import run_scan
+from ssafer.core.upload import upload_scan_result_to_registered_scan
 
 
 @dataclass(frozen=True)
@@ -59,7 +61,82 @@ def fetch_pending_agent_tasks(api_url: str, agent_id: int, agent_token: str) -> 
     return [_parse_agent_task(item) for item in data if isinstance(item, dict)]
 
 
-def handle_agent_task(project_root: Path, task: AgentTask, *, dry_run: bool = False) -> AgentTaskResult:
+def report_patch_apply_task_result(
+    api_url: str,
+    agent_token: str,
+    task: AgentTask,
+    result: AgentTaskResult,
+) -> list[dict[str, Any]]:
+    if task.task_type != "PATCH_APPLY" or result.status == "DRY_RUN":
+        return []
+    if task.scan_id is None:
+        raise ValueError("PATCH_APPLY result report requires scanId.")
+
+    reports: list[dict[str, Any]] = []
+    if result.patch_results:
+        for patch_result in result.patch_results:
+            finding_id = _resolve_report_finding_id(task, patch_result.finding_id)
+            if finding_id is None:
+                raise ValueError("PATCH_APPLY result report requires findingId.")
+            reports.append(
+                _post_patch_apply_result(
+                    api_url,
+                    agent_token,
+                    scan_id=task.scan_id,
+                    finding_id=finding_id,
+                    payload=_build_patch_apply_result_payload(
+                        status=patch_result.status,
+                        message=patch_result.message,
+                        backup_path=patch_result.backup_path,
+                        backup_metadata={
+                            "taskId": task.task_id,
+                            "taskType": task.task_type,
+                            "patchId": patch_result.patch_id,
+                            "filePath": patch_result.file_path,
+                        },
+                    ),
+                )
+            )
+        return reports
+
+    if task.finding_id is None:
+        raise ValueError("PATCH_APPLY failure report requires findingId.")
+    reports.append(
+        _post_patch_apply_result(
+            api_url,
+            agent_token,
+            scan_id=task.scan_id,
+            finding_id=task.finding_id,
+            payload=_build_patch_apply_result_payload(
+                status=result.status,
+                message=result.message,
+                backup_metadata={
+                    "taskId": task.task_id,
+                    "taskType": task.task_type,
+                },
+            ),
+        )
+    )
+    return reports
+
+
+def handle_agent_task(
+    project_root: Path,
+    task: AgentTask,
+    *,
+    dry_run: bool = False,
+    api_url: str | None = None,
+    agent_token: str | None = None,
+) -> AgentTaskResult:
+    if task.task_type == "SCAN_REQUEST":
+        return _handle_scan_request_task(
+            project_root,
+            task,
+            dry_run=dry_run,
+            api_url=api_url,
+            agent_token=agent_token,
+        )
+
     if task.task_type != "PATCH_APPLY":
         return AgentTaskResult(
             task_id=task.task_id,
@@ -105,6 +182,107 @@ def handle_agent_task(project_root: Path, task: AgentTask, *, dry_run: bool = Fa
         message=f"Applied {len(results)} patch candidate(s).",
         patch_results=results,
     )
+
+
+def _handle_scan_request_task(
+    project_root: Path,
+    task: AgentTask,
+    *,
+    dry_run: bool,
+    api_url: str | None,
+    agent_token: str | None,
+) -> AgentTaskResult:
+    if task.scan_id is None:
+        return _failed_task(task, "SCAN_REQUEST task is missing scanId.")
+    if task.payload is None:
+        return _failed_task(task, "SCAN_REQUEST task has no payload.")
+
+    raw_upload_url = _payload_string(task.payload, "rawUploadUrl", "raw_upload_url")
+    if not raw_upload_url:
+        if _payload_string(task.payload, "rawResultPath", "raw_result_path"):
+            return _failed_task(
+                task,
+                "SCAN_REQUEST payload looks like an analysis dispatch task. Local scan execution requires rawUploadUrl.",
+            )
+        return _failed_task(task, "SCAN_REQUEST payload is missing rawUploadUrl.")
+
+    if not api_url:
+        return _failed_task(task, "SCAN_REQUEST handling requires api_url.")
+
+    scan_type = (_payload_string(task.payload, "scanType", "scan_type") or "PROJECT_SCAN").upper()
+    if scan_type not in {"PROJECT_SCAN", "LOCAL_SCAN"}:
+        return _failed_task(task, f"Unsupported SCAN_REQUEST scanType: {scan_type}")
+
+    try:
+        target_root = _resolve_scan_root(project_root, task.payload)
+    except ValueError as exc:
+        return _failed_task(task, str(exc))
+
+    save_raw = bool(task.payload.get("saveRaw") or task.payload.get("save_raw"))
+    if dry_run:
+        return AgentTaskResult(
+            task_id=task.task_id,
+            task_type=task.task_type,
+            status="DRY_RUN",
+            message=f"SCAN_REQUEST validated for {target_root}.",
+            patch_results=[],
+        )
+
+    try:
+        scan = run_scan(target_root, save_raw=save_raw)
+        upload_scan_result_to_registered_scan(
+            target_root,
+            scan,
+            api_url=api_url,
+            token=agent_token,
+            scan_id=task.scan_id,
+            raw_upload_url=raw_upload_url,
+        )
+    except Exception as exc:  # noqa: BLE001 - return task failure without killing the agent.
+        return _failed_task(task, f"SCAN_REQUEST failed: {exc}")
+
+    return AgentTaskResult(
+        task_id=task.task_id,
+        task_type=task.task_type,
+        status="SUCCESS",
+        message=f"Scan completed and uploaded for scanId={task.scan_id}.",
+        patch_results=[],
+    )
+
+
+def _failed_task(task: AgentTask, message: str) -> AgentTaskResult:
+    return AgentTaskResult(
+        task_id=task.task_id,
+        task_type=task.task_type,
+        status="FAILED",
+        message=message,
+        patch_results=[],
+    )
+
+
+def _payload_string(payload: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _resolve_scan_root(agent_root: Path, payload: dict[str, Any]) -> Path:
+    raw_path = _payload_string(payload, "targetPath", "projectPath", "path") or "."
+    requested_path = Path(raw_path)
+    candidate = requested_path if requested_path.is_absolute() else agent_root / requested_path
+    resolved_agent_root = agent_root.resolve()
+    resolved_candidate = candidate.resolve()
+    try:
+        resolved_candidate.relative_to(resolved_agent_root)
+    except ValueError as exc:
+        raise ValueError("SCAN_REQUEST target path must stay inside the agent project root.") from exc
+    if not resolved_candidate.exists():
+        raise ValueError(f"SCAN_REQUEST target path does not exist: {resolved_candidate}")
+    if not resolved_candidate.is_dir():
+        raise ValueError(f"SCAN_REQUEST target path is not a directory: {resolved_candidate}")
+    return resolved_candidate
 
 
 async def watch_agent(
@@ -186,7 +364,13 @@ async def _watch_agent_session(
             on_event("tasks_found", tasks)
             for task in tasks:
                 try:
-                    result = handle_agent_task(project_root, task, dry_run=dry_run)
+                    result = handle_agent_task(
+                        project_root,
+                        task,
+                        dry_run=dry_run,
+                        api_url=api_url,
+                        agent_token=agent_token,
+                    )
                 except Exception as exc:  # noqa: BLE001 - keep the long-running agent alive per task.
                     result = AgentTaskResult(
                         task_id=task.task_id,
@@ -196,6 +380,20 @@ async def _watch_agent_session(
                         patch_results=[],
                     )
                 on_event("task", result)
+                if not dry_run:
+                    try:
+                        reports = report_patch_apply_task_result(api_url, agent_token, task, result)
+                    except Exception as exc:  # noqa: BLE001 - report failure must not stop the agent.
+                        on_event(
+                            "task_result_report_failed",
+                            {"taskId": task.task_id, "taskType": task.task_type, "error": str(exc)},
+                        )
+                    else:
+                        if reports:
+                            on_event(
+                                "task_result_reported",
+                                {"taskId": task.task_id, "taskType": task.task_type, "count": len(reports)},
+                            )
 
             if once:
                 return
@@ -241,3 +439,48 @@ def _parse_agent_task(item: dict[str, Any]) -> AgentTask:
         finding_id=int(item["findingId"]) if item.get("findingId") is not None else None,
         payload=item.get("payload") if isinstance(item.get("payload"), dict) else None,
     )
+
+
+def _resolve_report_finding_id(task: AgentTask, finding_id: str | None) -> int | None:
+    if finding_id is not None:
+        try:
+            return int(finding_id)
+        except ValueError:
+            pass
+    return task.finding_id
+
+
+def _post_patch_apply_result(
+    api_url: str,
+    agent_token: str,
+    *,
+    scan_id: int,
+    finding_id: int,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    endpoint = f"{api_url.rstrip('/')}/api/v1/internal/scans/{scan_id}/findings/{finding_id}/patch-results"
+    headers = {"Authorization": f"Bearer {agent_token}"}
+    with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+        response = client.post(endpoint, headers=headers, json=payload)
+        response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, dict) else {}
+
+
+def _build_patch_apply_result_payload(
+    *,
+    status: str,
+    message: str,
+    backup_path: str | None = None,
+    backup_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "patchStatus": "SUCCEEDED" if status == "SUCCESS" else "FAILED",
+        "resultMessage": message,
+    }
+    if backup_path:
+        payload["backupFileName"] = Path(backup_path).name
+        payload["backupFilePath"] = backup_path
+    if backup_metadata:
+        payload["backupMetadata"] = backup_metadata
+    return payload

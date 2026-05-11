@@ -221,6 +221,70 @@ def test_apply_command_dry_run_does_not_modify_file(tmp_path: Path):
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER root\n"
 
 
+def test_apply_command_downloads_analysis_result_by_scan_id(monkeypatch, tmp_path: Path):
+    target = tmp_path / "Dockerfile"
+    target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+    downloaded = tmp_path / ".ssafer" / "analysis" / "scans" / "123" / "analysis_result.json"
+    calls = {}
+
+    def fake_download(project_root: Path, *, scan_id: int, api_url: str, token: str) -> Path:
+        calls["args"] = {
+            "project_root": project_root,
+            "scan_id": scan_id,
+            "api_url": api_url,
+            "token": token,
+        }
+        downloaded.parent.mkdir(parents=True)
+        downloaded.write_text(
+            json.dumps(
+                {
+                    "patches": [
+                        {
+                            "patchId": "P1",
+                            "filePath": "Dockerfile",
+                            "oldText": "USER root",
+                            "newText": "USER appuser",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        return downloaded
+
+    monkeypatch.setenv("SSAFER_TOKEN", "access-token")
+    monkeypatch.setattr("ssafer.core.analysis_result.download_analysis_result_for_scan", fake_download)
+
+    result = CliRunner().invoke(
+        app,
+        ["apply", "--path", str(tmp_path), "--scan-id", "123", "--api-url", "https://api.example.com", "--yes"],
+    )
+
+    assert result.exit_code == 0
+    assert calls["args"] == {
+        "project_root": tmp_path.resolve(),
+        "scan_id": 123,
+        "api_url": "https://api.example.com",
+        "token": "access-token",
+    }
+    assert "Downloading analysis_result.json for scanId=123" in result.output
+    assert "Analysis result:" in result.output
+    assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
+
+
+def test_apply_command_rejects_analysis_result_and_scan_id(tmp_path: Path):
+    analysis_result = tmp_path / "analysis_result.json"
+    analysis_result.write_text(json.dumps({"patches": []}), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        app,
+        ["apply", "--path", str(tmp_path), "--analysis-result", str(analysis_result), "--scan-id", "123"],
+    )
+
+    assert result.exit_code == 1
+    assert "Use either --analysis-result or --scan-id" in result.output
+
+
 def test_apply_command_uses_default_analysis_result_and_interactive_selection(tmp_path: Path):
     first = tmp_path / "Dockerfile"
     second = tmp_path / ".env.example"

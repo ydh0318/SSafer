@@ -76,6 +76,143 @@ def test_fetch_pending_agent_tasks_parses_backend_response(monkeypatch):
     assert tasks[0].payload == {"patches": []}
 
 
+def test_report_patch_apply_task_result_posts_backend_payload(monkeypatch, tmp_path: Path):
+    requests = []
+    backup = tmp_path / "Dockerfile.20260511120000.bak"
+    backup.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": {"findingId": 3, "patchStatus": "SUCCEEDED"}}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def post(self, url, headers, json):
+            requests.append((url, headers, json, self.kwargs))
+            return FakeResponse()
+
+    monkeypatch.setattr(agent.httpx, "Client", FakeClient)
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        task_status="SENT",
+        project_id=1,
+        scan_id=2,
+        finding_id=3,
+        payload={"patches": []},
+    )
+    result = agent.AgentTaskResult(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        status="SUCCESS",
+        message="Applied 1 patch candidate(s).",
+        patch_results=[
+            agent.PatchApplyResult(
+                patch_id="PATCH-1",
+                finding_id="3",
+                file_path="Dockerfile",
+                status="SUCCESS",
+                message="Patch applied successfully.",
+                backup_path=str(backup),
+            )
+        ],
+    )
+
+    reports = agent.report_patch_apply_task_result("https://api.example.com", "agent-token", task, result)
+
+    assert reports == [{"data": {"findingId": 3, "patchStatus": "SUCCEEDED"}}]
+    assert requests == [
+        (
+            "https://api.example.com/api/v1/internal/scans/2/findings/3/patch-results",
+            {"Authorization": "Bearer agent-token"},
+            {
+                "patchStatus": "SUCCEEDED",
+                "resultMessage": "Patch applied successfully.",
+                "backupFileName": backup.name,
+                "backupFilePath": str(backup),
+                "backupMetadata": {
+                    "taskId": 10,
+                    "taskType": "PATCH_APPLY",
+                    "patchId": "PATCH-1",
+                    "filePath": "Dockerfile",
+                },
+            },
+            {"timeout": 20.0, "follow_redirects": True},
+        )
+    ]
+
+
+def test_report_patch_apply_task_result_reports_task_failure(monkeypatch):
+    requests = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": {"findingId": 3, "patchStatus": "FAILED"}}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def post(self, url, headers, json):
+            requests.append((url, headers, json))
+            return FakeResponse()
+
+    monkeypatch.setattr(agent.httpx, "Client", FakeClient)
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        task_status="SENT",
+        project_id=1,
+        scan_id=2,
+        finding_id=3,
+        payload={"patches": []},
+    )
+    result = agent.AgentTaskResult(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        status="FAILED",
+        message="Patch oldText was not found: Dockerfile",
+        patch_results=[],
+    )
+
+    agent.report_patch_apply_task_result("https://api.example.com", "agent-token", task, result)
+
+    assert requests == [
+        (
+            "https://api.example.com/api/v1/internal/scans/2/findings/3/patch-results",
+            {"Authorization": "Bearer agent-token"},
+            {
+                "patchStatus": "FAILED",
+                "resultMessage": "Patch oldText was not found: Dockerfile",
+                "backupMetadata": {
+                    "taskId": 10,
+                    "taskType": "PATCH_APPLY",
+                },
+            },
+        )
+    ]
+
+
 def test_handle_agent_task_applies_patch_payload(tmp_path: Path):
     target = tmp_path / "Dockerfile"
     target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
@@ -152,10 +289,121 @@ def test_handle_agent_task_returns_failed_when_patch_apply_fails(tmp_path: Path)
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER root\n"
 
 
-def test_handle_agent_task_skips_non_patch_task(tmp_path: Path):
+def test_handle_agent_task_fails_scan_request_without_upload_url(tmp_path: Path):
     task = agent.AgentTask(
         task_id=10,
         task_type="SCAN_REQUEST",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=None,
+        payload={"rawResultPath": "s3://ssafer/raw/2/result.json"},
+    )
+
+    result = agent.handle_agent_task(tmp_path, task)
+
+    assert result.status == "FAILED"
+    assert "rawUploadUrl" in result.message
+
+
+def test_handle_agent_task_runs_scan_request_and_uploads_result(monkeypatch, tmp_path: Path):
+    calls = {}
+    scan_payload = {"scanId": "local-id", "projectName": "sample", "findings": []}
+
+    def fake_run_scan(project_root: Path, *, save_raw: bool = False, on_step=None):
+        calls["run_scan"] = {"project_root": project_root, "save_raw": save_raw}
+        return scan_payload
+
+    def fake_upload_scan_result_to_registered_scan(project_root, scan, *, api_url, token, scan_id, raw_upload_url):
+        calls["upload"] = {
+            "project_root": project_root,
+            "scan": scan,
+            "api_url": api_url,
+            "token": token,
+            "scan_id": scan_id,
+            "raw_upload_url": raw_upload_url,
+        }
+        return {"scanId": scan_id, "status": "RAW_UPLOADED"}
+
+    monkeypatch.setattr(agent, "run_scan", fake_run_scan)
+    monkeypatch.setattr(agent, "upload_scan_result_to_registered_scan", fake_upload_scan_result_to_registered_scan)
+
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="SCAN_REQUEST",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=None,
+        payload={
+            "rawUploadUrl": "https://s3.example.com/raw",
+            "targetPath": ".",
+            "saveRaw": True,
+        },
+    )
+
+    result = agent.handle_agent_task(
+        tmp_path,
+        task,
+        api_url="https://api.example.com",
+        agent_token="agent-token",
+    )
+
+    assert result.status == "SUCCESS"
+    assert calls["run_scan"] == {"project_root": tmp_path.resolve(), "save_raw": True}
+    assert calls["upload"] == {
+        "project_root": tmp_path.resolve(),
+        "scan": scan_payload,
+        "api_url": "https://api.example.com",
+        "token": "agent-token",
+        "scan_id": 2,
+        "raw_upload_url": "https://s3.example.com/raw",
+    }
+
+
+def test_handle_agent_task_dry_runs_scan_request_without_running_scan(monkeypatch, tmp_path: Path):
+    def fail_run_scan(*args, **kwargs):
+        raise AssertionError("run_scan should not be called in dry-run")
+
+    monkeypatch.setattr(agent, "run_scan", fail_run_scan)
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="SCAN_REQUEST",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=None,
+        payload={"rawUploadUrl": "https://s3.example.com/raw", "targetPath": "."},
+    )
+
+    result = agent.handle_agent_task(tmp_path, task, dry_run=True, api_url="https://api.example.com")
+
+    assert result.status == "DRY_RUN"
+    assert "validated" in result.message
+
+
+def test_handle_agent_task_rejects_scan_request_outside_agent_root(tmp_path: Path):
+    outside = tmp_path.parent
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="SCAN_REQUEST",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=None,
+        payload={"rawUploadUrl": "https://s3.example.com/raw", "targetPath": str(outside)},
+    )
+
+    result = agent.handle_agent_task(tmp_path, task, api_url="https://api.example.com")
+
+    assert result.status == "FAILED"
+    assert "inside the agent project root" in result.message
+
+
+def test_handle_agent_task_skips_unknown_task(tmp_path: Path):
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="UNKNOWN",
         task_status="PENDING",
         project_id=1,
         scan_id=2,
