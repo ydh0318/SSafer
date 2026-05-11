@@ -6,7 +6,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,8 +17,7 @@ import org.springframework.stereotype.Component;
 public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
 
   private final UploadScanTempWorkspaceManager tempWorkspaceManager;
-  private final CustomRuleScanner customRuleScanner;
-  private final TrivyScanExecutor trivyScanExecutor;
+  private final UploadFileScanner uploadFileScanner;
   private final ScanResultJsonBuilder scanResultJsonBuilder;
   private final UploadScanRawResultUploader uploadScanRawResultUploader;
   private final UploadScanAnalysisTaskDispatcher uploadScanAnalysisTaskDispatcher;
@@ -29,15 +27,14 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
   @Override
   public UploadScanProcessingResult process(UploadScanProcessingCommand command) {
     // 업로드 스캔 처리 순서:
-    // temp 저장 -> 1차 점검 -> scan_result.json 생성 -> S3 업로드 -> MQ 발행 -> 상태 전이
+    // temp 저장 -> 스캔 실행(engine 또는 fallback) -> scan_result.json 생성 -> S3 업로드 -> MQ 발행 -> 상태 전이
     Path workspace = null;
     try {
       workspace = tempWorkspaceManager.createWorkspace(command.scanId());
       List<Path> savedFiles = tempWorkspaceManager.saveFiles(workspace, command.files());
 
-      List<UploadScanFinding> findings = new ArrayList<>();
-      findings.addAll(customRuleScanner.scan(savedFiles));
-      findings.addAll(trivyScanExecutor.scan(savedFiles));
+      // 스캔 실행 방식은 UploadFileScanner 구현체가 결정하고, 이후 결과 처리 흐름은 이 클래스가 유지한다.
+      List<UploadScanFinding> findings = uploadFileScanner.scanAll(savedFiles);
 
       Path resultPath = scanResultJsonBuilder.writeScanResultJson(
           workspace,
@@ -77,7 +74,7 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
   }
 
   private UploadScanProcessingResult handleFailure(UploadScanProcessingCommand command, Exception ex) {
-    // 실패 원인별 DB 상태/응답 코드를 고정해 API 정책과 맞춘다.
+    // 실패 원인별 DB 상태와 응답 코드를 고정해 기존 업로드 API 계약을 유지한다.
     if (ex instanceof UploadScanS3UploadException) {
       uploadScanStatusUpdater.markUploadFailed(command.scanId(), ScanFailureReason.RAW_RESULT_UPLOAD_FAILED);
       log.error("Upload scan S3 upload failed: scanId={}, projectId={}", command.scanId(), command.projectId(), ex);
