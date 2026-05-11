@@ -153,6 +153,28 @@ function TypingLine({
   );
 }
 
+function getTokenStyles(tone: TokenTone, isDark: boolean) {
+  if (isDark) {
+    switch (tone) {
+      case 'emerald': return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
+      case 'sky': return 'border-sky-500/30 bg-sky-500/10 text-sky-300';
+      case 'amber': return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+      case 'rose': return 'border-rose-500/30 bg-rose-500/10 text-rose-300';
+      case 'slate': return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
+      default: return 'border-neutral-500/30 bg-neutral-500/10 text-neutral-300';
+    }
+  } else {
+    switch (tone) {
+      case 'emerald': return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+      case 'sky': return 'border-sky-200 bg-sky-50 text-sky-700';
+      case 'amber': return 'border-amber-200 bg-amber-50 text-amber-700';
+      case 'rose': return 'border-rose-200 bg-rose-50 text-rose-700';
+      case 'slate': return 'border-slate-200 bg-slate-50 text-slate-700';
+      default: return 'border-neutral-200 bg-neutral-50 text-neutral-700';
+    }
+  }
+}
+
 /* ─── Main Page ─── */
 export default function TypingGamePage() {
   const [stageIdx, setStageIdx] = useState(0);
@@ -162,6 +184,7 @@ export default function TypingGamePage() {
   const [sidebarTab, setSidebarTab] = useState(0);
   const theme = useUiStore((s) => s.theme);
   const isDark = theme === 'dark';
+  const currentLineRef = useRef<HTMLDivElement>(null);
 
   const stage = STAGES[stageIdx];
   const cmd = stage.commands[cmdIdx];
@@ -190,6 +213,23 @@ export default function TypingGamePage() {
   const jumpTo = (si: number, ci: number) => {
     setStageIdx(si); setCmdIdx(ci); setSidebarOpen(false);
   };
+
+  // Auto-scroll to the current typing line whenever the command changes
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  useEffect(() => {
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (currentLineRef.current) {
+        currentLineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+    
+    return () => {
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
+  }, [cmdIdx, stageIdx]);
 
   // theme-aware classes
   const pageBg    = isDark ? 'bg-[#1a1a1a]' : 'bg-[#f2f1ec]';
@@ -260,13 +300,29 @@ export default function TypingGamePage() {
               <div key={c.id} className="mb-6">
                 <p className={`font-mono text-2xl ${doneCmd}`}>{c.command}</p>
                 {doneIds.has(c.id) && (
-                  <p className={`mt-1.5 text-base ${doneDesc}`}>{c.description}</p>
+                  <div className="mt-2">
+                    <p className={`text-base ${doneDesc}`}>{c.description}</p>
+                    {c.tokens && c.tokens.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+                        {c.tokens.map((token, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className={`inline-flex items-center justify-center rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold ${getTokenStyles(token.tone, isDark)}`}>
+                              {token.label}
+                            </span>
+                            <span className={`text-xs ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                              {token.meaning}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
 
             {/* current typing line */}
-            <div className="mb-3">
+            <div ref={currentLineRef} className="mb-3 scroll-mt-32">
               <TypingLine
                 command={cmd.command}
                 onDone={handleDone}
@@ -277,9 +333,25 @@ export default function TypingGamePage() {
 
             {/* description fade-in after done */}
             <div
-              className={`overflow-hidden transition-all duration-500 ${isCurrentDone ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'}`}
+              className={`overflow-hidden transition-all duration-500 ${isCurrentDone ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
             >
               <p className={`mt-1.5 text-base ${descRevealCls}`}>{cmd.description}</p>
+              
+              {/* Tokens breakdown */}
+              {cmd.tokens && cmd.tokens.length > 0 && (
+                <div className="mt-4 flex flex-col gap-2.5">
+                  {cmd.tokens.map((token, idx) => (
+                    <div key={idx} className="flex items-start gap-3">
+                      <span className={`shrink-0 inline-flex items-center justify-center rounded border px-2 py-1 font-mono text-xs font-bold ${getTokenStyles(token.tone, isDark)}`}>
+                        {token.label}
+                      </span>
+                      <span className={`mt-0.5 text-sm ${isDark ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                        {token.meaning}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* upcoming — grayed preview */}
