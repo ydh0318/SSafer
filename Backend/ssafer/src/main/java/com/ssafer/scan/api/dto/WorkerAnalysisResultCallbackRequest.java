@@ -17,6 +17,7 @@ public record WorkerAnalysisResultCallbackRequest(
     @NotNull(message = "taskId is required")
     Long taskId,
     @Schema(description = "워커 분석 상태", example = "RUNNING")
+    @NotNull(message = "status is required")
     ScanStatus status,
     @Schema(description = "워커가 전달하는 현재 처리 단계", example = "analysis_started")
     @Size(max = 100) String progressStep,
@@ -44,7 +45,7 @@ public record WorkerAnalysisResultCallbackRequest(
 
   @AssertTrue(message = "status only supports RUNNING, DONE or FAILED")
   public boolean hasSupportedStatus() {
-    return status == null || status == ScanStatus.RUNNING || status == ScanStatus.DONE || status == ScanStatus.FAILED;
+    return status == ScanStatus.RUNNING || status == ScanStatus.DONE || status == ScanStatus.FAILED;
   }
 
   @AssertTrue(message = "startedAt must be before or equal to completedAt")

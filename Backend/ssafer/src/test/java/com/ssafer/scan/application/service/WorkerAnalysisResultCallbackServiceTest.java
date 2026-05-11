@@ -146,6 +146,7 @@ class WorkerAnalysisResultCallbackServiceTest {
     assertThat(reported.getStatus()).isEqualTo(ScanStatus.FAILED);
     assertThat(reported.getFailureReason()).isEqualTo("worker analysis failed");
     assertThat(agentTask.getTaskStatus()).isEqualTo(AgentTaskStatus.FAILED);
+    verify(applicationEventPublisher).publishEvent(new ScanStatusSsePublishRequestedEvent(1L, ScanStatus.FAILED));
   }
 
   @Test
@@ -162,6 +163,31 @@ class WorkerAnalysisResultCallbackServiceTest {
         null,
         null,
         null,
+        null,
+        null,
+        null
+    );
+
+    assertThatThrownBy(() -> workerAnalysisResultCallbackService.report(1L, request))
+        .isInstanceOf(ResponseStatusException.class)
+        .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+        .isEqualTo(BAD_REQUEST);
+  }
+
+  @Test
+  void reportWithoutStatusThrowsBadRequest() {
+    Scan scan = queuedScan(LocalDateTime.of(2026, 4, 24, 15, 0));
+    AgentTask agentTask = sentTask(scan);
+
+    when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(scan));
+    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+
+    WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
+        100L,
+        null,
+        null,
+        null,
+        "s3://ssafer/result/1/analysis_result.json",
         null,
         null,
         null

@@ -34,6 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -174,6 +175,9 @@ class WorkerAnalysisResultPersistenceServiceTest {
   @Mock
   private AnalysisResultObjectReader analysisResultObjectReader;
 
+  @Mock
+  private ApplicationEventPublisher applicationEventPublisher;
+
   private WorkerAnalysisResultPersistenceService workerAnalysisResultPersistenceService;
 
   @BeforeEach
@@ -184,7 +188,8 @@ class WorkerAnalysisResultPersistenceServiceTest {
         scanNodeRepository,
         scanFindingRepository,
         analysisResultObjectReader,
-        new ObjectMapper()
+        new ObjectMapper(),
+        applicationEventPublisher
     );
   }
 
@@ -227,6 +232,7 @@ class WorkerAnalysisResultPersistenceServiceTest {
     assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SUCCEEDED);
     assertThat(scan.getStatus()).isEqualTo(ScanStatus.DONE);
     assertThat(scan.getProgressStep()).isEqualTo(WorkerAnalysisResultPersistenceService.COMPLETED_PROGRESS_STEP);
+    verify(applicationEventPublisher).publishEvent(new ScanStatusSsePublishRequestedEvent(1L, ScanStatus.DONE));
   }
 
   @Test
@@ -401,7 +407,7 @@ class WorkerAnalysisResultPersistenceServiceTest {
   }
 
   @Test
-  void markFailedKeepsRunningStateForRetry() {
+  void markFailedMarksTaskAndScanFailed() {
     Scan scan = runningScan();
     AgentTask task = ackedTask(scan);
 
@@ -410,12 +416,13 @@ class WorkerAnalysisResultPersistenceServiceTest {
 
     workerAnalysisResultPersistenceService.markFailed(event(), new IllegalStateException("temporary s3 failure"));
 
-    assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.RUNNING);
+    assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.FAILED);
     assertThat(task.getFailureReason()).contains("temporary s3 failure");
-    assertThat(scan.getStatus()).isEqualTo(ScanStatus.RUNNING);
+    assertThat(scan.getStatus()).isEqualTo(ScanStatus.FAILED);
     assertThat(scan.getProgressStep()).isEqualTo(WorkerAnalysisResultPersistenceService.FAILED_PROGRESS_STEP);
     assertThat(scan.getFailureReason()).contains("temporary s3 failure");
-    assertThat(scan.getCompletedAt()).isNull();
+    assertThat(scan.getCompletedAt()).isNotNull();
+    verify(applicationEventPublisher).publishEvent(new ScanStatusSsePublishRequestedEvent(1L, ScanStatus.FAILED));
   }
 
   private WorkerAnalysisResultIngestionRequestedEvent event() {
