@@ -119,7 +119,11 @@ patches가 있으면 1개 이상의 patch object를 담은 array여야 함
 각 patch는 patchId, targetFile, operation, oldText, newText, requiresApproval을 반드시 포함해야 함
 patch.operation은 현재 replace만 허용함
 patchId, targetFile, operation, oldText, newText는 비어 있지 않은 string이어야 함
-patch.requiresApproval은 boolean이어야 함
+patch.targetFile은 저장소 루트 기준 상대 경로여야 함
+patch.targetFile은 절대 경로, 홈 경로, 상위 경로(..), 역슬래시를 포함하면 안 됨
+patch.requiresApproval은 true여야 함
+patch.oldText와 patch.newText는 서로 달라야 함
+patch.oldText와 patch.newText는 마스킹된 민감 값 토큰을 포함하면 안 됨
 patch.expectedFileHash가 있으면 sha256:으로 시작해야 함
 patch.rollback이 있으면 operation, oldText, newText를 반드시 포함해야 함
 patch.rollback.operation은 현재 replace만 허용함
@@ -146,7 +150,60 @@ patch.rollback.operation은 현재 replace만 허용함
 ]
 ```
 
-## 7. findingId 매핑 검증
+## 7. CLI 적용 가능한 patch contract
+
+CLI는 `fix.patches`의 각 patch를 아래 순서로 검증한 뒤 적용해야 합니다.
+
+```text
+targetFile을 저장소 루트 기준 상대 경로로 해석함
+targetFile이 저장소 밖을 가리키면 patch 적용 불가
+expectedFileHash가 있으면 로컬 대상 파일의 sha256 값과 비교함
+operation은 replace만 처리함
+oldText가 대상 파일에서 정확히 1번만 매칭되는지 확인함
+oldText가 0번 또는 2번 이상 매칭되면 patch 적용 불가
+oldText와 newText로 diff preview를 생성함
+requiresApproval이 true이므로 사용자 승인 전에는 파일을 수정하지 않음
+승인 후 적용 전 대상 파일 backup을 생성함
+적용 실패 또는 사용자 취소 시 원본 파일을 유지함
+rollback은 보조 정보이며, 실제 복구의 기준은 CLI가 만든 backup이어야 함
+```
+
+`replace` 적용 규칙:
+
+```text
+대상 파일 전체에서 oldText를 newText로 한 번 치환함
+oldText는 줄바꿈과 공백을 포함해 원문과 정확히 일치해야 함
+CLI는 치환 전후 diff를 사용자에게 보여줘야 함
+```
+
+## 8. patch 생성 가능/불가능 조건
+
+AI는 아래 조건을 모두 만족할 때만 `fix.patches`를 생성해야 합니다.
+
+```text
+scan artifact 안에 targetFile을 특정할 수 있음
+scan artifact 안에 정확한 oldText를 특정할 수 있음
+oldText가 실제 파일에서 고유하게 1번만 등장할 가능성이 높음
+newText가 기존 코드 흐름을 크게 추측하지 않고 만들 수 있음
+secret 원문, token, password, key 값을 oldText 또는 newText에 포함하지 않음
+변경 방식이 현재 지원하는 replace operation으로 표현 가능함
+사용자 검토가 필요한 수정임을 requiresApproval=true로 표시할 수 있음
+```
+
+AI는 아래 경우 `fix.patches`를 생성하지 않고 설명형 `fix`만 작성해야 합니다.
+
+```text
+대상 파일 경로나 정확한 oldText를 알 수 없음
+oldText가 여러 위치에 있을 가능성이 높음
+newText를 만들려면 주변 코드, 프레임워크, 설정을 추측해야 함
+새 비밀 값이나 민감 값을 생성하거나 복원해야 함
+maskedEvidence처럼 마스킹된 값만 있어 실제 치환 텍스트를 알 수 없음
+여러 파일의 의미 있는 리팩터링이나 의존성 추가가 필요함
+append, delete, unified diff 등 replace 이외의 작업이 필요함
+로컬 파일 해시 또는 파일 내용 확인 없이는 안전성을 판단하기 어려움
+```
+
+## 9. findingId 매핑 검증
 
 전체 분석 파이프라인은 저장 전에 valid 입력 findings와 출력 results의 `findingId`가 1:1로 일치하는지 확인합니다.
 
@@ -168,7 +225,7 @@ analysis_result findingId mapping must match input findings: unexpected output f
 Duplicate findingId in analysis_result: FND-0001
 ```
 
-## 8. 검증 확인
+## 10. 검증 확인
 
 아래 명령어로 기존 `analysis_result.json`이 출력 스키마를 만족하는지 확인할 수 있습니다.
 

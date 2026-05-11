@@ -19,6 +19,19 @@ def build_fix(**overrides):
     return fix
 
 
+def build_patch(**overrides):
+    patch = {
+        "patchId": "PATCH-0001",
+        "targetFile": "Dockerfile",
+        "operation": "replace",
+        "oldText": "USER root",
+        "newText": "USER appuser",
+        "requiresApproval": True,
+    }
+    patch.update(overrides)
+    return patch
+
+
 class AnalysisResultFixSchemaTest(unittest.TestCase):
     def test_validate_fix_schema_accepts_existing_description_only_fix(self):
         validate_fix_schema(build_fix())
@@ -27,20 +40,14 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
         validate_fix_schema(
             build_fix(
                 patches=[
-                    {
-                        "patchId": "PATCH-0001",
-                        "targetFile": "Dockerfile",
-                        "operation": "replace",
-                        "oldText": "USER root",
-                        "newText": "USER appuser",
-                        "expectedFileHash": "sha256:abc123",
-                        "requiresApproval": True,
-                        "rollback": {
+                    build_patch(
+                        expectedFileHash="sha256:abc123",
+                        rollback={
                             "operation": "replace",
                             "oldText": "USER appuser",
                             "newText": "USER root",
                         },
-                    }
+                    )
                 ]
             )
         )
@@ -64,14 +71,9 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
             validate_fix_schema(
                 build_fix(
                     patches=[
-                        {
-                            "patchId": "PATCH-0001",
-                            "targetFile": "Dockerfile",
-                            "operation": "append",
-                            "oldText": "USER root",
-                            "newText": "USER appuser",
-                            "requiresApproval": True,
-                        }
+                        build_patch(
+                            operation="append",
+                        )
                     ]
                 )
             )
@@ -81,15 +83,9 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
             validate_fix_schema(
                 build_fix(
                     patches=[
-                        {
-                            "patchId": "PATCH-0001",
-                            "targetFile": "Dockerfile",
-                            "operation": "replace",
-                            "oldText": "USER root",
-                            "newText": "USER appuser",
-                            "expectedFileHash": "abc123",
-                            "requiresApproval": True,
-                        }
+                        build_patch(
+                            expectedFileHash="abc123",
+                        )
                     ]
                 )
             )
@@ -102,19 +98,67 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
             validate_fix_schema(
                 build_fix(
                     patches=[
-                        {
-                            "patchId": "PATCH-0001",
-                            "targetFile": "Dockerfile",
-                            "operation": "replace",
-                            "oldText": "USER root",
-                            "newText": "USER appuser",
-                            "requiresApproval": True,
-                            "rollback": {
+                        build_patch(
+                            rollback={
                                 "operation": "append",
                                 "oldText": "USER appuser",
                                 "newText": "USER root",
                             },
-                        }
+                        )
+                    ]
+                )
+            )
+
+    def test_validate_fix_schema_rejects_unsafe_target_file(self):
+        unsafe_paths = (
+            "/etc/passwd",
+            "../Dockerfile",
+            "src/../Dockerfile",
+            "~/.ssh/config",
+            "src\\Dockerfile",
+        )
+
+        for unsafe_path in unsafe_paths:
+            with self.subTest(unsafe_path=unsafe_path):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "fix.patches\\[0\\].targetFile",
+                ):
+                    validate_fix_schema(
+                        build_fix(patches=[build_patch(targetFile=unsafe_path)])
+                    )
+
+    def test_validate_fix_schema_rejects_patch_without_user_approval(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "fix.patches\\[0\\].requiresApproval must be true",
+        ):
+            validate_fix_schema(
+                build_fix(patches=[build_patch(requiresApproval=False)])
+            )
+
+    def test_validate_fix_schema_rejects_noop_replacement(self):
+        with self.assertRaisesRegex(ValueError, "oldText.*newText"):
+            validate_fix_schema(
+                build_fix(
+                    patches=[
+                        build_patch(
+                            oldText="USER appuser",
+                            newText="USER appuser",
+                        )
+                    ]
+                )
+            )
+
+    def test_validate_fix_schema_rejects_masked_patch_text(self):
+        with self.assertRaisesRegex(ValueError, "masked values"):
+            validate_fix_schema(
+                build_fix(
+                    patches=[
+                        build_patch(
+                            oldText="DB_PASSWORD=***MASKED***",
+                            newText="DB_PASSWORD=new-value",
+                        )
                     ]
                 )
             )

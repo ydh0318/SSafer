@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -78,6 +78,11 @@ OPTIONAL_FIX_PATCH_STRING_FIELDS = (
     "expectedFileHash",
 )
 ALLOWED_FIX_PATCH_OPERATIONS = ("replace",)
+DISALLOWED_PATCH_TEXT_TOKENS = (
+    "***MASKED***",
+    "[MASKED]",
+    "<MASKED>",
+)
 REQUIRED_FIX_PATCH_ROLLBACK_FIELDS = (
     "operation",
     "oldText",
@@ -443,6 +448,13 @@ def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{path}.{field} must be a non-empty string.")
 
+    validate_patch_target_file(patch["targetFile"], f"{path}.targetFile")
+    validate_patch_replacement_text(
+        old_text=patch["oldText"],
+        new_text=patch["newText"],
+        path=path,
+    )
+
     operation = patch["operation"]
     if operation not in ALLOWED_FIX_PATCH_OPERATIONS:
         raise ValueError(
@@ -461,8 +473,8 @@ def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
     if expected_file_hash is not None and not expected_file_hash.startswith("sha256:"):
         raise ValueError(f"{path}.expectedFileHash must start with sha256:.")
 
-    if type(patch["requiresApproval"]) is not bool:
-        raise ValueError(f"{path}.requiresApproval must be a boolean.")
+    if patch["requiresApproval"] is not True:
+        raise ValueError(f"{path}.requiresApproval must be true.")
 
     if "rollback" in patch:
         validate_fix_patch_rollback_schema(patch["rollback"], f"{path}.rollback")
@@ -494,6 +506,33 @@ def validate_fix_patch_rollback_schema(
             f"{path}.operation must be one of: "
             f"{', '.join(ALLOWED_FIX_PATCH_OPERATIONS)}."
         )
+
+
+def validate_patch_target_file(target_file: str, path: str) -> None:
+    if target_file.startswith(("/", "~")):
+        raise ValueError(f"{path} must be a repository-relative path.")
+    if "\\" in target_file:
+        raise ValueError(f"{path} must use forward slashes.")
+
+    parsed_path = PurePosixPath(target_file)
+    if parsed_path.is_absolute() or ".." in parsed_path.parts:
+        raise ValueError(f"{path} must be a repository-relative path.")
+
+
+def validate_patch_replacement_text(
+    *,
+    old_text: str,
+    new_text: str,
+    path: str,
+) -> None:
+    if old_text == new_text:
+        raise ValueError(f"{path}.oldText and {path}.newText must be different.")
+
+    for token in DISALLOWED_PATCH_TEXT_TOKENS:
+        if token in old_text or token in new_text:
+            raise ValueError(
+                f"{path}.oldText and {path}.newText must not contain masked values."
+            )
 
 
 def save_analysis_result(
