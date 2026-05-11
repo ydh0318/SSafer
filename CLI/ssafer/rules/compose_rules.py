@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -11,10 +12,28 @@ from ssafer.rules.base import BaseRule, Finding
 from ssafer.rules.engine import ScanContext
 
 _ENV_REF_RE = re.compile(r"^\$\{[^}]+\}$")
+_LOCAL_DEFAULT_SECRET_VALUES = {
+    "dev",
+    "development",
+    "guest",
+    "local",
+    "localhost",
+    "password",
+    "postgres",
+    "rabbitmq",
+    "redis",
+    "sample",
+    "ssafer",
+    "test",
+}
 
 
 def _is_env_ref(value: str) -> bool:
     return bool(_ENV_REF_RE.match(str(value).strip()))
+
+
+def _is_local_default_secret(value: str) -> bool:
+    return str(value).strip().lower() in _LOCAL_DEFAULT_SECRET_VALUES
 
 
 def _parse_effective_yaml(raw_yaml: str) -> dict[str, Any]:
@@ -28,6 +47,21 @@ def _services(doc: dict[str, Any]) -> dict[str, Any]:
     return doc.get("services") or {}
 
 
+def _compose_file_refs(context: ScanContext, set_name: str) -> tuple[str | None, list[str]]:
+    files: list[str] = []
+    for compose_set in context.compose_sets:
+        if compose_set.name != set_name:
+            continue
+        for compose_file in compose_set.files:
+            try:
+                files.append(str(compose_file.relative_to(context.project_root)))
+            except ValueError:
+                files.append(str(compose_file))
+    unique_files = list(dict.fromkeys(files))
+    file_path = unique_files[0] if len(unique_files) == 1 else None
+    return file_path, unique_files
+
+
 class ComposeExposedDbPortRule(BaseRule):
     rule_id = "COMPOSE_EXPOSED_DB_PORT"
     severity = "CRITICAL"
@@ -35,6 +69,7 @@ class ComposeExposedDbPortRule(BaseRule):
     def check(self, context: ScanContext) -> list[Finding]:
         findings: list[Finding] = []
         for set_name, raw_yaml in context.effective_configs.items():
+            file_path, target_files = _compose_file_refs(context, set_name)
             doc = _parse_effective_yaml(raw_yaml)
             for svc_name, svc in _services(doc).items():
                 for port_entry in svc.get("ports") or []:
@@ -53,6 +88,8 @@ class ComposeExposedDbPortRule(BaseRule):
                             masked_evidence=make_masked_evidence(
                                 f"services.{svc_name}.ports", f"{host_port}:{container_port}"
                             ),
+                            file_path=file_path,
+                            target_files=target_files,
                         ))
         return findings
 
@@ -131,38 +168,62 @@ class ComposeHardcodedSecretRule(BaseRule):
 
     def check(self, context: ScanContext) -> list[Finding]:
         findings: list[Finding] = []
-        for set_name, raw_yaml in context.effective_configs.items():
-            doc = _parse_effective_yaml(raw_yaml)
-            for svc_name, svc in _services(doc).items():
-                env = svc.get("environment") or {}
-                items: list[tuple[str, str]] = []
-                if isinstance(env, dict):
-                    items = [(str(k), str(v)) for k, v in env.items() if v is not None]
-                elif isinstance(env, list):
-                    for entry in env:
-                        if isinstance(entry, str) and "=" in entry:
-                            k, v = entry.split("=", 1)
-                            items.append((k, v))
+        if not context.compose_sets:
+            for set_name, raw_yaml in context.effective_configs.items():
+                findings.extend(self._check_compose_yaml(raw_yaml, Path(f"docker-compose ({set_name})"), context.project_root))
+            return findings
+        seen_files: set[Path] = set()
+        for compose_set in context.compose_sets:
+            for compose_file in compose_set.files:
+                if compose_file in seen_files:
+                    continue
+                seen_files.add(compose_file)
+                try:
+                    raw_yaml = compose_file.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                findings.extend(self._check_compose_yaml(raw_yaml, compose_file, context.project_root))
+        return findings
 
-                for key, value in items:
-                    if (
-                        is_secret_key(key)
-                        and not is_safe_key(key)
-                        and value
-                        and not _is_env_ref(value)
-                        and not is_placeholder(value)
-                    ):
-                        findings.append(Finding(
-                            rule_id=self.rule_id,
-                            source="custom-rule",
-                            severity=self.severity,
-                            file=f"docker-compose ({set_name})",
-                            line=None,
-                            title=f"서비스 '{svc_name}'에 민감한 환경변수가 설정됨",
-                            masked_evidence=make_masked_evidence(
-                                f"services.{svc_name}.environment.{key}"
-                            ),
-                        ))
+    def _check_compose_yaml(self, raw_yaml: str, compose_file: Path, project_root: Path) -> list[Finding]:
+        findings: list[Finding] = []
+        try:
+            rel_file = str(compose_file.relative_to(project_root))
+        except ValueError:
+            rel_file = str(compose_file)
+        doc = _parse_effective_yaml(raw_yaml)
+        for svc_name, svc in _services(doc).items():
+            env = svc.get("environment") or {}
+            items: list[tuple[str, str]] = []
+            if isinstance(env, dict):
+                items = [(str(k), str(v)) for k, v in env.items() if v is not None]
+            elif isinstance(env, list):
+                for entry in env:
+                    if isinstance(entry, str) and "=" in entry:
+                        k, v = entry.split("=", 1)
+                        items.append((k, v))
+
+            for key, value in items:
+                if (
+                    is_secret_key(key)
+                    and not is_safe_key(key)
+                    and value
+                    and not _is_env_ref(value)
+                    and not is_placeholder(value)
+                    and not _is_local_default_secret(value)
+                ):
+                    findings.append(Finding(
+                        rule_id=self.rule_id,
+                        source="custom-rule",
+                        severity=self.severity,
+                        file=rel_file,
+                        line=None,
+                        title=f"서비스 '{svc_name}'에 민감한 환경변수가 설정됨",
+                        masked_evidence=make_masked_evidence(
+                            f"services.{svc_name}.environment.{key}"
+                        ),
+                        file_path=rel_file,
+                    ))
         return findings
 
 

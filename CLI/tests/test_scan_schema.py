@@ -26,6 +26,10 @@ FINDING_SCHEMA_KEYS = {
     "title",
     "maskedEvidence",
 }
+OPTIONAL_FINDING_SCHEMA_KEYS = {
+    "filePath",
+    "targetFiles",
+}
 
 
 def _write_scan(project_root: Path, scan: dict[str, Any]) -> None:
@@ -233,7 +237,8 @@ def test_findings_share_common_schema_for_cli_backend_and_frontend():
     ], 1)[0]
 
     for finding in [custom_finding, trivy_finding]:
-        assert set(finding) == FINDING_SCHEMA_KEYS
+        assert FINDING_SCHEMA_KEYS <= set(finding)
+        assert set(finding) <= FINDING_SCHEMA_KEYS | OPTIONAL_FINDING_SCHEMA_KEYS
         assert finding["source"] in {"trivy", "custom-rule"}
         assert backend_finding_source_type(finding["source"]) in {"TRIVY", "CUSTOM_RULE"}
         assert isinstance(finding["ruleId"], str) and finding["ruleId"]
@@ -340,7 +345,8 @@ def test_trivy_misconfiguration_fields_map_from_raw_json():
 
     finding = _normalize_trivy_findings(artifacts, 0)[0]
 
-    assert set(finding) == FINDING_SCHEMA_KEYS
+    assert FINDING_SCHEMA_KEYS <= set(finding)
+    assert set(finding) <= FINDING_SCHEMA_KEYS | OPTIONAL_FINDING_SCHEMA_KEYS
     assert finding["id"] == "FND-0001"
     assert re.match(r"^FND-\d{4}$", finding["id"])
     assert finding["ruleId"] == raw_misconfiguration["ID"]
@@ -348,6 +354,7 @@ def test_trivy_misconfiguration_fields_map_from_raw_json():
     assert backend_finding_source_type(finding["source"]) == "TRIVY"
     assert finding["severity"] == raw_misconfiguration["Severity"]
     assert finding["file"] == "Dockerfile"
+    assert finding["filePath"] == "Dockerfile"
     assert finding["line"] == raw_misconfiguration["CauseMetadata"]["StartLine"]
     assert finding["title"] == raw_misconfiguration["Title"]
     assert len(finding["title"]) <= 255

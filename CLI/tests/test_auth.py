@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -12,7 +13,9 @@ import ssafer.core.auth as auth_module
 import ssafer.core.upload as upload_module
 import ssafer.main as main_module
 from ssafer.core.auth import (
+    clear_agent_config,
     clear_token,
+    create_project,
     describe_token_source,
     issue_project_agent_token,
     list_projects,
@@ -118,11 +121,13 @@ def test_help_shows_user_facing_commands_only():
 def test_status_command_prints_saved_login_and_agent_config(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("SSAFER_TOKEN", raising=False)
     save_auth_tokens({"accessToken": "access-token-123"}, endpoint="https://api.example.com")
     save_agent_config(
         {"agentId": 7, "projectId": 10, "agentToken": "agent-token-123"},
         endpoint="https://api.example.com",
+        project_root=tmp_path,
     )
 
     result = CliRunner().invoke(app, ["status"])
@@ -258,6 +263,48 @@ def test_list_projects_fetches_backend_projects(monkeypatch):
     ]
 
 
+def test_create_project_posts_backend_project(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            captured["timeout"] = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def post(self, url: str, json: dict[str, Any] | None = None, headers: dict[str, str] | None = None):
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            request = httpx.Request("POST", url)
+            return httpx.Response(
+                201,
+                json={"data": {"projectId": 42}},
+                request=request,
+            )
+
+    monkeypatch.setattr(auth_module.httpx, "Client", FakeClient)
+
+    data = create_project("https://api.example.com/", "access-token", name="S14P31B105")
+
+    assert captured == {
+        "timeout": 30,
+        "url": "https://api.example.com/api/v1/projects",
+        "json": {
+            "name": "S14P31B105",
+            "description": None,
+            "defaultScanMode": "AGENT",
+            "monitorEnabled": False,
+        },
+        "headers": {"Authorization": "Bearer access-token"},
+    }
+    assert data == {"projectId": 42}
+
+
 def test_save_and_load_agent_config(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
@@ -265,14 +312,16 @@ def test_save_and_load_agent_config(monkeypatch, tmp_path):
     save_agent_config(
         {"agentId": 3, "projectId": 10, "agentToken": "raw-agent-token"},
         endpoint="https://api.example.com",
+        project_root=tmp_path,
     )
 
-    assert load_agent_config() == {
+    assert load_agent_config(tmp_path) == {
         "agentId": 3,
         "projectId": 10,
         "agentToken": "raw-agent-token",
         "endpoint": "https://api.example.com",
     }
+    assert load_agent_config(tmp_path / "other") == {}
 
 
 def test_login_with_credentials_posts_to_backend_auth_login(monkeypatch):
@@ -459,21 +508,50 @@ def test_clear_token(monkeypatch, tmp_path):
     assert load_token() is None
 
 
+def test_clear_agent_config(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    save_auth_tokens({"accessToken": "access-token"}, "https://api.example.com")
+    save_agent_config(
+        {"agentId": 1, "projectId": 2, "agentToken": "agent-token"},
+        "https://api.example.com",
+        tmp_path,
+    )
+
+    clear_agent_config(tmp_path)
+
+    assert load_token() == "access-token"
+    assert load_agent_config(tmp_path) == {}
+
+
 def test_logout_command_clears_saved_token(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("SSAFER_TOKEN", raising=False)
     save_token("to-delete")
+    save_agent_config(
+        {"agentId": 1, "projectId": 2, "agentToken": "agent-token"},
+        "https://api.example.com",
+        tmp_path,
+    )
 
     result = CliRunner().invoke(app, ["logout"])
 
     assert result.exit_code == 0
     assert load_token() is None
+    assert load_agent_config(tmp_path) == {}
 
 
 def test_login_command_authenticates_with_backend_and_saves_tokens(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    other_project = tmp_path / "other"
+    save_agent_config(
+        {"agentId": 1, "projectId": 2, "agentToken": "stale-agent-token"},
+        "https://api.example.com",
+        other_project,
+    )
 
     def fake_login(endpoint: str, email: str, password: str) -> dict[str, str]:
         assert endpoint == "https://api.example.com"
@@ -492,6 +570,7 @@ def test_login_command_authenticates_with_backend_and_saves_tokens(monkeypatch, 
     assert result.exit_code == 0
     assert load_token() == "access-token"
     assert load_endpoint() == "https://api.example.com"
+    assert load_agent_config(other_project)["agentId"] == 1
     assert "Start local agent now?" in result.output
     assert "Local agent not started" in result.output
 
@@ -519,6 +598,116 @@ def test_login_command_can_start_agent_after_login(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert started == {"path": Path("."), "refresh_token": True}
+
+
+def test_start_agent_refresh_selects_project_instead_of_reusing_saved_project(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.chdir(tmp_path)
+    save_auth_tokens({"accessToken": "access-token"}, "https://api.example.com")
+    save_agent_config(
+        {"agentId": 1, "projectId": 1, "agentToken": "old-agent-token"},
+        "https://api.example.com",
+        tmp_path,
+    )
+    issued: dict[str, object] = {}
+
+    def fake_select_project(endpoint: str, access_token: str) -> int:
+        assert endpoint == "https://api.example.com"
+        assert access_token == "access-token"
+        return 8
+
+    def fake_issue(
+        project_id: int,
+        endpoint: str,
+        label: str,
+        *,
+        access_token: str | None = None,
+        project_root: Path | None = None,
+    ) -> dict[str, object]:
+        issued["project_id"] = project_id
+        issued["endpoint"] = endpoint
+        issued["label"] = label
+        issued["access_token"] = access_token
+        issued["project_root"] = project_root
+        return {"agentId": 8, "projectId": project_id, "agentToken": "new-agent-token"}
+
+    def fake_run_agent_watch(**kwargs: object) -> None:
+        issued["agent_config"] = kwargs["agent_config"]
+
+    monkeypatch.setattr(main_module, "_select_agent_project_id", fake_select_project)
+    monkeypatch.setattr(main_module, "_issue_and_save_agent_token", fake_issue)
+    monkeypatch.setattr(main_module, "_run_agent_watch", fake_run_agent_watch)
+
+    main_module._start_agent(path=Path("."), refresh_token=True)
+
+    assert issued["project_id"] == 8
+    assert issued["project_root"] == tmp_path.resolve()
+    assert issued["agent_config"] == {"agentId": 8, "projectId": 8, "agentToken": "new-agent-token"}
+
+
+def test_select_agent_project_id_stops_when_no_projects_and_user_declines_create(monkeypatch):
+    monkeypatch.setattr(auth_module, "list_projects", lambda endpoint, token: [])
+    monkeypatch.setattr(main_module.typer, "confirm", lambda *args, **kwargs: False)
+
+    with pytest.raises(click.exceptions.Exit):
+        main_module._select_agent_project_id("https://api.example.com", "access-token")
+
+
+def test_select_agent_project_id_creates_project_when_no_projects(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(auth_module, "list_projects", lambda endpoint, token: [])
+    monkeypatch.setattr(main_module.typer, "confirm", lambda *args, **kwargs: True)
+    monkeypatch.setattr(main_module.typer, "prompt", lambda *args, **kwargs: "created-project")
+
+    def fake_create_project(endpoint: str, access_token: str, *, name: str, **kwargs: object) -> dict[str, int]:
+        assert endpoint == "https://api.example.com"
+        assert access_token == "access-token"
+        assert name == "created-project"
+        return {"projectId": 77}
+
+    monkeypatch.setattr(auth_module, "create_project", fake_create_project)
+
+    project_id = main_module._select_agent_project_id("https://api.example.com", "access-token")
+
+    assert project_id == 77
+
+
+def test_project_create_command_creates_project(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    save_auth_tokens({"accessToken": "access-token"}, "https://api.example.com")
+    captured: dict[str, object] = {}
+
+    def fake_create_project(
+        endpoint: str,
+        access_token: str,
+        *,
+        name: str,
+        description: str | None = None,
+        **kwargs: object,
+    ) -> dict[str, int]:
+        captured["endpoint"] = endpoint
+        captured["access_token"] = access_token
+        captured["name"] = name
+        captured["description"] = description
+        return {"projectId": 88}
+
+    monkeypatch.setattr(auth_module, "create_project", fake_create_project)
+
+    result = CliRunner().invoke(
+        app,
+        ["project-create", "--name", "cli-project", "--description", "from cli"],
+    )
+
+    assert result.exit_code == 0
+    assert captured == {
+        "endpoint": "https://api.example.com",
+        "access_token": "access-token",
+        "name": "cli-project",
+        "description": "from cli",
+    }
+    assert "projectId=88" in result.output
 
 
 def test_signup_command_registers_backend_user(monkeypatch):
@@ -591,10 +780,15 @@ def test_agent_init_command_issues_and_saves_agent_token(monkeypatch):
         }
         return {"agentId": 3, "projectId": 10, "agentToken": "raw-agent-token"}
 
-    def fake_save(agent_data: dict[str, Any], endpoint: str | None = None) -> None:
+    def fake_save(
+        agent_data: dict[str, Any],
+        endpoint: str | None = None,
+        project_root: Path | None = None,
+    ) -> None:
         captured["save"] = {
             "agent_data": agent_data,
             "endpoint": endpoint,
+            "project_root": project_root,
         }
 
     monkeypatch.setattr(auth_module, "issue_project_agent_token", fake_issue)
@@ -611,6 +805,7 @@ def test_agent_init_command_issues_and_saves_agent_token(monkeypatch):
     assert captured["save"] == {
         "agent_data": {"agentId": 3, "projectId": 10, "agentToken": "raw-agent-token"},
         "endpoint": "https://api.example.com",
+        "project_root": None,
     }
     assert "Agent token saved." in result.output
     assert "agentId: 3" in result.output

@@ -4,7 +4,15 @@ import subprocess
 from pathlib import Path
 
 from ssafer.core.env_parser import normalize_env_key
-from ssafer.core.sanitize import is_placeholder, is_safe_key, is_secret_key, make_masked_evidence
+from ssafer.core.sanitize import (
+    AWS_KEY_RE,
+    PRIVATE_KEY_RE,
+    classify_value,
+    is_placeholder,
+    is_safe_key,
+    is_secret_key,
+    make_masked_evidence,
+)
 from ssafer.rules.base import BaseRule, Finding
 from ssafer.rules.engine import ScanContext
 
@@ -49,12 +57,7 @@ class EnvPlainSecretRule(BaseRule):
             key = normalize_env_key(key)
             value = _strip_quotes(raw_value)
 
-            if (
-                is_secret_key(key)
-                and not is_safe_key(key)
-                and value
-                and not is_placeholder(value)
-            ):
+            if _should_report_env_secret(key, value, is_example_env):
                 findings.append(Finding(
                     rule_id=self.rule_id,
                     source="custom-rule",
@@ -63,6 +66,7 @@ class EnvPlainSecretRule(BaseRule):
                     line=lineno,
                     title=self._title_for_env_file(is_example_env, key),
                     masked_evidence=make_masked_evidence(key),
+                    file_path=rel_path,
                 ))
         return findings
 
@@ -78,7 +82,53 @@ class EnvPlainSecretRule(BaseRule):
 
 
 def _is_example_env_file(path: Path) -> bool:
-    return path.name.endswith(".example") or path.name in {".env.example", "env.example"}
+    return path.name.endswith((".example", ".sample")) or path.name in {
+        ".env.example",
+        "env.example",
+        ".env.sample",
+        "env.sample",
+    }
+
+
+def _should_report_env_secret(key: str, value: str, is_example_env: bool) -> bool:
+    if not is_secret_key(key) or is_safe_key(key) or not value:
+        return False
+    if is_placeholder(value) or _is_example_placeholder(value):
+        return False
+    if not is_example_env:
+        return True
+    return _looks_like_real_secret_value(value)
+
+
+def _looks_like_real_secret_value(value: str) -> bool:
+    stripped = value.strip()
+    if AWS_KEY_RE.search(stripped) or PRIVATE_KEY_RE.search(stripped):
+        return True
+    return classify_value(stripped) == "secret-like" and _has_secret_entropy(stripped)
+
+
+def _has_secret_entropy(value: str) -> bool:
+    compact = value.strip()
+    if len(compact) < 24:
+        return False
+    return (
+        any(ch.islower() for ch in compact)
+        and any(ch.isupper() for ch in compact)
+        and any(ch.isdigit() for ch in compact)
+    )
+
+
+def _is_example_placeholder(value: str) -> bool:
+    normalized = value.strip().lower()
+    compact = normalized.replace("-", "_")
+    return (
+        normalized in {"replace", "required", "guest", "none", "null", "not_set", "unset"}
+        or compact.startswith(("replace_with_", "change_me_", "changeme_", "your_"))
+        or compact.endswith(("_example", "_sample", "_placeholder"))
+        or "your_" in compact
+        or "replace" in compact
+        or "change_me" in compact
+    )
 
 
 def _git_file_state(path: Path, project_root: Path) -> str:

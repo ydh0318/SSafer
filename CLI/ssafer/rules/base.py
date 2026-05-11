@@ -11,16 +11,18 @@ if TYPE_CHECKING:
 @dataclass
 class Finding:
     rule_id: str
-    source: str        # 항상 "custom-rule"
-    severity: str      # "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
+    source: str
+    severity: str
     file: str
     line: int | None
     title: str
-    masked_evidence: str  # 최대 120자, 원본값 미포함
-    id: str = field(default="")  # RuleEngine에서 FND-{n:04d} 부여
+    masked_evidence: str
+    file_path: str | None = None
+    target_files: list[str] = field(default_factory=list)
+    id: str = field(default="")
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "id": self.id,
             "ruleId": self.rule_id,
             "source": self.source,
@@ -30,6 +32,11 @@ class Finding:
             "title": self.title,
             "maskedEvidence": self.masked_evidence,
         }
+        if self.file_path:
+            data["filePath"] = self.file_path
+        if self.target_files:
+            data["targetFiles"] = self.target_files
+        return data
 
 
 class BaseRule(ABC):

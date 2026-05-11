@@ -426,7 +426,7 @@ def test_agent_watch_command_uses_env_defaults(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("SSAFER_AGENT_ID", "7")
     monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
     monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
-    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda: {})
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
     monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
     monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
 
@@ -454,7 +454,7 @@ def test_agent_watch_command_uses_saved_agent_config(monkeypatch, tmp_path: Path
     monkeypatch.delenv("SSAFER_AGENT_TOKEN", raising=False)
     monkeypatch.setattr(
         "ssafer.core.auth.load_agent_config",
-        lambda: {
+        lambda *args, **kwargs: {
             "endpoint": "https://api.example.com",
             "agentId": 3,
             "projectId": 10,
@@ -483,7 +483,7 @@ def test_agent_command_starts_with_saved_agent_config(monkeypatch, tmp_path: Pat
     monkeypatch.delenv("SSAFER_AGENT_TOKEN", raising=False)
     monkeypatch.setattr(
         "ssafer.core.auth.load_agent_config",
-        lambda: {
+        lambda *args, **kwargs: {
             "endpoint": "https://api.example.com",
             "agentId": 3,
             "projectId": 10,
@@ -519,16 +519,17 @@ def test_agent_command_initializes_missing_agent_config(monkeypatch, tmp_path: P
         }
         return {"agentId": 9, "projectId": project_id, "agentToken": "new-agent-token"}
 
-    def fake_save(agent_data: dict, endpoint: str | None = None):
+    def fake_save(agent_data: dict, endpoint: str | None = None, project_root: Path | None = None):
         captured["save"] = {
             "agent_data": agent_data,
             "endpoint": endpoint,
+            "project_root": project_root,
         }
 
     monkeypatch.delenv("SSAFER_AGENT_ID", raising=False)
     monkeypatch.delenv("SSAFER_PROJECT_ID", raising=False)
     monkeypatch.delenv("SSAFER_AGENT_TOKEN", raising=False)
-    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda: {})
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
     monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://api.example.com")
     monkeypatch.setattr("ssafer.core.auth.load_token", lambda: "access-token")
     monkeypatch.setattr(
@@ -553,6 +554,7 @@ def test_agent_command_initializes_missing_agent_config(monkeypatch, tmp_path: P
     assert captured["save"] == {
         "agent_data": {"agentId": 9, "projectId": 10, "agentToken": "new-agent-token"},
         "endpoint": "https://api.example.com",
+        "project_root": tmp_path.resolve(),
     }
     assert calls[0]["agent_id"] == 9
     assert calls[0]["project_id"] == 10
@@ -578,7 +580,7 @@ def test_agent_watch_command_prints_pending_task_count(monkeypatch, tmp_path: Pa
     monkeypatch.setenv("SSAFER_AGENT_ID", "7")
     monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
     monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
-    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda: {})
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
     monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
     monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
 
@@ -605,7 +607,7 @@ def test_agent_watch_command_prints_dry_run_and_task_result_table(monkeypatch, t
     monkeypatch.setenv("SSAFER_AGENT_ID", "7")
     monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
     monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
-    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda: {})
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
     monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
     monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
 
@@ -629,7 +631,7 @@ def test_agent_watch_command_passes_reconnect_options(monkeypatch, tmp_path: Pat
     monkeypatch.setenv("SSAFER_AGENT_ID", "7")
     monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
     monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
-    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda: {})
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
     monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
     monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
 

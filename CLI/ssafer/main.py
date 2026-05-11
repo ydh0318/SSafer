@@ -109,12 +109,20 @@ def version() -> None:
 @app.command(help="로그인/Agent 설정 상태를 확인합니다.")
 def status() -> None:
     """Show saved login and local-agent status."""
-    from ssafer.core.auth import CONFIG_PATH, describe_token_source, load_agent_config, load_endpoint, load_token
+    from ssafer.core.auth import (
+        CONFIG_PATH,
+        describe_token_source,
+        load_agent_config,
+        load_endpoint,
+        load_token,
+        project_agent_config_path,
+    )
 
     token = load_token()
     token_source = describe_token_source()
     endpoint = load_endpoint()
-    agent_config = load_agent_config()
+    agent_config = load_agent_config(Path("."))
+    agent_config_path = project_agent_config_path(Path("."))
 
     table = Table(title="SSAfer 상태")
     table.add_column("항목")
@@ -127,7 +135,7 @@ def status() -> None:
         table.add_row(
             "Local Agent",
             "[green]설정됨[/green]",
-            f"agentId={agent_config.get('agentId')}, projectId={agent_config.get('projectId')}",
+            f"agentId={agent_config.get('agentId')}, projectId={agent_config.get('projectId')} ({agent_config_path})",
         )
     else:
         table.add_row("Local Agent", "[yellow]미설정[/yellow]", "ssafer agent 실행 시 설정 가능")
@@ -433,18 +441,28 @@ def agent(
 def _start_agent(*, path: Path, refresh_token: bool = False) -> None:
     from ssafer.core.auth import load_agent_config, load_endpoint, load_token
 
-    agent_config = load_agent_config()
+    project_root = path.resolve()
+    agent_config = load_agent_config(project_root)
     if refresh_token or not _has_saved_agent_config(agent_config):
         endpoint = load_endpoint()
         access_token = load_token()
         if access_token is None:
             console.print("[red]Login token is required. Run ssafer login first.[/red]")
             raise typer.Exit(code=1)
-        project_id = _saved_agent_project_id(agent_config) or _select_agent_project_id(endpoint, access_token)
-        agent_config = _issue_and_save_agent_token(project_id, endpoint, "Agent setup", access_token=access_token)
+        if refresh_token:
+            project_id = _select_agent_project_id(endpoint, access_token)
+        else:
+            project_id = _saved_agent_project_id(agent_config) or _select_agent_project_id(endpoint, access_token)
+        agent_config = _issue_and_save_agent_token(
+            project_id,
+            endpoint,
+            "Agent setup",
+            access_token=access_token,
+            project_root=project_root,
+        )
         console.print("[green]Agent setup complete.[/green]")
     _run_agent_watch(
-        path=path,
+        path=project_root,
         api_url=None,
         agent_id=None,
         project_id=None,
@@ -476,6 +494,48 @@ def agent_init(
     console.print("[dim]Run ssafer agent to start watching pending tasks.[/dim]")
 
 
+@app.command("project-create", help="SSAfer 프로젝트를 생성합니다.")
+def project_create(
+    name: Optional[str] = typer.Option(None, "--name", help="Project name. Defaults to the current folder name."),
+    description: Optional[str] = typer.Option(None, "--description", help="Project description."),
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL."),
+) -> None:
+    """Create a SSAfer project for the logged-in user."""
+    from ssafer.core.auth import create_project, load_endpoint, load_token
+
+    effective_endpoint = endpoint or load_endpoint()
+    access_token = load_token()
+    if access_token is None:
+        console.print("[red]Login token is required. Run ssafer login first.[/red]")
+        raise typer.Exit(code=1)
+    if name is None:
+        console.print("[cyan]새 프로젝트 이름을 입력하세요. 그냥 Enter를 누르면 현재 폴더명을 사용합니다.[/cyan]")
+        project_name = typer.prompt("프로젝트 이름", default=Path.cwd().name)
+    else:
+        project_name = name
+    if not project_name.strip():
+        console.print("[red]Project name is required.[/red]")
+        raise typer.Exit(code=1)
+    try:
+        project = create_project(
+            effective_endpoint,
+            access_token,
+            name=project_name.strip(),
+            description=description,
+        )
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]Project create failed:[/red] {_format_http_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Project create failed:[/red] {_format_http_transport_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    project_id = project.get("projectId") or project.get("id")
+    if project_id is None:
+        console.print("[red]Project create failed:[/red] backend response is missing projectId.")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Project created.[/green] projectId={project_id}")
+
+
 def _has_saved_agent_config(config: dict) -> bool:
     return bool(config.get("agentId") and config.get("projectId") and config.get("agentToken"))
 
@@ -496,6 +556,7 @@ def _issue_and_save_agent_token(
     label: str,
     *,
     access_token: str | None = None,
+    project_root: Path | None = None,
 ) -> dict:
     from ssafer.core.auth import issue_project_agent_token, load_token, save_agent_config
 
@@ -506,7 +567,7 @@ def _issue_and_save_agent_token(
 
     try:
         agent_data = issue_project_agent_token(endpoint, project_id, effective_access_token)
-        save_agent_config(agent_data, endpoint)
+        save_agent_config(agent_data, endpoint, project_root)
         return agent_data
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]{label} failed:[/red] {_format_http_error(exc)}")
@@ -520,7 +581,7 @@ def _issue_and_save_agent_token(
 
 
 def _select_agent_project_id(endpoint: str, access_token: str) -> int:
-    from ssafer.core.auth import list_projects
+    from ssafer.core.auth import create_project, list_projects
 
     try:
         projects = list_projects(endpoint, access_token)
@@ -533,7 +594,31 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
 
     if not projects:
         console.print("[yellow]No projects were returned by the backend.[/yellow]")
-        return typer.prompt("Project ID", type=int)
+        if not typer.confirm("Create a new project now?", default=True):
+            console.print(
+                "[yellow]Create or join a project in the SSAfer web app first, "
+                "then run [bold]ssafer agent[/bold] again.[/yellow]"
+            )
+            raise typer.Exit(code=1)
+        console.print("[cyan]새 프로젝트 이름을 입력하세요. 그냥 Enter를 누르면 현재 폴더명을 사용합니다.[/cyan]")
+        name = typer.prompt("프로젝트 이름", default=Path.cwd().name)
+        if not name.strip():
+            console.print("[red]Project name is required.[/red]")
+            raise typer.Exit(code=1)
+        try:
+            project = create_project(endpoint, access_token, name=name.strip())
+        except httpx.HTTPStatusError as exc:
+            console.print(f"[red]Project create failed:[/red] {_format_http_error(exc)}")
+            raise typer.Exit(code=1) from exc
+        except httpx.HTTPError as exc:
+            console.print(f"[red]Project create failed:[/red] {_format_http_transport_error(exc)}")
+            raise typer.Exit(code=1) from exc
+        project_id = project.get("projectId") or project.get("id")
+        if project_id is None:
+            console.print("[red]Project create failed:[/red] backend response is missing projectId.")
+            raise typer.Exit(code=1)
+        console.print(f"[green]Project created.[/green] projectId={project_id}")
+        return int(project_id)
 
     console.print("[cyan]Select a project for the local agent.[/cyan]")
     for index, project in enumerate(projects, start=1):
@@ -571,7 +656,8 @@ def _run_agent_watch(
     from ssafer.core.agent import AgentTaskResult, watch_agent
     from ssafer.core.auth import load_agent_config, load_endpoint
 
-    config = agent_config if agent_config is not None else load_agent_config()
+    project_root = path.resolve()
+    config = agent_config if agent_config is not None else load_agent_config(project_root)
     effective_url = api_url or config.get("endpoint") or load_endpoint()
     effective_agent_id = agent_id or _load_int_config_or_env(config, "agentId", "SSAFER_AGENT_ID", "agent ID")
     effective_project_id = project_id or _load_int_config_or_env(config, "projectId", "SSAFER_PROJECT_ID", "project ID")
@@ -580,7 +666,6 @@ def _run_agent_watch(
         console.print("[red]Agent token is required. Run ssafer agent, or use --agent-token/SSAFER_AGENT_TOKEN.[/red]")
         raise typer.Exit(code=1)
 
-    project_root = path.resolve()
     console.print(
         f"[cyan]Starting local agent.[/cyan] agentId={effective_agent_id}, "
         f"projectId={effective_project_id}, path={project_root}"
@@ -949,10 +1034,12 @@ def verify_email(
 @app.command(help="저장된 로그인 토큰을 삭제합니다.")
 def logout() -> None:
     """Clear the saved SSAfer upload token."""
-    from ssafer.core.auth import clear_token
+    from ssafer.core.auth import clear_agent_config, clear_token
 
     clear_token()
-    console.print("[green]Saved SSAfer token cleared.[/green]")
+    clear_agent_config(Path("."))
+    console.print("[green]Saved SSAfer login and local-agent config cleared.[/green]")
+    console.print("[dim]If a local agent is already running in another terminal, stop it with Ctrl+C.[/dim]")
 
 
 @app.command(help="최근 로컬 스캔 결과 요약을 출력합니다.")
@@ -1193,9 +1280,21 @@ def _group_report_findings(findings: list[dict]) -> list[dict[str, str | int]]:
 
 
 def _format_finding_location(finding: dict) -> str:
-    file_path = str(finding.get("file") or "-")
+    file_path = _finding_display_path(finding)
     line = finding.get("line")
     return f"{file_path}:{line}" if line else file_path
+
+
+def _finding_display_path(finding: dict) -> str:
+    file_path = finding.get("filePath")
+    if isinstance(file_path, str) and file_path.strip():
+        return file_path
+    target_files = finding.get("targetFiles")
+    if isinstance(target_files, list):
+        paths = [str(item) for item in target_files if item]
+        if paths:
+            return _join_compact(paths, max_items=3)
+    return str(finding.get("file") or "-")
 
 
 def _compact_locations(locations: list[str]) -> str:
@@ -1452,7 +1551,7 @@ def _latest_done_scan_id_or_exit(project_root: Path, *, project_id: int | None, 
 
     effective_project_id = project_id
     if effective_project_id is None:
-        agent_config = load_agent_config()
+        agent_config = load_agent_config(Path("."))
         saved_project_id = agent_config.get("projectId")
         if saved_project_id is not None:
             try:
