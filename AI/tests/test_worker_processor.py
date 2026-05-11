@@ -169,10 +169,11 @@ class WorkerProcessorTest(unittest.TestCase):
         self.assertEqual(callback.task_id, 123)
         self.assertEqual(callback.status, "FAILED")
         self.assertEqual(callback.progress_step, "analysis_failed")
+        self.assertEqual(callback.stage, "analysis")
         self.assertEqual(callback.error_code, "UNKNOWN_ERROR")
         self.assertEqual(
             callback.failure_reason,
-            "UNKNOWN_ERROR: FastAPI analysis failed: FastAPI down",
+            "UNKNOWN_ERROR: FastAPI analysis failed: FastAPI down (stage=analysis)",
         )
         self.assertIsNone(callback.analysis_result_path)
 
@@ -222,6 +223,7 @@ class WorkerProcessorTest(unittest.TestCase):
         callback = spring_client.callbacks[1][1]
         self.assertEqual(callback.status, "FAILED")
         self.assertEqual(callback.progress_step, "analysis_failed")
+        self.assertEqual(callback.stage, "input")
         self.assertEqual(callback.error_code, "ANALYSIS_INPUT_ERROR")
         self.assertEqual(
             callback.failure_reason,

@@ -96,9 +96,11 @@ class ScanTaskProcessor:
                 message=message,
                 started_at=started_at,
                 error_code=UNKNOWN_ERROR_CODE,
+                stage="analysis",
                 failure_reason=format_failure_reason(
                     error_code=UNKNOWN_ERROR_CODE,
                     message=str(exc),
+                    stage="analysis",
                     prefix="FastAPI analysis failed",
                 ),
             )
@@ -120,6 +122,7 @@ class ScanTaskProcessor:
             message=message,
             started_at=started_at,
             error_code=error_code,
+            stage=response.stage,
             failure_reason=self._build_failure_reason(response),
         )
         self._log_failed(message, error_code, elapsed_ms(started_ms))
@@ -168,6 +171,7 @@ class ScanTaskProcessor:
         message: ScanRequestMessage,
         started_at: str,
         error_code: str,
+        stage: str | None,
         failure_reason: str,
     ) -> None:
         completed_at = utc_now_iso()
@@ -177,6 +181,7 @@ class ScanTaskProcessor:
                 taskId=message.task_id,
                 status=SPRING_ANALYSIS_FAILED_STATUS,
                 progressStep=ANALYSIS_FAILED_PROGRESS_STEP,
+                stage=stage,
                 errorCode=error_code,
                 failureReason=failure_reason,
                 startedAt=started_at,
