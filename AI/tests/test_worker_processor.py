@@ -25,12 +25,13 @@ def build_settings() -> WorkerSettings:
 def build_message() -> ScanRequestMessage:
     return ScanRequestMessage(
         messageType="SCAN_REQUEST",
-        messageVersion=1,
+        messageVersion=2,
         taskType="SCAN_REQUEST",
         taskId=123,
         agentId=10,
         projectId=2,
         scanId=5,
+        scanType="PROJECT_FILE",
         rawResultPath="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
         resultCount=1,
         tool="ssafer-cli",
@@ -63,6 +64,27 @@ class FakeFastApiClient:
 
 
 class WorkerProcessorTest(unittest.TestCase):
+    def test_scan_request_message_accepts_version_2_scan_type(self):
+        message = build_message()
+
+        self.assertEqual(message.message_version, 2)
+        self.assertEqual(message.scan_type, "PROJECT_FILE")
+
+    def test_scan_request_message_accepts_server_audit_scan_type(self):
+        message = ScanRequestMessage(
+            messageType="SCAN_REQUEST",
+            messageVersion=2,
+            taskType="SCAN_REQUEST",
+            taskId=123,
+            agentId=10,
+            projectId=2,
+            scanId=5,
+            scanType="SERVER_AUDIT",
+            rawResultPath="s3://bucket/raw.json",
+        )
+
+        self.assertEqual(message.scan_type, "SERVER_AUDIT")
+
     def test_build_analysis_result_path_uses_configured_bucket(self):
         path = build_analysis_result_path(build_message(), build_settings())
 
@@ -145,6 +167,7 @@ class WorkerProcessorTest(unittest.TestCase):
         output = "\n".join(logs.output)
         self.assertIn("scanId=5", output)
         self.assertIn("taskId=123", output)
+        self.assertIn("scanType=PROJECT_FILE", output)
         self.assertIn("stage=TASK_COMPLETED", output)
         self.assertIn("durationMs=", output)
 
@@ -192,6 +215,7 @@ class WorkerProcessorTest(unittest.TestCase):
         output = "\n".join(logs.output)
         self.assertIn("scanId=5", output)
         self.assertIn("taskId=123", output)
+        self.assertIn("scanType=PROJECT_FILE", output)
         self.assertIn("stage=TASK_FAILED", output)
         self.assertIn("status=FAILED", output)
         self.assertIn("errorCode=UNKNOWN_ERROR", output)
@@ -233,8 +257,22 @@ class WorkerProcessorTest(unittest.TestCase):
             ),
         )
 
-    def test_rejects_invalid_scan_request_message(self):
+    def test_rejects_legacy_scan_request_message_version(self):
         with self.assertRaisesRegex(ValueError, "messageVersion"):
+            ScanRequestMessage(
+                messageType="SCAN_REQUEST",
+                messageVersion=1,
+                taskType="SCAN_REQUEST",
+                taskId=123,
+                agentId=10,
+                projectId=2,
+                scanId=5,
+                scanType="PROJECT_FILE",
+                rawResultPath="s3://bucket/raw.json",
+            )
+
+    def test_rejects_invalid_scan_type(self):
+        with self.assertRaisesRegex(ValueError, "scanType"):
             ScanRequestMessage(
                 messageType="SCAN_REQUEST",
                 messageVersion=2,
@@ -243,6 +281,7 @@ class WorkerProcessorTest(unittest.TestCase):
                 agentId=10,
                 projectId=2,
                 scanId=5,
+                scanType="PROJECT_SCAN",
                 rawResultPath="s3://bucket/raw.json",
             )
 

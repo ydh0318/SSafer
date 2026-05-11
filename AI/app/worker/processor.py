@@ -72,6 +72,7 @@ class ScanTaskProcessor:
             taskId=message.task_id,
             agentId=message.agent_id,
             projectId=message.project_id,
+            scanType=message.scan_type,
             stage="ANALYZE_REQUEST",
             status="RUNNING",
         )
@@ -209,6 +210,7 @@ class ScanTaskProcessor:
             taskId=message.task_id,
             agentId=message.agent_id,
             projectId=message.project_id,
+            scanType=message.scan_type,
             stage="TASK_COMPLETED",
             status="DONE",
             durationMs=duration_ms,
@@ -228,6 +230,7 @@ class ScanTaskProcessor:
             taskId=message.task_id,
             agentId=message.agent_id,
             projectId=message.project_id,
+            scanType=message.scan_type,
             stage="TASK_FAILED",
             status=SPRING_ANALYSIS_FAILED_STATUS,
             errorCode=error_code,

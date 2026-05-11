@@ -208,10 +208,24 @@ class SpringClientTest(unittest.TestCase):
 
         path, payload = http_client.posts[0]
         self.assertEqual(path, "/api/v1/internal/scans/5/analysis-results")
-        self.assertEqual(payload["status"], "FAILED")
-        self.assertEqual(payload["stage"], "input")
-        self.assertEqual(payload["errorCode"], "ANALYSIS_INPUT_ERROR")
-        self.assertIsNone(payload["analysisResultPath"])
+        self.assertEqual(
+            payload,
+            {
+                "taskId": 123,
+                "status": "FAILED",
+                "progressStep": "analysis_failed",
+                "stage": "input",
+                "errorCode": "ANALYSIS_INPUT_ERROR",
+                "failureReason": (
+                    "ANALYSIS_INPUT_ERROR: FastAPI analysis failed: "
+                    "Failed to download scan_result.json from S3. (stage=input)"
+                ),
+                "analysisResultPath": None,
+                "startedAt": "2026-05-06T04:00:00",
+                "completedAt": "2026-05-06T04:05:00",
+                "lastUpdatedAt": "2026-05-06T04:05:00",
+            },
+        )
 
 
 if __name__ == "__main__":
