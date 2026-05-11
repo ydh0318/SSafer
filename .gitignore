@@ -102,3 +102,12 @@ secrets/
 
 # Local architecture notes
 docs/service_architecture_overview.md
+
+# ========================
+# AI Agent Context Files
+# ========================
+# 에이전트용 소스코드 분석 문서 (로컬 전용, Git 제외)
+CLAUDE.md
+AI/CLAUDE.md
+Backend/CLAUDE.md
+Frontend/CLAUDE.md
