@@ -10,6 +10,7 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 
+from ssafer.core.auth import normalize_api_url
 from ssafer.core.patches import PatchApplyResult, PatchError, apply_patch_candidates, extract_patch_candidates
 from ssafer.core.result_store import run_scan
 from ssafer.core.upload import upload_scan_result_to_registered_scan
@@ -49,7 +50,7 @@ def _agent_ws_netloc(netloc: str) -> str:
 
 
 def fetch_pending_agent_tasks(api_url: str, agent_id: int, agent_token: str) -> list[AgentTask]:
-    endpoint = f"{api_url.rstrip('/')}/api/v1/internal/agents/{agent_id}/tasks"
+    endpoint = f"{normalize_api_url(api_url)}/api/v1/internal/agents/{agent_id}/tasks"
     headers = {"Authorization": f"Bearer {agent_token}"}
     with httpx.Client(timeout=20.0, follow_redirects=True) as client:
         response = client.get(endpoint, headers=headers)
@@ -73,7 +74,7 @@ def report_agent_task_result(
     if result.status not in {"SUCCESS", "FAILED"}:
         return None
 
-    endpoint = f"{api_url.rstrip('/')}/api/v1/internal/agents/{agent_id}/tasks/{task.task_id}/result"
+    endpoint = f"{normalize_api_url(api_url)}/api/v1/internal/agents/{agent_id}/tasks/{task.task_id}/result"
     headers = {"Authorization": f"Bearer {agent_token}"}
     payload = _build_agent_task_result_payload(result)
     with httpx.Client(timeout=20.0, follow_redirects=True) as client:
@@ -324,51 +325,119 @@ async def _watch_agent_session(
         connected = await websocket.recv()
         on_event("connected", connected)
 
+        _process_agent_tasks(
+            api_url=api_url,
+            agent_id=agent_id,
+            agent_token=agent_token,
+            project_root=project_root,
+            dry_run=dry_run,
+            on_event=on_event,
+        )
+        if once:
+            return
+
+        on_event("watching", {"mode": "websocket"})
         while True:
-            on_event("checking_tasks", None)
-            tasks = fetch_pending_agent_tasks(api_url, agent_id, agent_token)
-            on_event("tasks_found", tasks)
-            for task in tasks:
-                try:
-                    result = handle_agent_task(
-                        project_root,
-                        task,
-                        dry_run=dry_run,
-                        api_url=api_url,
-                        agent_token=agent_token,
-                    )
-                except Exception as exc:  # noqa: BLE001 - keep the long-running agent alive per task.
-                    result = AgentTaskResult(
-                        task_id=task.task_id,
-                        task_type=task.task_type,
-                        status="FAILED",
-                        message=f"Task failed: {exc}",
-                        patch_results=[],
-                    )
-                on_event("task", result)
-                if not dry_run:
-                    try:
-                        report = report_agent_task_result(api_url, agent_id, agent_token, task, result)
-                    except Exception as exc:  # noqa: BLE001 - report failure must not stop the agent.
-                        on_event(
-                            "task_result_report_failed",
-                            {"taskId": task.task_id, "taskType": task.task_type, "error": str(exc)},
-                        )
-                    else:
-                        if report is not None:
-                            on_event(
-                                "task_result_reported",
-                                {"taskId": task.task_id, "taskType": task.task_type, "count": 1},
-                            )
+            message = await websocket.recv()
+            tasks = _tasks_from_ws_message(message)
+            if tasks is None:
+                on_event("task_available", message)
+                _process_agent_tasks(
+                    api_url=api_url,
+                    agent_id=agent_id,
+                    agent_token=agent_token,
+                    project_root=project_root,
+                    dry_run=dry_run,
+                    on_event=on_event,
+                )
+                continue
+            if tasks:
+                on_event("tasks_found", tasks)
+                _process_agent_tasks(
+                    api_url=api_url,
+                    agent_id=agent_id,
+                    agent_token=agent_token,
+                    project_root=project_root,
+                    dry_run=dry_run,
+                    on_event=on_event,
+                    tasks=tasks,
+                )
 
-            if once:
-                return
 
-            on_event("watching", {"intervalSeconds": interval_seconds})
-            await websocket.send(json.dumps(_ping_message(agent_id)))
-            pong = await websocket.recv()
-            on_event("ping", pong)
-            await asyncio.sleep(interval_seconds)
+def _process_agent_tasks(
+    *,
+    api_url: str,
+    agent_id: int,
+    agent_token: str,
+    project_root: Path,
+    dry_run: bool,
+    on_event,
+    tasks: list[AgentTask] | None = None,
+) -> None:
+    if tasks is None:
+        on_event("checking_tasks", None)
+        tasks = fetch_pending_agent_tasks(api_url, agent_id, agent_token)
+        on_event("tasks_found", tasks)
+    for task in tasks:
+        try:
+            result = handle_agent_task(
+                project_root,
+                task,
+                dry_run=dry_run,
+                api_url=api_url,
+                agent_token=agent_token,
+            )
+        except Exception as exc:  # noqa: BLE001 - keep the long-running agent alive per task.
+            result = AgentTaskResult(
+                task_id=task.task_id,
+                task_type=task.task_type,
+                status="FAILED",
+                message=f"Task failed: {exc}",
+                patch_results=[],
+            )
+        on_event("task", result)
+        if not dry_run:
+            try:
+                report = report_agent_task_result(api_url, agent_id, agent_token, task, result)
+            except Exception as exc:  # noqa: BLE001 - report failure must not stop the agent.
+                on_event(
+                    "task_result_report_failed",
+                    {"taskId": task.task_id, "taskType": task.task_type, "error": str(exc)},
+                )
+            else:
+                if report is not None:
+                    on_event(
+                        "task_result_reported",
+                        {"taskId": task.task_id, "taskType": task.task_type, "count": 1},
+                    )
+
+
+def _tasks_from_ws_message(message: Any) -> list[AgentTask] | None:
+    try:
+        payload = json.loads(message) if isinstance(message, str) else message
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, dict):
+        return []
+    message_type = payload.get("type")
+    if message_type == "TASK_AVAILABLE":
+        return None
+    if message_type != "TASK_ASSIGNED":
+        return []
+    try:
+        return [
+            AgentTask(
+                task_id=int(payload["taskId"]),
+                task_type=str(payload["taskType"]),
+                task_status=str(payload.get("taskStatus") or "SENT"),
+                project_id=int(payload["projectId"]),
+                scan_id=int(payload["scanId"]) if payload.get("scanId") is not None else None,
+                finding_id=int(payload["findingId"]) if payload.get("findingId") is not None else None,
+                payload=payload.get("payload") if isinstance(payload.get("payload"), dict) else None,
+            )
+        ]
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _connect_websocket(websockets: Any, ws_url: str, headers: dict[str, str]) -> Any:

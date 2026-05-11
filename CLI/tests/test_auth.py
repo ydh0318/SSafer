@@ -13,12 +13,14 @@ import ssafer.core.upload as upload_module
 import ssafer.main as main_module
 from ssafer.core.auth import (
     clear_token,
+    describe_token_source,
     issue_project_agent_token,
     list_projects,
     load_agent_config,
     load_endpoint,
     load_token,
     login_with_credentials,
+    normalize_api_url,
     register_user,
     save_agent_config,
     save_auth_tokens,
@@ -77,6 +79,24 @@ def test_env_var_takes_priority_over_config(monkeypatch, tmp_path):
     assert load_token() == "env-priority-token"
 
 
+def test_describe_token_source_reports_env_override(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.setenv("SSAFER_TOKEN", "env-priority-token")
+    save_auth_tokens({"accessToken": "access-token"})
+
+    assert describe_token_source() == "env:SSAFER_TOKEN"
+
+
+def test_describe_token_source_reports_config_access_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.delenv("SSAFER_TOKEN", raising=False)
+    save_auth_tokens({"accessToken": "access-token"})
+
+    assert describe_token_source() == "config:upload.accessToken"
+
+
 def test_load_token_returns_none_when_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(auth_module, "CONFIG_PATH", tmp_path / "config.yml")
     monkeypatch.delenv("SSAFER_TOKEN", raising=False)
@@ -111,6 +131,7 @@ def test_status_command_prints_saved_login_and_agent_config(monkeypatch, tmp_pat
     assert "로그인" in result.output
     assert "됨" in result.output
     assert "https://api.example.com" in result.output
+    assert "upload.accessToken" in result.output
     assert "agentId=7, projectId=10" in result.output
     assert "agent-token-123" not in result.output
     assert "access-token-123" not in result.output
@@ -657,6 +678,19 @@ def test_load_endpoint_returns_saved_endpoint(monkeypatch, tmp_path):
 
 
 # ── upload.py Bearer 헤더 테스트 ──────────────────────────────────────────────
+
+def test_normalize_api_url_maps_legacy_host():
+    assert normalize_api_url("https://k14b105.p.ssafy.io") == "https://ssafer.co.kr"
+    assert normalize_api_url("https://k14b105.p.ssafy.io/") == "https://ssafer.co.kr"
+
+
+def test_save_auth_tokens_stores_normalized_endpoint(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    save_auth_tokens({"accessToken": "access-token"}, endpoint="https://k14b105.p.ssafy.io")
+
+    assert load_endpoint() == "https://ssafer.co.kr"
+
 
 def _write_scan(project_root: Path, scan: dict[str, Any]) -> None:
     results_dir = project_root / ".ssafer" / "results"

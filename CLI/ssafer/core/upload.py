@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from ssafer import __version__
+from ssafer.core.auth import normalize_api_url
 from ssafer.core.config import load_project_config
 from ssafer.core.constants import MASK
 from ssafer.core.result_store import load_last_scan
@@ -74,7 +75,7 @@ def upload_scan_result_to_registered_scan(
             f"{paths}{suffix}"
         )
 
-    base_url = api_url.rstrip("/")
+    base_url = normalize_api_url(api_url)
     headers: dict[str, str] = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -139,7 +140,7 @@ def _upload_result(
         )
 
     project_config = load_project_config(project_root, [])
-    base_url = (api_url or project_config.upload.endpoint or DEFAULT_API_URL).rstrip("/")
+    base_url = normalize_api_url(api_url or project_config.upload.endpoint or DEFAULT_API_URL)
     headers: dict[str, str] = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
