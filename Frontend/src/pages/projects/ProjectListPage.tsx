@@ -8,6 +8,7 @@ import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import { useToast } from '../../features/feedback/useToast';
 import { createProject, getProjects } from '../../features/projects/api/projects';
+import CliGuideBox from '../../features/scans/components/CliGuideBox';
 import ProjectCreateForm from '../../features/projects/components/ProjectCreateForm';
 import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
 import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
@@ -758,10 +759,8 @@ function ProjectListPage() {
                 ? 'CLI 흐름은 실제 개발 환경이나 CI에서 반복 실행하기 좋습니다. 현재 화면에서는 스캔 요청만 등록하고, 상세 화면에서 진행 상태를 확인할 수 있습니다.'
                 : 'Agent 흐름은 연결된 로컬 환경을 기준으로 실행됩니다. 프로젝트에 Agent가 준비되어 있어야 사용할 수 있습니다.'}
             </p>
-            <div className="mt-8 bg-neutral-950 p-5 font-mono text-sm text-[#D4FC64]">
-              {selectedMode === 'CLI'
-                ? `ssafer run --upload --project ${selectedProject?.name ?? 'project-name'}`
-                : `agent dispatch --project ${selectedProject?.name ?? 'project-name'}`}
+            <div className="mt-8">
+              <CliGuideBox mode={selectedMode === 'AGENT' ? 'AGENT' : 'CLI_UPLOAD'} />
             </div>
           </div>
         )}
