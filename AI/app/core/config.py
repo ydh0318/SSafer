@@ -79,28 +79,17 @@ def load_s3_settings(env: Mapping[str, str] | None = None) -> S3Settings:
     env = env or os.environ
 
     region = _get_optional_env(env, "AWS_REGION") or "ap-northeast-2"
-    default_bucket = _get_optional_env(env, "AWS_S3_BUCKET")
-    raw_scan_bucket = (
-        _get_optional_env(env, "APP_SCAN_RESULT_S3_BUCKET")
-        or _get_optional_env(env, "APP_SCAN_RAW_S3_BUCKET")
-        or default_bucket
-    )
-    analysis_result_bucket = (
-        _get_optional_env(env, "APP_ANALYSIS_RESULT_S3_BUCKET") or default_bucket
-    )
+    raw_scan_bucket = _get_optional_env(env, "APP_SCAN_RAW_S3_BUCKET")
+    analysis_result_bucket = _get_optional_env(env, "APP_ANALYSIS_RESULT_S3_BUCKET")
     access_key_id = _get_optional_env(env, "AWS_ACCESS_KEY_ID")
     secret_access_key = _get_optional_env(env, "AWS_SECRET_ACCESS_KEY")
     endpoint_url = _get_optional_env(env, "AWS_S3_ENDPOINT_URL")
 
     if raw_scan_bucket is None:
-        raise S3ConfigurationError(
-            "APP_SCAN_RESULT_S3_BUCKET or AWS_S3_BUCKET must be set."
-        )
+        raise S3ConfigurationError("APP_SCAN_RAW_S3_BUCKET must be set.")
 
     if analysis_result_bucket is None:
-        raise S3ConfigurationError(
-            "APP_ANALYSIS_RESULT_S3_BUCKET or AWS_S3_BUCKET must be set."
-        )
+        raise S3ConfigurationError("APP_ANALYSIS_RESULT_S3_BUCKET must be set.")
 
     if bool(access_key_id) != bool(secret_access_key):
         raise S3ConfigurationError(
