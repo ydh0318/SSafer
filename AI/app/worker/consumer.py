@@ -6,12 +6,23 @@ from pydantic import ValidationError
 from app.worker.config import load_worker_settings
 from app.worker.fastapi_client import FastApiClient
 from app.worker.http_client import JsonHttpClient
+from app.worker.http_client import JsonHttpClientError
 from app.worker.processor import ScanTaskProcessor
 from app.worker.schemas import ScanRequestMessage
 from app.worker.spring_client import SpringClient
 
 
 logger = logging.getLogger(__name__)
+
+NON_REQUEUE_HTTP_STATUS_CODES = {400, 401, 403, 404, 409}
+
+
+def should_requeue_exception(exc: Exception) -> bool:
+    if isinstance(exc, JsonHttpClientError):
+        if exc.status_code in NON_REQUEUE_HTTP_STATUS_CODES:
+            return False
+        return True
+    return True
 
 
 def build_processor() -> ScanTaskProcessor:
@@ -87,13 +98,15 @@ def run() -> None:
                 message.raw_result_path,
             )
             processor.process(message)
-        except Exception:
+        except Exception as exc:
+            requeue = should_requeue_exception(exc)
             logger.exception(
-                "Unhandled scan task failure taskId=%s scanId=%s",
+                "Unhandled scan task failure taskId=%s scanId=%s requeue=%s",
                 message.task_id,
                 message.scan_id,
+                requeue,
             )
-            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=requeue)
             return
 
         channel.basic_ack(delivery_tag=method.delivery_tag)

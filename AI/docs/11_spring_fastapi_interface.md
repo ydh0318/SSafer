@@ -92,7 +92,19 @@ Worker 처리 규칙:
 | 성공 | Spring Boot에 `DONE` 분석 완료 콜백 후 RabbitMQ ack |
 | 실패 | Spring Boot에 `FAILED` 분석 완료 콜백 후 RabbitMQ ack |
 | 메시지 형식 오류 | RabbitMQ nack, requeue false |
-| 미처리 예외 | RabbitMQ nack, requeue true |
+| 영구 HTTP 실패 | RabbitMQ nack, requeue false |
+| 일시 실패 또는 미분류 예외 | RabbitMQ nack, requeue true |
+
+Worker requeue 정책:
+
+| 실패 유형 | 처리 |
+| --- | --- |
+| Spring/FastAPI HTTP `400`, `401`, `403`, `404`, `409` | `requeue=false` |
+| Spring/FastAPI HTTP `408`, `429`, `5xx` | `requeue=true` |
+| 네트워크 오류, timeout, status code 없는 HTTP client 오류 | `requeue=true` |
+| 예상하지 못한 예외 | `requeue=true` |
+
+`409 Conflict`는 이미 완료되었거나 현재 상태와 충돌하는 작업일 가능성이 높으므로 재시도하지 않습니다. 특히 이미 `DONE` 또는 `FAILED` 처리된 scan에 같은 RabbitMQ 메시지가 재전달될 때 `RUNNING -> 409 -> requeue` 반복이 발생하지 않도록 `requeue=false`로 처리합니다.
 
 ## 4. FastAPI Analyze API
 
