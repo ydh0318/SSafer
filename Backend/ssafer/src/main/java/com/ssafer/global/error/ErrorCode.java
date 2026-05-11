@@ -104,6 +104,11 @@ public enum ErrorCode {
   ),
   INVALID_PAYLOAD_HASH(HttpStatus.BAD_REQUEST, "INVALID_PAYLOAD_HASH", "payloadHash format is invalid"),
   RAW_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "RAW_RESULT_NOT_FOUND", "Raw result object not found"),
+  ANALYSIS_RESULT_NOT_FOUND(
+      HttpStatus.NOT_FOUND,
+      "ANALYSIS_RESULT_NOT_FOUND",
+      "Analysis result object not found"
+  ),
   PATCH_PAYLOAD_NOT_FOUND(
       HttpStatus.CONFLICT,
       "PATCH_PAYLOAD_NOT_FOUND",
