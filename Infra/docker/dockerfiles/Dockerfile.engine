@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+COPY --from=aquasec/trivy:0.67.2 /usr/local/bin/trivy /usr/local/bin/trivy
+
+RUN useradd -m -u 1001 ssafer
+WORKDIR /app
+
+COPY CLI/pyproject.toml CLI/README.md /tmp/cli/
+COPY CLI/ssafer /tmp/cli/ssafer
+RUN pip install --no-cache-dir /tmp/cli && rm -rf /tmp/cli
+
+COPY Engine/pyproject.toml ./pyproject.toml
+COPY Engine/engine ./engine
+RUN pip install --no-cache-dir .
+
+USER ssafer
+EXPOSE 8100
+
+CMD ["uvicorn", "engine.app:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]
