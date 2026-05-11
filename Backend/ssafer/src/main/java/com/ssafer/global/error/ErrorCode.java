@@ -124,6 +124,11 @@ public enum ErrorCode {
       "SCAN_STATUS_CONFLICT",
       "Operation is not allowed for current scan status"
   ),
+  TASK_STATUS_CONFLICT(
+      HttpStatus.CONFLICT,
+      "TASK_STATUS_CONFLICT",
+      "Operation is not allowed for current task status"
+  ),
   DUPLICATE_RAW_RESULT_UPLOAD(
       HttpStatus.CONFLICT,
       "DUPLICATE_RAW_RESULT_UPLOAD",
