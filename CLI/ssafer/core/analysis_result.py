@@ -30,6 +30,24 @@ def download_analysis_result_for_scan(
     return destination
 
 
+def find_latest_done_scan_id(api_url: str, *, project_id: int, token: str) -> int:
+    endpoint = f"{api_url.rstrip('/')}/api/v1/projects/{project_id}/scans"
+    headers = {"Authorization": f"Bearer {token}"}
+    params = {"page": 0, "size": 1, "status": "DONE"}
+    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+        response = client.get(endpoint, headers=headers, params=params)
+        response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data", payload)
+    items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(items, list) or not items:
+        raise ValueError(f"No DONE scans found for projectId={project_id}.")
+    scan_id = items[0].get("scanId") if isinstance(items[0], dict) else None
+    if scan_id is None:
+        raise ValueError("Latest scan response is missing scanId.")
+    return int(scan_id)
+
+
 def issue_analysis_result_download_url(api_url: str, *, scan_id: int, token: str) -> dict[str, Any]:
     endpoint = f"{api_url.rstrip('/')}/api/v1/scans/{scan_id}/analysis-result/download-url"
     headers = {"Authorization": f"Bearer {token}"}

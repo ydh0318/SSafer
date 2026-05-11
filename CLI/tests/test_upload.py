@@ -400,8 +400,8 @@ def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):
     upload.upload_last_scan(tmp_path)
 
     assert posted_urls == [
-        "https://k14b105.p.ssafy.io/api/v1/scans",
-        "https://k14b105.p.ssafy.io/api/v1/scans/1001/raw-results",
+        "https://ssafer.co.kr/api/v1/scans",
+        "https://ssafer.co.kr/api/v1/scans/1001/raw-results",
     ]
 
 

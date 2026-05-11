@@ -66,3 +66,46 @@ def test_download_analysis_result_for_scan_fetches_presigned_url_and_caches_file
             {"timeout": 30.0, "follow_redirects": True},
         ),
     ]
+
+
+def test_find_latest_done_scan_id_requests_project_done_scans(monkeypatch):
+    requests = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": {"items": [{"scanId": 321, "status": "DONE"}]}}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def get(self, url, headers=None, params=None):
+            requests.append((url, headers, params, self.kwargs))
+            return FakeResponse()
+
+    monkeypatch.setattr(analysis_result.httpx, "Client", FakeClient)
+
+    scan_id = analysis_result.find_latest_done_scan_id(
+        "https://api.example.com",
+        project_id=7,
+        token="access-token",
+    )
+
+    assert scan_id == 321
+    assert requests == [
+        (
+            "https://api.example.com/api/v1/projects/7/scans",
+            {"Authorization": "Bearer access-token"},
+            {"page": 0, "size": 1, "status": "DONE"},
+            {"timeout": 30.0, "follow_redirects": True},
+        )
+    ]
