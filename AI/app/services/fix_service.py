@@ -5,6 +5,7 @@ from app.chains.fix_chain import create_fix_chain
 from app.core.llm import invoke_llm_with_retry
 from app.services.explain_service import contains_disallowed_script
 from app.services.input_service import format_finding_for_llm
+from app.services.result_service import validate_fix_schema
 
 
 MAX_FIX_RETRIES = 2
@@ -80,6 +81,13 @@ def parse_fix_response(response: str) -> dict[str, Any]:
             raise ValueError(
                 f"Fix Chain output field '{field}' must contain non-empty strings."
             )
+
+    try:
+        validate_fix_schema(parsed, "Fix Chain output")
+    except ValueError as exc:
+        raise ValueError(
+            f"Fix Chain output failed schema validation: {exc}"
+        ) from exc
 
     return parsed
 

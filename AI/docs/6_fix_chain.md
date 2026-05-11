@@ -145,6 +145,8 @@ finding dict
 → JSON 문자열 정규화
 → JSON 파싱
 → 필수 필드 및 타입 검증
+→ analysis_result.json fix schema 검증
+→ patches가 있으면 patch contract 검증
 → 실패 시 실패 사유를 저장
 → 실패 사유와 제약 조건을 포함해 재시도
 → fix dict 반환
@@ -158,11 +160,16 @@ finding dict
 이전 실패 사유
 JSON 객체 하나만 반환
 JSON 객체 밖 문자 금지
-6개 key 고정
+6개 필수 key 유지
+patches 선택 생성 규칙
+patches[].operation replace 제한
+patches[].targetFile 상대 경로 제한
+patches[].requiresApproval true 제한
 priority 허용값
 recommendedActions, cautions 배열 길이
 한국어 자연어 작성
 금지 문자 사용 금지
+마스킹된 민감 값 기반 patch 생성 금지
 ```
 
 모든 재시도가 실패하면 마지막 실패 사유를 포함한 `ValueError`를 발생시킵니다.
