@@ -69,6 +69,8 @@ public class WorkerAnalysisResultCallbackService {
           completedAt,
           lastUpdatedAt
       );
+      // 실패 알림은 커밋 이후 발행해서 프론트 후속 조회와 상태 커밋 시점을 맞춘다.
+      applicationEventPublisher.publishEvent(new ScanStatusSsePublishRequestedEvent(scan.getId(), ScanStatus.FAILED));
       return scan;
     }
 
@@ -114,7 +116,10 @@ public class WorkerAnalysisResultCallbackService {
   }
 
   private ScanStatus resolveStatus(WorkerAnalysisResultCallbackRequest request) {
-    return request.status() != null ? request.status() : ScanStatus.DONE;
+    if (request.status() == null) {
+      throw new ResponseStatusException(BAD_REQUEST, "status is required");
+    }
+    return request.status();
   }
 
   private void validateRequestedStatus(ScanStatus status, WorkerAnalysisResultCallbackRequest request) {

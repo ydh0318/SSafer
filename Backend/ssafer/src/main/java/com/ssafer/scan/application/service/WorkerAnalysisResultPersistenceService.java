@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +52,7 @@ public class WorkerAnalysisResultPersistenceService {
   private final ScanFindingRepository scanFindingRepository;
   private final AnalysisResultObjectReader analysisResultObjectReader;
   private final ObjectMapper objectMapper;
+  private final ApplicationEventPublisher applicationEventPublisher;
 
   @Transactional
   public void persist(WorkerAnalysisResultIngestionRequestedEvent event) {
@@ -79,6 +81,8 @@ public class WorkerAnalysisResultPersistenceService {
 
     agentTask.markSucceeded(toInstant(completedAt));
     scan.markAnalysisCompleted(COMPLETED_PROGRESS_STEP, startedAt, completedAt, completedAt);
+    // 완료 알림은 커밋 이후 발행해서 프론트가 즉시 재조회해도 DONE을 읽도록 맞춘다.
+    applicationEventPublisher.publishEvent(new ScanStatusSsePublishRequestedEvent(scan.getId(), ScanStatus.DONE));
 
     log.info(
         "Worker analysis result persisted: scanId={}, taskId={}, nodeId={}, findingCount={}",
@@ -108,11 +112,13 @@ public class WorkerAnalysisResultPersistenceService {
       if (agentTask.getTaskStatus() == AgentTaskStatus.ACKED) {
         agentTask.markRunning(toInstant(now));
       }
-      agentTask.markRetryPending(failureReason);
+      agentTask.markFailed(toInstant(now), failureReason);
     }
 
     if (!scan.getStatus().isTerminal()) {
-      scan.markAnalysisRetryPending(FAILED_PROGRESS_STEP, failureReason, startedAt, now);
+      // 적재 재시도 루프가 없는 현재 구조에서는 중간 상태로 남기지 않고 최종 실패로 닫는다.
+      scan.markAnalysisFailed(FAILED_PROGRESS_STEP, failureReason, startedAt, now, now);
+      applicationEventPublisher.publishEvent(new ScanStatusSsePublishRequestedEvent(scan.getId(), ScanStatus.FAILED));
     }
   }
 

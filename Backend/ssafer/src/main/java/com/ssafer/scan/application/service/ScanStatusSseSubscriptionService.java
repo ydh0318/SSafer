@@ -23,6 +23,12 @@ public class ScanStatusSseSubscriptionService {
     // SSE 연결이 실제로 열렸는지 프론트가 바로 알 수 있도록 connected 이벤트를 먼저 한 번 보낸다.
     SseEmitter emitter = emitterRegistry.register(actor, new SseEmitter(SSE_TIMEOUT_MILLIS));
     sendConnectedEvent(actor, emitter);
+    log.info(
+        "스캔 상태 SSE 구독을 시작했습니다. actorType={}, userId={}, guestOwnerKeyHash={}",
+        actor.actorType(),
+        actor.userId(),
+        actor.guestOwnerKeyHash()
+    );
     return emitter;
   }
 

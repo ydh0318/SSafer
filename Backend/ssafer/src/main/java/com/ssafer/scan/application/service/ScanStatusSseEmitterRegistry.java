@@ -6,10 +6,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Component
+@Slf4j
 public class ScanStatusSseEmitterRegistry {
 
   private final Map<String, Map<String, SseEmitter>> emittersByActorKey = new ConcurrentHashMap<>();
@@ -22,6 +24,8 @@ public class ScanStatusSseEmitterRegistry {
     emittersByActorKey
         .computeIfAbsent(actorKey, ignored -> new ConcurrentHashMap<>())
         .put(emitterId, emitter);
+
+    log.info("스캔 상태 SSE emitter를 등록했습니다. actorKey={}, emitterCount={}", actorKey, countEmitters(actorKey));
 
     emitter.onCompletion(() -> remove(actorKey, emitterId));
     emitter.onTimeout(() -> remove(actorKey, emitterId));
@@ -42,6 +46,11 @@ public class ScanStatusSseEmitterRegistry {
     return getEmitters(actor).size();
   }
 
+  private int countEmitters(String actorKey) {
+    Map<String, SseEmitter> emitters = emittersByActorKey.get(actorKey);
+    return emitters == null ? 0 : emitters.size();
+  }
+
   private void remove(String actorKey, String emitterId) {
     Map<String, SseEmitter> emitters = emittersByActorKey.get(actorKey);
     if (emitters == null) {
@@ -51,6 +60,7 @@ public class ScanStatusSseEmitterRegistry {
     if (emitters.isEmpty()) {
       emittersByActorKey.remove(actorKey, emitters);
     }
+    log.info("스캔 상태 SSE emitter를 해제했습니다. actorKey={}, emitterCount={}", actorKey, countEmitters(actorKey));
   }
 
   private String toActorKey(AuthenticatedActor actor) {

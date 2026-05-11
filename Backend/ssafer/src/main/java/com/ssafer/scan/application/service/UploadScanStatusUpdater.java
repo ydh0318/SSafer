@@ -6,6 +6,7 @@ import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ public class UploadScanStatusUpdater {
   private static final String QUEUE_PUBLISH_FAILED_PROGRESS_STEP = "UPLOAD_ANALYSIS_QUEUE_PUBLISH_FAILED";
 
   private final ScanRepository scanRepository;
+  private final ApplicationEventPublisher applicationEventPublisher;
 
   @Transactional
   public void markRawUploaded(Long scanId, String rawResultPath) {
@@ -119,8 +121,12 @@ public class UploadScanStatusUpdater {
           "Upload scan status conflict while marking FAILED: scanId={}, expectedStatus={}, updatedRows={}",
           scanId,
           ScanStatus.REQUESTED,
-          updatedRows
+        updatedRows
       );
+      return;
     }
+
+    // upload 선행 단계 최종 실패도 커밋 이후 SSE 실패 이벤트를 보내서 상태 재조회 타이밍을 맞춘다.
+    applicationEventPublisher.publishEvent(new ScanStatusSsePublishRequestedEvent(scanId, ScanStatus.FAILED));
   }
 }
