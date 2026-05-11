@@ -1,5 +1,5 @@
 import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Trash2, Upload, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import ModalFrame from '../../components/common/ModalFrame';
@@ -117,15 +117,28 @@ function ProjectListPage() {
   const [isLoadingCompletedScans, setIsLoadingCompletedScans] = useState(false);
   const [selectedProjectScanOptions, setSelectedProjectScanOptions] = useState<ProjectScanOptionsData | null>(null);
   const [completedScansRefreshKey, setCompletedScansRefreshKey] = useState(0);
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useScanEventSubscription(
     () => {
-      setCompletedScansRefreshKey((key) => key + 1);
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = setTimeout(() => {
+        setCompletedScansRefreshKey((key) => key + 1);
+      }, 500);
     },
     () => {
-      setCompletedScansRefreshKey((key) => key + 1);
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = setTimeout(() => {
+        setCompletedScansRefreshKey((key) => key + 1);
+      }, 500);
     },
   );
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    };
+  }, []);
 
   const {
     closeDeleteModal,
