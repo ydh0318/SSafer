@@ -1,6 +1,6 @@
 export type ScanRequestSource = 'CLI';
 
-export type ScanType = 'PROJECT_SCAN' | 'SERVER_AUDIT';
+export type ScanType = 'PROJECT_FILE' | 'SERVER_AUDIT';
 
 export type ScanMode = 'UPLOAD' | 'CLI' | 'AGENT';
 

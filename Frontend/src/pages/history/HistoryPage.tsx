@@ -104,7 +104,7 @@ function HistoryPage() {
   const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
 
   const doneHistoryItems = useMemo(
-    () => historyData.items.filter((item) => item.status === 'DONE' && getSafeScanType(item.scanType) === 'PROJECT_SCAN'),
+    () => historyData.items.filter((item) => item.status === 'DONE' && getSafeScanType(item.scanType) === 'PROJECT_FILE'),
     [historyData.items],
   );
   const hasHistoryItems = useMemo(() => historyData.items.length > 0, [historyData.items.length]);
