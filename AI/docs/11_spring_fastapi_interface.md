@@ -398,14 +398,21 @@ durationMs
 
 ```text
 MESSAGE_CONSUMED
-S3_DOWNLOAD
 ANALYZE_REQUEST
-LLM_ANALYSIS
-S3_UPLOAD
+LOAD_INPUT
+S3_DOWNLOAD
+PREPARE_INPUT
+ANALYZE_FINDINGS
+FINDING_ANALYSIS
+EXPLAIN
+FIX
+SAVE_RESULT
 SPRING_CALLBACK
 TASK_COMPLETED
 TASK_FAILED
 ```
+
+FastAPI `/analyze` timeout을 추적할 때는 `durationMs`와 stage를 함께 봅니다. `S3_DOWNLOAD`는 raw 결과 다운로드, `PREPARE_INPUT`은 finding 파싱/검증, `EXPLAIN`과 `FIX`는 finding별 LLM 호출, `SAVE_RESULT`는 분석 결과 저장 또는 S3 업로드 시간을 의미합니다. Worker의 `WORKER_HTTP_TIMEOUT_SECONDS`는 이 전체 `/analyze` 요청 시간을 감싸므로, 특정 stage가 오래 걸리면 해당 stage 로그가 timeout 원인 분석의 기준이 됩니다.
 
 ## 9. Worker 환경변수
 
@@ -423,7 +430,7 @@ TASK_FAILED
 | `APP_ANALYSIS_RESULT_S3_BUCKET` | 없음 | `analysisResultPath` 생성용 bucket |
 | `S3_MAX_RETRIES` | `2` | S3 다운로드/업로드 실패 시 추가 재시도 횟수 |
 | `S3_RETRY_BACKOFF_SECONDS` | `1` | S3 재시도 사이 대기 시간 |
-| `WORKER_HTTP_TIMEOUT_SECONDS` | `120` | Spring/FastAPI HTTP 호출 timeout |
+| `WORKER_HTTP_TIMEOUT_SECONDS` | `120` | Spring/FastAPI HTTP 호출 timeout. 운영 분석 시간이 길면 FastAPI stage별 `durationMs`를 확인한 뒤 상향 |
 | `OLLAMA_TIMEOUT_SECONDS` | `600` | Ollama LLM 호출 timeout |
 | `OLLAMA_MAX_RETRIES` | `2` | LLM 호출 실패 시 추가 재시도 횟수 |
 | `OLLAMA_RETRY_BACKOFF_SECONDS` | `1` | LLM 재시도 사이 대기 시간 |

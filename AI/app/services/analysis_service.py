@@ -58,6 +58,35 @@ class AnalysisPipelineContext:
     invalid_findings: list[dict[str, Any]]
 
 
+def build_analysis_log_fields(request: AnalysisRequest) -> dict[str, Any]:
+    return {
+        "scanId": request.scan_id,
+        "taskId": request.task_id,
+        "agentId": request.agent_id,
+        "projectId": request.project_id,
+    }
+
+
+def log_analysis_step(
+    message: str,
+    *,
+    stage: str,
+    started_ms: int,
+    level: int = logging.INFO,
+    log_fields: dict[str, Any] | None = None,
+    **fields: Any,
+) -> None:
+    log_with_fields(
+        logger,
+        level,
+        message,
+        **(log_fields or {}),
+        stage=stage,
+        durationMs=elapsed_ms(started_ms),
+        **fields,
+    )
+
+
 def build_failed_analysis_result(
     *,
     stage: str,
@@ -101,14 +130,12 @@ def get_s3_download_error_code(exc: S3DownloadError) -> str:
 
 def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
     started_ms = monotonic_ms()
+    log_fields = build_analysis_log_fields(request)
     log_with_fields(
         logger,
         logging.INFO,
         "FastAPI analysis started.",
-        scanId=request.scan_id,
-        taskId=request.task_id,
-        agentId=request.agent_id,
-        projectId=request.project_id,
+        **log_fields,
         stage="ANALYZE_REQUEST",
         status="RUNNING",
     )
@@ -119,17 +146,20 @@ def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
                 raw_result_path=request.raw_result_path,
                 analysis_result_path=request.analysis_result_s3_path
                 or request.analysis_result_path,
+                log_fields=log_fields,
             )
         elif request.scan_result is None:
             result = run_analysis_pipeline(
                 scan_result_path=request.scan_result_path,
                 output_path=request.analysis_result_path,
+                log_fields=log_fields,
             )
         else:
             result = run_analysis_pipeline_from_scan_result(
                 scan_result=request.scan_result.model_dump(by_alias=True),
                 scan_result_path=request.scan_result_path,
                 output_path=request.analysis_result_path,
+                log_fields=log_fields,
             )
     except Exception:
         log_with_fields(
@@ -181,10 +211,29 @@ def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
 def run_s3_analysis_pipeline(
     raw_result_path: str,
     analysis_result_path: str,
+    *,
+    log_fields: dict[str, Any] | None = None,
 ) -> dict[str, object]:
+    download_started_ms = monotonic_ms()
     try:
         scan_result = parse_scan_result(download_scan_result_json_data(raw_result_path))
+        log_analysis_step(
+            "FastAPI S3 raw result downloaded.",
+            stage="S3_DOWNLOAD",
+            started_ms=download_started_ms,
+            log_fields=log_fields,
+            rawResultPath=raw_result_path,
+        )
     except S3DownloadError as exc:
+        log_analysis_step(
+            "FastAPI S3 raw result download failed.",
+            stage="S3_DOWNLOAD",
+            started_ms=download_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            rawResultPath=raw_result_path,
+            errorCode=get_s3_download_error_code(exc),
+        )
         return build_failed_analysis_result(
             stage="input",
             scan_result_path=raw_result_path,
@@ -193,6 +242,14 @@ def run_s3_analysis_pipeline(
             error_code=get_s3_download_error_code(exc),
         )
     except Exception as exc:
+        log_analysis_step(
+            "FastAPI S3 raw result download failed.",
+            stage="S3_DOWNLOAD",
+            started_ms=download_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            rawResultPath=raw_result_path,
+        )
         return build_failed_analysis_result(
             stage="input",
             scan_result_path=raw_result_path,
@@ -205,15 +262,55 @@ def run_s3_analysis_pipeline(
         scan_result_path=raw_result_path,
         output_path=analysis_result_path,
         upload_to_s3=True,
+        log_fields=log_fields,
     )
 
 
-def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:
+def analyze_finding(
+    finding: dict[str, Any],
+    *,
+    log_fields: dict[str, Any] | None = None,
+    finding_index: int | None = None,
+    finding_total: int | None = None,
+) -> dict[str, Any]:
     finding_id = finding["id"]
 
+    finding_started_ms = monotonic_ms()
+    log_with_fields(
+        logger,
+        logging.INFO,
+        "FastAPI finding analysis started.",
+        **(log_fields or {}),
+        stage="FINDING_ANALYSIS",
+        findingId=finding_id,
+        findingIndex=finding_index,
+        findingTotal=finding_total,
+    )
+
+    explain_started_ms = monotonic_ms()
     try:
         explanation = generate_finding_explanation(finding)
+        log_analysis_step(
+            "FastAPI finding explanation completed.",
+            stage="EXPLAIN",
+            started_ms=explain_started_ms,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+        )
     except LLMTimeoutError as exc:
+        log_analysis_step(
+            "FastAPI finding explanation timed out.",
+            stage="EXPLAIN",
+            started_ms=explain_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+            errorCode="LLM_TIMEOUT",
+        )
         raise FindingAnalysisError(
             finding_id=finding_id,
             stage="explain",
@@ -221,6 +318,17 @@ def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:
             error_code="LLM_TIMEOUT",
         ) from exc
     except LLMCallError as exc:
+        log_analysis_step(
+            "FastAPI finding explanation failed.",
+            stage="EXPLAIN",
+            started_ms=explain_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+            errorCode="LLM_CALL_FAILED",
+        )
         raise FindingAnalysisError(
             finding_id=finding_id,
             stage="explain",
@@ -228,15 +336,46 @@ def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:
             error_code="LLM_CALL_FAILED",
         ) from exc
     except Exception as exc:
+        log_analysis_step(
+            "FastAPI finding explanation failed.",
+            stage="EXPLAIN",
+            started_ms=explain_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+        )
         raise FindingAnalysisError(
             finding_id=finding_id,
             stage="explain",
             message=str(exc),
         ) from exc
 
+    fix_started_ms = monotonic_ms()
     try:
         fix = generate_finding_fix(finding)
+        log_analysis_step(
+            "FastAPI finding fix completed.",
+            stage="FIX",
+            started_ms=fix_started_ms,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+        )
     except LLMTimeoutError as exc:
+        log_analysis_step(
+            "FastAPI finding fix timed out.",
+            stage="FIX",
+            started_ms=fix_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+            errorCode="LLM_TIMEOUT",
+        )
         raise FindingAnalysisError(
             finding_id=finding_id,
             stage="fix",
@@ -244,6 +383,17 @@ def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:
             error_code="LLM_TIMEOUT",
         ) from exc
     except LLMCallError as exc:
+        log_analysis_step(
+            "FastAPI finding fix failed.",
+            stage="FIX",
+            started_ms=fix_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+            errorCode="LLM_CALL_FAILED",
+        )
         raise FindingAnalysisError(
             finding_id=finding_id,
             stage="fix",
@@ -251,21 +401,54 @@ def analyze_finding(finding: dict[str, Any]) -> dict[str, Any]:
             error_code="LLM_CALL_FAILED",
         ) from exc
     except Exception as exc:
+        log_analysis_step(
+            "FastAPI finding fix failed.",
+            stage="FIX",
+            started_ms=fix_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+        )
         raise FindingAnalysisError(
             finding_id=finding_id,
             stage="fix",
             message=str(exc),
         ) from exc
 
-    return build_structured_analysis_result(
+    result = build_structured_analysis_result(
         finding=finding,
         explanation=explanation,
         fix=fix,
     )
+    log_analysis_step(
+        "FastAPI finding analysis completed.",
+        stage="FINDING_ANALYSIS",
+        started_ms=finding_started_ms,
+        log_fields=log_fields,
+        findingId=finding_id,
+        findingIndex=finding_index,
+        findingTotal=finding_total,
+    )
+    return result
 
 
-def analyze_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [analyze_finding(finding) for finding in findings]
+def analyze_findings(
+    findings: list[dict[str, Any]],
+    *,
+    log_fields: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    finding_total = len(findings)
+    return [
+        analyze_finding(
+            finding,
+            log_fields=log_fields,
+            finding_index=index,
+            finding_total=finding_total,
+        )
+        for index, finding in enumerate(findings, start=1)
+    ]
 
 
 def prepare_analysis_pipeline_context(
@@ -286,10 +469,28 @@ def prepare_analysis_pipeline_context(
 def run_analysis_pipeline(
     scan_result_path: str = "data/scan_result.json",
     output_path: str = DEFAULT_ANALYSIS_RESULT_PATH,
+    *,
+    log_fields: dict[str, Any] | None = None,
 ) -> dict[str, object]:
+    load_started_ms = monotonic_ms()
     try:
         scan_result = load_scan_result(scan_result_path)
+        log_analysis_step(
+            "FastAPI local scan result loaded.",
+            stage="LOAD_INPUT",
+            started_ms=load_started_ms,
+            log_fields=log_fields,
+            scanResultPath=scan_result_path,
+        )
     except Exception as exc:
+        log_analysis_step(
+            "FastAPI local scan result load failed.",
+            stage="LOAD_INPUT",
+            started_ms=load_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            scanResultPath=scan_result_path,
+        )
         return build_failed_analysis_result(
             stage="input",
             scan_result_path=scan_result_path,
@@ -301,6 +502,7 @@ def run_analysis_pipeline(
         scan_result=scan_result,
         scan_result_path=scan_result_path,
         output_path=output_path,
+        log_fields=log_fields,
     )
 
 
@@ -310,10 +512,28 @@ def run_analysis_pipeline_from_scan_result(
     output_path: str,
     *,
     upload_to_s3: bool = False,
+    log_fields: dict[str, Any] | None = None,
 ) -> dict[str, object]:
+    prepare_started_ms = monotonic_ms()
     try:
         context = prepare_analysis_pipeline_context(scan_result)
+        log_analysis_step(
+            "FastAPI scan result prepared.",
+            stage="PREPARE_INPUT",
+            started_ms=prepare_started_ms,
+            log_fields=log_fields,
+            findingCount=len(context.raw_findings),
+            validFindingCount=len(context.valid_findings),
+            invalidFindingCount=len(context.invalid_findings),
+        )
     except Exception as exc:
+        log_analysis_step(
+            "FastAPI scan result preparation failed.",
+            stage="PREPARE_INPUT",
+            started_ms=prepare_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+        )
         return build_failed_analysis_result(
             stage="input",
             scan_result_path=scan_result_path,
@@ -321,9 +541,31 @@ def run_analysis_pipeline_from_scan_result(
             message=str(exc),
         )
 
+    analysis_started_ms = monotonic_ms()
     try:
-        structured_results = analyze_findings(context.valid_findings)
+        structured_results = analyze_findings(
+            context.valid_findings,
+            log_fields=log_fields,
+        )
+        log_analysis_step(
+            "FastAPI findings analysis completed.",
+            stage="ANALYZE_FINDINGS",
+            started_ms=analysis_started_ms,
+            log_fields=log_fields,
+            resultCount=len(structured_results),
+            validFindingCount=len(context.valid_findings),
+        )
     except FindingAnalysisError as exc:
+        log_analysis_step(
+            "FastAPI findings analysis failed.",
+            stage=exc.stage.upper(),
+            started_ms=analysis_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            findingId=exc.finding_id,
+            errorCode=exc.error_code,
+            validFindingCount=len(context.valid_findings),
+        )
         return build_failed_analysis_result(
             stage=exc.stage,
             finding_id=exc.finding_id,
@@ -337,6 +579,14 @@ def run_analysis_pipeline_from_scan_result(
             error_code=exc.error_code,
         )
     except Exception as exc:
+        log_analysis_step(
+            "FastAPI findings analysis failed.",
+            stage="ANALYZE_FINDINGS",
+            started_ms=analysis_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            validFindingCount=len(context.valid_findings),
+        )
         return build_failed_analysis_result(
             stage="analysis",
             scan_result_path=scan_result_path,
@@ -348,6 +598,7 @@ def run_analysis_pipeline_from_scan_result(
             message=str(exc),
         )
 
+    save_started_ms = monotonic_ms()
     try:
         analysis_result = build_analysis_result_from_results(
             scan_result=context.scan_result,
@@ -358,7 +609,27 @@ def run_analysis_pipeline_from_scan_result(
             saved_path = upload_analysis_result_json_data(analysis_result, output_path)
         else:
             saved_path = save_analysis_result(analysis_result, output_path)
+        log_analysis_step(
+            "FastAPI analysis result saved.",
+            stage="SAVE_RESULT",
+            started_ms=save_started_ms,
+            log_fields=log_fields,
+            analysisResultPath=str(saved_path),
+            resultCount=analysis_result["resultCount"],
+            uploadToS3=upload_to_s3,
+        )
     except S3UploadError as exc:
+        log_analysis_step(
+            "FastAPI analysis result save failed.",
+            stage="SAVE_RESULT",
+            started_ms=save_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            analysisResultPath=output_path,
+            resultCount=len(structured_results),
+            uploadToS3=upload_to_s3,
+            errorCode="S3_UPLOAD_FAILED",
+        )
         return build_failed_analysis_result(
             stage="output",
             scan_result_path=scan_result_path,
@@ -372,6 +643,16 @@ def run_analysis_pipeline_from_scan_result(
             error_code="S3_UPLOAD_FAILED",
         )
     except Exception as exc:
+        log_analysis_step(
+            "FastAPI analysis result save failed.",
+            stage="SAVE_RESULT",
+            started_ms=save_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+            analysisResultPath=output_path,
+            resultCount=len(structured_results),
+            uploadToS3=upload_to_s3,
+        )
         return build_failed_analysis_result(
             stage="output",
             scan_result_path=scan_result_path,
