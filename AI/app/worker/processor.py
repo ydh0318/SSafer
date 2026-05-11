@@ -37,8 +37,7 @@ def build_analysis_result_path(
 
     if settings.analysis_result_bucket is None:
         raise ValueError(
-            "APP_ANALYSIS_RESULT_S3_BUCKET or AWS_S3_BUCKET must be set "
-            "to build analysisResultPath."
+            "APP_ANALYSIS_RESULT_S3_BUCKET must be set to build analysisResultPath."
         )
 
     return (
