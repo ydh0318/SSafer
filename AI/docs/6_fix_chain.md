@@ -64,6 +64,22 @@ LLM 응답은 반드시 아래 JSON 객체 하나여야 합니다.
   "verification": "수정 후 확인해야 할 방법",
   "cautions": [
     "수정할 때 주의할 점"
+  ],
+  "patches": [
+    {
+      "patchId": "PATCH-0001",
+      "targetFile": "Dockerfile",
+      "operation": "replace",
+      "oldText": "USER root",
+      "newText": "USER appuser",
+      "expectedFileHash": "sha256:...",
+      "requiresApproval": true,
+      "rollback": {
+        "operation": "replace",
+        "oldText": "USER appuser",
+        "newText": "USER root"
+      }
+    }
   ]
 }
 ```
@@ -77,7 +93,14 @@ recommendedActions: 2~5개의 문자열 배열
 codeGuidance: 코드 예시 대신 변경 방향을 1~3문장으로 설명
 verification: 수정 후 확인 방법을 1~2문장으로 설명
 cautions: 1~3개의 문자열 배열
+patches: 선택 필드, CLI가 안전하게 replace 적용할 수 있을 때만 작성
+patches[].targetFile: 저장소 루트 기준 상대 경로
+patches[].operation: 현재 replace만 허용
+patches[].requiresApproval: 항상 true
 ```
+
+`patches`는 정확한 `targetFile`, `oldText`, `newText`를 알 수 있을 때만 생성합니다.
+대상 파일 경로나 정확한 원문 조각을 알 수 없거나, 마스킹된 민감 값만 있는 경우에는 `patches` key를 생략하고 설명형 `fix`만 반환합니다.
 
 ## 6. Fix Chain 구현
 
