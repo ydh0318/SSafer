@@ -232,6 +232,7 @@ public class GlobalExceptionHandler {
       case ANALYSIS_QUEUE_PUBLISH_FAILED -> "Analysis queue publish failed.";
       case INVALID_PAYLOAD_HASH -> "payloadHash format is invalid.";
       case RAW_RESULT_NOT_FOUND -> "Raw result object was not found.";
+      case ANALYSIS_RESULT_NOT_FOUND -> "Analysis result object was not found.";
       case PATCH_PAYLOAD_NOT_FOUND -> "Patch payload is not available for this finding.";
       case PATCH_APPROVAL_NOT_ALLOWED -> "Patch approval is not allowed for the current finding state.";
       case SCAN_STATUS_CONFLICT -> "Operation is not allowed for the current scan status.";

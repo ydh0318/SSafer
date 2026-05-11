@@ -1,12 +1,14 @@
 package com.ssafer.scan.api.controller;
 
 import com.ssafer.global.api.ApiResponse;
+import com.ssafer.scan.api.dto.AnalysisResultDownloadUrlResponseData;
 import com.ssafer.scan.api.dto.ScanBasicResponse;
 import com.ssafer.scan.api.dto.ScanCompareResponse;
 import com.ssafer.scan.api.dto.ScanFindingDetailResponse;
 import com.ssafer.scan.api.dto.ScanFindingListResponseData;
 import com.ssafer.scan.api.dto.ScanStatusResponse;
 import com.ssafer.scan.api.dto.ScanSummaryResponse;
+import com.ssafer.scan.application.service.AnalysisResultDownloadUrlService;
 import com.ssafer.scan.application.service.ScanBasicQueryService;
 import com.ssafer.scan.application.service.ScanCompareQueryService;
 import com.ssafer.scan.application.service.ScanFindingDetailQueryService;
@@ -45,6 +47,7 @@ public class ScanQueryController {
   private final ScanSummaryQueryService scanSummaryQueryService;
   private final ScanFindingListQueryService scanFindingListQueryService;
   private final ScanFindingDetailQueryService scanFindingDetailQueryService;
+  private final AnalysisResultDownloadUrlService analysisResultDownloadUrlService;
 
   @GetMapping("/compare")
   @Operation(
@@ -80,6 +83,19 @@ public class ScanQueryController {
   public ResponseEntity<ApiResponse<ScanSummaryResponse>> getScanSummary(@PathVariable Long scanId) {
     ScanSummaryResponse data = scanSummaryQueryService.getScanSummary(scanId);
     return ResponseEntity.ok(ApiResponse.success(GET_SCAN_SUMMARY_SUCCESS_MESSAGE, data));
+  }
+
+  @GetMapping("/{scanId}/analysis-result/download-url")
+  @Operation(
+      summary = "분석 결과 다운로드 URL 발급",
+      description = "권한이 있는 완료 scan의 analysis_result.json 다운로드용 Presigned URL을 발급합니다."
+  )
+  public ResponseEntity<ApiResponse<AnalysisResultDownloadUrlResponseData>> getAnalysisResultDownloadUrl(
+      @PathVariable Long scanId
+  ) {
+    // 실제 파일 내용은 백엔드가 프록시하지 않고, 권한 검증 후 S3 다운로드 URL만 발급한다.
+    AnalysisResultDownloadUrlResponseData data = analysisResultDownloadUrlService.issueDownloadUrl(scanId);
+    return ResponseEntity.ok(ApiResponse.success("분석 결과 다운로드 URL 발급 성공", data));
   }
 
   @GetMapping("/{scanId}/findings")

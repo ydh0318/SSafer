@@ -35,7 +35,6 @@ class WorkerSettings:
 
 def load_worker_settings(env: Mapping[str, str] | None = None) -> WorkerSettings:
     env = env or os.environ
-    default_bucket = _get_optional_env(env, "AWS_S3_BUCKET")
 
     return WorkerSettings(
         rabbitmq_host=_get_optional_env(env, "RABBITMQ_HOST") or "localhost",
@@ -52,9 +51,7 @@ def load_worker_settings(env: Mapping[str, str] | None = None) -> WorkerSettings
         spring_base_url=_get_optional_env(env, "SPRING_BASE_URL")
         or "http://127.0.0.1:8080",
         spring_api_secret=_get_optional_env(env, "SPRING_API_SECRET"),
-        analysis_result_bucket=(
-            _get_optional_env(env, "APP_ANALYSIS_RESULT_S3_BUCKET") or default_bucket
-        ),
+        analysis_result_bucket=_get_optional_env(env, "APP_ANALYSIS_RESULT_S3_BUCKET"),
         analysis_result_prefix=(
             _get_optional_env(env, "WORKER_ANALYSIS_RESULT_PREFIX") or "analysis"
         ),

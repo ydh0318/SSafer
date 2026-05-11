@@ -7,54 +7,51 @@ from app.core.s3 import create_s3_client
 
 
 class S3ConfigTest(unittest.TestCase):
-    def test_load_s3_settings_uses_default_bucket_for_raw_and_analysis(self):
+    def test_load_s3_settings_uses_configured_buckets(self):
         settings = load_s3_settings(
             {
                 "AWS_REGION": "ap-northeast-2",
-                "AWS_S3_BUCKET": "ssafer-bucket",
+                "APP_SCAN_RAW_S3_BUCKET": "raw-bucket",
+                "APP_ANALYSIS_RESULT_S3_BUCKET": "analysis-bucket",
                 "AWS_ACCESS_KEY_ID": "access-key",
                 "AWS_SECRET_ACCESS_KEY": "secret-key",
             }
         )
 
         self.assertEqual(settings.region, "ap-northeast-2")
-        self.assertEqual(settings.raw_scan_bucket, "ssafer-bucket")
-        self.assertEqual(settings.analysis_result_bucket, "ssafer-bucket")
+        self.assertEqual(settings.raw_scan_bucket, "raw-bucket")
+        self.assertEqual(settings.analysis_result_bucket, "analysis-bucket")
         self.assertEqual(settings.access_key_id, "access-key")
         self.assertEqual(settings.secret_access_key, "secret-key")
 
-    def test_load_s3_settings_allows_separate_buckets(self):
+    def test_load_s3_settings_allows_same_bucket_for_raw_and_analysis(self):
         settings = load_s3_settings(
             {
-                "AWS_S3_BUCKET": "default-bucket",
-                "APP_SCAN_RESULT_S3_BUCKET": "raw-bucket",
-                "APP_ANALYSIS_RESULT_S3_BUCKET": "analysis-bucket",
+                "APP_SCAN_RAW_S3_BUCKET": "ssafer-bucket",
+                "APP_ANALYSIS_RESULT_S3_BUCKET": "ssafer-bucket",
             }
         )
 
         self.assertEqual(settings.region, "ap-northeast-2")
-        self.assertEqual(settings.raw_scan_bucket, "raw-bucket")
-        self.assertEqual(settings.analysis_result_bucket, "analysis-bucket")
-
-    def test_load_s3_settings_accepts_legacy_raw_bucket_name(self):
-        settings = load_s3_settings(
-            {
-                "APP_SCAN_RAW_S3_BUCKET": "legacy-raw-bucket",
-                "APP_ANALYSIS_RESULT_S3_BUCKET": "analysis-bucket",
-            }
-        )
-
-        self.assertEqual(settings.raw_scan_bucket, "legacy-raw-bucket")
+        self.assertEqual(settings.raw_scan_bucket, "ssafer-bucket")
+        self.assertEqual(settings.analysis_result_bucket, "ssafer-bucket")
 
     def test_load_s3_settings_rejects_missing_bucket(self):
-        with self.assertRaisesRegex(S3ConfigurationError, "AWS_S3_BUCKET"):
+        with self.assertRaisesRegex(S3ConfigurationError, "APP_SCAN_RAW_S3_BUCKET"):
             load_s3_settings({})
+
+    def test_load_s3_settings_rejects_missing_analysis_bucket(self):
+        with self.assertRaisesRegex(
+            S3ConfigurationError, "APP_ANALYSIS_RESULT_S3_BUCKET"
+        ):
+            load_s3_settings({"APP_SCAN_RAW_S3_BUCKET": "raw-bucket"})
 
     def test_load_s3_settings_rejects_partial_credentials(self):
         with self.assertRaisesRegex(S3ConfigurationError, "must be set together"):
             load_s3_settings(
                 {
-                    "AWS_S3_BUCKET": "ssafer-bucket",
+                    "APP_SCAN_RAW_S3_BUCKET": "raw-bucket",
+                    "APP_ANALYSIS_RESULT_S3_BUCKET": "analysis-bucket",
                     "AWS_ACCESS_KEY_ID": "access-key",
                 }
             )
@@ -66,7 +63,8 @@ class S3ConfigTest(unittest.TestCase):
         settings = load_s3_settings(
             {
                 "AWS_REGION": "ap-northeast-2",
-                "AWS_S3_BUCKET": "ssafer-bucket",
+                "APP_SCAN_RAW_S3_BUCKET": "raw-bucket",
+                "APP_ANALYSIS_RESULT_S3_BUCKET": "analysis-bucket",
                 "AWS_ACCESS_KEY_ID": "access-key",
                 "AWS_SECRET_ACCESS_KEY": "secret-key",
                 "AWS_S3_ENDPOINT_URL": "http://localhost:4566",
