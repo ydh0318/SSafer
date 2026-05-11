@@ -21,6 +21,7 @@ pipeline {
         SPRING_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-spring:${IMAGE_TAG}"
         FASTAPI_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-fastapi:${IMAGE_TAG}"
         NGINX_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-nginx:${IMAGE_TAG}"
+        ENGINE_IMAGE = "${DOCKERHUB_NAMESPACE}/ssafer-engine:${IMAGE_TAG}"
     }
 
     stages {
@@ -45,6 +46,14 @@ pipeline {
                         changes.contains('Infra/docker/dockerfiles/Dockerfile.fastapi') ||
                         changes.contains('Infra/scripts/deploy-ec2-2.sh')
                     ) ? 'true' : 'false'
+                    env.AUTO_REBUILD_ENGINE = (
+                        changes.contains('CLI/') ||
+                        changes.contains('Engine/') ||
+                        changes.contains('Infra/docker/dockerfiles/Dockerfile.engine')
+                    ) ? 'true' : 'false'
+                    if (env.AUTO_REBUILD_ENGINE == 'true') {
+                        echo "Engine related changes detected. Engine image will be rebuilt."
+                    }
                     if (env.AUTO_DEPLOY_EC2_2 == 'true') {
                         echo "EC2 #2 related changes detected. Auto deploy enabled."
                     } else {
@@ -80,6 +89,7 @@ pipeline {
 
                     docker build -f Infra/docker/dockerfiles/Dockerfile.spring -t "$SPRING_IMAGE" .
                     docker build -f Infra/docker/dockerfiles/Dockerfile.fastapi -t "$FASTAPI_IMAGE" .
+                    docker build -f Infra/docker/dockerfiles/Dockerfile.engine -t "$ENGINE_IMAGE" .
                     docker build -f Infra/docker/dockerfiles/nginx/Dockerfile \
                       --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
                       --build-arg VITE_GOOGLE_CLIENT_ID="$VITE_GOOGLE_CLIENT_ID" \
@@ -98,6 +108,7 @@ pipeline {
                         docker push "$SPRING_IMAGE"
                         docker push "$FASTAPI_IMAGE"
                         docker push "$NGINX_IMAGE"
+                        docker push "$ENGINE_IMAGE"
                         docker logout
                     '''
                 }
@@ -121,7 +132,7 @@ pipeline {
             steps {
                 script { FAILED_STAGE = 'Deploy EC2 #1' }
                 sh '''
-                    SPRING_IMAGE="$SPRING_IMAGE" NGINX_IMAGE="$NGINX_IMAGE" \
+                    SPRING_IMAGE="$SPRING_IMAGE" NGINX_IMAGE="$NGINX_IMAGE" ENGINE_IMAGE="$ENGINE_IMAGE" \
                     bash "$DEPLOY_ROOT/Infra/scripts/deploy-ec2-1.sh"
                 '''
             }

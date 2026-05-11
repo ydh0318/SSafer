@@ -36,6 +36,7 @@ check_env_key "RABBITMQ_USERNAME"
 check_env_key "RABBITMQ_PASSWORD"
 check_env_key "SPRING_IMAGE"
 check_env_key "NGINX_IMAGE"
+check_env_key "ENGINE_IMAGE"
 
 cd "${DEPLOY_DIR}"
 
