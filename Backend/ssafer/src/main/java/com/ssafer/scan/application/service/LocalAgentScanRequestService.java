@@ -42,7 +42,6 @@ public class LocalAgentScanRequestService {
   private final AgentRepository agentRepository;
   private final ScanRepository scanRepository;
   private final AgentTaskRepository agentTaskRepository;
-  private final RawUploadUrlIssuer rawUploadUrlIssuer;
   private final AgentTaskAvailableNotificationService notificationService;
   private final ObjectMapper objectMapper;
   private final TransactionTemplate transactionTemplate;
@@ -55,7 +54,6 @@ public class LocalAgentScanRequestService {
       AgentRepository agentRepository,
       ScanRepository scanRepository,
       AgentTaskRepository agentTaskRepository,
-      RawUploadUrlIssuer rawUploadUrlIssuer,
       AgentTaskAvailableNotificationService notificationService,
       ObjectMapper objectMapper,
       PlatformTransactionManager transactionManager
@@ -64,7 +62,6 @@ public class LocalAgentScanRequestService {
     this.agentRepository = agentRepository;
     this.scanRepository = scanRepository;
     this.agentTaskRepository = agentTaskRepository;
-    this.rawUploadUrlIssuer = rawUploadUrlIssuer;
     this.notificationService = notificationService;
     this.objectMapper = objectMapper;
     this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -127,12 +124,13 @@ public class LocalAgentScanRequestService {
 
     String rawResultKey = buildRawResultKey(scan.getId());
     String rawResultPath = buildRawResultPath(rawResultKey);
-    String rawUploadUrl = rawUploadUrlIssuer.issuePutUrl(rawResultKey);
+    // 만료 시간이 있는 rawUploadUrl은 task에 저장하지 않는다.
+    // agent가 task를 pull할 때 PendingAgentTaskQueryService가 fresh URL을 발급해 응답에 붙인다.
     scanRepository.updateRawResultPath(scan.getId(), rawResultPath);
 
     // Local Agent는 pending task 조회 응답의 payload만 보고 실행해야 하므로,
-    // 점검 대상 정보와 raw 결과 업로드 정보를 같은 payload에 담아 둔다.
-    String payloadJson = buildTaskPayloadJson(normalizedTargetPath, scanName, includeLogs, rawResultPath, rawUploadUrl);
+    // 점검 대상 정보와 raw 결과 저장 위치를 같은 payload에 담아 둔다.
+    String payloadJson = buildTaskPayloadJson(normalizedTargetPath, scanName, includeLogs, rawResultPath);
     AgentTask task = agentTaskRepository.save(new AgentTask(
         agent,
         project,
@@ -169,17 +167,15 @@ public class LocalAgentScanRequestService {
       String targetPath,
       String scanName,
       Boolean includeLogs,
-      String rawResultPath,
-      String rawUploadUrl
+      String rawResultPath
   ) {
     // CLI agent의 SCAN_REQUEST 처리 로직은 rawUploadUrl로 원본 결과를 올리고,
-    // rawResultPath를 기준으로 백엔드 완료 보고 흐름을 이어간다.
+    // rawUploadUrl은 만료 시간이 있으므로 저장하지 않고 task 조회 시점에 새로 발급한다.
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("targetPath", targetPath);
     payload.put("scanName", scanName);
     payload.put("includeLogs", includeLogs);
     payload.put("rawResultPath", rawResultPath);
-    payload.put("rawUploadUrl", rawUploadUrl);
     return writeJson(payload);
   }
 
