@@ -5,6 +5,7 @@ from app.chains.fix_chain import create_fix_chain
 from app.core.llm import invoke_llm_with_retry
 from app.services.explain_service import contains_disallowed_script
 from app.services.input_service import format_finding_for_llm
+from app.services.result_service import validate_fix_schema
 
 
 MAX_FIX_RETRIES = 2
@@ -81,6 +82,13 @@ def parse_fix_response(response: str) -> dict[str, Any]:
                 f"Fix Chain output field '{field}' must contain non-empty strings."
             )
 
+    try:
+        validate_fix_schema(parsed, "Fix Chain output")
+    except ValueError as exc:
+        raise ValueError(
+            f"Fix Chain output failed schema validation: {exc}"
+        ) from exc
+
     return parsed
 
 
@@ -95,18 +103,31 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
             "응답은 반드시 유효한 JSON 객체 하나만 반환하세요.",
             "JSON 객체 밖에 어떤 문자도 쓰지 마세요.",
             "마크다운 코드 블록, 설명 문장, 주석은 포함하지 마세요.",
-            "아래 6개 key만 정확히 사용하세요.",
+            "아래 6개 필수 key는 항상 정확히 사용하세요.",
             "summary, priority, recommendedActions, codeGuidance, verification, cautions",
+            "patches는 선택 key입니다. 안전하게 적용 가능한 replace patch가 있을 때만 추가하세요.",
+            "patches를 만들 수 없으면 patches key 자체를 생략하세요.",
             "priority는 high, medium, low 중 하나만 사용하세요.",
             "recommendedActions는 2~5개의 문자열 배열로 작성하세요.",
             "cautions는 1~3개의 문자열 배열로 작성하세요.",
+            "patches를 작성한다면 각 항목은 patchId, targetFile, operation, oldText, newText, requiresApproval을 포함해야 합니다.",
+            "patches[].operation은 replace만 사용하세요.",
+            "patches[].targetFile은 저장소 루트 기준 상대 경로만 사용하고 절대 경로, 홈 경로, .., 역슬래시는 사용하지 마세요.",
+            "patches[].requiresApproval은 반드시 true로 작성하세요.",
+            "patches[].oldText와 patches[].newText는 서로 달라야 합니다.",
+            "patches[].expectedFileHash는 확실히 알 때만 작성하고, 모르면 생략하세요.",
+            "rollback은 확실히 알 때만 작성하고, 작성한다면 operation, oldText, newText를 포함하세요.",
             "답변의 자연어 문장은 한국어로만 작성하세요.",
             "일본어, 중국어, 한자, 깨진 문자를 절대 사용하지 마세요.",
             "일반 영어 단어를 섞지 말고 쉬운 한국어로 바꾸세요.",
             "finding에 없는 파일 구조, 패키지명, 함수명, 설정 키, 배포 환경을 단정하지 마세요.",
             "비밀 값이나 민감한 값을 추측하거나 복원하지 마세요.",
+            "oldText와 newText에 비밀 값 원문, ***MASKED***, [MASKED], <MASKED>를 포함하지 마세요.",
+            "maskedEvidence처럼 마스킹된 값만 있으면 patches를 만들지 마세요.",
+            "정확한 targetFile, oldText, newText를 알 수 없으면 patches를 만들지 마세요.",
+            "append, delete, unified diff 등 replace 이외의 수정이 필요하면 patches를 만들지 마세요.",
             "실행 명령어, 공격 절차, 악용 코드는 작성하지 마세요.",
-            "파일명, 규칙 ID, 탐지 ID, 근거 값만 원문 그대로 유지할 수 있습니다.",
+            "파일명, 규칙 ID, 탐지 ID, 근거 값, patches 안의 코드 조각과 파일 경로만 원문 그대로 유지할 수 있습니다.",
         ]
     )
 

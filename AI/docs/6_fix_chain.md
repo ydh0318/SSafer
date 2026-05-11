@@ -64,6 +64,22 @@ LLM 응답은 반드시 아래 JSON 객체 하나여야 합니다.
   "verification": "수정 후 확인해야 할 방법",
   "cautions": [
     "수정할 때 주의할 점"
+  ],
+  "patches": [
+    {
+      "patchId": "PATCH-0001",
+      "targetFile": "Dockerfile",
+      "operation": "replace",
+      "oldText": "USER root",
+      "newText": "USER appuser",
+      "expectedFileHash": "sha256:...",
+      "requiresApproval": true,
+      "rollback": {
+        "operation": "replace",
+        "oldText": "USER appuser",
+        "newText": "USER root"
+      }
+    }
   ]
 }
 ```
@@ -77,7 +93,14 @@ recommendedActions: 2~5개의 문자열 배열
 codeGuidance: 코드 예시 대신 변경 방향을 1~3문장으로 설명
 verification: 수정 후 확인 방법을 1~2문장으로 설명
 cautions: 1~3개의 문자열 배열
+patches: 선택 필드, CLI가 안전하게 replace 적용할 수 있을 때만 작성
+patches[].targetFile: 저장소 루트 기준 상대 경로
+patches[].operation: 현재 replace만 허용
+patches[].requiresApproval: 항상 true
 ```
+
+`patches`는 정확한 `targetFile`, `oldText`, `newText`를 알 수 있을 때만 생성합니다.
+대상 파일 경로나 정확한 원문 조각을 알 수 없거나, 마스킹된 민감 값만 있는 경우에는 `patches` key를 생략하고 설명형 `fix`만 반환합니다.
 
 ## 6. Fix Chain 구현
 
@@ -122,6 +145,8 @@ finding dict
 → JSON 문자열 정규화
 → JSON 파싱
 → 필수 필드 및 타입 검증
+→ analysis_result.json fix schema 검증
+→ patches가 있으면 patch contract 검증
 → 실패 시 실패 사유를 저장
 → 실패 사유와 제약 조건을 포함해 재시도
 → fix dict 반환
@@ -135,11 +160,16 @@ finding dict
 이전 실패 사유
 JSON 객체 하나만 반환
 JSON 객체 밖 문자 금지
-6개 key 고정
+6개 필수 key 유지
+patches 선택 생성 규칙
+patches[].operation replace 제한
+patches[].targetFile 상대 경로 제한
+patches[].requiresApproval true 제한
 priority 허용값
 recommendedActions, cautions 배열 길이
 한국어 자연어 작성
 금지 문자 사용 금지
+마스킹된 민감 값 기반 patch 생성 금지
 ```
 
 모든 재시도가 실패하면 마지막 실패 사유를 포함한 `ValueError`를 발생시킵니다.

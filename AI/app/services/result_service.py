@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -59,6 +59,40 @@ REQUIRED_FIX_STRING_FIELDS = (
     "verification",
 )
 ALLOWED_FIX_PRIORITIES = ("high", "medium", "low")
+REQUIRED_FIX_PATCH_FIELDS = (
+    "patchId",
+    "targetFile",
+    "operation",
+    "oldText",
+    "newText",
+    "requiresApproval",
+)
+REQUIRED_FIX_PATCH_STRING_FIELDS = (
+    "patchId",
+    "targetFile",
+    "operation",
+    "oldText",
+    "newText",
+)
+OPTIONAL_FIX_PATCH_STRING_FIELDS = (
+    "expectedFileHash",
+)
+ALLOWED_FIX_PATCH_OPERATIONS = ("replace",)
+DISALLOWED_PATCH_TEXT_TOKENS = (
+    "***MASKED***",
+    "[MASKED]",
+    "<MASKED>",
+)
+REQUIRED_FIX_PATCH_ROLLBACK_FIELDS = (
+    "operation",
+    "oldText",
+    "newText",
+)
+REQUIRED_FIX_PATCH_ROLLBACK_STRING_FIELDS = (
+    "operation",
+    "oldText",
+    "newText",
+)
 
 
 def _resolve_path(path: str) -> Path:
@@ -382,6 +416,123 @@ def validate_fix_schema(fix: Any, path: str = "fix") -> None:
                 raise ValueError(
                     f"{path}.{field}[{item_index}] must be a non-empty string."
                 )
+
+    if "patches" in fix:
+        validate_fix_patches_schema(fix["patches"], f"{path}.patches")
+
+
+def validate_fix_patches_schema(patches: Any, path: str = "fix.patches") -> None:
+    if not isinstance(patches, list):
+        raise ValueError(f"{path} must be an array.")
+    if not patches:
+        raise ValueError(f"{path} must contain at least 1 item.")
+
+    for index, patch in enumerate(patches):
+        validate_fix_patch_schema(patch, f"{path}[{index}]")
+
+
+def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
+    if not isinstance(patch, dict):
+        raise ValueError(f"{path} must be an object.")
+
+    missing_fields = [
+        field for field in REQUIRED_FIX_PATCH_FIELDS if field not in patch
+    ]
+    if missing_fields:
+        raise ValueError(
+            f"{path} missing required fields: {', '.join(missing_fields)}"
+        )
+
+    for field in REQUIRED_FIX_PATCH_STRING_FIELDS:
+        value = patch[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{path}.{field} must be a non-empty string.")
+
+    validate_patch_target_file(patch["targetFile"], f"{path}.targetFile")
+    validate_patch_replacement_text(
+        old_text=patch["oldText"],
+        new_text=patch["newText"],
+        path=path,
+    )
+
+    operation = patch["operation"]
+    if operation not in ALLOWED_FIX_PATCH_OPERATIONS:
+        raise ValueError(
+            f"{path}.operation must be one of: "
+            f"{', '.join(ALLOWED_FIX_PATCH_OPERATIONS)}."
+        )
+
+    for field in OPTIONAL_FIX_PATCH_STRING_FIELDS:
+        if field not in patch:
+            continue
+        value = patch[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{path}.{field} must be a non-empty string.")
+
+    expected_file_hash = patch.get("expectedFileHash")
+    if expected_file_hash is not None and not expected_file_hash.startswith("sha256:"):
+        raise ValueError(f"{path}.expectedFileHash must start with sha256:.")
+
+    if patch["requiresApproval"] is not True:
+        raise ValueError(f"{path}.requiresApproval must be true.")
+
+    if "rollback" in patch:
+        validate_fix_patch_rollback_schema(patch["rollback"], f"{path}.rollback")
+
+
+def validate_fix_patch_rollback_schema(
+    rollback: Any,
+    path: str = "fix.patches[].rollback",
+) -> None:
+    if not isinstance(rollback, dict):
+        raise ValueError(f"{path} must be an object.")
+
+    missing_fields = [
+        field for field in REQUIRED_FIX_PATCH_ROLLBACK_FIELDS if field not in rollback
+    ]
+    if missing_fields:
+        raise ValueError(
+            f"{path} missing required fields: {', '.join(missing_fields)}"
+        )
+
+    for field in REQUIRED_FIX_PATCH_ROLLBACK_STRING_FIELDS:
+        value = rollback[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{path}.{field} must be a non-empty string.")
+
+    operation = rollback["operation"]
+    if operation not in ALLOWED_FIX_PATCH_OPERATIONS:
+        raise ValueError(
+            f"{path}.operation must be one of: "
+            f"{', '.join(ALLOWED_FIX_PATCH_OPERATIONS)}."
+        )
+
+
+def validate_patch_target_file(target_file: str, path: str) -> None:
+    if target_file.startswith(("/", "~")):
+        raise ValueError(f"{path} must be a repository-relative path.")
+    if "\\" in target_file:
+        raise ValueError(f"{path} must use forward slashes.")
+
+    parsed_path = PurePosixPath(target_file)
+    if parsed_path.is_absolute() or ".." in parsed_path.parts:
+        raise ValueError(f"{path} must be a repository-relative path.")
+
+
+def validate_patch_replacement_text(
+    *,
+    old_text: str,
+    new_text: str,
+    path: str,
+) -> None:
+    if old_text == new_text:
+        raise ValueError(f"{path}.oldText and {path}.newText must be different.")
+
+    for token in DISALLOWED_PATCH_TEXT_TOKENS:
+        if token in old_text or token in new_text:
+            raise ValueError(
+                f"{path}.oldText and {path}.newText must not contain masked values."
+            )
 
 
 def save_analysis_result(
