@@ -233,6 +233,8 @@ public class GlobalExceptionHandler {
       case INVALID_PAYLOAD_HASH -> "payloadHash format is invalid.";
       case RAW_RESULT_NOT_FOUND -> "Raw result object was not found.";
       case ANALYSIS_RESULT_NOT_FOUND -> "Analysis result object was not found.";
+      case AGENT_NOT_FOUND -> "Local Agent is not registered for this project.";
+      case AGENT_OFFLINE -> "Local Agent is not online.";
       case PATCH_PAYLOAD_NOT_FOUND -> "Patch payload is not available for this finding.";
       case PATCH_APPROVAL_NOT_ALLOWED -> "Patch approval is not allowed for the current finding state.";
       case SCAN_STATUS_CONFLICT -> "Operation is not allowed for the current scan status.";
