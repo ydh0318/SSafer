@@ -12,6 +12,7 @@ import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -42,14 +43,19 @@ public class ScanRegistrationService {
   @Transactional
   public ScanRegistrationResult register(AuthenticatedActor actor, CreateScanRequest request) {
     // projectName은 소유자 범위 내 재사용/자동생성 기준이므로 정규화해서 비교한다.
+    // CLI 등록도 업로드 요청과 같은 규칙을 사용한다.
+    // 매칭은 정규화 값으로, 저장은 표시용 이름으로 처리한다.
+    String displayProjectName = normalizeDisplayProjectName(request.projectName());
     String normalizedProjectName = normalizeProjectName(request.projectName());
-    if (normalizedProjectName == null) {
+    if (displayProjectName == null || normalizedProjectName == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
 
     // 회원/게스트 소유 범위에서 프로젝트를 찾고, 없으면 새로 만든다.
-    Project project = findOrCreateProject(actor, normalizedProjectName);
+    // owner 범위에서 기존 프로젝트를 찾고, 없으면 같은 규칙으로 새로 만든다.
+    Project project = findOrCreateProject(actor, displayProjectName, normalizedProjectName);
     ScanRequestSource source = resolveSource(request.source());
+    ScanType scanType = resolveScanType(request.scanType());
 
     LocalDateTime now = LocalDateTime.now();
     // 스캔 시작 시점에는 REQUESTED 상태로 row를 만들고, 요청 스냅샷을 JSON으로 남긴다.
@@ -58,8 +64,9 @@ public class ScanRegistrationService {
         .requestedByUserId(actor.isMember() ? actor.userId() : null)
         .requestActorType(actor.isMember() ? RequestActorType.USER : RequestActorType.GUEST)
         .scanMode(com.ssafer.scan.domain.enums.ScanMode.AGENT)
+        .scanType(scanType)
         .status(ScanStatus.REQUESTED)
-        .targetSnapshotJson(serializeTargetSnapshot(request, source))
+        .targetSnapshotJson(serializeTargetSnapshot(request, source, scanType))
         .requestedAt(now)
         .lastUpdatedAt(now)
         .build();
@@ -80,7 +87,11 @@ public class ScanRegistrationService {
     );
   }
 
-  private Project findOrCreateProject(AuthenticatedActor actor, String normalizedProjectName) {
+  private Project findOrCreateProject(
+      AuthenticatedActor actor,
+      String displayProjectName,
+      String normalizedProjectName
+  ) {
     Project matched = findProjectByNormalizedName(actor, normalizedProjectName);
     if (matched != null) {
       return matched;
@@ -88,10 +99,11 @@ public class ScanRegistrationService {
 
     try {
       // 동일 소유자 범위에서 프로젝트가 없으면 기본 옵션으로 자동 생성한다.
+      // 생성 시에는 사용자 입력의 표시용 이름을 저장한다.
       Project created = new Project(
           actor.isMember() ? actor.userId() : null,
           actor.isGuest() ? actor.guestOwnerKeyHash() : null,
-          normalizedProjectName,
+          displayProjectName,
           null,
           AGENT,
           false
@@ -131,6 +143,18 @@ public class ScanRegistrationService {
     return collapsed.toLowerCase(Locale.ROOT);
   }
 
+  private String normalizeDisplayProjectName(String rawName) {
+    // 저장용 이름은 trim만 적용해서 표시 값을 유지한다.
+    if (rawName == null) {
+      return null;
+    }
+    String trimmed = rawName.trim();
+    if (trimmed.isEmpty()) {
+      return null;
+    }
+    return trimmed;
+  }
+
   private String buildRawResultKey(Long scanId) {
     // 같은 버킷에서 여러 개발자가 테스트해도 S3 key가 겹치지 않도록 업로드 ID를 분리한다.
     String rawUploadId = UUID.randomUUID().toString();
@@ -146,10 +170,15 @@ public class ScanRegistrationService {
     return source != null ? source : ScanRequestSource.CLI;
   }
 
-  private String serializeTargetSnapshot(CreateScanRequest request, ScanRequestSource source) {
+  private ScanType resolveScanType(ScanType scanType) {
+    return scanType != null ? scanType : ScanType.PROJECT_FILE;
+  }
+
+  private String serializeTargetSnapshot(CreateScanRequest request, ScanRequestSource source, ScanType scanType) {
     // 스캔 시작 요청 원문 일부를 저장해 이후 추적/디버깅에 활용한다.
     Map<String, Object> snapshot = new LinkedHashMap<>();
     snapshot.put("source", source.name());
+    snapshot.put("scanType", scanType.name());
     snapshot.put("scanName", request.scanName());
     snapshot.put("targetPath", request.targetPath());
     snapshot.put("includeLogs", request.includeLogs());

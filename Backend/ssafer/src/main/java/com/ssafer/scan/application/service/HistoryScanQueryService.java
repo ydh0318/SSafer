@@ -9,6 +9,7 @@ import com.ssafer.project.domain.entity.Project;
 import com.ssafer.scan.api.dto.HistoryScanListItemResponse;
 import com.ssafer.scan.api.dto.HistoryScanListResponse;
 import com.ssafer.scan.api.dto.HistoryScanSummaryCountResponse;
+import com.ssafer.scan.api.mapper.ScanRequestSourceResolver;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
@@ -229,6 +230,8 @@ public class HistoryScanQueryService {
         scan.getProjectId(),
         scan.getStatus(),
         scan.getScanMode(),
+        ScanRequestSourceResolver.resolve(scan),
+        scan.getScanType(),
         criticalCount + highCount + mediumCount + lowCount + infoCount,
         criticalCount,
         highCount,

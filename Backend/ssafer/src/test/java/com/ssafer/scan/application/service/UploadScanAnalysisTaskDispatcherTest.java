@@ -18,6 +18,7 @@ import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -60,6 +61,7 @@ class UploadScanAnalysisTaskDispatcherTest {
         .projectId(2001L)
         .requestActorType(RequestActorType.USER)
         .scanMode(ScanMode.UPLOAD)
+        .scanType(ScanType.PROJECT_FILE)
         .status(ScanStatus.RAW_UPLOADED)
         .requestedAt(LocalDateTime.now())
         .lastUpdatedAt(LocalDateTime.now())
@@ -95,6 +97,7 @@ class UploadScanAnalysisTaskDispatcherTest {
 
     assertThat(message.scanId()).isEqualTo(1001L);
     assertThat(message.projectId()).isEqualTo(2001L);
+    assertThat(message.scanType()).isEqualTo(ScanType.PROJECT_FILE);
     assertThat(message.rawResultPath()).isEqualTo("s3://ssafer/raw/1001/uuid/scan_result.json");
     assertThat(message.resultCount()).isEqualTo(12);
     assertThat(message.tool()).isEqualTo("ssafer-web-upload");

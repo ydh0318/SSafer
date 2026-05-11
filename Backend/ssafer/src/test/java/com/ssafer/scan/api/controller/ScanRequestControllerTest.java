@@ -1,6 +1,7 @@
 package com.ssafer.scan.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -12,9 +13,12 @@ import com.ssafer.scan.api.dto.CreateScanRequest;
 import com.ssafer.scan.application.service.ScanRegistrationResult;
 import com.ssafer.scan.application.service.ScanRegistrationService;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import org.hamcrest.Matchers;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -51,7 +55,8 @@ class ScanRequestControllerTest {
         {
           "projectName": "sample-app",
           "source": "AGENT",
-          "scanName": "로컬 서버 점검",
+          "scanType": "SERVER_AUDIT",
+          "scanName": "local server scan",
           "targetPath": "/opt/app",
           "includeLogs": false
         }
@@ -69,6 +74,10 @@ class ScanRequestControllerTest {
             "$.data.rawResultPath",
             Matchers.matchesPattern("^s3://ssafer/raw/1001/.+/scan_result\\.json$")))
         .andExpect(jsonPath("$.data.rawUploadUrl").value("https://presigned-url.example.com"));
+
+    ArgumentCaptor<CreateScanRequest> requestCaptor = ArgumentCaptor.forClass(CreateScanRequest.class);
+    verify(scanRegistrationService).register(any(), requestCaptor.capture());
+    Assertions.assertEquals(ScanType.SERVER_AUDIT, requestCaptor.getValue().scanType());
   }
 
   @Test
@@ -78,7 +87,7 @@ class ScanRequestControllerTest {
     String requestBody = """
         {
           "source": "AGENT",
-          "scanName": "로컬 서버 점검"
+          "scanName": "local server scan"
         }
         """;
 

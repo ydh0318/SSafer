@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,7 +57,7 @@ class UploadScanServiceTest {
   void requestUploadScanCreatesRequestedScanAndReturnsQueued() {
     // 기존 프로젝트가 있으면 재사용하고 REQUESTED 생성 후 processor 결과를 그대로 반환한다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
-    Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
+    Project project = new Project(10L, null, "Project A", null, ScanMode.UPLOAD, false);
     ReflectionTestUtils.setField(project, "id", 2001L);
     MockMultipartFile file = new MockMultipartFile(
         "files",
@@ -76,7 +77,7 @@ class UploadScanServiceTest {
     });
     when(webUploadScanProcessor.process(any())).thenReturn(UploadScanProcessingResult.queued());
 
-    UploadScanResult result = uploadScanService.requestUploadScan("project-a", "scan-1", List.of(file));
+    UploadScanResult result = uploadScanService.requestUploadScan("  project   a  ", "scan-1", List.of(file));
 
     assertThat(result.scanId()).isEqualTo(3001L);
     assertThat(result.status()).isEqualTo(ScanStatus.QUEUED);
@@ -94,7 +95,8 @@ class UploadScanServiceTest {
     ArgumentCaptor<UploadScanProcessingCommand> commandCaptor = ArgumentCaptor.forClass(UploadScanProcessingCommand.class);
     verify(webUploadScanProcessor).process(commandCaptor.capture());
     // scan_result.json 생성을 위해 프로젝트 이름이 processor command에 전달되어야 한다.
-    assertThat(commandCaptor.getValue().projectName()).isEqualTo("project-a");
+    assertThat(commandCaptor.getValue().projectName()).isEqualTo("Project A");
+    verify(projectRepository, never()).save(any(Project.class));
     verify(scanExecutionPermit).release();
   }
 
@@ -102,7 +104,7 @@ class UploadScanServiceTest {
   void requestUploadScanWhenProjectMissingCreatesNewProject() {
     // 동일 이름 프로젝트가 없으면 새 프로젝트를 생성한 뒤 업로드를 진행한다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
-    Project createdProject = new Project(10L, null, "project-a", null, ScanMode.AGENT, false);
+    Project createdProject = new Project(10L, null, "Project A", null, ScanMode.AGENT, false);
     ReflectionTestUtils.setField(createdProject, "id", 2001L);
     MockMultipartFile file = new MockMultipartFile(
         "files",
@@ -123,10 +125,15 @@ class UploadScanServiceTest {
     });
     when(webUploadScanProcessor.process(any())).thenReturn(UploadScanProcessingResult.queued());
 
-    UploadScanResult result = uploadScanService.requestUploadScan("Project A", "scan-1", List.of(file));
+    UploadScanResult result = uploadScanService.requestUploadScan("  Project A  ", "scan-1", List.of(file));
 
     assertThat(result.scanId()).isEqualTo(3001L);
-    verify(projectRepository).save(any(Project.class));
+    ArgumentCaptor<Project> projectCaptor = ArgumentCaptor.forClass(Project.class);
+    verify(projectRepository).save(projectCaptor.capture());
+    assertThat(projectCaptor.getValue().getName()).isEqualTo("Project A");
+    ArgumentCaptor<UploadScanProcessingCommand> commandCaptor = ArgumentCaptor.forClass(UploadScanProcessingCommand.class);
+    verify(webUploadScanProcessor).process(commandCaptor.capture());
+    assertThat(commandCaptor.getValue().projectName()).isEqualTo("Project A");
   }
 
   @Test
@@ -143,7 +150,6 @@ class UploadScanServiceTest {
     );
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
-    when(projectRepository.findByUserIdAndDeletedAtIsNull(10L)).thenReturn(List.of(project));
     when(scanExecutionPermit.tryAcquire()).thenReturn(false);
 
     assertThatThrownBy(() -> uploadScanService.requestUploadScan("project-a", "scan-1", List.of(file)))
@@ -151,6 +157,8 @@ class UploadScanServiceTest {
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.SCAN_EXECUTION_BUSY);
 
+    verify(projectRepository, never()).findByUserIdAndDeletedAtIsNull(any());
+    verify(projectRepository, never()).save(any());
     verify(scanRepository, never()).save(any());
     verify(webUploadScanProcessor, never()).process(any());
     verify(scanExecutionPermit, never()).release();
@@ -160,8 +168,6 @@ class UploadScanServiceTest {
   void requestUploadScanWhenValidationFailsSkipsPermitAcquire() {
     // 파일 검증에서 실패하면 permit 획득/Scan 생성/processor 호출을 모두 건너뛴다.
     AuthenticatedActor actor = AuthenticatedActor.member(10L);
-    Project project = new Project(10L, null, "project-a", null, ScanMode.UPLOAD, false);
-    ReflectionTestUtils.setField(project, "id", 2001L);
     MockMultipartFile file = new MockMultipartFile(
         "files",
         ".env",
@@ -170,8 +176,7 @@ class UploadScanServiceTest {
     );
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
-    when(projectRepository.findByUserIdAndDeletedAtIsNull(10L)).thenReturn(List.of(project));
-    org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.INVALID_PARAMETER))
+    doThrow(new BusinessException(ErrorCode.INVALID_PARAMETER))
         .when(uploadScanFileValidator)
         .validate(eq(List.of(file)));
 
@@ -180,6 +185,8 @@ class UploadScanServiceTest {
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.INVALID_PARAMETER);
 
+    verify(projectRepository, never()).findByUserIdAndDeletedAtIsNull(any());
+    verify(projectRepository, never()).save(any());
     verify(scanExecutionPermit, never()).tryAcquire();
     verify(scanRepository, never()).save(any());
     verify(webUploadScanProcessor, never()).process(any());

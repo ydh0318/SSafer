@@ -15,7 +15,9 @@ import com.ssafer.scan.api.dto.ScanBasicResponse;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
+import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -53,6 +55,8 @@ class ScanBasicQueryServiceTest {
         .requestedByUserId(1L)
         .requestActorType(RequestActorType.USER)
         .scanMode(ScanMode.AGENT)
+        .scanType(ScanType.SERVER_AUDIT)
+        .targetSnapshotJson("{\"source\":\"CLI\"}")
         .status(ScanStatus.DONE)
         .progressStep("completed")
         .rawResultPath("s3://ssafer/raw/1001/scan_result.json")
@@ -69,6 +73,8 @@ class ScanBasicQueryServiceTest {
 
     assertThat(response.scanId()).isEqualTo(1001L);
     assertThat(response.projectId()).isEqualTo(101L);
+    assertThat(response.source()).isEqualTo(ScanRequestSource.CLI);
+    assertThat(response.scanType()).isEqualTo(ScanType.SERVER_AUDIT);
     assertThat(response.status()).isEqualTo(ScanStatus.DONE);
     assertThat(response.rawResultPath()).isEqualTo("s3://ssafer/raw/1001/scan_result.json");
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);

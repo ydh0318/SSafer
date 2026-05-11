@@ -14,7 +14,9 @@ import com.ssafer.scan.api.dto.ProjectScanListResponse;
 import com.ssafer.scan.api.dto.ProjectScanOptionsResponseData;
 import com.ssafer.scan.application.service.ProjectScanListQueryService;
 import com.ssafer.scan.application.service.ProjectScanOptionQueryService;
+import com.ssafer.scan.domain.enums.ScanRequestSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -94,6 +96,8 @@ class ProjectScanQueryControllerTest {
                 1001L,
                 ScanStatus.DONE,
                 com.ssafer.scan.domain.enums.ScanMode.AGENT,
+                ScanRequestSource.CLI,
+                ScanType.PROJECT_FILE,
                 LocalDateTime.of(2026, 4, 27, 9, 0),
                 LocalDateTime.of(2026, 4, 27, 9, 10)
             )),
@@ -116,7 +120,9 @@ class ProjectScanQueryControllerTest {
         .andExpect(jsonPath("$.data.totalPages").value(1))
         .andExpect(jsonPath("$.data.items[0].scanId").value(1001))
         .andExpect(jsonPath("$.data.items[0].status").value("DONE"))
-        .andExpect(jsonPath("$.data.items[0].scanMode").value("AGENT"));
+        .andExpect(jsonPath("$.data.items[0].scanMode").value("AGENT"))
+        .andExpect(jsonPath("$.data.items[0].source").value("CLI"))
+        .andExpect(jsonPath("$.data.items[0].scanType").value("PROJECT_FILE"));
   }
 
   @Test

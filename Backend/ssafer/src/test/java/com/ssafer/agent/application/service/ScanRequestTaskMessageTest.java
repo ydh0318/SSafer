@@ -12,6 +12,7 @@ import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
+import com.ssafer.scan.domain.enums.ScanType;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,7 @@ class ScanRequestTaskMessageTest {
         .projectId(project.getId())
         .requestActorType(RequestActorType.USER)
         .scanMode(ScanMode.AGENT)
+        .scanType(ScanType.SERVER_AUDIT)
         .status(ScanStatus.REQUESTED)
         .requestedAt(LocalDateTime.now())
         .lastUpdatedAt(LocalDateTime.now())
@@ -51,12 +53,13 @@ class ScanRequestTaskMessageTest {
     );
 
     assertThat(message.messageType()).isEqualTo("SCAN_REQUEST");
-    assertThat(message.messageVersion()).isEqualTo(1);
+    assertThat(message.messageVersion()).isEqualTo(2);
     assertThat(message.taskType()).isEqualTo(AgentTaskType.SCAN_REQUEST);
     assertThat(message.taskId()).isEqualTo(40L);
     assertThat(message.agentId()).isEqualTo(20L);
     assertThat(message.projectId()).isEqualTo(10L);
     assertThat(message.scanId()).isEqualTo(30L);
+    assertThat(message.scanType()).isEqualTo(ScanType.SERVER_AUDIT);
     assertThat(message.rawResultPath()).isEqualTo("s3://ssafer/raw/30/scan_result.json");
     assertThat(message.resultCount()).isEqualTo(152);
     assertThat(message.tool()).isEqualTo("ssafer-cli");

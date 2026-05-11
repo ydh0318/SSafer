@@ -1,6 +1,7 @@
 package com.ssafer.scan.api.dto;
 
 import com.ssafer.scan.domain.enums.ScanRequestSource;
+import com.ssafer.scan.domain.enums.ScanType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -24,6 +25,9 @@ public record CreateScanRequest(
     String targetPath,
 
     @Schema(description = "로그 포함 여부", example = "false", nullable = true)
-    Boolean includeLogs
+    Boolean includeLogs,
+
+    @Schema(description = "스캔 타입", example = "PROJECT_FILE", defaultValue = "PROJECT_FILE", nullable = true)
+    ScanType scanType
 ) {
 }

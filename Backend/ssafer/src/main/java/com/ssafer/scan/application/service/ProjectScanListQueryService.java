@@ -6,6 +6,7 @@ import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.global.security.CurrentActorProvider;
 import com.ssafer.project.application.service.ProjectAuthorizationService;
 import com.ssafer.scan.api.dto.ProjectScanListItemResponse;
+import com.ssafer.scan.api.mapper.ScanRequestSourceResolver;
 import com.ssafer.scan.api.dto.ProjectScanListResponse;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.ScanMode;
@@ -59,6 +60,8 @@ public class ProjectScanListQueryService {
             scan.getId(),
             scan.getStatus(),
             scan.getScanMode(),
+            ScanRequestSourceResolver.resolve(scan),
+            scan.getScanType(),
             scan.getRequestedAt(),
             scan.getCompletedAt()
         ))
