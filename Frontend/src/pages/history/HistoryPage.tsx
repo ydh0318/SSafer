@@ -12,6 +12,7 @@ import { getScanCompare } from '../../features/results/api/results';
 import { deleteScanHistory } from '../../features/scans/api/scans';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
+import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import {
   canDeleteScanHistory,
   formatDateTime,
@@ -218,6 +219,19 @@ function HistoryPage() {
     setNoticeMessage(null);
     await loadHistory();
   };
+
+  useScanEventSubscription(
+    () => {
+      if (canAccessHistory) {
+        void handleRefresh();
+      }
+    },
+    () => {
+      if (canAccessHistory) {
+        void handleRefresh();
+      }
+    },
+  );
 
   const handleDeleteScan = async (item: HistoryScanListItemData) => {
     const shouldDelete = window.confirm(`스캔 #${item.scanId} 이력을 삭제하시겠습니까?`);

@@ -6,6 +6,7 @@ import { ROUTES } from '../../constants/routes';
 import { useToast } from '../../features/feedback/useToast';
 import { getScanStatus } from '../../features/scans/api/scans';
 import ScanProgressPanel from '../../features/scans/components/ScanProgressPanel';
+import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import { isTerminalScanStatus } from '../../features/scans/utils/scanPresentation';
 import type { ScanProgressStatusData } from '../../types/scan';
 
@@ -145,6 +146,19 @@ function ScanDetailPage() {
       setIsLoading(false);
     }
   };
+
+  useScanEventSubscription(
+    (completedScanId) => {
+      if (scanId && completedScanId === Number(scanId)) {
+        void handleRefresh();
+      }
+    },
+    (failedScanId) => {
+      if (scanId && failedScanId === Number(scanId)) {
+        void handleRefresh();
+      }
+    },
+  );
 
   const canOpenResult = statusData?.status === 'DONE';
   const backTo = routeState.projectId ? ROUTES.projectDetail.replace(':projectId', routeState.projectId) : ROUTES.projects;
