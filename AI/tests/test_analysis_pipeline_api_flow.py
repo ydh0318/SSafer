@@ -144,6 +144,10 @@ class AnalysisPipelineApiFlowTest(unittest.TestCase):
         output = "\n".join(logs.output)
         self.assertIn("scanId=5", output)
         self.assertIn("taskId=123", output)
+        self.assertIn("stage=PREPARE_INPUT", output)
+        self.assertIn("stage=EXPLAIN", output)
+        self.assertIn("stage=FIX", output)
+        self.assertIn("stage=SAVE_RESULT", output)
         self.assertIn("stage=TASK_COMPLETED", output)
         self.assertIn("durationMs=", output)
 

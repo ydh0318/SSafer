@@ -43,21 +43,23 @@ Spring/Worker 연동용 camelCase 필드(`taskId`, `rawResultPath`, `analysisRes
 ```bash
 cd /home/eunsu/S14P31B105/AI
 source .venv/bin/activate
-python -m unittest tests.test_analyze_endpoint tests.test_fastapi_client tests.test_worker_processor
+python -m unittest tests.test_analysis_pipeline_api_flow tests.test_analyze_endpoint tests.test_fastapi_client tests.test_worker_processor tests.test_worker_consumer
 ```
 
 정상 출력:
 
 ```text
-..............
+.................................
 ----------------------------------------------------------------------
-Ran 14 tests in 0.000s
+Ran 33 tests in 0.012s
 
 OK
 ```
 
 `tests.test_fastapi_client`는 Worker가 FastAPI에 `POST /analyze`를 호출할 때 Spring 계약 payload를 그대로 전송하는지 검증합니다.
+`tests.test_analysis_pipeline_api_flow`는 FastAPI 분석 파이프라인 응답과 stage별 duration 로그를 검증합니다.
 `tests.test_worker_processor`는 RabbitMQ 메시지를 받은 Worker가 `/analyze` 요청을 만들고 최신 Spring 분석 완료 콜백 payload로 변환하는지 검증합니다.
+`tests.test_worker_consumer`는 Worker가 HTTP status별 RabbitMQ requeue 정책을 올바르게 선택하는지 검증합니다.
 
 ## 3-1. scan_result DTO 파싱 테스트
 
