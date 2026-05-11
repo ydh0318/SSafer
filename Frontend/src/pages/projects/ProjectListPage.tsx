@@ -350,7 +350,9 @@ function ProjectListPage() {
       const validationIssue = getScanUploadValidationIssue(createUploadFiles);
 
       if (validationIssue) {
-        toast.warning(getUploadScanValidationToastMessage(validationIssue), { durationMs: 3000 });
+        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? '업로드 파일을 확인해주세요.', {
+          durationMs: 3000,
+        });
         return;
       }
     }
@@ -425,7 +427,9 @@ function ProjectListPage() {
       const validationIssue = getScanUploadValidationIssue(selectedUploadFiles);
 
       if (validationIssue) {
-        toast.warning(getUploadScanValidationToastMessage(validationIssue), { durationMs: 3000 });
+        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? '업로드 파일을 확인해주세요.', {
+          durationMs: 3000,
+        });
         return;
       }
     }
