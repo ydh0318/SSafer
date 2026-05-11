@@ -20,6 +20,7 @@ import {
 import { formatCompactDateTime, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
 import { getUploadScanToastFeedback, getUploadScanValidationToastMessage } from '../../features/scans/utils/uploadScanFeedback';
 import { getScanUploadValidationIssue } from '../../features/scans/utils/uploadValidation';
+import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import { useProjectStore } from '../../store/projectStore';
 import type { CreateProjectFormValues, ProjectSummary } from '../../types/project';
 import type { ProjectScanListItemData, ProjectScanOptionsData } from '../../types/scan';
@@ -115,6 +116,16 @@ function ProjectListPage() {
   const [latestCompletedScans, setLatestCompletedScans] = useState<LatestCompletedScanMap>({});
   const [isLoadingCompletedScans, setIsLoadingCompletedScans] = useState(false);
   const [selectedProjectScanOptions, setSelectedProjectScanOptions] = useState<ProjectScanOptionsData | null>(null);
+  const [completedScansRefreshKey, setCompletedScansRefreshKey] = useState(0);
+
+  useScanEventSubscription(
+    () => {
+      setCompletedScansRefreshKey((key) => key + 1);
+    },
+    () => {
+      setCompletedScansRefreshKey((key) => key + 1);
+    },
+  );
 
   const {
     closeDeleteModal,
@@ -243,7 +254,7 @@ function ProjectListPage() {
     return () => {
       isMounted = false;
     };
-  }, [projects]);
+  }, [projects, completedScansRefreshKey]);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
