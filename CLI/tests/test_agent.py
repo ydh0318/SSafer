@@ -778,3 +778,88 @@ def test_watch_agent_does_not_reconnect_on_agent_auth_error(monkeypatch, tmp_pat
 
     assert calls["count"] == 1
     assert events[0][0] == "auth_failed"
+
+
+def test_tasks_from_ws_message_parses_task_assigned():
+    tasks = agent._tasks_from_ws_message(
+        '{"type":"TASK_ASSIGNED","taskId":10,"taskType":"SCAN_REQUEST","projectId":1,"scanId":2,'
+        '"payload":{"targetPath":"."}}'
+    )
+
+    assert tasks is not None
+    assert len(tasks) == 1
+    assert tasks[0].task_id == 10
+    assert tasks[0].task_type == "SCAN_REQUEST"
+    assert tasks[0].task_status == "SENT"
+    assert tasks[0].payload == {"targetPath": "."}
+
+
+def test_tasks_from_ws_message_requests_fetch_on_task_available():
+    assert agent._tasks_from_ws_message('{"type":"TASK_AVAILABLE"}') is None
+
+
+def test_watch_agent_session_fetches_on_connect_and_task_available(monkeypatch, tmp_path: Path):
+    events = []
+    fetch_calls = []
+
+    class FakeWebSocket:
+        def __init__(self):
+            self.messages = [
+                '{"type":"CONNECTED"}',
+                '{"type":"TASK_AVAILABLE"}',
+            ]
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def send(self, message):
+            return None
+
+        async def recv(self):
+            if self.messages:
+                return self.messages.pop(0)
+            raise RuntimeError("stop")
+
+    def fake_connect(*args, **kwargs):
+        return FakeWebSocket()
+
+    def fake_fetch(api_url: str, agent_id: int, agent_token: str):
+        fetch_calls.append((api_url, agent_id, agent_token))
+        return []
+
+    monkeypatch.setattr(agent, "fetch_pending_agent_tasks", fake_fetch)
+
+    async def run_session():
+        await agent._watch_agent_session(
+            websockets=SimpleNamespace(connect=fake_connect),
+            ws_url="wss://example.com/ws/v1/internal/agents/connect",
+            headers={"Authorization": "Bearer agent-token"},
+            api_url="https://api.example.com",
+            agent_id=7,
+            project_id=3,
+            agent_token="agent-token",
+            project_root=tmp_path,
+            interval_seconds=5,
+            once=False,
+            dry_run=False,
+            on_event=lambda event_type, payload: events.append((event_type, payload)),
+        )
+
+    import asyncio
+
+    try:
+        asyncio.run(run_session())
+    except RuntimeError as exc:
+        assert str(exc) == "stop"
+    else:
+        raise AssertionError("fake websocket should stop the session")
+
+    assert fetch_calls == [
+        ("https://api.example.com", 7, "agent-token"),
+        ("https://api.example.com", 7, "agent-token"),
+    ]
+    assert [event[0] for event in events].count("checking_tasks") == 2
+    assert "task_available" in [event[0] for event in events]

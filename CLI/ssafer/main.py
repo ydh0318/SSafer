@@ -588,7 +588,7 @@ def _run_agent_watch(
     if once:
         console.print("[dim]Mode: fetch pending tasks once, then exit.[/dim]")
     else:
-        console.print(f"[dim]Mode: watching for pending tasks every {interval:g}s.[/dim]")
+        console.print("[dim]Mode: watching WebSocket task events. Pending tasks are checked on connect and task notifications.[/dim]")
         if reconnect:
             retry_label = "unlimited" if max_retries is None else str(max_retries)
             console.print(
@@ -619,10 +619,10 @@ def _run_agent_watch(
             console.print(f"[cyan]Found {len(tasks)} pending task(s).[/cyan] {task_types}")
             return
         if event_type == "watching":
-            interval_seconds = "-"
-            if isinstance(payload, dict):
-                interval_seconds = str(payload.get("intervalSeconds", "-"))
-            console.print(f"[dim]Waiting for next task check in {interval_seconds}s.[/dim]")
+            console.print("[dim]Waiting for WebSocket task notifications.[/dim]")
+            return
+        if event_type == "task_available":
+            console.print("[cyan]Task notification received. Checking pending tasks...[/cyan]")
             return
         if event_type == "disconnected":
             error = "-"
