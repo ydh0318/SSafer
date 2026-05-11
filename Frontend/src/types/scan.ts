@@ -185,7 +185,9 @@ export interface ScanFindingDetailData {
   attackScenario: string | null;
   remediationGuide: string | null;
   rawSnippetJson: string | null;
+  patchPayloadJson: string | null;
   resolutionStatus: FindingResolutionStatus;
+  patchApprovedActorType: 'USER' | 'GUEST' | null;
   patchApprovedByUserId: number | null;
   patchApprovedAt: string | null;
   patchResultMessage: string | null;
