@@ -10,6 +10,7 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 
+from ssafer.core.auth import normalize_api_url
 from ssafer.core.patches import PatchApplyResult, PatchError, apply_patch_candidates, extract_patch_candidates
 from ssafer.core.result_store import run_scan
 from ssafer.core.upload import upload_scan_result_to_registered_scan
@@ -49,7 +50,7 @@ def _agent_ws_netloc(netloc: str) -> str:
 
 
 def fetch_pending_agent_tasks(api_url: str, agent_id: int, agent_token: str) -> list[AgentTask]:
-    endpoint = f"{api_url.rstrip('/')}/api/v1/internal/agents/{agent_id}/tasks"
+    endpoint = f"{normalize_api_url(api_url)}/api/v1/internal/agents/{agent_id}/tasks"
     headers = {"Authorization": f"Bearer {agent_token}"}
     with httpx.Client(timeout=20.0, follow_redirects=True) as client:
         response = client.get(endpoint, headers=headers)
@@ -73,7 +74,7 @@ def report_agent_task_result(
     if result.status not in {"SUCCESS", "FAILED"}:
         return None
 
-    endpoint = f"{api_url.rstrip('/')}/api/v1/internal/agents/{agent_id}/tasks/{task.task_id}/result"
+    endpoint = f"{normalize_api_url(api_url)}/api/v1/internal/agents/{agent_id}/tasks/{task.task_id}/result"
     headers = {"Authorization": f"Bearer {agent_token}"}
     payload = _build_agent_task_result_payload(result)
     with httpx.Client(timeout=20.0, follow_redirects=True) as client:

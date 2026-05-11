@@ -109,9 +109,10 @@ def version() -> None:
 @app.command(help="로그인/Agent 설정 상태를 확인합니다.")
 def status() -> None:
     """Show saved login and local-agent status."""
-    from ssafer.core.auth import CONFIG_PATH, load_agent_config, load_endpoint, load_token
+    from ssafer.core.auth import CONFIG_PATH, describe_token_source, load_agent_config, load_endpoint, load_token
 
     token = load_token()
+    token_source = describe_token_source()
     endpoint = load_endpoint()
     agent_config = load_agent_config()
 
@@ -120,6 +121,7 @@ def status() -> None:
     table.add_column("상태")
     table.add_column("설명", overflow="fold")
     table.add_row("로그인", "[green]됨[/green]" if token else "[red]안 됨[/red]", "저장된 access token 기준")
+    table.add_row("토큰 출처", token_source, "환경변수 토큰이 저장된 로그인 토큰보다 우선됩니다")
     table.add_row("Endpoint", endpoint, "현재 사용할 백엔드 API")
     if _has_saved_agent_config(agent_config):
         table.add_row(

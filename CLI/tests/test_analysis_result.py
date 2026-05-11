@@ -109,3 +109,44 @@ def test_find_latest_done_scan_id_requests_project_done_scans(monkeypatch):
             {"timeout": 30.0, "follow_redirects": True},
         )
     ]
+
+
+def test_issue_analysis_result_download_url_normalizes_legacy_endpoint(monkeypatch):
+    requests = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": {"downloadUrl": "https://s3.example.com/download"}}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def get(self, url, headers=None):
+            requests.append((url, headers, self.kwargs))
+            return FakeResponse()
+
+    monkeypatch.setattr(analysis_result.httpx, "Client", FakeClient)
+
+    analysis_result.issue_analysis_result_download_url(
+        "https://k14b105.p.ssafy.io",
+        scan_id=41,
+        token="access-token",
+    )
+
+    assert requests == [
+        (
+            "https://ssafer.co.kr/api/v1/scans/41/analysis-result/download-url",
+            {"Authorization": "Bearer access-token"},
+            {"timeout": 30.0, "follow_redirects": True},
+        )
+    ]
