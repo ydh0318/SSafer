@@ -1,6 +1,9 @@
 package com.ssafer.agent.api.controller;
 
+import com.ssafer.agent.api.dto.AgentTaskResultReportRequest;
+import com.ssafer.agent.api.dto.AgentTaskResultReportResponseData;
 import com.ssafer.agent.api.dto.PendingAgentTaskResponseData;
+import com.ssafer.agent.application.service.AgentTaskResultReportService;
 import com.ssafer.agent.application.service.PendingAgentTaskQueryService;
 import com.ssafer.global.api.ApiResponse;
 import com.ssafer.global.security.AgentPrincipal;
@@ -8,10 +11,13 @@ import com.ssafer.global.security.CurrentAgentProvider;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,15 +28,20 @@ public class InternalAgentTaskController {
 
   private static final String GET_PENDING_TASKS_SUCCESS_MESSAGE = "미처리 task 조회 성공";
 
+  private static final String REPORT_TASK_RESULT_SUCCESS_MESSAGE = "Agent Task 결과 보고 성공";
+
   private final CurrentAgentProvider currentAgentProvider;
   private final PendingAgentTaskQueryService pendingAgentTaskQueryService;
+  private final AgentTaskResultReportService agentTaskResultReportService;
 
   public InternalAgentTaskController(
       CurrentAgentProvider currentAgentProvider,
-      PendingAgentTaskQueryService pendingAgentTaskQueryService
+      PendingAgentTaskQueryService pendingAgentTaskQueryService,
+      AgentTaskResultReportService agentTaskResultReportService
   ) {
     this.currentAgentProvider = currentAgentProvider;
     this.pendingAgentTaskQueryService = pendingAgentTaskQueryService;
+    this.agentTaskResultReportService = agentTaskResultReportService;
   }
 
   @GetMapping("/{agentId}/tasks")
@@ -51,5 +62,27 @@ public class InternalAgentTaskController {
         currentAgent.agentId()
     );
     return ResponseEntity.ok(ApiResponse.success(GET_PENDING_TASKS_SUCCESS_MESSAGE, data));
+  }
+
+  @PostMapping("/{agentId}/tasks/{taskId}/result")
+  @Operation(
+      summary = "Agent Task 결과 보고",
+      description = "Local Agent가 PATCH_APPLY task 수행 결과를 보고하고 task/finding 상태를 갱신합니다."
+  )
+  public ResponseEntity<ApiResponse<AgentTaskResultReportResponseData>> reportTaskResult(
+      @Parameter(description = "Agent ID", example = "1")
+      @PathVariable Long agentId,
+      @Parameter(description = "Agent Task ID", example = "10")
+      @PathVariable Long taskId,
+      @Valid @RequestBody AgentTaskResultReportRequest request
+  ) {
+    AgentPrincipal currentAgent = currentAgentProvider.getCurrentAgent();
+    AgentTaskResultReportResponseData data = agentTaskResultReportService.reportResult(
+        agentId,
+        currentAgent.agentId(),
+        taskId,
+        request
+    );
+    return ResponseEntity.ok(ApiResponse.success(REPORT_TASK_RESULT_SUCCESS_MESSAGE, data));
   }
 }

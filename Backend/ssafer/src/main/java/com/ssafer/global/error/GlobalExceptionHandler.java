@@ -236,6 +236,7 @@ public class GlobalExceptionHandler {
       case PATCH_PAYLOAD_NOT_FOUND -> "Patch payload is not available for this finding.";
       case PATCH_APPROVAL_NOT_ALLOWED -> "Patch approval is not allowed for the current finding state.";
       case SCAN_STATUS_CONFLICT -> "Operation is not allowed for the current scan status.";
+      case TASK_STATUS_CONFLICT -> "Operation is not allowed for the current task status.";
       case DUPLICATE_RAW_RESULT_UPLOAD -> "Raw result upload report was already submitted.";
       case INTERNAL_SERVER_ERROR -> "Internal server error.";
     };
