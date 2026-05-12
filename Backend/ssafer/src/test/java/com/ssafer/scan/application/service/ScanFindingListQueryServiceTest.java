@@ -182,4 +182,40 @@ class ScanFindingListQueryServiceTest {
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.FORBIDDEN);
   }
+
+  @Test
+  void getScanFindingsCapsPageSizeToMax() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Scan scan = Scan.builder()
+        .id(1001L)
+        .projectId(101L)
+        .requestedByUserId(1L)
+        .requestActorType(RequestActorType.USER)
+        .scanMode(ScanMode.AGENT)
+        .status(ScanStatus.DONE)
+        .requestedAt(LocalDateTime.of(2026, 4, 27, 9, 0))
+        .lastUpdatedAt(LocalDateTime.of(2026, 4, 27, 9, 5))
+        .build();
+    Page<ScanFinding> findingPage = new PageImpl<>(java.util.List.of(), PageRequest.of(0, 100), 0);
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(scanRepository.findById(1001L)).thenReturn(Optional.of(scan));
+    when(scanFindingRepository.findAll(any(Specification.class), any(Pageable.class)))
+        .thenReturn(findingPage);
+
+    scanFindingListQueryService.getScanFindings(
+        1001L,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        1000
+    );
+
+    ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+    verify(scanFindingRepository).findAll(any(Specification.class), pageableCaptor.capture());
+    assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(100);
+  }
 }

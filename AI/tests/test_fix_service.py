@@ -133,7 +133,7 @@ class FixServiceTest(unittest.TestCase):
         retry_prompt = invoke.call_args_list[1].args[1]["finding_input"]
         self.assertIn("Validation error:", retry_prompt)
         self.assertIn("Fix Chain output failed schema validation", retry_prompt)
-        self.assertIn("patches[].operation must be replace.", retry_prompt)
+        self.assertIn("patches[].operation must be replace or append.", retry_prompt)
 
 
 if __name__ == "__main__":

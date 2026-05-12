@@ -66,6 +66,10 @@ public class ScanSummaryQueryService {
     Map<Severity, Long> counts = new EnumMap<>(Severity.class);
     // severity 분포는 enum 키를 그대로 유지하면 응답 필드별 카운트를 꺼내기 쉽다.
     for (Object[] row : rows) {
+      // 일부 과거 데이터나 비정상 적재 row는 summary 응답에서 제외한다.
+      if (row[0] == null) {
+        continue;
+      }
       counts.put((Severity) row[0], ((Number) row[1]).longValue());
     }
     return counts;
@@ -75,7 +79,15 @@ public class ScanSummaryQueryService {
     Map<String, Long> counts = new LinkedHashMap<>();
     // JPA group by 결과를 {키: 개수} 형태로 정리한다.
     for (Object[] row : rows) {
-      counts.put(String.valueOf(row[0]), ((Number) row[1]).longValue());
+      // category/source/resolution 값이 비어 있으면 "null" 문자열이 API에 그대로 새지 않게 걸러낸다.
+      if (row[0] == null) {
+        continue;
+      }
+      String key = String.valueOf(row[0]).trim();
+      if (key.isEmpty()) {
+        continue;
+      }
+      counts.put(key, ((Number) row[1]).longValue());
     }
     return counts;
   }

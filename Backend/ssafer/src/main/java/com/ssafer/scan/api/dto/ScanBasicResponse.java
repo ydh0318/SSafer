@@ -26,6 +26,8 @@ public record ScanBasicResponse(
     String failureReason,
     @Schema(description = "Raw result path", example = "s3://ssafer/raw/1001/scan_result.json")
     String rawResultPath,
+    @Schema(description = "Analysis result path", example = "s3://ssafer/result/1001/analysis_result.json")
+    String analysisResultPath,
     @Schema(description = "Requested time", example = "2026-04-23T09:00:00")
     LocalDateTime requestedAt,
     @Schema(description = "Started time", example = "2026-04-23T09:01:00")

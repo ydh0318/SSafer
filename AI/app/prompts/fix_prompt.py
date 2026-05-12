@@ -9,18 +9,24 @@ FIX_PROMPT = ChatPromptTemplate.from_messages(
                 "You are SSAfer's security fix generator. "
                 "Return only one valid JSON object. Do not use Markdown fences. "
                 "Always include summary, priority, recommendedActions, codeGuidance, verification, and cautions. "
-                "Include patches only when a safe CLI replace patch can be generated.\n\n"
+                "Include patches only when finding.patchContext allows a safe CLI patch.\n\n"
                 "Patch rules:\n"
-                "- Use operation: replace only.\n"
+                "- Omit patches entirely when patchContext is missing.\n"
+                "- Use operation: replace when patchContext.oldText is present and exact replacement is safe.\n"
+                "- For replace, copy patchContext.oldText to oldText exactly; do not rewrite, trim, or reformat it.\n"
+                "- Use operation: append only for Dockerfile findings where a missing setting can be safely added at the end of the file.\n"
+                "- For append, omit oldText and include a complete Dockerfile instruction block in newText.\n"
+                "- Do not use append for docker-compose YAML or other position-sensitive files.\n"
                 "- Use filePath, not targetFile.\n"
-                "- If finding.filePath exists, patches must target that filePath.\n"
-                "- If finding.filePath is missing and targetFiles exists, generate a patch only when exactly one candidate file can be determined.\n"
-                "- If the target file or exact oldText is uncertain, omit patches and provide guidance only.\n"
-                "- oldText must be a source snippet that should occur exactly once in the target file.\n"
+                "- patches[].filePath must equal finding.filePath.\n"
+                "- patches[].expectedFileHash must equal patchContext.expectedFileHash.\n"
+                "- Use patchId format PATCH-{{findingId}}, for example PATCH-FND-0003.\n"
+                "- If the target file, patchContext.oldText, expectedFileHash, or safe newText is uncertain, omit patches and provide guidance only.\n"
                 "- newText must produce valid Dockerfile or docker-compose YAML when applicable.\n"
                 "- Do not include masked values such as ***MASKED***, [MASKED], or <MASKED> in oldText or newText.\n"
                 "- Do not generate patches for risky, destructive, ambiguous, or secret-value changes.\n"
-                "- Each patch must include patchId, findingId, operation, filePath, oldText, newText, expectedFileHash, and requiresApproval: true.\n"
+                "- Each replace patch must include patchId, findingId, operation, filePath, oldText, newText, and expectedFileHash.\n"
+                "- Each append patch must include patchId, findingId, operation, filePath, newText, and expectedFileHash.\n"
             ),
         ),
         (
@@ -38,14 +44,13 @@ FIX_PROMPT = ChatPromptTemplate.from_messages(
                 '  "cautions": ["caution 1"],\n'
                 '  "patches": [\n'
                 "    {{\n"
-                '      "patchId": "PATCH-0001",\n'
+                '      "patchId": "PATCH-FND-0001",\n'
                 '      "findingId": "FND-0001",\n'
                 '      "operation": "replace",\n'
                 '      "filePath": "Dockerfile",\n'
                 '      "oldText": "USER root",\n'
                 '      "newText": "USER appuser",\n'
-                '      "expectedFileHash": "sha256:...",\n'
-                '      "requiresApproval": true\n'
+                '      "expectedFileHash": "sha256:..."\n'
                 "    }}\n"
                 "  ]\n"
                 "}}\n\n"

@@ -19,12 +19,18 @@ from ssafer.rules.compose_rules import (
 from ssafer.rules.env_rules import EnvPlainSecretRule
 
 
-def _ctx(effective: dict[str, str] | None = None, env_files: list[Path] | None = None, root: Path | None = None) -> ScanContext:
+def _ctx(
+    effective: dict[str, str] | None = None,
+    env_files: list[Path] | None = None,
+    root: Path | None = None,
+    environment: str = "production",
+) -> ScanContext:
     return ScanContext(
         compose_sets=[],
         effective_configs=effective or {},
         env_files=env_files or [],
         project_root=root or Path("."),
+        environment=environment,
     )
 
 
@@ -112,6 +118,92 @@ services:
 """
     findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}))
     assert findings == []
+
+
+# ── COMPOSE_EXPOSED_DB_PORT localhost 바인딩 ─────────────────────────────────
+
+def test_compose_exposed_db_port_localhost_ipv4_is_low():
+    yaml = """
+services:
+  db:
+    image: mysql:8
+    ports:
+      - "127.0.0.1:3306:3306"
+"""
+    findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}))
+    assert len(findings) == 1
+    assert findings[0].severity == "LOW"
+    assert "localhost 바인딩" in findings[0].title
+
+
+def test_compose_exposed_db_port_localhost_ipv6_is_low():
+    yaml = """
+services:
+  db:
+    image: postgres:15
+    ports:
+      - "::1:5432:5432"
+"""
+    findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}))
+    assert len(findings) == 1
+    assert findings[0].severity == "LOW"
+    assert "localhost 바인딩" in findings[0].title
+
+
+def test_compose_exposed_db_port_no_bind_address_stays_critical():
+    yaml = """
+services:
+  db:
+    image: mysql:8
+    ports:
+      - "3306:3306"
+"""
+    findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}))
+    assert len(findings) == 1
+    assert findings[0].severity == "CRITICAL"
+
+
+def test_compose_exposed_db_port_0000_stays_critical():
+    yaml = """
+services:
+  db:
+    image: mysql:8
+    ports:
+      - "0.0.0.0:3306:3306"
+"""
+    findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}))
+    assert len(findings) == 1
+    assert findings[0].severity == "CRITICAL"
+
+
+def test_compose_exposed_db_port_dict_localhost_is_low():
+    yaml = """
+services:
+  db:
+    image: postgres:15
+    ports:
+      - published: 5432
+        target: 5432
+        host_ip: 127.0.0.1
+"""
+    findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}))
+    assert len(findings) == 1
+    assert findings[0].severity == "LOW"
+    assert "localhost 바인딩" in findings[0].title
+
+
+def test_compose_exposed_db_port_bracket_ipv6_is_low():
+    yaml = """
+services:
+  db:
+    image: postgres:15
+    ports:
+      - "[::1]:5432:5432"
+"""
+    findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}))
+    assert len(findings) == 1
+    assert findings[0].severity == "LOW"
+    assert "localhost 바인딩" in findings[0].title
 
 
 # ── COMPOSE_PRIVILEGED_MODE ──────────────────────────────────────────────────
@@ -503,6 +595,172 @@ def test_env_plain_secret_git_tracked_file_stays_high(tmp_path: Path, monkeypatc
 
     assert len(findings) == 1
     assert findings[0].severity == "HIGH"
+
+
+# ── 환경별 심각도 (Stage 2) ──────────────────────────────────────────────────
+
+def test_env_local_db_port_no_localhost_is_low():
+    yaml = """
+services:
+  db:
+    image: mysql:8
+    ports:
+      - "3306:3306"
+"""
+    findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}, environment="local"))
+    assert len(findings) == 1
+    assert findings[0].severity == "LOW"
+
+
+def test_env_production_db_port_stays_critical():
+    yaml = """
+services:
+  db:
+    image: mysql:8
+    ports:
+      - "3306:3306"
+"""
+    findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}, environment="production"))
+    assert len(findings) == 1
+    assert findings[0].severity == "CRITICAL"
+
+
+def test_env_local_hardcoded_secret_is_medium():
+    yaml = """
+services:
+  app:
+    image: myapp:1.0
+    environment:
+      DB_PASSWORD: supersecret
+"""
+    findings = ComposeHardcodedSecretRule().check(_ctx({"default": yaml}, environment="local"))
+    assert len(findings) == 1
+    assert findings[0].severity == "MEDIUM"
+
+
+def test_env_local_privileged_is_medium():
+    yaml = """
+services:
+  app:
+    image: myapp:1.0
+    privileged: true
+"""
+    findings = ComposePrivilegedModeRule().check(_ctx({"default": yaml}, environment="local"))
+    assert len(findings) == 1
+    assert findings[0].severity == "MEDIUM"
+
+
+def test_env_local_host_network_is_medium():
+    yaml = """
+services:
+  app:
+    image: myapp:1.0
+    network_mode: host
+"""
+    findings = ComposeHostNetworkRule().check(_ctx({"default": yaml}, environment="local"))
+    assert len(findings) == 1
+    assert findings[0].severity == "MEDIUM"
+
+
+def test_env_local_latest_tag_stays_medium():
+    yaml = """
+services:
+  app:
+    image: myapp:latest
+"""
+    findings = ComposeLatestTagRule().check(_ctx({"default": yaml}, environment="local"))
+    assert len(findings) == 1
+    assert findings[0].severity == "MEDIUM"
+
+
+def test_localhost_binding_overrides_env_production():
+    yaml = """
+services:
+  db:
+    image: mysql:8
+    ports:
+      - "127.0.0.1:3306:3306"
+"""
+    findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}, environment="production"))
+    assert len(findings) == 1
+    assert findings[0].severity == "LOW"
+
+
+# ── 환경 자동 감지 ──────────────────────────────────────────────────────────
+
+from ssafer.core.compose import detect_environment_from_compose_sets
+
+
+def test_detect_env_from_filename_dev():
+    cs = ComposeSet("dev", Path("/project"), [Path("/project/docker-compose.dev.yml")], [])
+    assert detect_environment_from_compose_sets([cs]) == "local"
+
+
+def test_detect_env_from_filename_prod():
+    cs = ComposeSet("prod", Path("/project"), [Path("/project/docker-compose.prod.yml")], [])
+    assert detect_environment_from_compose_sets([cs]) == "production"
+
+
+def test_detect_env_from_directory_path_dev():
+    cs = ComposeSet("default", Path("/project/infra/dev"), [Path("/project/infra/dev/docker-compose.yml")], [])
+    assert detect_environment_from_compose_sets([cs]) == "local"
+
+
+def test_detect_env_from_directory_path_prod():
+    cs = ComposeSet("default", Path("/project/infra/prod"), [Path("/project/infra/prod/docker-compose.yml")], [])
+    assert detect_environment_from_compose_sets([cs]) == "production"
+
+
+def test_detect_env_defaults_to_production():
+    cs = ComposeSet("default", Path("/project"), [Path("/project/docker-compose.yml")], [])
+    assert detect_environment_from_compose_sets([cs]) == "production"
+
+
+def test_detect_env_ignores_override():
+    cs = ComposeSet("default", Path("/dev"), [Path("/dev/compose.override.yml")], [])
+    assert detect_environment_from_compose_sets([cs]) == "production"
+
+
+def test_detect_env_from_spring_profiles_dev():
+    cs = ComposeSet("default", Path("/project"), [Path("/project/docker-compose.yml")], [])
+    config = {"default": """
+services:
+  spring:
+    image: myapp:1.0
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+"""}
+    assert detect_environment_from_compose_sets([cs], config) == "local"
+
+
+def test_detect_env_from_spring_profiles_prod():
+    cs = ComposeSet("default", Path("/project"), [Path("/project/docker-compose.yml")], [])
+    config = {"default": """
+services:
+  spring:
+    image: myapp:1.0
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+"""}
+    assert detect_environment_from_compose_sets([cs], config) == "production"
+
+
+def test_detect_env_prod_path_overrides_dev_filename():
+    cs = ComposeSet("dev", Path("/project/infra/prod"), [Path("/project/infra/prod/docker-compose.dev.yml")], [])
+    assert detect_environment_from_compose_sets([cs]) == "production"
+
+
+def test_detect_env_from_build_and_node_env():
+    cs = ComposeSet("default", Path("/project"), [Path("/project/docker-compose.yml")], [])
+    config = {"default": """
+services:
+  app:
+    build: ./app
+    environment:
+      NODE_ENV: development
+"""}
+    assert detect_environment_from_compose_sets([cs], config) == "local"
 
 
 # ── RuleEngine ───────────────────────────────────────────────────────────────

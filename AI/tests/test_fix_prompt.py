@@ -10,9 +10,11 @@ class FixPromptTest(unittest.TestCase):
         rendered_prompt = "\n".join(message.content for message in messages)
 
         self.assertIn('"patches"', rendered_prompt)
-        self.assertIn('"requiresApproval": true', rendered_prompt)
         self.assertIn('"operation": "replace"', rendered_prompt)
         self.assertIn('"filePath": "Dockerfile"', rendered_prompt)
+        self.assertIn("patchContext.oldText", rendered_prompt)
+        self.assertIn("operation: append", rendered_prompt)
+        self.assertIn("PATCH-{findingId}", rendered_prompt)
         self.assertIn("If patch requirements are not satisfied", rendered_prompt)
         self.assertIn("***MASKED***", rendered_prompt)
 
@@ -23,9 +25,10 @@ class FixPromptTest(unittest.TestCase):
         )
 
         self.assertIn("patches field failed validation", retry_prompt)
-        self.assertIn("requiresApproval", retry_prompt)
-        self.assertIn("patches[].operation must be replace.", retry_prompt)
+        self.assertIn("finding.patchContext", retry_prompt)
+        self.assertIn("patches[].operation must be replace or append.", retry_prompt)
         self.assertIn("patches[].filePath", retry_prompt)
+        self.assertIn("docker-compose YAML", retry_prompt)
         self.assertIn("***MASKED***", retry_prompt)
 
 

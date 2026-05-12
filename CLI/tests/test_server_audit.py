@@ -11,8 +11,11 @@ from ssafer.server.audit import (
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     TRIVY_ROOTFS_TIMEOUT_SECONDS,
     _command_timeout_seconds,
+    _resolve_firewall_state,
+    parse_iptables_input_rules,
     parse_ssh_settings,
     parse_ss_listening_ports,
+    parse_ufw_rules,
     run_server_audit,
     save_server_audit_result,
     to_jsonable,
@@ -416,3 +419,148 @@ def test_server_audit_command_uploads_saved_result(tmp_path: Path, monkeypatch):
         "api_url": "https://api.example.com",
     }
     assert "777" in result.output
+
+
+# ── parse_ufw_rules ────────────────────────────────────────────────────────
+
+def test_parse_ufw_allow_and_deny():
+    output = """\
+Status: active
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       Anywhere
+3306/tcp                   DENY        Anywhere
+80/tcp                     ALLOW       Anywhere
+"""
+    rules = parse_ufw_rules(output)
+    assert rules[22] == ["ALLOW"]
+    assert rules[3306] == ["DENY"]
+    assert rules[80] == ["ALLOW"]
+
+
+def test_parse_ufw_inactive_returns_empty():
+    rules = parse_ufw_rules("Status: inactive\n")
+    assert rules == {}
+
+
+# ── parse_iptables_input_rules ──────────────────────────────────────────────
+
+def test_parse_iptables_accept_and_drop():
+    output = """\
+-P INPUT ACCEPT
+-P FORWARD DROP
+-P OUTPUT ACCEPT
+-A INPUT -p tcp --dport 22 -j ACCEPT
+-A INPUT -p tcp --dport 3306 -j DROP
+-A INPUT -p tcp --dport 5432 -j REJECT
+"""
+    rules = parse_iptables_input_rules(output)
+    assert rules[22] == ["ALLOW"]
+    assert rules[3306] == ["DENY"]
+    assert rules[5432] == ["DENY"]
+
+
+def test_parse_iptables_ignores_policy_and_output_chain():
+    output = "-P INPUT ACCEPT\n-A OUTPUT -p tcp --dport 443 -j ACCEPT\n"
+    rules = parse_iptables_input_rules(output)
+    assert rules == {}
+
+
+# ── _resolve_firewall_state ─────────────────────────────────────────────────
+
+def test_resolve_deny_overrides_allow():
+    ufw = {3306: ["ALLOW"]}
+    iptables = {3306: ["DENY"]}
+    state = _resolve_firewall_state(ufw, iptables)
+    assert state[3306] == "DENY"
+
+
+def test_resolve_merges_both_sources():
+    ufw = {22: ["ALLOW"]}
+    iptables = {3306: ["DENY"]}
+    state = _resolve_firewall_state(ufw, iptables)
+    assert state[22] == "ALLOW"
+    assert state[3306] == "DENY"
+
+
+# ── cross_validate (integration) ───────────────────────────────────────────
+
+def test_cross_validate_firewall_deny_lowers_severity():
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["ss", "-tulpen"]:
+            return CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:3306 0.0.0.0:*")
+        if "ufw" in command:
+            return CommandResult(command, 0, "Status: active\n\n3306/tcp DENY Anywhere\n")
+        if "iptables" in command:
+            return CommandResult(command, 0, "")
+        return CommandResult(command, 0, "")
+
+    result = run_server_audit(checks=["ports", "firewall"], runner=fake_runner)
+    port_findings = [f for f in result.findings if f.ruleId == "SERVER_PUBLIC_SENSITIVE_PORT"]
+    assert len(port_findings) == 1
+    assert port_findings[0].severity == "LOW"
+    assert "방화벽 차단됨" in port_findings[0].title
+
+
+def test_cross_validate_firewall_allow_stays_critical():
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["ss", "-tulpen"]:
+            return CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:3306 0.0.0.0:*")
+        if "ufw" in command:
+            return CommandResult(command, 0, "Status: active\n\n3306/tcp ALLOW Anywhere\n")
+        if "iptables" in command:
+            return CommandResult(command, 0, "")
+        return CommandResult(command, 0, "")
+
+    result = run_server_audit(checks=["ports", "firewall"], runner=fake_runner)
+    port_findings = [f for f in result.findings if f.ruleId == "SERVER_PUBLIC_SENSITIVE_PORT"]
+    assert len(port_findings) == 1
+    assert port_findings[0].severity == "CRITICAL"
+    assert "방화벽 허용됨" in port_findings[0].title
+
+
+def test_cross_validate_no_firewall_rule_becomes_medium():
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["ss", "-tulpen"]:
+            return CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:3306 0.0.0.0:*")
+        if "ufw" in command:
+            return CommandResult(command, 0, "Status: active\n\n22/tcp ALLOW Anywhere\n")
+        if "iptables" in command:
+            return CommandResult(command, 0, "")
+        return CommandResult(command, 0, "")
+
+    result = run_server_audit(checks=["ports", "firewall"], runner=fake_runner)
+    port_findings = [f for f in result.findings if f.ruleId == "SERVER_PUBLIC_SENSITIVE_PORT"]
+    assert len(port_findings) == 1
+    assert port_findings[0].severity == "MEDIUM"
+    assert "방화벽 규칙 없음" in port_findings[0].title
+
+
+def test_cross_validate_ufw_active_no_port_rule_becomes_medium():
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["ss", "-tulpen"]:
+            return CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:3306 0.0.0.0:*")
+        if "ufw" in command:
+            return CommandResult(command, 0, "Status: active\n\nTo Action From\n-- ------ ----\n")
+        if "iptables" in command:
+            return CommandResult(command, 1, stderr="command not found")
+        return CommandResult(command, 0, "")
+
+    result = run_server_audit(checks=["ports", "firewall"], runner=fake_runner)
+    port_findings = [f for f in result.findings if f.ruleId == "SERVER_PUBLIC_SENSITIVE_PORT"]
+    assert len(port_findings) == 1
+    assert port_findings[0].severity == "MEDIUM"
+    assert "방화벽 규칙 없음" in port_findings[0].title
+
+
+def test_cross_validate_no_firewall_data_preserves_severity():
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["ss", "-tulpen"]:
+            return CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:3306 0.0.0.0:*")
+        return CommandResult(command, 1, stderr="command not found")
+
+    result = run_server_audit(checks=["ports", "firewall"], runner=fake_runner)
+    port_findings = [f for f in result.findings if f.ruleId == "SERVER_PUBLIC_SENSITIVE_PORT"]
+    assert len(port_findings) == 1
+    assert port_findings[0].severity == "HIGH"

@@ -16,7 +16,6 @@ import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.RequestActorType;
-import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
@@ -78,7 +77,39 @@ class ScanFindingDetailQueryServiceTest {
         .ruleCode("DS-0002")
         .attackScenario("Container escape")
         .remediationGuide("Use non-root user")
-        .rawSnippetJson("{\"line\":2}")
+        .rawSnippetJson("""
+            {
+              "maskedEvidence": "USER root",
+              "impact": "초보자도 이해하기 쉬운 영향",
+              "targetFiles": ["Dockerfile"],
+              "explanation": {
+                "summary": "취약점 요약",
+                "whyRisky": "위험한 이유",
+                "abuseScenario": "악용 가능 시나리오",
+                "expectedImpact": "예상 영향",
+                "severityInterpretation": "심각도 해석"
+              },
+              "fix": {
+                "summary": "수정 요약",
+                "priority": "high",
+                "recommendedActions": ["조치 1"],
+                "codeGuidance": "코드 가이드",
+                "verification": "검증 방법",
+                "cautions": ["주의사항"],
+                "patches": [
+                  {
+                    "patchId": "PATCH-0001",
+                    "findingId": "FND-0001",
+                    "operation": "replace",
+                    "filePath": "Dockerfile",
+                    "oldText": "USER root",
+                    "newText": "USER app",
+                    "expectedFileHash": "sha256:abc"
+                  }
+                ]
+              }
+            }
+            """)
         .patchPayloadJson("{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}")
         .resolutionStatus(ResolutionStatus.OPEN)
         .patchApprovedActorType(com.ssafer.scan.domain.enums.RequestActorType.USER)
@@ -107,6 +138,13 @@ class ScanFindingDetailQueryServiceTest {
     assertThat(response.category()).isEqualTo("CONFIG");
     assertThat(response.lineNumber()).isEqualTo(2);
     assertThat(response.ruleCode()).isEqualTo("DS-0002");
+    assertThat(response.maskedEvidence()).isEqualTo("USER root");
+    assertThat(response.explanation()).isNotNull();
+    assertThat(response.explanation().whyRisky()).isEqualTo("위험한 이유");
+    assertThat(response.impact()).isEqualTo("초보자도 이해하기 쉬운 영향");
+    assertThat(response.fix()).isNotNull();
+    assertThat(response.fix().patches()).hasSize(1);
+    assertThat(response.targetFiles()).containsExactly("Dockerfile");
     assertThat(response.patchApprovedActorType()).isEqualTo(RequestActorType.USER);
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);
   }

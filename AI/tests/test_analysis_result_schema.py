@@ -48,6 +48,10 @@ def build_finding(**overrides):
         "line": None,
         "title": "Dockerfile runs as root",
         "maskedEvidence": "USER root",
+        "patchContext": {
+            "oldText": "USER root",
+            "expectedFileHash": "sha256:fresh",
+        },
     }
     finding.update(overrides)
     return finding
@@ -107,8 +111,17 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
                 )
             )
 
-    def test_validate_fix_schema_rejects_unsupported_patch_operation(self):
-        with self.assertRaisesRegex(ValueError, "fix.patches\\[0\\].operation"):
+    def test_validate_fix_schema_accepts_append_patch_without_old_text(self):
+        patch = build_patch(
+            operation="append",
+            newText="\nHEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost/ || exit 1",
+        )
+        patch.pop("oldText")
+
+        validate_fix_schema(build_fix(patches=[patch]))
+
+    def test_validate_fix_schema_rejects_append_patch_with_old_text(self):
+        with self.assertRaisesRegex(ValueError, "fix.patches\\[0\\].oldText"):
             validate_fix_schema(build_fix(patches=[build_patch(operation="append")]))
 
     def test_validate_fix_schema_rejects_invalid_patch_metadata(self):
@@ -199,7 +212,94 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
         patch = analysis_result["results"][0]["fix"]["patches"][0]
         self.assertEqual(patch["filePath"], "Dockerfile")
         self.assertEqual(patch["expectedFileHash"], "sha256:fresh")
+        self.assertEqual(patch["oldText"], "USER root")
         self.assertNotIn("targetFile", patch)
+
+    def test_normalize_analysis_result_patches_removes_patch_without_patch_context(self):
+        finding = build_finding()
+        finding.pop("patchContext")
+        analysis_result = build_analysis_result_with_patch(build_patch())
+
+        normalize_analysis_result_patches(
+            findings=[finding],
+            scan_result={"sourceFileHashes": {"Dockerfile": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        self.assertNotIn("patches", analysis_result["results"][0]["fix"])
+
+    def test_normalize_analysis_result_patches_uses_patch_context_old_text_verbatim(self):
+        finding = build_finding(
+            patchContext={
+                "oldText": "USER    root",
+                "expectedFileHash": "sha256:fresh",
+            }
+        )
+        analysis_result = build_analysis_result_with_patch(
+            build_patch(oldText="USER root")
+        )
+
+        normalize_analysis_result_patches(
+            findings=[finding],
+            scan_result={
+                "sourceFileHashes": {"Dockerfile": "sha256:fresh"},
+                "artifacts": [{"target": "Dockerfile", "content": "USER    root\n"}],
+            },
+            analysis_result=analysis_result,
+        )
+
+        self.assertEqual(
+            analysis_result["results"][0]["fix"]["patches"][0]["oldText"],
+            "USER    root",
+        )
+
+    def test_normalize_analysis_result_patches_accepts_safe_dockerfile_append(self):
+        finding = build_finding(
+            patchContext={
+                "expectedFileHash": "sha256:fresh",
+            },
+        )
+        append_patch = build_patch(
+            operation="append",
+            newText="\nHEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost/ || exit 1",
+        )
+        append_patch.pop("oldText")
+        analysis_result = build_analysis_result_with_patch(append_patch)
+
+        normalize_analysis_result_patches(
+            findings=[finding],
+            scan_result={"sourceFileHashes": {"Dockerfile": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        patch = analysis_result["results"][0]["fix"]["patches"][0]
+        self.assertEqual(patch["operation"], "append")
+        self.assertNotIn("oldText", patch)
+        self.assertEqual(patch["expectedFileHash"], "sha256:fresh")
+
+    def test_normalize_analysis_result_patches_rejects_compose_append(self):
+        finding = build_finding(
+            file="docker-compose.yml",
+            filePath="docker-compose.yml",
+            patchContext={
+                "expectedFileHash": "sha256:fresh",
+            },
+        )
+        append_patch = build_patch(
+            filePath="docker-compose.yml",
+            operation="append",
+            newText="\nservices: {}",
+        )
+        append_patch.pop("oldText")
+        analysis_result = build_analysis_result_with_patch(append_patch)
+
+        normalize_analysis_result_patches(
+            findings=[finding],
+            scan_result={"sourceFileHashes": {"docker-compose.yml": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        self.assertNotIn("patches", analysis_result["results"][0]["fix"])
 
     def test_normalize_analysis_result_patches_removes_patch_when_file_path_conflicts(self):
         analysis_result = build_analysis_result_with_patch(
@@ -239,9 +339,7 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
             analysis_result=analysis_result,
         )
 
-        patch = analysis_result["results"][0]["fix"]["patches"][0]
-        self.assertEqual(patch["filePath"], "a.yml")
-        self.assertEqual(patch["expectedFileHash"], "sha256:a")
+        self.assertNotIn("patches", analysis_result["results"][0]["fix"])
 
     def test_normalize_analysis_result_patches_removes_ambiguous_target_file_patch(self):
         finding = build_finding(filePath=None, targetFiles=["a.yml", "b.yml"])
