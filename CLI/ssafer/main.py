@@ -32,6 +32,8 @@ _STATUS_KO = {
     "FAILED": "[red]실패[/red]",
 }
 
+_SCAN_EMPTY_STATUS = "[yellow]스캔 대상 없음[/yellow]"
+
 _TYPE_KO = {
     "sanitized-effective-compose": "마스킹된 Compose 설정",
     "env-metadata": "환경변수 메타데이터",
@@ -100,15 +102,15 @@ def callback() -> None:
     """SSAfer CLI."""
 
 
-@app.command(help="CLI 버전을 출력합니다.")
+@app.command(help="CLI 버전을 출력합니다.", rich_help_panel="기본")
 def version() -> None:
-    """Print the SSAfer CLI version."""
+    """CLI 버전을 출력합니다."""
     console.print(__version__)
 
 
-@app.command(help="로그인/Agent 설정 상태를 확인합니다.")
+@app.command(help="로그인/Agent 설정 상태를 확인합니다.", rich_help_panel="계정/상태")
 def status() -> None:
-    """Show saved login and local-agent status."""
+    """로그인과 Local Agent 설정 상태를 확인합니다."""
     from ssafer.core.auth import (
         CONFIG_PATH,
         describe_token_source,
@@ -135,7 +137,10 @@ def status() -> None:
         table.add_row(
             "Local Agent",
             "[green]설정됨[/green]",
-            f"agentId={agent_config.get('agentId')}, projectId={agent_config.get('projectId')} ({agent_config_path})",
+            (
+                f"agentId={agent_config.get('agentId')}, projectId={agent_config.get('projectId')}\n"
+                f"설정 파일: {agent_config_path}"
+            ),
         )
     else:
         table.add_row("Local Agent", "[yellow]미설정[/yellow]", "ssafer agent 실행 시 설정 가능")
@@ -159,11 +164,11 @@ def doctor() -> None:
         console.print("[yellow]Trivy 설치:[/yellow] ssafer install-tools")
 
 
-@app.command("install-tools", help="Trivy 등 선택 도구를 설치합니다.")
+@app.command("install-tools", help="Trivy 등 선택 도구를 설치합니다.", rich_help_panel="서버 점검")
 def install_tools() -> None:
-    """Install optional local tools used by SSAfer."""
-    console.print("[cyan]Installing Trivy. This can take a few minutes...[/cyan]")
-    with console.status("[cyan]Running installer...[/cyan]", spinner="dots"):
+    """Trivy 등 SSAfer가 선택적으로 사용하는 도구를 설치합니다."""
+    console.print("[cyan]Trivy를 설치합니다. 몇 분 정도 걸릴 수 있습니다...[/cyan]")
+    with console.status("[cyan]설치 진행 중...[/cyan]", spinner="dots"):
         ok, message = install_trivy_with_winget()
     if ok:
         console.print(f"[green]{message}[/green]")
@@ -172,29 +177,29 @@ def install_tools() -> None:
     raise typer.Exit(code=1)
 
 
-@app.command("server-audit", help="서버 내부 런타임 보안 상태를 점검합니다.")
+@app.command("server-audit", help="서버 내부 런타임 보안 상태를 점검합니다.", rich_help_panel="서버 점검")
 def server_audit(
-    path: Optional[Path] = typer.Option(None, "--path", "-p", help="Output root for .ssafer server-audit files."),
-    upload: bool = typer.Option(False, "--upload", help="Upload the generated server audit package."),
-    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL for --upload."),
+    path: Optional[Path] = typer.Option(None, "--path", "-p", help="server-audit 결과를 저장할 기준 폴더입니다. 생략하면 홈 디렉터리를 사용합니다."),
+    upload: bool = typer.Option(False, "--upload", help="점검 결과를 생성한 뒤 백엔드/S3에 업로드합니다."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="업로드에 사용할 SSAfer 백엔드 API URL입니다."),
     checks: Optional[str] = typer.Option(
         None,
         "--checks",
-        help="Comma-separated checks: ports,processes,docker,ssh,firewall,nginx,os-packages.",
+        help="실행할 점검 목록입니다. 예: ports,processes,docker,ssh,firewall,nginx,os-packages",
     ),
-    details: bool = typer.Option(False, "--details", "-d", help="Print findings, warnings, and artifacts."),
+    details: bool = typer.Option(False, "--details", "-d", help="findings, warnings, artifacts 상세 내용을 함께 출력합니다."),
     include_os_packages: bool = typer.Option(
         False,
         "--include-os-packages",
-        help="Run Trivy rootfs OS package vulnerability scan. This can be slow and may require privileges.",
+        help="Trivy rootfs 기반 OS 패키지 취약점 점검을 포함합니다. 오래 걸릴 수 있고 권한이 필요할 수 있습니다.",
     ),
     allow_sudo_option: bool = typer.Option(
         False,
         "--allow-sudo",
-        help="Retry privileged server checks with sudo without asking for confirmation.",
+        help="권한이 필요한 서버 점검을 사용자 확인 없이 sudo로 재시도합니다.",
     ),
 ) -> None:
-    """Audit runtime security state from inside a server."""
+    """EC2/서버 안에서 런타임 보안 상태를 점검합니다."""
     from ssafer.server.audit import run_server_audit, save_server_audit_result
 
     selected_checks = [item.strip() for item in checks.split(",") if item.strip()] if checks else None
@@ -234,8 +239,8 @@ def server_audit(
     if details:
         _print_server_audit_details(result)
     if upload:
-        console.print("[cyan]Uploading server audit result...[/cyan]")
-        with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+        console.print("[cyan]서버 점검 결과를 업로드합니다...[/cyan]")
+        with console.status("[cyan]백엔드 등록 및 S3 업로드 진행 중...[/cyan]", spinner="dots"):
             response = _upload_server_audit_or_exit(output_root, api_url=api_url)
         _print_upload_response(response)
     console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
@@ -245,14 +250,14 @@ def _can_prompt_for_sudo() -> bool:
     return bool(getattr(sys.stdin, "isatty", lambda: False)())
 
 
-@app.command(help="현재 프로젝트를 스캔하고 로컬 결과 JSON을 생성합니다.")
+@app.command(help="현재 프로젝트를 스캔하고 로컬 결과 JSON을 생성합니다.", rich_help_panel="로컬 점검")
 def run(
-    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to scan."),
-    upload: bool = typer.Option(False, "--upload", help="Upload the generated scan package after run."),
-    save_raw: bool = typer.Option(False, "--save-raw", help="Store raw effective compose configs locally."),
-    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL for --upload."),
+    path: Path = typer.Option(Path("."), "--path", "-p", help="스캔할 프로젝트 루트입니다. CLI 폴더 안이면 보통 --path .. 를 사용합니다."),
+    upload: bool = typer.Option(False, "--upload", help="스캔 후 결과 JSON을 백엔드/S3에 바로 업로드합니다."),
+    save_raw: bool = typer.Option(False, "--save-raw", help="마스킹 전 effective compose 설정도 로컬에 저장합니다. 민감정보 포함 가능성이 있어 주의하세요."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="--upload에 사용할 SSAfer 백엔드 API URL입니다."),
 ) -> None:
-    """Create a local sanitized SSAfer scan package."""
+    """현재 프로젝트의 설정 파일을 점검하고 로컬 결과 JSON을 생성합니다."""
     step_ref = ["스캔 준비 중..."]
     result_ref: list = [None]
     error_ref: list = [None]
@@ -291,37 +296,37 @@ def run(
 
     _print_scan_summary(result_ref[0])
     if upload:
-        console.print("[cyan]Uploading scan result...[/cyan]")
-        with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+        console.print("[cyan]스캔 결과를 업로드합니다...[/cyan]")
+        with console.status("[cyan]백엔드 등록 및 S3 업로드 진행 중...[/cyan]", spinner="dots"):
             response = _upload_or_exit(path.resolve(), api_url=api_url)
         _print_upload_response(response)
 
 
-@app.command(help="최근 로컬 스캔 결과를 백엔드/S3에 업로드합니다.")
+@app.command(help="최근 로컬 스캔 결과를 백엔드/S3에 업로드합니다.", rich_help_panel="로컬 점검")
 def upload(
-    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root containing .ssafer results."),
-    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL."),
+    path: Path = typer.Option(Path("."), "--path", "-p", help=".ssafer/results가 있는 프로젝트 루트입니다."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="업로드에 사용할 SSAfer 백엔드 API URL입니다."),
 ) -> None:
-    """Upload the last local scan package."""
-    console.print("[cyan]Uploading scan result...[/cyan]")
-    with console.status("[cyan]Sending result to backend and S3...[/cyan]", spinner="dots"):
+    """최근 로컬 스캔 결과 JSON을 백엔드/S3에 업로드합니다."""
+    console.print("[cyan]스캔 결과를 업로드합니다...[/cyan]")
+    with console.status("[cyan]백엔드 등록 및 S3 업로드 진행 중...[/cyan]", spinner="dots"):
         response = _upload_or_exit(path.resolve(), api_url=api_url)
     _print_upload_response(response)
 
 
-@app.command("apply", help="승인된 수정안을 로컬 프로젝트 파일에 적용합니다.")
+@app.command("apply", help="승인된 수정안을 로컬 프로젝트 파일에 적용합니다.", rich_help_panel="수정 적용")
 def apply_fix(
-    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root to patch."),
-    analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="Worker analysis_result.json with patch payloads."),
-    scan_id: Optional[int] = typer.Option(None, "--scan-id", help="Download analysis_result.json for this backend scan ID."),
-    latest: bool = typer.Option(False, "--latest", help="Use the latest DONE scan for the selected project."),
-    project_id: Optional[int] = typer.Option(None, "--project-id", help="Project ID used with --latest."),
-    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL for --scan-id."),
-    patch_id: Optional[str] = typer.Option(None, "--patch-id", help="Apply only one patch ID."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch payloads without modifying files."),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirmation prompt."),
+    path: Path = typer.Option(Path("."), "--path", "-p", help="수정안을 적용할 프로젝트 루트입니다."),
+    analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="patch payload가 들어있는 analysis_result.json 경로입니다."),
+    scan_id: Optional[int] = typer.Option(None, "--scan-id", help="해당 백엔드 scanId의 analysis_result.json을 내려받아 적용합니다."),
+    latest: bool = typer.Option(False, "--latest", help="선택한 프로젝트의 최신 DONE 스캔 결과를 내려받아 적용합니다."),
+    project_id: Optional[int] = typer.Option(None, "--project-id", help="--latest에서 사용할 프로젝트 ID입니다. 생략하면 저장된 agent projectId를 사용합니다."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="analysis_result 다운로드에 사용할 SSAfer 백엔드 API URL입니다."),
+    patch_id: Optional[str] = typer.Option(None, "--patch-id", help="특정 patchId 하나만 적용합니다."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="파일을 바꾸지 않고 적용 가능 여부와 diff만 확인합니다."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="확인 질문 없이 바로 적용합니다."),
 ) -> None:
-    """Apply approved patch payloads to local project files."""
+    """AI 분석 결과의 patch payload를 로컬 파일에 적용합니다."""
     from ssafer.core.patches import (
         PatchCandidate,
         PatchError,
@@ -344,23 +349,30 @@ def apply_fix(
             analysis_path = analysis_result or find_default_analysis_result(project_root)
         if analysis_path is None:
             raise PatchError(
-                "analysis_result.json not found. Use --analysis-result or place it under .ssafer/analysis_result.json."
+                "analysis_result.json을 찾지 못했습니다. --analysis-result로 경로를 지정하거나 "
+                "--scan-id/--latest로 백엔드 분석 결과를 내려받으세요."
             )
         console.print(f"[dim]Analysis result: {analysis_path}[/dim]")
         if analysis_result is None and scan_id is None and not latest and not yes:
             console.print(
-                "[yellow]Using a local analysis_result.json that was not downloaded by this command. "
-                "Make sure it belongs to the current project.[/yellow]"
+                "[yellow]로컬 analysis_result.json을 사용합니다. "
+                "현재 프로젝트의 분석 결과가 맞는지 확인해 주세요.[/yellow]"
             )
-            if not typer.confirm("Continue with local analysis_result.json?"):
-                console.print("[yellow]Patch apply canceled.[/yellow]")
+            if not typer.confirm("계속 진행할까요?"):
+                console.print("[yellow]수정 적용을 취소했습니다.[/yellow]")
                 raise typer.Exit(code=1)
 
         candidates = load_patch_candidates_from_file(analysis_path)
+        if not candidates:
+            console.print("[yellow]이 분석 결과에는 자동 적용 가능한 patch payload가 없습니다.[/yellow]")
+            console.print(
+                "[dim]파일은 변경하지 않았습니다. 웹 결과나 analysis_result.json의 권장 조치를 확인해 주세요.[/dim]"
+            )
+            return
+
         selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
         if not selected:
-            console.print("[yellow]No applicable patch payloads found.[/yellow]")
-            raise typer.Exit(code=1)
+            raise PatchError(f"patchId를 찾지 못했습니다: {patch_id}")
 
         selected = _select_patch_candidates(selected, patch_id=patch_id, yes=yes)
         _print_patch_preview(selected)
@@ -380,10 +392,10 @@ def apply_fix(
             dry_run=dry_run,
         )
     except (OSError, ValueError, PatchError, RuntimeError) as exc:
-        console.print(f"[red]Patch apply failed:[/red] {exc}")
+        console.print(f"[red]수정 적용 실패:[/red] {exc}")
         raise typer.Exit(code=1) from exc
 
-    result_table = Table(title="Patch apply result")
+    result_table = Table(title="수정 적용 결과")
     result_table.add_column("Patch ID")
     result_table.add_column("Status")
     result_table.add_column("File", overflow="fold")
@@ -402,19 +414,20 @@ def apply_fix(
 
 @app.command("agent-watch", hidden=True)
 def agent_watch(
-    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root where patches are applied."),
-    api_url: Optional[str] = typer.Option(None, "--api-url", help="Backend API base URL."),
-    agent_id: Optional[int] = typer.Option(None, "--agent-id", help="Local agent ID issued by the backend."),
-    project_id: Optional[int] = typer.Option(None, "--project-id", help="Project ID bound to the local agent."),
-    agent_token: Optional[str] = typer.Option(None, "--agent-token", help="Agent bearer token issued by the backend."),
-    interval: float = typer.Option(5.0, "--interval", help="Polling interval in seconds."),
-    once: bool = typer.Option(False, "--once", help="Connect, fetch pending tasks once, then exit."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Validate patch tasks without modifying files."),
-    reconnect: bool = typer.Option(True, "--reconnect/--no-reconnect", help="Reconnect automatically when the agent connection drops."),
-    max_retries: Optional[int] = typer.Option(None, "--max-retries", help="Maximum reconnect attempts. Omit for unlimited retries."),
-    reconnect_max_delay: float = typer.Option(30.0, "--reconnect-max-delay", help="Maximum reconnect backoff delay in seconds."),
+    path: Path = typer.Option(Path("."), "--path", "-p", help="agent가 작업할 프로젝트 루트입니다."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="SSAfer 백엔드 API URL입니다."),
+    agent_id: Optional[int] = typer.Option(None, "--agent-id", help="백엔드에서 발급한 Local Agent ID입니다."),
+    project_id: Optional[int] = typer.Option(None, "--project-id", help="이 agent가 연결될 프로젝트 ID입니다."),
+    agent_token: Optional[str] = typer.Option(None, "--agent-token", help="백엔드에서 발급한 agent 인증 토큰입니다."),
+    interval: float = typer.Option(5.0, "--interval", help="WebSocket 알림이 없을 때 사용할 보조 확인 주기입니다."),
+    once: bool = typer.Option(False, "--once", help="연결 후 pending task를 한 번만 확인하고 종료합니다."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="파일을 바꾸지 않고 agent task 처리 가능 여부만 확인합니다."),
+    reconnect: bool = typer.Option(True, "--reconnect/--no-reconnect", help="agent 연결이 끊기면 자동으로 재연결합니다."),
+    max_retries: Optional[int] = typer.Option(None, "--max-retries", help="최대 재연결 횟수입니다. 생략하면 계속 재시도합니다."),
+    reconnect_max_delay: float = typer.Option(30.0, "--reconnect-max-delay", help="재연결 대기 시간의 최대값(초)입니다."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="연결 payload, pending task 조회 같은 상세 로그를 출력합니다."),
 ) -> None:
-    """Connect a local agent and apply pending PATCH_APPLY tasks."""
+    """Local Agent를 연결하고 pending task를 처리합니다."""
     _run_agent_watch(
         path=path,
         api_url=api_url,
@@ -427,14 +440,15 @@ def agent_watch(
         reconnect=reconnect,
         max_retries=max_retries,
         reconnect_max_delay=reconnect_max_delay,
+        verbose=verbose,
     )
 
 
-@app.command("agent", help="Local Agent를 설정하고 실행합니다.")
+@app.command("agent", help="Local Agent를 설정하고 실행합니다.", rich_help_panel="Local Agent")
 def agent(
-    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root where patches are applied."),
+    path: Path = typer.Option(Path("."), "--path", "-p", help="agent가 연결될 프로젝트 루트입니다."),
 ) -> None:
-    """Initialize the local agent if needed, then keep it running."""
+    """Local Agent를 설정하고 웹 요청을 처리할 수 있게 실행합니다."""
     _start_agent(path=path)
 
 
@@ -447,7 +461,7 @@ def _start_agent(*, path: Path, refresh_token: bool = False) -> None:
         endpoint = load_endpoint()
         access_token = load_token()
         if access_token is None:
-            console.print("[red]Login token is required. Run ssafer login first.[/red]")
+            console.print("[red]로그인이 필요합니다. 먼저 ssafer login을 실행하세요.[/red]")
             raise typer.Exit(code=1)
         if refresh_token:
             project_id = _select_agent_project_id(endpoint, access_token)
@@ -460,7 +474,7 @@ def _start_agent(*, path: Path, refresh_token: bool = False) -> None:
             access_token=access_token,
             project_root=project_root,
         )
-        console.print("[green]Agent setup complete.[/green]")
+        console.print("[green]Agent 설정 완료.[/green]")
     _run_agent_watch(
         path=project_root,
         api_url=None,
@@ -473,48 +487,51 @@ def _start_agent(*, path: Path, refresh_token: bool = False) -> None:
         reconnect=True,
         max_retries=None,
         reconnect_max_delay=30.0,
+        verbose=False,
         agent_config=agent_config,
     )
 
 
 @app.command("agent-init", hidden=True)
 def agent_init(
-    project_id: int = typer.Option(..., "--project-id", help="Project ID to issue a local-agent token for."),
-    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL."),
+    project_id: int = typer.Option(..., "--project-id", help="agent token을 발급받을 프로젝트 ID입니다."),
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer 백엔드 API URL입니다."),
 ) -> None:
-    """Issue and save a local-agent token for a project."""
+    """프로젝트용 Local Agent 토큰을 발급받아 저장합니다."""
     from ssafer.core.auth import load_endpoint
 
     effective_endpoint = endpoint or load_endpoint()
     agent_data = _issue_and_save_agent_token(project_id, effective_endpoint, "Agent init")
 
-    console.print("[green]Agent token saved.[/green]")
+    console.print("[green]Agent 토큰 저장 완료.[/green]")
     console.print(f"agentId: {agent_data.get('agentId')}")
     console.print(f"projectId: {agent_data.get('projectId')}")
-    console.print("[dim]Run ssafer agent to start watching pending tasks.[/dim]")
+    console.print("[dim]ssafer agent를 실행하면 웹 요청을 받을 수 있습니다.[/dim]")
 
 
-@app.command("project-create", help="SSAfer 프로젝트를 생성합니다.")
+@app.command("project-create", help="SSAfer 프로젝트를 생성합니다.", rich_help_panel="계정/상태")
 def project_create(
-    name: Optional[str] = typer.Option(None, "--name", help="Project name. Defaults to the current folder name."),
-    description: Optional[str] = typer.Option(None, "--description", help="Project description."),
-    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL."),
+    name: Optional[str] = typer.Option(None, "--name", help="생성할 프로젝트 이름입니다. 생략하면 현재 폴더명을 기본값으로 사용합니다."),
+    description: Optional[str] = typer.Option(None, "--description", help="프로젝트 설명입니다."),
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer 백엔드 API URL입니다."),
 ) -> None:
-    """Create a SSAfer project for the logged-in user."""
+    """로그인한 계정에 SSAfer 프로젝트를 생성합니다."""
     from ssafer.core.auth import create_project, load_endpoint, load_token
 
     effective_endpoint = endpoint or load_endpoint()
     access_token = load_token()
     if access_token is None:
-        console.print("[red]Login token is required. Run ssafer login first.[/red]")
+        console.print("[red]로그인이 필요합니다. 먼저 ssafer login을 실행하세요.[/red]")
         raise typer.Exit(code=1)
     if name is None:
+        console.print("[cyan]SSAfer 웹과 CLI가 함께 사용할 프로젝트를 생성합니다.[/cyan]")
+        console.print("[dim]프로젝트는 스캔 기록, 분석 결과, Local Agent 연결 상태를 묶는 단위입니다.[/dim]")
         console.print("[cyan]새 프로젝트 이름을 입력하세요. 그냥 Enter를 누르면 현재 폴더명을 사용합니다.[/cyan]")
         project_name = typer.prompt("프로젝트 이름", default=Path.cwd().name)
     else:
         project_name = name
     if not project_name.strip():
-        console.print("[red]Project name is required.[/red]")
+        console.print("[red]프로젝트 이름을 입력해야 합니다.[/red]")
         raise typer.Exit(code=1)
     try:
         project = create_project(
@@ -524,16 +541,16 @@ def project_create(
             description=description,
         )
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Project create failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Project create failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     project_id = project.get("projectId") or project.get("id")
     if project_id is None:
-        console.print("[red]Project create failed:[/red] backend response is missing projectId.")
+        console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
         raise typer.Exit(code=1)
-    console.print(f"[green]Project created.[/green] projectId={project_id}")
+    console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
 
 
 def _has_saved_agent_config(config: dict) -> bool:
@@ -562,7 +579,7 @@ def _issue_and_save_agent_token(
 
     effective_access_token = access_token or load_token()
     if effective_access_token is None:
-        console.print("[red]Login token is required. Run ssafer login first.[/red]")
+        console.print("[red]로그인이 필요합니다. 먼저 ssafer login을 실행하세요.[/red]")
         raise typer.Exit(code=1)
 
     try:
@@ -586,48 +603,61 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
     try:
         projects = list_projects(endpoint, access_token)
     except httpx.HTTPStatusError as exc:
-        console.print(f"[yellow]Project list failed:[/yellow] {_format_http_error(exc)}")
-        return typer.prompt("Project ID", type=int)
+        console.print(f"[yellow]프로젝트 목록 조회 실패:[/yellow] {_format_http_error(exc)}")
+        console.print("[dim]웹에서 만든 프로젝트의 ID를 알고 있다면 직접 입력할 수 있습니다.[/dim]")
+        return typer.prompt("프로젝트 ID", type=int)
     except httpx.HTTPError as exc:
-        console.print(f"[yellow]Project list failed:[/yellow] {_format_http_transport_error(exc)}")
-        return typer.prompt("Project ID", type=int)
+        console.print(f"[yellow]프로젝트 목록 조회 실패:[/yellow] {_format_http_transport_error(exc)}")
+        console.print("[dim]웹에서 만든 프로젝트의 ID를 알고 있다면 직접 입력할 수 있습니다.[/dim]")
+        return typer.prompt("프로젝트 ID", type=int)
 
     if not projects:
-        console.print("[yellow]No projects were returned by the backend.[/yellow]")
-        if not typer.confirm("Create a new project now?", default=True):
+        console.print("[yellow]이 계정에 연결된 SSAfer 프로젝트가 아직 없습니다.[/yellow]")
+        console.print(
+            "[dim]Local Agent는 어느 웹 프로젝트의 요청을 처리할지 알아야 해서 프로젝트가 필요합니다. "
+            "프로젝트를 만들면 웹에서도 같은 프로젝트로 스캔 기록과 agent 상태를 볼 수 있습니다.[/dim]"
+        )
+        if not typer.confirm("지금 이 폴더용 프로젝트를 새로 만들까요?", default=True):
             console.print(
-                "[yellow]Create or join a project in the SSAfer web app first, "
-                "then run [bold]ssafer agent[/bold] again.[/yellow]"
+                "[yellow]먼저 SSAfer 웹에서 프로젝트를 만들거나 참여한 뒤 "
+                "[bold]ssafer agent[/bold]를 다시 실행하세요.[/yellow]"
             )
             raise typer.Exit(code=1)
         console.print("[cyan]새 프로젝트 이름을 입력하세요. 그냥 Enter를 누르면 현재 폴더명을 사용합니다.[/cyan]")
         name = typer.prompt("프로젝트 이름", default=Path.cwd().name)
         if not name.strip():
-            console.print("[red]Project name is required.[/red]")
+            console.print("[red]프로젝트 이름을 입력해야 합니다.[/red]")
             raise typer.Exit(code=1)
         try:
             project = create_project(endpoint, access_token, name=name.strip())
         except httpx.HTTPStatusError as exc:
-            console.print(f"[red]Project create failed:[/red] {_format_http_error(exc)}")
+            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_error(exc)}")
             raise typer.Exit(code=1) from exc
         except httpx.HTTPError as exc:
-            console.print(f"[red]Project create failed:[/red] {_format_http_transport_error(exc)}")
+            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_transport_error(exc)}")
             raise typer.Exit(code=1) from exc
         project_id = project.get("projectId") or project.get("id")
         if project_id is None:
-            console.print("[red]Project create failed:[/red] backend response is missing projectId.")
+            console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
             raise typer.Exit(code=1)
-        console.print(f"[green]Project created.[/green] projectId={project_id}")
+        console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
         return int(project_id)
 
-    console.print("[cyan]Select a project for the local agent.[/cyan]")
+    console.print("[cyan]Local Agent를 연결할 프로젝트를 선택하세요.[/cyan]")
+    console.print("[dim]웹에서 이 프로젝트로 보낸 스캔/수정 요청을 현재 PC 또는 서버의 agent가 처리합니다.[/dim]")
+    console.print("[dim]아래 표의 선택 번호를 입력하세요. Enter를 누르면 1번을 선택합니다.[/dim]")
+    project_table = Table(title="프로젝트 목록")
+    project_table.add_column("선택 번호", justify="right")
+    project_table.add_column("프로젝트 이름")
+    project_table.add_column("projectId", justify="right")
     for index, project in enumerate(projects, start=1):
         project_id = project.get("projectId") or project.get("id")
         name = project.get("name") or "(unnamed)"
-        console.print(f"{index}. {name} (projectId={project_id})")
+        project_table.add_row(str(index), str(name), str(project_id or "-"))
+    console.print(project_table)
 
     while True:
-        selected = typer.prompt("Project", default="1")
+        selected = typer.prompt("선택 번호", default="1", show_default=False)
         if selected.isdigit():
             index = int(selected)
             if 1 <= index <= len(projects):
@@ -635,7 +665,7 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
                 project_id = project.get("projectId") or project.get("id")
                 if project_id is not None:
                     return int(project_id)
-        console.print("[red]Select a valid project number.[/red]")
+        console.print("[red]목록 왼쪽의 선택 번호를 입력해 주세요. 예: 1[/red]")
 
 
 def _run_agent_watch(
@@ -651,6 +681,7 @@ def _run_agent_watch(
     reconnect: bool,
     max_retries: Optional[int],
     reconnect_max_delay: float,
+    verbose: bool,
     agent_config: Optional[dict] = None,
 ) -> None:
     from ssafer.core.agent import AgentTaskResult, watch_agent
@@ -663,51 +694,64 @@ def _run_agent_watch(
     effective_project_id = project_id or _load_int_config_or_env(config, "projectId", "SSAFER_PROJECT_ID", "project ID")
     effective_agent_token = agent_token or os.getenv("SSAFER_AGENT_TOKEN") or config.get("agentToken")
     if not effective_agent_token:
-        console.print("[red]Agent token is required. Run ssafer agent, or use --agent-token/SSAFER_AGENT_TOKEN.[/red]")
+        console.print("[red]Agent 토큰이 없습니다. ssafer agent로 설정하거나 --agent-token을 지정하세요.[/red]")
         raise typer.Exit(code=1)
 
     console.print(
-        f"[cyan]Starting local agent.[/cyan] agentId={effective_agent_id}, "
-        f"projectId={effective_project_id}, path={project_root}"
+        f"[green]Local Agent 실행 중[/green] projectId={effective_project_id}"
     )
-    if once:
-        console.print("[dim]Mode: fetch pending tasks once, then exit.[/dim]")
-    else:
-        console.print("[dim]Mode: watching WebSocket task events. Pending tasks are checked on connect and task notifications.[/dim]")
-        if reconnect:
-            retry_label = "unlimited" if max_retries is None else str(max_retries)
-            console.print(
-                f"[dim]Reconnect: enabled, max retries={retry_label}, "
-                f"max delay={reconnect_max_delay:g}s.[/dim]"
-            )
+    console.print(f"[dim]스캔 기준 경로: {project_root}[/dim]")
+    console.print("[dim]웹에서 스캔/수정 요청을 보내면 이 터미널에서 처리합니다. 종료하려면 Ctrl+C를 누르세요.[/dim]")
+    if project_root.name.lower() == "cli":
+        console.print(
+            "[yellow]현재 CLI 폴더에서 agent를 실행 중입니다. "
+            "전체 프로젝트를 점검하려면 프로젝트 루트에서 ssafer agent를 실행하거나 --path .. 를 사용하세요.[/yellow]"
+        )
+    if verbose:
+        console.print(f"[dim]agentId={effective_agent_id}, path={project_root}[/dim]")
+        if once:
+            console.print("[dim]Mode: pending task를 한 번만 확인하고 종료합니다.[/dim]")
         else:
-            console.print("[yellow]Reconnect: disabled. Agent exits when the connection drops.[/yellow]")
+            console.print("[dim]Mode: WebSocket task 알림을 기다립니다.[/dim]")
+            if reconnect:
+                retry_label = "unlimited" if max_retries is None else str(max_retries)
+                console.print(
+                    f"[dim]Reconnect: enabled, max retries={retry_label}, "
+                    f"max delay={reconnect_max_delay:g}s.[/dim]"
+                )
+            else:
+                console.print("[yellow]자동 재연결이 꺼져 있습니다. 연결이 끊기면 agent가 종료됩니다.[/yellow]")
     if dry_run:
-        console.print("[yellow]Dry-run mode: files will not be modified.[/yellow]")
+        console.print("[yellow]Dry-run 모드입니다. 파일은 변경하지 않습니다.[/yellow]")
 
     def on_event(event_type: str, payload: object) -> None:
         if event_type == "connected":
-            console.print(f"[green]Agent connected.[/green] {payload}")
+            if verbose:
+                console.print(f"[green]Agent connected.[/green] {payload}")
+            else:
+                console.print("[green]Agent 연결 완료. 요청 대기 중입니다.[/green]")
             return
         if event_type == "checking_tasks":
-            console.print("[cyan]Checking pending tasks...[/cyan]")
+            if verbose:
+                console.print("[cyan]Checking pending tasks...[/cyan]")
             return
         if event_type == "tasks_found":
             tasks = payload if isinstance(payload, list) else []
             if not tasks:
                 if once:
-                    console.print("[dim]No pending tasks.[/dim]")
-                else:
+                    console.print("[dim]처리할 pending task가 없습니다.[/dim]")
+                elif verbose:
                     console.print("[dim]No pending tasks. Agent is watching.[/dim]")
                 return
             task_types = ", ".join(str(getattr(task, "task_type", "UNKNOWN")) for task in tasks)
-            console.print(f"[cyan]Found {len(tasks)} pending task(s).[/cyan] {task_types}")
+            console.print(f"[cyan]처리할 task {len(tasks)}개를 찾았습니다.[/cyan] {task_types}")
             return
         if event_type == "watching":
-            console.print("[dim]Waiting for WebSocket task notifications.[/dim]")
+            if verbose:
+                console.print("[dim]Waiting for WebSocket task notifications.[/dim]")
             return
         if event_type == "task_available":
-            console.print("[cyan]Task notification received. Checking pending tasks...[/cyan]")
+            console.print("[cyan]새 작업을 받았습니다. 처리할 task를 확인합니다.[/cyan]")
             return
         if event_type == "disconnected":
             error = "-"
@@ -715,7 +759,10 @@ def _run_agent_watch(
             if isinstance(payload, dict):
                 error = str(payload.get("error", "-"))
                 attempt = str(payload.get("attempt", "-"))
-            console.print(f"[yellow]Agent connection lost.[/yellow] attempt={attempt}, error={error}")
+            if verbose:
+                console.print(f"[yellow]Agent connection lost.[/yellow] attempt={attempt}, error={error}")
+            else:
+                console.print("[yellow]Agent 연결이 끊겼습니다. 자동 재연결을 시도합니다.[/yellow]")
             return
         if event_type == "reconnecting":
             attempt = "-"
@@ -723,7 +770,8 @@ def _run_agent_watch(
             if isinstance(payload, dict):
                 attempt = str(payload.get("attempt", "-"))
                 delay = str(payload.get("delaySeconds", "-"))
-            console.print(f"[cyan]Reconnecting agent...[/cyan] attempt={attempt}, next retry in {delay}s")
+            if verbose:
+                console.print(f"[cyan]Reconnecting agent...[/cyan] attempt={attempt}, next retry in {delay}s")
             return
         if event_type == "reconnect_gave_up":
             attempt = "-"
@@ -731,20 +779,21 @@ def _run_agent_watch(
             if isinstance(payload, dict):
                 attempt = str(payload.get("attempt", "-"))
                 error = str(payload.get("error", "-"))
-            console.print(f"[red]Agent reconnect attempts exhausted.[/red] attempts={attempt}, error={error}")
+            console.print(f"[red]Agent 재연결을 중단했습니다.[/red] attempts={attempt}, error={error}")
             return
         if event_type == "auth_failed":
             error = "-"
             if isinstance(payload, dict):
                 error = str(payload.get("error", "-"))
-            console.print(f"[red]Agent authentication failed.[/red] {error}")
+            console.print(f"[red]Agent 인증 실패:[/red] {error}")
             console.print(
-                "[yellow]Saved agent token is invalid. Run "
-                "[bold]ssafer login --endpoint https://ssafer.co.kr[/bold] and start the agent again.[/yellow]"
+                "[yellow]저장된 agent 토큰이 유효하지 않습니다. "
+                "[bold]ssafer login --endpoint https://ssafer.co.kr[/bold] 후 agent를 다시 시작하세요.[/yellow]"
             )
             return
         if event_type == "ping":
-            console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
+            if verbose:
+                console.print(f"[dim]Agent heartbeat acknowledged.[/dim] {payload}")
             return
         if event_type == "task_result_reported":
             task_id = "-"
@@ -752,7 +801,7 @@ def _run_agent_watch(
             if isinstance(payload, dict):
                 task_id = str(payload.get("taskId", "-"))
                 count = str(payload.get("count", "-"))
-            console.print(f"[green]Agent task result reported.[/green] taskId={task_id}, count={count}")
+            console.print(f"[green]Agent task 결과 보고 완료.[/green] taskId={task_id}, count={count}")
             return
         if event_type == "task_result_report_failed":
             task_id = "-"
@@ -760,7 +809,7 @@ def _run_agent_watch(
             if isinstance(payload, dict):
                 task_id = str(payload.get("taskId", "-"))
                 error = str(payload.get("error", "-"))
-            console.print(f"[yellow]Agent task result report failed.[/yellow] taskId={task_id}, error={error}")
+            console.print(f"[yellow]Agent task 결과 보고 실패.[/yellow] taskId={task_id}, error={error}")
             return
         if isinstance(payload, AgentTaskResult):
             _print_agent_task_result(payload)
@@ -783,7 +832,7 @@ def _run_agent_watch(
             )
         )
     except KeyboardInterrupt:
-        console.print("[yellow]Agent watch stopped.[/yellow]")
+        console.print("[yellow]Agent를 종료했습니다.[/yellow]")
     except Exception as exc:  # noqa: BLE001
         console.print(f"[red]Agent watch failed:[/red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -905,12 +954,12 @@ def _format_patch_diff(old_text: str, new_text: str) -> str:
     return "\n".join(diff_lines)
 
 
-@app.command(help="SSAfer 서버에 로그인합니다.")
+@app.command(help="SSAfer 서버에 로그인합니다.", rich_help_panel="계정/상태")
 def login(
-    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer 서버 API URL"),
-    logout: bool = typer.Option(False, "--logout", help="저장된 토큰 삭제"),
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="로그인할 SSAfer 백엔드 API URL입니다."),
+    logout: bool = typer.Option(False, "--logout", help="저장된 로그인 토큰을 삭제합니다. 가능하면 ssafer logout 사용을 권장합니다."),
 ) -> None:
-    """SSAfer 서버에 로그인합니다."""
+    """SSAfer 서버에 로그인하고 토큰을 저장합니다."""
     from ssafer.core.auth import clear_token, load_endpoint, login_with_credentials, save_auth_tokens
 
     if logout:
@@ -919,39 +968,42 @@ def login(
         return
 
     effective_endpoint = endpoint or load_endpoint()
-    email = typer.prompt("Email")
-    password = typer.prompt("Password", hide_input=True)
+    email = typer.prompt("이메일")
+    password = typer.prompt("비밀번호", hide_input=True)
     if not email.strip() or not password.strip():
-        console.print("[red]Email and password are required.[/red]")
+        console.print("[red]이메일과 비밀번호를 모두 입력해야 합니다.[/red]")
         raise typer.Exit(code=1)
     try:
         auth_data = login_with_credentials(effective_endpoint, email.strip(), password)
         save_auth_tokens(auth_data, effective_endpoint)
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Login failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]로그인 실패:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Login failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]로그인 실패:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
     except ValueError as exc:
-        console.print(f"[red]Login failed:[/red] {exc}")
+        console.print(f"[red]로그인 실패:[/red] {exc}")
         raise typer.Exit(code=1) from exc
-    console.print("[green]Login succeeded. Tokens saved to ~/.ssafer/config.yml.[/green]")
+    console.print("[green]로그인 완료. 토큰은 ~/.ssafer/config.yml에 저장됩니다.[/green]")
     _prompt_start_agent_after_login()
 
 
 def _prompt_start_agent_after_login() -> None:
-    if typer.confirm("Start local agent now?", default=False):
+    console.print(
+        "[dim]웹에서 이 PC/서버에 스캔이나 수정 적용을 요청하려면 Local Agent가 실행 중이어야 합니다.[/dim]"
+    )
+    if typer.confirm("지금 Local Agent를 시작할까요?", default=False):
         _start_agent(path=Path("."), refresh_token=True)
         return
-    console.print("[dim]Local agent not started. Run [bold]ssafer agent[/bold] when you want to connect it.[/dim]")
+    console.print("[dim]Agent는 시작하지 않았습니다. 나중에 연결하려면 [bold]ssafer agent[/bold]를 실행하세요.[/dim]")
 
 
-@app.command(hidden=True)
+@app.command(help="이메일 인증을 거쳐 SSAfer 계정을 생성합니다.", rich_help_panel="계정/상태")
 def signup(
-    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="SSAfer backend API URL"),
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="회원가입에 사용할 SSAfer 백엔드 API URL입니다."),
 ) -> None:
-    """Verify email and create a SSAfer backend user account."""
+    """이메일 인증을 거쳐 SSAfer 계정을 생성합니다."""
     from ssafer.core.auth import (
         load_endpoint,
         register_user,
@@ -960,28 +1012,28 @@ def signup(
     )
 
     effective_endpoint = endpoint or load_endpoint()
-    email = typer.prompt("Email")
-    display_name = typer.prompt("Display name")
-    password = typer.prompt("Password", hide_input=True)
+    email = typer.prompt("이메일")
+    display_name = typer.prompt("표시 이름")
+    password = typer.prompt("비밀번호", hide_input=True)
     if not email.strip() or not display_name.strip() or not password.strip():
-        console.print("[red]Email, display name, and password are required.[/red]")
+        console.print("[red]이메일, 표시 이름, 비밀번호를 모두 입력해야 합니다.[/red]")
         raise typer.Exit(code=1)
     try:
         send_email_verification_code(effective_endpoint, email.strip())
-        console.print("[green]Verification code sent. Check your email.[/green]")
-        code = typer.prompt("Verification code")
+        console.print("[green]인증 코드를 보냈습니다. 이메일함을 확인해 주세요.[/green]")
+        code = typer.prompt("이메일 인증 코드")
         if not code.strip():
-            console.print("[red]Verification code is required.[/red]")
+            console.print("[red]이메일 인증 코드를 입력해야 합니다.[/red]")
             raise typer.Exit(code=1)
         verify_email_code(effective_endpoint, email.strip(), code.strip())
         register_user(effective_endpoint, email.strip(), display_name.strip(), password)
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Signup failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]회원가입 실패:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Signup failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]회원가입 실패:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
-    console.print("[green]Signup succeeded. Run 'ssafer login' to save login tokens.[/green]")
+    console.print("[green]회원가입 완료. 이제 [bold]ssafer login[/bold]으로 로그인하세요.[/green]")
 
 
 @app.command("send-email-code", hidden=True)
@@ -1031,9 +1083,9 @@ def verify_email(
     console.print("[green]Email verified. Run 'ssafer signup' to create your account.[/green]")
 
 
-@app.command(help="저장된 로그인 토큰을 삭제합니다.")
+@app.command(help="저장된 로그인 토큰을 삭제합니다.", rich_help_panel="계정/상태")
 def logout() -> None:
-    """Clear the saved SSAfer upload token."""
+    """저장된 로그인 토큰과 현재 프로젝트의 agent 설정을 삭제합니다."""
     from ssafer.core.auth import clear_agent_config, clear_token
 
     clear_token()
@@ -1042,12 +1094,12 @@ def logout() -> None:
     console.print("[dim]If a local agent is already running in another terminal, stop it with Ctrl+C.[/dim]")
 
 
-@app.command(help="최근 로컬 스캔 결과 요약을 출력합니다.")
+@app.command(help="최근 로컬 스캔 결과 요약을 출력합니다.", rich_help_panel="로컬 점검")
 def report(
-    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root containing .ssafer results."),
-    details: bool = typer.Option(False, "--details", "-d", help="Print targets, artifacts, and output paths."),
+    path: Path = typer.Option(Path("."), "--path", "-p", help=".ssafer/results가 있는 프로젝트 루트입니다."),
+    details: bool = typer.Option(False, "--details", "-d", help="스캔 대상, 산출물 경로, finding 상세를 함께 출력합니다."),
 ) -> None:
-    """Print the last local scan summary."""
+    """최근 로컬 스캔 결과 요약을 출력합니다."""
     project_root = path.resolve()
     scan = load_last_scan(project_root)
     if scan is None:
@@ -1092,10 +1144,35 @@ def _format_upload_request_url(url: object) -> str:
     return "S3 presigned upload URL hidden"
 
 
+def _scan_has_targets(scan: dict) -> bool:
+    summary = scan.get("cliSummary", {})
+    return any(
+        int(summary.get(key) or 0) > 0
+        for key in ("composeSets", "envFiles", "dockerfiles")
+    )
+
+
+def _scan_status_label(scan: dict) -> str:
+    status = scan.get("analysisStatus", "UNKNOWN")
+    if status == "FAILED" and not _scan_has_targets(scan):
+        return _SCAN_EMPTY_STATUS
+    return _STATUS_KO.get(status, status)
+
+
+def _print_scan_target_hint(scan: dict) -> None:
+    if _scan_has_targets(scan):
+        return
+    console.print("[yellow]스캔 대상 파일을 찾지 못했습니다.[/yellow]")
+    console.print(
+        "[dim]현재 폴더에 .env, Dockerfile, docker-compose.yml 같은 점검 대상이 없습니다. "
+        "프로젝트 루트에서 실행하거나 --path로 대상 경로를 지정하세요.[/dim]"
+    )
+    console.print("[dim]예: ssafer run --path ..[/dim]")
+
+
 def _print_scan_summary(scan: dict) -> None:
     summary = scan.get("cliSummary", {})
-    status = scan.get("analysisStatus", "UNKNOWN")
-    status_label = _STATUS_KO.get(status, status)
+    status_label = _scan_status_label(scan)
 
     table = Table(title=f"스캔 결과  {status_label}")
     table.add_column("항목")
@@ -1112,6 +1189,7 @@ def _print_scan_summary(scan: dict) -> None:
     for label, key in rows:
         table.add_row(label, str(summary.get(key, 0)))
     console.print(table)
+    _print_scan_target_hint(scan)
 
     warnings = scan.get("warnings", [])
     if warnings:
@@ -1512,21 +1590,21 @@ def _download_analysis_result_or_exit(project_root: Path, *, scan_id: int, api_u
     effective_url = api_url or project_config.upload.endpoint or load_endpoint()
     if token is None:
         console.print(
-            "[yellow]Analysis result download requires authentication. Run [bold]ssafer login[/bold] first "
-            "or set SSAFER_TOKEN.[/yellow]"
+            "[yellow]analysis_result 다운로드에는 로그인이 필요합니다. 먼저 [bold]ssafer login[/bold]을 실행하거나 "
+            "SSAFER_TOKEN을 설정하세요.[/yellow]"
         )
         raise typer.Exit(code=1)
 
     try:
-        console.print(f"[cyan]Downloading analysis_result.json for scanId={scan_id}...[/cyan]")
+        console.print(f"[cyan]scanId={scan_id}의 analysis_result.json을 내려받습니다...[/cyan]")
         return download_analysis_result_for_scan(project_root, scan_id=scan_id, api_url=effective_url, token=token)
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Analysis result download failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]analysis_result 다운로드 실패:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
-        console.print(f"[red]Analysis result download failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]analysis_result 다운로드 실패:[/red] {_format_http_transport_error(exc)}")
     except (OSError, ValueError, RuntimeError) as exc:
-        console.print(f"[red]Analysis result download failed:[/red] {exc}")
+        console.print(f"[red]analysis_result 다운로드 실패:[/red] {exc}")
     raise typer.Exit(code=1)
 
 
@@ -1544,8 +1622,8 @@ def _latest_done_scan_id_or_exit(project_root: Path, *, project_id: int | None, 
     effective_url = api_url or project_config.upload.endpoint or load_endpoint()
     if token is None:
         console.print(
-            "[yellow]Latest scan lookup requires authentication. Run [bold]ssafer login[/bold] first "
-            "or set SSAFER_TOKEN.[/yellow]"
+            "[yellow]최신 스캔 조회에는 로그인이 필요합니다. 먼저 [bold]ssafer login[/bold]을 실행하거나 "
+            "SSAFER_TOKEN을 설정하세요.[/yellow]"
         )
         raise typer.Exit(code=1)
 
@@ -1563,15 +1641,15 @@ def _latest_done_scan_id_or_exit(project_root: Path, *, project_id: int | None, 
 
     try:
         scan_id = find_latest_done_scan_id(effective_url, project_id=effective_project_id, token=token)
-        console.print(f"[cyan]Using latest DONE scan.[/cyan] projectId={effective_project_id}, scanId={scan_id}")
+        console.print(f"[cyan]최신 완료 스캔을 사용합니다.[/cyan] projectId={effective_project_id}, scanId={scan_id}")
         return scan_id
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Latest scan lookup failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]최신 스캔 조회 실패:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
-        console.print(f"[red]Latest scan lookup failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]최신 스캔 조회 실패:[/red] {_format_http_transport_error(exc)}")
     except (ValueError, RuntimeError) as exc:
-        console.print(f"[red]Latest scan lookup failed:[/red] {exc}")
+        console.print(f"[red]최신 스캔 조회 실패:[/red] {exc}")
     raise typer.Exit(code=1)
 
 
@@ -1595,12 +1673,12 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
     try:
         return upload_last_scan(path, api_url=effective_url, token=token)
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]업로드 실패:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
-        console.print(f"[red]Upload failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]업로드 실패:[/red] {_format_http_transport_error(exc)}")
     except RuntimeError as exc:
-        console.print(f"[red]Upload failed:[/red] {exc}")
+        console.print(f"[red]업로드 실패:[/red] {exc}")
     raise typer.Exit(code=1)
 
 
@@ -1624,12 +1702,12 @@ def _upload_server_audit_or_exit(path: Path, api_url: str | None) -> dict:
     try:
         return upload_last_server_audit(path, api_url=effective_url, token=token)
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Upload failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]업로드 실패:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
     except httpx.HTTPError as exc:
-        console.print(f"[red]Upload failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]업로드 실패:[/red] {_format_http_transport_error(exc)}")
     except RuntimeError as exc:
-        console.print(f"[red]Upload failed:[/red] {exc}")
+        console.print(f"[red]업로드 실패:[/red] {exc}")
     raise typer.Exit(code=1)
 
 

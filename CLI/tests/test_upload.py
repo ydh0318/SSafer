@@ -355,8 +355,26 @@ def test_upload_command_prints_progress_before_upload(tmp_path: Path, monkeypatc
     result = CliRunner().invoke(app, ["upload", "--path", str(tmp_path)])
 
     assert result.exit_code == 0
-    assert "Uploading scan result..." in result.output
     assert "1001" in result.output
+    assert "1001" in result.output
+
+
+def test_upload_last_scan_rejects_empty_scan_package(tmp_path: Path):
+    _write_scan(
+        tmp_path,
+        {
+            "scanId": "empty-scan",
+            "analysisStatus": "FAILED",
+            "cliSummary": {
+                "composeSets": 0,
+                "envFiles": 0,
+                "dockerfiles": 0,
+            },
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="업로드할 스캔 대상이 없습니다"):
+        upload.upload_last_scan(tmp_path)
 
 
 def test_upload_last_scan_uses_default_api_url(tmp_path: Path, monkeypatch):

@@ -128,6 +128,45 @@ def test_join_compact_shows_remaining_count():
     assert _join_compact(["a", "b", "c", "d"], max_items=2) == "a, b +2"
 
 
+def test_scan_status_label_shows_empty_targets_instead_of_failed():
+    scan = {
+        "analysisStatus": "FAILED",
+        "cliSummary": {
+            "composeSets": 0,
+            "envFiles": 0,
+            "dockerfiles": 0,
+        },
+    }
+
+    assert "스캔 대상 없음" in main._scan_status_label(scan)
+
+
+def test_print_scan_summary_guides_when_no_targets(monkeypatch):
+    record_console = Console(record=True, width=120)
+    monkeypatch.setattr(main, "console", record_console)
+
+    main._print_scan_summary(
+        {
+            "analysisStatus": "FAILED",
+            "cliSummary": {
+                "composeSets": 0,
+                "envFiles": 0,
+                "dockerfiles": 0,
+                "customRuleFindings": 0,
+                "trivyFindings": 0,
+                "totalFindings": 0,
+                "warnings": 0,
+            },
+            "warnings": [],
+        }
+    )
+
+    output = record_console.export_text()
+
+    assert "스캔 대상 없음" in output
+    assert "ssafer run --path .." in output
+
+
 def test_group_report_findings_localizes_trivy_messages():
     grouped = _group_report_findings([
         {

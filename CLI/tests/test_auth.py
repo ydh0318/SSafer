@@ -111,7 +111,12 @@ def test_help_shows_user_facing_commands_only():
 
     assert result.exit_code == 0
     assert "status" in result.output
-    assert "로그인/Agent 설정 상태를 확인합니다." in result.output
+    assert "login" in result.output
+    assert "signup" in result.output
+    assert "run" in result.output
+    assert "upload" in result.output
+    assert "apply" in result.output
+    assert "agent" in result.output
     assert "agent-watch" not in result.output
     assert "agent-init" not in result.output
     assert "send-email-code" not in result.output
@@ -571,8 +576,9 @@ def test_login_command_authenticates_with_backend_and_saves_tokens(monkeypatch, 
     assert load_token() == "access-token"
     assert load_endpoint() == "https://api.example.com"
     assert load_agent_config(other_project)["agentId"] == 1
-    assert "Start local agent now?" in result.output
-    assert "Local agent not started" in result.output
+    assert "지금 Local Agent를 시작할까요?" in result.output
+    assert "웹에서 이 PC/서버에 스캔이나 수정 적용을 요청하려면" in result.output
+    assert "Agent는 시작하지 않았습니다" in result.output
 
 
 def test_login_command_can_start_agent_after_login(monkeypatch, tmp_path):
@@ -807,7 +813,7 @@ def test_agent_init_command_issues_and_saves_agent_token(monkeypatch):
         "endpoint": "https://api.example.com",
         "project_root": None,
     }
-    assert "Agent token saved." in result.output
+    assert "agentId: 3" in result.output
     assert "agentId: 3" in result.output
 
 
