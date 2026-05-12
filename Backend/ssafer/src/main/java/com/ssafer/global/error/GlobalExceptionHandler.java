@@ -237,6 +237,7 @@ public class GlobalExceptionHandler {
       case AGENT_OFFLINE -> "Local Agent is not online.";
       case PATCH_PAYLOAD_NOT_FOUND -> "Patch payload is not available for this finding.";
       case PATCH_APPROVAL_NOT_ALLOWED -> "Patch approval is not allowed for the current finding state.";
+      case UPLOAD_PATCH_NOT_ALLOWED -> "Patch approval is not supported for upload scans.";
       case SCAN_STATUS_CONFLICT -> "Operation is not allowed for the current scan status.";
       case TASK_STATUS_CONFLICT -> "Operation is not allowed for the current task status.";
       case DUPLICATE_RAW_RESULT_UPLOAD -> "Raw result upload report was already submitted.";

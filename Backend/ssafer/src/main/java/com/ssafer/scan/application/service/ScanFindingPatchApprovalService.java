@@ -17,6 +17,7 @@ import com.ssafer.project.domain.entity.Project;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
+import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
@@ -107,6 +108,13 @@ public class ScanFindingPatchApprovalService {
       throw new BusinessException(ErrorCode.SCAN_STATUS_CONFLICT);
     }
     if (scan.getScanType() != ScanType.PROJECT_FILE) {
+      throw new BusinessException(ErrorCode.PATCH_APPROVAL_NOT_ALLOWED);
+    }
+    // 웹 업로드 결과는 diff 미리보기만 허용하고, 실제 patch 적용은 Agent 점검 결과만 허용한다.
+    if (scan.getScanMode() == ScanMode.UPLOAD) {
+      throw new BusinessException(ErrorCode.UPLOAD_PATCH_NOT_ALLOWED);
+    }
+    if (scan.getScanMode() != ScanMode.AGENT) {
       throw new BusinessException(ErrorCode.PATCH_APPROVAL_NOT_ALLOWED);
     }
     if (finding.getPatchPayloadJson() == null || finding.getPatchPayloadJson().isBlank()) {

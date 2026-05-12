@@ -129,6 +129,11 @@ public enum ErrorCode {
       "PATCH_APPROVAL_NOT_ALLOWED",
       "Patch approval is not allowed for current finding state"
   ),
+  UPLOAD_PATCH_NOT_ALLOWED(
+      HttpStatus.CONFLICT,
+      "UPLOAD_PATCH_NOT_ALLOWED",
+      "Patch approval is not supported for upload scans"
+  ),
   SCAN_STATUS_CONFLICT(
       HttpStatus.CONFLICT,
       "SCAN_STATUS_CONFLICT",

@@ -221,6 +221,26 @@ class ScanFindingPatchApprovalServiceTest {
         .isEqualTo(ErrorCode.PATCH_APPROVAL_NOT_ALLOWED);
   }
 
+  @Test
+  void approveWhenUploadScanThrowsNotAllowed() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Project project = new Project(1L, null, "project", null, ScanMode.UPLOAD, false);
+    ReflectionTestUtils.setField(project, "id", 101L);
+    Scan scan = scan(project.getId());
+    ReflectionTestUtils.setField(scan, "scanMode", com.ssafer.scan.domain.enums.ScanMode.UPLOAD);
+    ScanFinding finding = finding(scan.getId(), ResolutionStatus.OPEN, "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}");
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(scanRepository.findByIdAndDeletedAtIsNull(scan.getId())).thenReturn(Optional.of(scan));
+    when(projectAuthorizationService.loadAuthorizedProjectForUpdateOrThrow(project.getId(), actor)).thenReturn(project);
+    when(scanFindingRepository.findByIdAndScanIdForUpdate(finding.getId(), scan.getId())).thenReturn(Optional.of(finding));
+
+    assertThatThrownBy(() -> scanFindingPatchApprovalService.approve(scan.getId(), finding.getId()))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.UPLOAD_PATCH_NOT_ALLOWED);
+  }
+
   private Scan scan(Long projectId) {
     return Scan.builder()
         .id(1001L)
