@@ -68,6 +68,17 @@ class ScanFindingPatchApprovalControllerTest {
         .andExpect(jsonPath("$.code").value("PATCH_PAYLOAD_NOT_FOUND"));
   }
 
+  @Test
+  void approvePatchWhenUploadScanReturnsUploadPatchNotAllowed() throws Exception {
+    when(scanFindingPatchApprovalService.approve(1001L, 2001L))
+        .thenThrow(new BusinessException(ErrorCode.UPLOAD_PATCH_NOT_ALLOWED));
+
+    buildMockMvc().perform(post("/api/v1/scans/1001/findings/2001/approve"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("UPLOAD_PATCH_NOT_ALLOWED"))
+        .andExpect(jsonPath("$.message").value("Patch approval is not supported for upload scans"));
+  }
+
   private MockMvc buildMockMvc() {
     return MockMvcBuilders.standaloneSetup(scanFindingPatchApprovalController)
         .setControllerAdvice(new GlobalExceptionHandler())

@@ -31,6 +31,8 @@ class WebUploadScanProcessorImplTest {
   @Mock
   private UploadFileScanner uploadFileScanner;
   @Mock
+  private UploadScanFindingPatchContextEnricher uploadScanFindingPatchContextEnricher;
+  @Mock
   private ScanResultJsonBuilder scanResultJsonBuilder;
   @Mock
   private UploadScanRawResultUploader uploadScanRawResultUploader;
@@ -59,9 +61,11 @@ class WebUploadScanProcessorImplTest {
 
     when(tempWorkspaceManager.createWorkspace(1001L)).thenReturn(workspace);
     when(tempWorkspaceManager.saveFiles(any(), any())).thenReturn(List.of(file));
-    when(uploadFileScanner.scanAll(List.of(file))).thenReturn(List.of(
+    List<UploadScanFinding> scannedFindings = List.of(
         new UploadScanFinding("FND-0001", "ENV_PLAIN_SECRET", "custom-rule", "HIGH", ".env", 1, "secret", "DB_PASSWORD=***MASKED***")
-    ));
+    );
+    when(uploadFileScanner.scanAll(List.of(file))).thenReturn(scannedFindings);
+    when(uploadScanFindingPatchContextEnricher.enrich(scannedFindings, List.of(file))).thenReturn(scannedFindings);
     when(scanResultJsonBuilder.writeScanResultJson(any(), any(), any(), any())).thenReturn(output);
     when(uploadScanRawResultUploader.upload(1001L, output)).thenReturn(rawResultPath);
     when(uploadScanToolMetadata.toolName()).thenReturn("ssafer-web-upload");
@@ -120,6 +124,7 @@ class WebUploadScanProcessorImplTest {
     when(tempWorkspaceManager.createWorkspace(1001L)).thenReturn(workspace);
     when(tempWorkspaceManager.saveFiles(any(), any())).thenReturn(List.of(file));
     when(uploadFileScanner.scanAll(List.of(file))).thenReturn(List.of());
+    when(uploadScanFindingPatchContextEnricher.enrich(List.of(), List.of(file))).thenReturn(List.of());
     when(scanResultJsonBuilder.writeScanResultJson(any(), any(), any(), any())).thenReturn(output);
     when(uploadScanRawResultUploader.upload(1001L, output))
         .thenThrow(new UploadScanS3UploadException("s3 failed", new RuntimeException("boom")));
@@ -146,6 +151,7 @@ class WebUploadScanProcessorImplTest {
     when(tempWorkspaceManager.createWorkspace(1001L)).thenReturn(workspace);
     when(tempWorkspaceManager.saveFiles(any(), any())).thenReturn(List.of(file));
     when(uploadFileScanner.scanAll(List.of(file))).thenReturn(List.of());
+    when(uploadScanFindingPatchContextEnricher.enrich(List.of(), List.of(file))).thenReturn(List.of());
     when(scanResultJsonBuilder.writeScanResultJson(any(), any(), any(), any())).thenReturn(output);
     when(uploadScanRawResultUploader.upload(1001L, output)).thenReturn(rawResultPath);
     when(uploadScanToolMetadata.toolName()).thenReturn("ssafer-web-upload");

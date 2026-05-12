@@ -11,6 +11,39 @@ public record UploadScanFinding(
     String file,
     Integer line,
     String title,
-    String maskedEvidence
+    String maskedEvidence,
+    // 웹 업로드에서는 서버 임시 경로가 아니라 업로드 파일을 식별할 상대 경로/파일명을 사용한다.
+    String filePath,
+    // AI가 diff용 patch를 만들 때 사용할 원본 코드 컨텍스트다.
+    UploadScanFindingPatchContext patchContext
 ) {
+
+  public UploadScanFinding(
+      String id,
+      String ruleId,
+      String source,
+      String severity,
+      String file,
+      Integer line,
+      String title,
+      String maskedEvidence
+  ) {
+    this(id, ruleId, source, severity, file, line, title, maskedEvidence, null, null);
+  }
+
+  public UploadScanFinding withPatchContext(String filePath, UploadScanFindingPatchContext patchContext) {
+    // record는 불변 객체이므로 patchContext가 추가된 새 finding을 만들어 반환한다.
+    return new UploadScanFinding(
+        id,
+        ruleId,
+        source,
+        severity,
+        file,
+        line,
+        title,
+        maskedEvidence,
+        filePath,
+        patchContext
+    );
+  }
 }
