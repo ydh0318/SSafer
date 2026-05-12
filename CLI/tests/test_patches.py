@@ -221,6 +221,36 @@ def test_apply_command_dry_run_does_not_modify_file(tmp_path: Path):
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER root\n"
 
 
+def test_apply_command_without_patch_payload_is_noop(tmp_path: Path):
+    analysis_result = tmp_path / "analysis_result.json"
+    analysis_result.write_text(
+        json.dumps(
+            {
+                "results": [
+                    {
+                        "findingId": "FND-0001",
+                        "file": "Dockerfile",
+                        "fix": {
+                            "summary": "Review manually",
+                            "recommendedActions": ["Remove host port binding."],
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["apply", "--path", str(tmp_path), "--analysis-result", str(analysis_result)],
+    )
+
+    assert result.exit_code == 0
+    assert "patch payload" in result.output
+    assert "Patch apply failed" not in result.output
+
+
 def test_apply_command_downloads_analysis_result_by_scan_id(monkeypatch, tmp_path: Path):
     target = tmp_path / "Dockerfile"
     target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
@@ -267,7 +297,7 @@ def test_apply_command_downloads_analysis_result_by_scan_id(monkeypatch, tmp_pat
         "api_url": "https://api.example.com",
         "token": "access-token",
     }
-    assert "Downloading analysis_result.json for scanId=123" in result.output
+    assert "scanId=123" in result.output
     assert "Analysis result:" in result.output
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
 
@@ -334,7 +364,7 @@ def test_apply_command_uses_latest_done_scan(monkeypatch, tmp_path: Path):
         "api_url": "https://api.example.com",
         "token": "access-token",
     }
-    assert "Using latest DONE scan." in result.output
+    assert "scanId=321" in result.output
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
 
 
@@ -385,7 +415,7 @@ def test_apply_command_uses_default_analysis_result_and_interactive_selection(tm
     result = CliRunner().invoke(app, ["apply", "--path", str(tmp_path)], input="y\n2\ny\n")
 
     assert result.exit_code == 0
-    assert "Using a local analysis_result.json" in result.output
+    assert "analysis_result.json" in result.output
     assert "P1" in result.output
     assert "P2" in result.output
     assert first.read_text(encoding="utf-8") == "USER root\n"

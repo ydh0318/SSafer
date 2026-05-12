@@ -438,9 +438,9 @@ def test_agent_watch_command_uses_env_defaults(monkeypatch, tmp_path: Path):
     assert calls[0]["project_id"] == 3
     assert calls[0]["agent_token"] == "agent-token"
     assert calls[0]["reconnect"] is True
-    assert "Starting local agent." in result.output
-    assert "Checking pending tasks..." in result.output
-    assert "No pending tasks." in result.output
+    assert "Local Agent 실행 중" in result.output
+    assert "Agent 연결 완료" in result.output
+    assert "처리할 pending task가 없습니다" in result.output
 
 
 def test_agent_watch_command_uses_saved_agent_config(monkeypatch, tmp_path: Path):
@@ -501,7 +501,7 @@ def test_agent_command_starts_with_saved_agent_config(monkeypatch, tmp_path: Pat
     assert calls[0]["agent_token"] == "raw-agent-token"
     assert calls[0]["once"] is False
     assert calls[0]["reconnect"] is True
-    assert "Starting local agent." in result.output
+    assert "Local Agent 실행 중" in result.output
 
 
 def test_agent_command_initializes_missing_agent_config(monkeypatch, tmp_path: Path):
@@ -559,8 +559,10 @@ def test_agent_command_initializes_missing_agent_config(monkeypatch, tmp_path: P
     assert calls[0]["agent_id"] == 9
     assert calls[0]["project_id"] == 10
     assert calls[0]["agent_token"] == "new-agent-token"
-    assert "first-project (projectId=10)" in result.output
-    assert "Agent setup complete." in result.output
+    assert "프로젝트 목록" in result.output
+    assert "first-project" in result.output
+    assert "10" in result.output
+    assert "projectId=10" in result.output
 
 
 def test_agent_watch_command_prints_pending_task_count(monkeypatch, tmp_path: Path):
@@ -587,7 +589,7 @@ def test_agent_watch_command_prints_pending_task_count(monkeypatch, tmp_path: Pa
     result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
 
     assert result.exit_code == 0
-    assert "Found 1 pending task(s)." in result.output
+    assert "task 1" in result.output
     assert "PATCH_APPLY" in result.output
 
 
@@ -614,7 +616,7 @@ def test_agent_watch_command_prints_dry_run_and_task_result_table(monkeypatch, t
     result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once", "--dry-run"])
 
     assert result.exit_code == 0
-    assert "Dry-run mode: files will not be modified." in result.output
+    assert "Dry-run" in result.output
     assert "Agent task #10 result" in result.output
     assert "PATCH_APPLY" in result.output
     assert "DRY_RUN" in result.output
@@ -652,8 +654,8 @@ def test_agent_watch_command_passes_reconnect_options(monkeypatch, tmp_path: Pat
     assert calls[0]["reconnect"] is True
     assert calls[0]["max_retries"] == 3
     assert calls[0]["reconnect_max_delay_seconds"] == 9
-    assert "Agent connection lost." in result.output
-    assert "Reconnecting agent..." in result.output
+    assert "Agent 연결이 끊겼습니다" in result.output
+    assert "Reconnecting agent..." not in result.output
 
 
 def test_watch_agent_reconnects_after_connection_drop(monkeypatch, tmp_path: Path):

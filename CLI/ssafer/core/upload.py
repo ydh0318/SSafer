@@ -46,6 +46,11 @@ def upload_last_scan(
     scan = load_last_scan(project_root)
     if scan is None:
         raise RuntimeError("No local scan package found. Run 'ssafer run' first.")
+    if not _scan_has_targets(scan):
+        raise RuntimeError(
+            "업로드할 스캔 대상이 없습니다. 프로젝트 루트에서 'ssafer run'을 다시 실행하거나 "
+            "'ssafer run --path <프로젝트 경로>'로 대상 경로를 지정하세요."
+        )
     return _upload_result(
         project_root=project_root,
         result=scan,
@@ -54,7 +59,24 @@ def upload_last_scan(
         scan_type=None,
         source="CLI",
         name=_scan_name(scan),
-    )
+)
+
+
+def _scan_has_targets(scan: dict[str, Any]) -> bool:
+    summary = scan.get("cliSummary", {})
+    target_counts = [
+        summary.get("composeSets"),
+        summary.get("envFiles"),
+        summary.get("dockerfiles"),
+    ]
+    if any(value is not None for value in target_counts):
+        return any(int(value or 0) > 0 for value in target_counts)
+
+    targets = scan.get("targets", {})
+    return any(
+        len(targets.get(key) or []) > 0
+        for key in ("composeSets", "envFiles", "dockerfiles")
+    ) or not targets
 
 
 def upload_scan_result_to_registered_scan(
