@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ssafer import __version__
-from ssafer.core.compose import build_compose_sets, render_effective_config
+from ssafer.core.compose import build_compose_sets, detect_environment_from_compose_sets, render_effective_config
 from ssafer.core.config import load_project_config
 from ssafer.core.env_parser import parse_env_metadata
 from ssafer.core.finder import discover_project_files
@@ -28,6 +28,7 @@ def run_scan(
     project_root: Path,
     save_raw: bool = False,
     on_step: Callable[[str], None] | None = None,
+    environment: str | None = None,
 ) -> dict[str, Any]:
     def _step(msg: str) -> None:
         if on_step:
@@ -35,10 +36,17 @@ def run_scan(
 
     warnings: list[str] = []
     project_root = project_root.resolve()
+    _step("프로젝트 설정을 읽는 중...")
     project_config = load_project_config(project_root, warnings)
     extra_masking_patterns = compile_extra_masking_patterns(project_config.masking.extra_patterns, warnings)
-    _step("프로젝트 파일 탐색 중...")
+    _step("스캔 대상 파일을 찾는 중...")
     files = discover_project_files(project_root)
+    _step(
+        "스캔 대상 확인 완료: "
+        f".env {len(files.env_files)}개, "
+        f"Compose {len(files.compose_files)}개, "
+        f"Dockerfile {len(files.dockerfiles)}개"
+    )
     salt = load_or_create_project_salt(project_root)
 
     scan_id = str(uuid.uuid4())
@@ -55,19 +63,23 @@ def run_scan(
         raw_dir.mkdir(parents=True, exist_ok=True)
 
     artifacts: list[dict[str, Any]] = []
+    _step("대상 파일 해시를 계산하는 중...")
     source_hashes = _source_hashes(project_root, [*files.env_files, *files.dockerfiles, *files.compose_files], warnings)
     effective_hashes: dict[str, str] = {}
-    _step("Compose 세트 구성 중...")
+    _step("Compose 세트를 구성하는 중...")
     compose_sets = build_compose_sets(files.compose_files, warnings)
+    _step(f"Compose 세트 {len(compose_sets)}개 확인")
 
     for compose_set in compose_sets:
-        _step(f"Compose 설정 렌더링 중: {compose_set.name}")
-        ok, raw_config, error = render_effective_config(compose_set)
+        _step(f"Compose 설정을 렌더링하는 중: {compose_set.name}")
+        ok, raw_config, error, compose_warning = render_effective_config(compose_set)
         if not ok:
             warnings.append(error or f"Failed to render compose set '{compose_set.name}'.")
             continue
+        if compose_warning:
+            warnings.append(_compose_warning_with_context(compose_set, project_root, compose_warning))
 
-        _step(f"민감정보 마스킹 중: {compose_set.name}")
+        _step(f"민감정보를 마스킹하는 중: {compose_set.name}")
         sanitized = sanitize_compose_yaml(raw_config, extra_patterns=extra_masking_patterns)
         safe_name = _safe_artifact_name(compose_set.name)
         sanitized_path = sanitized_dir / f"{safe_name}.compose.yml"
@@ -85,23 +97,25 @@ def run_scan(
             }
         )
 
-    _step("보안 룰 검사 중...")
+    _step("커스텀 보안 룰을 검사하는 중...")
     effective_configs = {
         a["composeSet"]: a["content"]
         for a in artifacts
         if a["type"] == "sanitized-effective-compose"
     }
+    resolved_env = environment or detect_environment_from_compose_sets(compose_sets, effective_configs)
     scan_context = ScanContext(
         compose_sets=compose_sets,
         effective_configs=effective_configs,
         env_files=files.env_files,
         project_root=project_root,
+        environment=resolved_env,
     )
     rule_engine = RuleEngine(excluded_rule_ids=project_config.rules.exclude)
     custom_rule_findings = rule_engine.run(scan_context)
     warnings.extend(rule_engine.warnings)
 
-    _step("환경변수 파일 파싱 중...")
+    _step(f"환경변수 파일 {len(files.env_files)}개를 파싱하는 중...")
     env_metadata = parse_env_metadata(files.env_files, salt, project_root, warnings)
     for env_item in env_metadata:
         artifacts.append(
@@ -116,7 +130,7 @@ def run_scan(
     trivy_findings = 0
     trivy_version_value = trivy_version()
     for dockerfile in files.dockerfiles:
-        _step(f"Trivy 취약점 스캔 중: {dockerfile.name}")
+        _step(f"Trivy로 Dockerfile을 검사하는 중: {dockerfile.relative_to(project_root)}")
         output_path = trivy_dir / f"{_safe_artifact_name(str(dockerfile.relative_to(project_root)))}.json"
         ok, count, error = run_trivy_config(dockerfile, output_path)
         if not ok:
@@ -137,6 +151,7 @@ def run_scan(
             }
         )
 
+    _step("발견 항목을 정리하는 중...")
     custom_findings_dicts = [f.to_dict() for f in custom_rule_findings]
     trivy_findings_dicts = _normalize_trivy_findings(artifacts, len(custom_findings_dicts), source_hashes)
     findings = custom_findings_dicts + trivy_findings_dicts
@@ -147,6 +162,7 @@ def run_scan(
         "scanId": scan_id,
         "projectName": project_config.project_name,
         "source": "cli",
+        "environment": resolved_env,
         "scannedAt": scanned_at,
         "toolVersion": __version__,
         "os": platform.system().lower(),
@@ -177,7 +193,7 @@ def run_scan(
         "analysisSummary": None,
     }
 
-    _step("결과 저장 중...")
+    _step("스캔 결과 JSON을 저장하는 중...")
     result_path = results_dir / f"{scan_id}.json"
     result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     (results_dir / "last_scan.txt").write_text(result_path.name, encoding="utf-8")
@@ -208,6 +224,11 @@ def _source_hashes(root: Path, paths: list[Path], warnings: list[str]) -> dict[s
         except OSError as exc:
             warnings.append(f"Failed to hash {path}: {exc}")
     return hashes
+
+
+def _compose_warning_with_context(compose_set: Any, root: Path, message: str) -> str:
+    files = ",".join(str(path.relative_to(root)) for path in compose_set.files)
+    return f"[ssafer-compose name={compose_set.name} files={files}] {message}"
 
 
 def _analysis_status(artifacts: list[dict[str, Any]], warnings: list[str]) -> str:

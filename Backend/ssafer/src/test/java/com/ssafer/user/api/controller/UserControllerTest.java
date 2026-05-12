@@ -543,6 +543,93 @@ class UserControllerTest {
   }
 
   @Test
+  void setupCurrentUserPasswordReturnsSuccess() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    given(userPasswordService.setupPassword(actor, "new-password123"))
+        .willReturn(new AuthTokenResult(
+            "new-access-token",
+            Instant.parse("2026-05-12T00:00:00Z"),
+            "new-refresh-token",
+            Instant.parse("2026-05-26T00:00:00Z")
+        ));
+
+    mockMvc.perform(post("/api/v1/users/me/password/setup")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Password setup succeeded"))
+        .andExpect(jsonPath("$.data.accessToken").value("new-access-token"))
+        .andExpect(jsonPath("$.data.refreshToken").value("new-refresh-token"));
+
+    then(userPasswordService).should().setupPassword(actor, "new-password123");
+  }
+
+  @Test
+  void setupCurrentUserPasswordWithoutBodyReturnsInvalidParameter() throws Exception {
+    mockMvc.perform(post("/api/v1/users/me/password/setup")
+            .contentType(APPLICATION_JSON))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+  }
+
+  @Test
+  void setupCurrentUserPasswordWithShortNewPasswordReturnsFieldErrors() throws Exception {
+    mockMvc.perform(post("/api/v1/users/me/password/setup")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "newPassword": "short"
+                }
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.data.fieldErrors.newPassword").exists());
+  }
+
+  @Test
+  void setupCurrentUserPasswordReturnsConflictWhenSetupIsNotAllowed() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    Mockito.doThrow(new BusinessException(ErrorCode.PASSWORD_SETUP_NOT_ALLOWED))
+        .when(userPasswordService)
+        .setupPassword(actor, "new-password123");
+
+    mockMvc.perform(post("/api/v1/users/me/password/setup")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("PASSWORD_SETUP_NOT_ALLOWED"));
+  }
+
+  @Test
+  void setupCurrentUserPasswordReturnsForbiddenForGuest() throws Exception {
+    AuthenticatedActor actor = AuthenticatedActor.guest("guest-hash");
+    given(currentActorProvider.getCurrentActor()).willReturn(actor);
+    Mockito.doThrow(new BusinessException(ErrorCode.FORBIDDEN))
+        .when(userPasswordService)
+        .setupPassword(actor, "new-password123");
+
+    mockMvc.perform(post("/api/v1/users/me/password/setup")
+            .contentType(APPLICATION_JSON)
+            .content("""
+                {
+                  "newPassword": "new-password123"
+                }
+                """))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+  }
+
+  @Test
   void withdrawCurrentUserReturnsSuccess() throws Exception {
     AuthenticatedActor actor = AuthenticatedActor.member(1L);
     given(currentActorProvider.getCurrentActor()).willReturn(actor);

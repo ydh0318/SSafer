@@ -19,6 +19,8 @@ public final class ScanBasicResponseMapper {
         scan.getProgressStep(),
         scan.getFailureReason(),
         scan.getRawResultPath(),
+        // raw 결과와 최종 analysis 결과 경로를 둘 다 내려야 프론트가 현재 단계에 맞는 아티팩트를 참조할 수 있다.
+        scan.getAnalysisResultPath(),
         scan.getRequestedAt(),
         scan.getStartedAt(),
         scan.getCompletedAt(),

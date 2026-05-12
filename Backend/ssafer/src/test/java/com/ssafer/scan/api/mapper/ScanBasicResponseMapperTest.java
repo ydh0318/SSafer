@@ -33,6 +33,7 @@ class ScanBasicResponseMapperTest {
         .progressStep("completed")
         .failureReason(null)
         .rawResultPath("s3://ssafer/raw/1001/scan_result.json")
+        .analysisResultPath("s3://ssafer/result/1001/analysis_result.json")
         .requestedAt(requestedAt)
         .startedAt(startedAt)
         .completedAt(completedAt)
@@ -50,6 +51,7 @@ class ScanBasicResponseMapperTest {
     assertThat(response.progressStep()).isEqualTo("completed");
     assertThat(response.failureReason()).isNull();
     assertThat(response.rawResultPath()).isEqualTo("s3://ssafer/raw/1001/scan_result.json");
+    assertThat(response.analysisResultPath()).isEqualTo("s3://ssafer/result/1001/analysis_result.json");
     assertThat(response.requestedAt()).isEqualTo(requestedAt);
     assertThat(response.startedAt()).isEqualTo(startedAt);
     assertThat(response.completedAt()).isEqualTo(completedAt);

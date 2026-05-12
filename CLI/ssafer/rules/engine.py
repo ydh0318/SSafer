@@ -13,6 +13,7 @@ class ScanContext:
     effective_configs: dict[str, str]  # compose_set.name → raw_yaml
     env_files: list[Path]
     project_root: Path
+    environment: str = "production"
 
 
 class RuleEngine:

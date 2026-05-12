@@ -7,6 +7,8 @@ import { useUiStore } from '../../store/uiStore';
 
 import SiteHeader from '../../components/layout/SiteHeader';
 import TypingGameEnding from './TypingGameEnding';
+import TypingStageReportModal from './TypingStageReportModal';
+import { useAuthStore } from '../../store/authStore';
 
 /* ─── types ─── */
 type TokenTone = 'emerald' | 'sky' | 'amber' | 'rose' | 'slate';
@@ -109,20 +111,27 @@ function TypingLine({
   onEnterNext,
   isDark,
   autoPlay,
+  onTypeActivity,
 }: {
   command: string;
   onDone: () => void;
   onEnterNext: () => void;
   isDark: boolean;
   autoPlay?: boolean;
+  onTypeActivity?: (cpm: number, isTyping: boolean) => void;
+  onStroke?: () => void;
 }) {
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const doneRef = useRef(false);
+  const keyStamps = useRef<number[]>([]);
+  const activityTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setInput('');
     doneRef.current = false;
+    keyStamps.current = [];
+    if (onTypeActivity) onTypeActivity(0, false);
     setTimeout(() => inputRef.current?.focus(), 0);
   }, [command]);
 
@@ -191,7 +200,31 @@ function TypingLine({
         ref={inputRef}
         className="absolute inset-0 h-full w-full z-10 opacity-0 outline-none cursor-text"
         value={input}
-        onChange={(e) => !done && setInput(e.target.value.slice(0, command.length))}
+        onChange={(e) => {
+          if (done) return;
+          const newVal = e.target.value.slice(0, command.length);
+          if (newVal.length > input.length) {
+            if (onStroke) onStroke();
+          }
+          setInput(newVal);
+
+          if (onTypeActivity) {
+            const now = Date.now();
+            keyStamps.current.push(now);
+            // 최근 2초 이내의 타격만 유지
+            keyStamps.current = keyStamps.current.filter(t => now - t < 2000);
+            
+            // 2초 동안의 타수 * 30 = 분당 타수(CPM)
+            const currentCpm = keyStamps.current.length * 30;
+            onTypeActivity(currentCpm, true);
+
+            if (activityTimer.current) clearTimeout(activityTimer.current);
+            activityTimer.current = setTimeout(() => {
+              onTypeActivity(0, false);
+              keyStamps.current = [];
+            }, 400); // 0.4초 동안 입력이 없으면 쉬는 상태로 간주
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && done) {
             e.preventDefault();
@@ -238,7 +271,16 @@ export default function TypingGamePage() {
   const [sidebarTab, setSidebarTab] = useState(0);
   const [showEnding, setShowEnding] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
+  const [eating, setEating] = useState(false);
+  const [cpm, setCpm] = useState(0);
+  const [isTyping, setIsTyping] = useState(false);
+  const [stageStrokes, setStageStrokes] = useState(0);
+  const [maxStageCpm, setMaxStageCpm] = useState(0);
+  const [showStageReport, setShowStageReport] = useState(false);
+  
   const theme = useUiStore((s) => s.theme);
+  const { user } = useAuthStore();
+  const username = user?.name || user?.email || 'Guest Agent';
   const isDark = theme === 'dark';
   const currentLineRef = useRef<HTMLDivElement>(null);
 
@@ -250,6 +292,8 @@ export default function TypingGamePage() {
 
   const handleDone = () => {
     setDoneIds((prev) => new Set([...prev, cmd.id]));
+    setEating(true);
+    setTimeout(() => setEating(false), 800);
   };
 
   const goNextCmd = () => {
@@ -263,8 +307,15 @@ export default function TypingGamePage() {
   // Enter key from TypingLine auto-advances
   const handleEnterNext = () => {
     if (!isLastCmd) goNextCmd();
-    else if (!isLastStage) goNextStage();
+    else if (!isLastStage) setShowStageReport(true);
     else setShowEnding(true);
+  };
+
+  const closeStageReportAndGoNext = () => {
+    setShowStageReport(false);
+    setStageStrokes(0);
+    setMaxStageCpm(0);
+    goNextStage();
   };
 
   const jumpTo = (si: number, ci: number) => {
@@ -347,7 +398,16 @@ export default function TypingGamePage() {
           {/* Top section: Goose, XP, and CURRENT LIST button */}
           <div className="flex items-end justify-between pb-4">
             <div className="flex items-center gap-4">
-              <PixelGoose mood={isCurrentDone ? 'happy' : 'working'} size={52} />
+              <div className="relative flex items-end h-[52px]">
+                <PixelGoose 
+                  mood={(eating || isTyping) ? 'eating' : isCurrentDone ? 'happy' : 'working'} 
+                  size={52} 
+                  className="transition-transform duration-[400ms] ease-out origin-bottom"
+                  style={{ 
+                    transform: `scaleX(${1 + Math.min(1.0, cpm / 600)}) scaleY(${1 + Math.min(0.5, cpm / 1200)})` 
+                  }}
+                />
+              </div>
               <div>
                 <div className={`text-base font-bold ${isDark ? 'text-neutral-200' : 'text-neutral-800'}`}>
                   총 획득 포인트: <span className={isDark ? 'text-[#d9f66f]' : 'text-emerald-600'}>{totalXp} XP</span>
@@ -414,6 +474,12 @@ export default function TypingGamePage() {
                 onEnterNext={handleEnterNext}
                 isDark={isDark}
                 autoPlay={autoPlay}
+                onTypeActivity={(currentCpm, typingStatus) => {
+                  setCpm(currentCpm);
+                  setMaxStageCpm(prev => Math.max(prev, currentCpm));
+                  setIsTyping(typingStatus);
+                }}
+                onStroke={() => setStageStrokes(prev => prev + 1)}
               />
             </div>
 
@@ -596,6 +662,19 @@ export default function TypingGamePage() {
             </div>
           </aside>
         </>
+      )}
+
+      {/* Stage Report Overlay */}
+      {showStageReport && (
+        <TypingStageReportModal
+          stageOrder={stage.order}
+          stageTitle={stage.title}
+          username={username}
+          strokes={stageStrokes}
+          maxCpm={maxStageCpm}
+          isDark={isDark}
+          onNext={closeStageReportAndGoNext}
+        />
       )}
 
       {/* Ending Overlay */}

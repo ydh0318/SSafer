@@ -23,7 +23,12 @@ from ssafer.core.doctor import collect_doctor_status, install_trivy_with_winget
 from ssafer.core.result_store import load_last_scan, run_scan
 from ssafer.core.upload import upload_last_scan, upload_last_server_audit
 
-app = typer.Typer(help="SSAfer 보안 점검 CLI.")
+app = typer.Typer(
+    help="프로젝트와 서버 보안 점검을 터미널에서 실행하고 웹 대시보드와 연결합니다.",
+    add_completion=False,
+    options_metavar="[옵션]",
+    subcommand_metavar="명령어",
+)
 console = Console()
 
 _STATUS_KO = {
@@ -102,13 +107,13 @@ def callback() -> None:
     """SSAfer CLI."""
 
 
-@app.command(help="CLI 버전을 출력합니다.", rich_help_panel="기본")
+@app.command(help="현재 설치된 SSAfer CLI 버전을 확인합니다.", rich_help_panel="기본")
 def version() -> None:
     """CLI 버전을 출력합니다."""
     console.print(__version__)
 
 
-@app.command(help="로그인/Agent 설정 상태를 확인합니다.", rich_help_panel="계정/상태")
+@app.command(help="로그인, 백엔드 endpoint, Local Agent 설정 상태를 확인합니다.", rich_help_panel="계정/상태")
 def status() -> None:
     """로그인과 Local Agent 설정 상태를 확인합니다."""
     from ssafer.core.auth import (
@@ -164,7 +169,7 @@ def doctor() -> None:
         console.print("[yellow]Trivy 설치:[/yellow] ssafer install-tools")
 
 
-@app.command("install-tools", help="Trivy 등 선택 도구를 설치합니다.", rich_help_panel="서버 점검")
+@app.command("install-tools", help="스캔에 필요한 선택 도구(Trivy)를 설치합니다.", rich_help_panel="서버 점검")
 def install_tools() -> None:
     """Trivy 등 SSAfer가 선택적으로 사용하는 도구를 설치합니다."""
     console.print("[cyan]Trivy를 설치합니다. 몇 분 정도 걸릴 수 있습니다...[/cyan]")
@@ -177,7 +182,7 @@ def install_tools() -> None:
     raise typer.Exit(code=1)
 
 
-@app.command("server-audit", help="서버 내부 런타임 보안 상태를 점검합니다.", rich_help_panel="서버 점검")
+@app.command("server-audit", help="EC2/서버 내부의 포트, 프로세스, Docker 등 런타임 상태를 점검합니다.", rich_help_panel="서버 점검")
 def server_audit(
     path: Optional[Path] = typer.Option(None, "--path", "-p", help="server-audit 결과를 저장할 기준 폴더입니다. 생략하면 홈 디렉터리를 사용합니다."),
     upload: bool = typer.Option(False, "--upload", help="점검 결과를 생성한 뒤 백엔드/S3에 업로드합니다."),
@@ -240,8 +245,13 @@ def server_audit(
         _print_server_audit_details(result)
     if upload:
         console.print("[cyan]서버 점검 결과를 업로드합니다...[/cyan]")
-        with console.status("[cyan]백엔드 등록 및 S3 업로드 진행 중...[/cyan]", spinner="dots"):
-            response = _upload_server_audit_or_exit(output_root, api_url=api_url)
+        with console.status("[cyan]업로드 준비 중...[/cyan]", spinner="dots") as status:
+            response = _upload_server_audit_or_exit(
+                output_root,
+                api_url=api_url,
+                on_step=lambda message: status.update(f"[cyan]{message}[/cyan]"),
+            )
+        response = _wait_for_uploaded_scan(output_root, response=response, api_url=api_url)
         _print_upload_response(response)
     console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
 
@@ -250,15 +260,16 @@ def _can_prompt_for_sudo() -> bool:
     return bool(getattr(sys.stdin, "isatty", lambda: False)())
 
 
-@app.command(help="현재 프로젝트를 스캔하고 로컬 결과 JSON을 생성합니다.", rich_help_panel="로컬 점검")
+@app.command(help="프로젝트 설정 파일을 스캔하고 결과 JSON을 로컬에 저장합니다.", rich_help_panel="로컬 점검")
 def run(
     path: Path = typer.Option(Path("."), "--path", "-p", help="스캔할 프로젝트 루트입니다. CLI 폴더 안이면 보통 --path .. 를 사용합니다."),
     upload: bool = typer.Option(False, "--upload", help="스캔 후 결과 JSON을 백엔드/S3에 바로 업로드합니다."),
     save_raw: bool = typer.Option(False, "--save-raw", help="마스킹 전 effective compose 설정도 로컬에 저장합니다. 민감정보 포함 가능성이 있어 주의하세요."),
     api_url: Optional[str] = typer.Option(None, "--api-url", help="--upload에 사용할 SSAfer 백엔드 API URL입니다."),
+    env: Optional[str] = typer.Option(None, "--env", "-e", help="환경 (local/production). 생략 시 자동 감지합니다."),
 ) -> None:
     """현재 프로젝트의 설정 파일을 점검하고 로컬 결과 JSON을 생성합니다."""
-    step_ref = ["스캔 준비 중..."]
+    step_ref = ["스캔을 준비하는 중..."]
     result_ref: list = [None]
     error_ref: list = [None]
 
@@ -267,7 +278,7 @@ def run(
 
     def do_scan() -> None:
         try:
-            result_ref[0] = run_scan(path.resolve(), save_raw=save_raw, on_step=on_step)
+            result_ref[0] = run_scan(path.resolve(), save_raw=save_raw, on_step=on_step, environment=env)
         except Exception as exc:  # noqa: BLE001
             error_ref[0] = exc
 
@@ -297,24 +308,34 @@ def run(
     _print_scan_summary(result_ref[0])
     if upload:
         console.print("[cyan]스캔 결과를 업로드합니다...[/cyan]")
-        with console.status("[cyan]백엔드 등록 및 S3 업로드 진행 중...[/cyan]", spinner="dots"):
-            response = _upload_or_exit(path.resolve(), api_url=api_url)
+        with console.status("[cyan]업로드 준비 중...[/cyan]", spinner="dots") as status:
+            response = _upload_or_exit(
+                path.resolve(),
+                api_url=api_url,
+                on_step=lambda message: status.update(f"[cyan]{message}[/cyan]"),
+            )
+        response = _wait_for_uploaded_scan(path.resolve(), response=response, api_url=api_url)
         _print_upload_response(response)
 
 
-@app.command(help="최근 로컬 스캔 결과를 백엔드/S3에 업로드합니다.", rich_help_panel="로컬 점검")
+@app.command(help="최근 로컬 스캔 결과를 웹 대시보드로 업로드합니다.", rich_help_panel="로컬 점검")
 def upload(
     path: Path = typer.Option(Path("."), "--path", "-p", help=".ssafer/results가 있는 프로젝트 루트입니다."),
     api_url: Optional[str] = typer.Option(None, "--api-url", help="업로드에 사용할 SSAfer 백엔드 API URL입니다."),
 ) -> None:
     """최근 로컬 스캔 결과 JSON을 백엔드/S3에 업로드합니다."""
     console.print("[cyan]스캔 결과를 업로드합니다...[/cyan]")
-    with console.status("[cyan]백엔드 등록 및 S3 업로드 진행 중...[/cyan]", spinner="dots"):
-        response = _upload_or_exit(path.resolve(), api_url=api_url)
+    with console.status("[cyan]업로드 준비 중...[/cyan]", spinner="dots") as status:
+        response = _upload_or_exit(
+            path.resolve(),
+            api_url=api_url,
+            on_step=lambda message: status.update(f"[cyan]{message}[/cyan]"),
+        )
+    response = _wait_for_uploaded_scan(path.resolve(), response=response, api_url=api_url)
     _print_upload_response(response)
 
 
-@app.command("apply", help="승인된 수정안을 로컬 프로젝트 파일에 적용합니다.", rich_help_panel="수정 적용")
+@app.command("apply", help="AI가 제안한 수정안을 미리 보고 로컬 파일에 적용합니다.", rich_help_panel="수정 적용")
 def apply_fix(
     path: Path = typer.Option(Path("."), "--path", "-p", help="수정안을 적용할 프로젝트 루트입니다."),
     analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="patch payload가 들어있는 analysis_result.json 경로입니다."),
@@ -364,9 +385,10 @@ def apply_fix(
 
         candidates = load_patch_candidates_from_file(analysis_path)
         if not candidates:
-            console.print("[yellow]이 분석 결과에는 자동 적용 가능한 patch payload가 없습니다.[/yellow]")
+            console.print("[yellow]적용할 자동 수정안이 없습니다.[/yellow]")
             console.print(
-                "[dim]파일은 변경하지 않았습니다. 웹 결과나 analysis_result.json의 권장 조치를 확인해 주세요.[/dim]"
+                "[dim]파일은 변경하지 않았습니다. AI가 patch payload를 만들지 않은 결과입니다. "
+                "웹 결과나 analysis_result.json의 권장 조치를 확인해 주세요.[/dim]"
             )
             return
 
@@ -378,9 +400,9 @@ def apply_fix(
         _print_patch_preview(selected)
 
         if not dry_run and not yes:
-            confirmed = typer.confirm("Apply selected patches?")
+            confirmed = typer.confirm("선택한 수정안을 적용할까요?")
             if not confirmed:
-                console.print("[yellow]Patch apply canceled.[/yellow]")
+                console.print("[yellow]수정 적용을 취소했습니다. 파일은 변경하지 않았습니다.[/yellow]")
                 raise typer.Exit(code=1)
 
         selected_patch_id = selected[0].patch_id if len(selected) == 1 else None
@@ -444,7 +466,7 @@ def agent_watch(
     )
 
 
-@app.command("agent", help="Local Agent를 설정하고 실행합니다.", rich_help_panel="Local Agent")
+@app.command("agent", help="웹 요청을 현재 PC/서버에서 처리하도록 Local Agent를 연결합니다.", rich_help_panel="로컬 Agent")
 def agent(
     path: Path = typer.Option(Path("."), "--path", "-p", help="agent가 연결될 프로젝트 루트입니다."),
 ) -> None:
@@ -509,7 +531,7 @@ def agent_init(
     console.print("[dim]ssafer agent를 실행하면 웹 요청을 받을 수 있습니다.[/dim]")
 
 
-@app.command("project-create", help="SSAfer 프로젝트를 생성합니다.", rich_help_panel="계정/상태")
+@app.command("project-create", help="웹/Agent 연동에 사용할 SSAfer 프로젝트를 생성합니다.", rich_help_panel="계정/상태")
 def project_create(
     name: Optional[str] = typer.Option(None, "--name", help="생성할 프로젝트 이름입니다. 생략하면 현재 폴더명을 기본값으로 사용합니다."),
     description: Optional[str] = typer.Option(None, "--description", help="프로젝트 설명입니다."),
@@ -741,7 +763,7 @@ def _run_agent_watch(
                 if once:
                     console.print("[dim]처리할 pending task가 없습니다.[/dim]")
                 elif verbose:
-                    console.print("[dim]No pending tasks. Agent is watching.[/dim]")
+                    console.print("[dim]처리할 pending task가 없습니다. Agent가 계속 대기합니다.[/dim]")
                 return
             task_types = ", ".join(str(getattr(task, "task_type", "UNKNOWN")) for task in tasks)
             console.print(f"[cyan]처리할 task {len(tasks)}개를 찾았습니다.[/cyan] {task_types}")
@@ -958,7 +980,7 @@ def _format_patch_diff(old_text: str | None, new_text: str, *, operation: str = 
     return "\n".join(diff_lines)
 
 
-@app.command(help="SSAfer 서버에 로그인합니다.", rich_help_panel="계정/상태")
+@app.command(help="계정을 연결하고 업로드/Agent 실행에 필요한 토큰을 저장합니다.", rich_help_panel="계정/상태")
 def login(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="로그인할 SSAfer 백엔드 API URL입니다."),
     logout: bool = typer.Option(False, "--logout", help="저장된 로그인 토큰을 삭제합니다. 가능하면 ssafer logout 사용을 권장합니다."),
@@ -990,6 +1012,8 @@ def login(
         console.print(f"[red]로그인 실패:[/red] {exc}")
         raise typer.Exit(code=1) from exc
     console.print("[green]로그인 완료. 토큰은 ~/.ssafer/config.yml에 저장됩니다.[/green]")
+    console.print(f"웹 대시보드: {_web_url(effective_endpoint, '/dashboard')}")
+    console.print("[dim]브라우저 로그인이 필요할 수 있습니다. CLI 로그인 토큰은 터미널 업로드/agent 연결에만 사용됩니다.[/dim]")
     _prompt_start_agent_after_login()
 
 
@@ -1003,7 +1027,7 @@ def _prompt_start_agent_after_login() -> None:
     console.print("[dim]Agent는 시작하지 않았습니다. 나중에 연결하려면 [bold]ssafer agent[/bold]를 실행하세요.[/dim]")
 
 
-@app.command(help="이메일 인증을 거쳐 SSAfer 계정을 생성합니다.", rich_help_panel="계정/상태")
+@app.command(help="이메일 인증부터 회원가입까지 터미널에서 한 번에 진행합니다.", rich_help_panel="계정/상태")
 def signup(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="회원가입에 사용할 SSAfer 백엔드 API URL입니다."),
 ) -> None:
@@ -1016,6 +1040,7 @@ def signup(
     )
 
     effective_endpoint = endpoint or load_endpoint()
+    console.print("[cyan]SSAfer 계정을 생성합니다. 이메일 인증 코드 확인까지 한 번에 진행합니다.[/cyan]")
     email = typer.prompt("이메일")
     display_name = typer.prompt("표시 이름")
     password = typer.prompt("비밀번호", hide_input=True)
@@ -1023,13 +1048,16 @@ def signup(
         console.print("[red]이메일, 표시 이름, 비밀번호를 모두 입력해야 합니다.[/red]")
         raise typer.Exit(code=1)
     try:
+        console.print("[cyan]이메일 인증 코드를 발송합니다...[/cyan]")
         send_email_verification_code(effective_endpoint, email.strip())
-        console.print("[green]인증 코드를 보냈습니다. 이메일함을 확인해 주세요.[/green]")
-        code = typer.prompt("이메일 인증 코드")
+        console.print("[green]인증 코드를 보냈습니다. 이메일함을 확인한 뒤 코드를 입력하세요.[/green]")
+        code = typer.prompt("인증 코드")
         if not code.strip():
             console.print("[red]이메일 인증 코드를 입력해야 합니다.[/red]")
             raise typer.Exit(code=1)
+        console.print("[cyan]인증 코드를 확인합니다...[/cyan]")
         verify_email_code(effective_endpoint, email.strip(), code.strip())
+        console.print("[cyan]회원가입을 요청합니다...[/cyan]")
         register_user(effective_endpoint, email.strip(), display_name.strip(), password)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]회원가입 실패:[/red] {_format_http_error(exc)}")
@@ -1048,19 +1076,19 @@ def send_email_code(
     from ssafer.core.auth import load_endpoint, send_email_verification_code
 
     effective_endpoint = endpoint or load_endpoint()
-    email = typer.prompt("Email")
+    email = typer.prompt("이메일")
     if not email.strip():
-        console.print("[red]Email is required.[/red]")
+        console.print("[red]이메일을 입력해야 합니다.[/red]")
         raise typer.Exit(code=1)
     try:
         send_email_verification_code(effective_endpoint, email.strip())
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Email code request failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]이메일 인증 코드 발송 실패:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email code request failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]이메일 인증 코드 발송 실패:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
-    console.print("[green]Verification code sent. Check your email.[/green]")
+    console.print("[green]인증 코드를 보냈습니다. 이메일함을 확인하세요.[/green]")
 
 
 @app.command("verify-email", hidden=True)
@@ -1071,34 +1099,34 @@ def verify_email(
     from ssafer.core.auth import load_endpoint, verify_email_code
 
     effective_endpoint = endpoint or load_endpoint()
-    email = typer.prompt("Email")
-    code = typer.prompt("Verification code")
+    email = typer.prompt("이메일")
+    code = typer.prompt("인증 코드")
     if not email.strip() or not code.strip():
-        console.print("[red]Email and verification code are required.[/red]")
+        console.print("[red]이메일과 인증 코드를 모두 입력해야 합니다.[/red]")
         raise typer.Exit(code=1)
     try:
         verify_email_code(effective_endpoint, email.strip(), code.strip())
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Email verification failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]이메일 인증 실패:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email verification failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]이메일 인증 실패:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
-    console.print("[green]Email verified. Run 'ssafer signup' to create your account.[/green]")
+    console.print("[green]이메일 인증이 완료되었습니다. 회원가입은 ssafer signup에서 이어서 진행할 수 있습니다.[/green]")
 
 
-@app.command(help="저장된 로그인 토큰을 삭제합니다.", rich_help_panel="계정/상태")
+@app.command(help="저장된 로그인/Agent 정보를 삭제하고 CLI 연결을 해제합니다.", rich_help_panel="계정/상태")
 def logout() -> None:
     """저장된 로그인 토큰과 현재 프로젝트의 agent 설정을 삭제합니다."""
     from ssafer.core.auth import clear_agent_config, clear_token
 
     clear_token()
     clear_agent_config(Path("."))
-    console.print("[green]Saved SSAfer login and local-agent config cleared.[/green]")
-    console.print("[dim]If a local agent is already running in another terminal, stop it with Ctrl+C.[/dim]")
+    console.print("[green]저장된 SSAfer 로그인 정보와 현재 프로젝트의 Local Agent 설정을 삭제했습니다.[/green]")
+    console.print("[dim]다른 터미널에서 Local Agent가 실행 중이면 Ctrl+C로 종료하세요.[/dim]")
 
 
-@app.command(help="최근 로컬 스캔 결과 요약을 출력합니다.", rich_help_panel="로컬 점검")
+@app.command(help="최근 로컬 스캔 결과를 터미널에서 확인합니다.", rich_help_panel="로컬 점검")
 def report(
     path: Path = typer.Option(Path("."), "--path", "-p", help=".ssafer/results가 있는 프로젝트 루트입니다."),
     details: bool = typer.Option(False, "--details", "-d", help="스캔 대상, 산출물 경로, finding 상세를 함께 출력합니다."),
@@ -1150,10 +1178,15 @@ def _format_upload_request_url(url: object) -> str:
 
 def _scan_has_targets(scan: dict) -> bool:
     summary = scan.get("cliSummary", {})
-    return any(
-        int(summary.get(key) or 0) > 0
-        for key in ("composeSets", "envFiles", "dockerfiles")
-    )
+    target_counts = [summary.get(key) for key in ("composeSets", "envFiles", "dockerfiles")]
+    if any(value is not None for value in target_counts):
+        return any(int(value or 0) > 0 for value in target_counts)
+
+    targets = scan.get("targets", {})
+    if isinstance(targets, dict) and any(key in targets for key in ("composeSets", "envFiles", "dockerfiles")):
+        return any(len(targets.get(key) or []) > 0 for key in ("composeSets", "envFiles", "dockerfiles"))
+
+    return bool(scan.get("findings") or scan.get("artifacts"))
 
 
 def _scan_status_label(scan: dict) -> str:
@@ -1197,9 +1230,7 @@ def _print_scan_summary(scan: dict) -> None:
 
     warnings = scan.get("warnings", [])
     if warnings:
-        console.print("[yellow]경고 목록[/yellow]")
-        for warning in warnings:
-            console.print(f"  - {_format_scan_warning(warning)}")
+        _print_scan_warnings(warnings, scan)
 
 
 def _print_scan_details(scan: dict, project_root: Path) -> None:
@@ -1303,8 +1334,7 @@ def _print_findings(scan: dict) -> None:
     finding_table.add_column("Evidence", overflow="fold")
 
     if not finding_groups:
-        finding_table.add_row("-", "-", "-", "-", "-", "-", "-")
-        console.print(finding_table)
+        console.print(Panel.fit("발견된 보안 항목이 없습니다.", title="Findings"))
         return
 
     for group in finding_groups:
@@ -1433,29 +1463,110 @@ def _format_report_finding_evidence(finding: dict) -> str:
     return _format_report_evidence(finding.get("maskedEvidence"))
 
 
-def _format_scan_warning(warning: object) -> str:
+def _print_scan_warnings(warnings: list[object], scan: dict | None = None) -> None:
+    table = Table(title="경고 목록", show_lines=True)
+    table.add_column("번호", justify="right", no_wrap=True)
+    table.add_column("분류", no_wrap=True)
+    table.add_column("대상", overflow="fold")
+    table.add_column("내용", overflow="fold")
+    fallback_targets = iter(_compose_warning_fallback_targets(scan or {}))
+    for index, warning in enumerate(warnings, start=1):
+        category, target, message = _format_scan_warning_row(warning)
+        if target == "Compose 설정" and category.startswith("Compose"):
+            target = next(fallback_targets, target)
+        table.add_row(str(index), category, target, message)
+    console.print(table)
+
+
+def _compose_warning_fallback_targets(scan: dict) -> list[str]:
+    targets = scan.get("targets", {})
+    compose_sets = targets.get("composeSets", []) if isinstance(targets, dict) else []
+    result: list[str] = []
+    for compose_set in compose_sets:
+        if not isinstance(compose_set, dict):
+            continue
+        name = str(compose_set.get("name") or "compose")
+        files = [_format_warning_path(item) for item in compose_set.get("files", []) if item]
+        if not files:
+            continue
+        result.append(f"{name}: {_join_compact(files, max_items=2)}")
+    return result
+
+
+def _format_scan_warning_row(warning: object) -> tuple[str, str, str]:
     text = str(warning).replace("\r\n", "\n").strip()
     if not text:
-        return "-"
+        return ("기타", "-", "-")
+
+    compose_context = _extract_compose_warning_context(text)
+    if compose_context:
+        text = compose_context["message"]
 
     standalone_compose_match = re.search(r"(.+?)을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다\.", text)
-    if standalone_compose_match:
-        compose_path = Path(standalone_compose_match.group(1))
-        return f"기본 Compose 없이 단독 분석: {compose_path.name}"
+    standalone_compose_metadata_match = re.search(r"기본 Compose 파일 없이 단독으로 분석했습니다\.", text)
+    if standalone_compose_match or standalone_compose_metadata_match:
+        target = compose_context["target"] if compose_context else _format_warning_path(standalone_compose_match.group(1))
+        return (
+            "Compose 파일",
+            target,
+            "이 compose 파일만 단독으로 분석했습니다. 같은 폴더에 docker-compose.yml이 있으면 함께 분석됩니다.",
+        )
 
     missing_vars = list(dict.fromkeys(re.findall(r'The \\?"([^"\\]+)\\?" variable is not set', text)))
     if missing_vars:
-        return f"Docker Compose 환경변수 미설정: {_join_compact(missing_vars, max_items=8)}"
+        return (
+            "Compose 환경변수",
+            compose_context["target"] if compose_context else "Compose 설정",
+            f"필요한 환경변수가 비어 있습니다: {_join_compact(missing_vars, max_items=5)}",
+        )
 
     env_file_match = re.search(r"env file (.+?) not found", text)
     if env_file_match:
-        return f"Compose env 파일을 찾을 수 없음: {env_file_match.group(1)}"
+        return ("Compose env 파일", env_file_match.group(1), "Compose가 참조하는 env 파일을 찾지 못했습니다.")
 
     service_match = re.search(r'service "([^"]+)" has neither an image nor a build context specified', text)
     if service_match:
-        return f"Compose 서비스 '{service_match.group(1)}'에 image/build 설정이 없어 분석하지 못함"
+        return (
+            "Compose 서비스",
+            service_match.group(1),
+            "image 또는 build 설정이 없어 해당 서비스를 분석하지 못했습니다.",
+        )
 
-    return _format_report_evidence(text)
+    return ("기타", "-", _format_report_evidence(text))
+
+
+def _extract_compose_warning_context(text: str) -> dict[str, str] | None:
+    match = re.match(r"^\[ssafer-compose name=([^\] ]+) files=([^\]]*)\]\s*(.*)$", text, flags=re.DOTALL)
+    if not match:
+        return None
+    name = match.group(1)
+    files = [item.strip() for item in match.group(2).split(",") if item.strip()]
+    target_files = _join_compact([_format_warning_path(item) for item in files], max_items=2) if files else "Compose 설정"
+    return {
+        "name": name,
+        "files": ", ".join(files),
+        "target": f"{name}: {target_files}",
+        "message": match.group(3).strip(),
+    }
+
+
+def _format_warning_path(path: object) -> str:
+    text = str(path)
+    try:
+        parsed = Path(text)
+        if parsed.is_absolute():
+            try:
+                return str(parsed.relative_to(Path.cwd()))
+            except ValueError:
+                return parsed.name
+        return text
+    except (OSError, ValueError):
+        return text
+
+
+def _format_scan_warning(warning: object) -> str:
+    category, target, message = _format_scan_warning_row(warning)
+    return f"{category} - {target}: {message}" if target != "-" else f"{category}: {message}"
 
 
 def _count_trivy_artifact_findings(content: dict) -> int:
@@ -1475,9 +1586,24 @@ def _join_items(items: list[str]) -> str:
 
 def _print_upload_response(response: dict) -> None:
     console.print("[green]업로드 완료[/green]")
-    console.print(f"스캔 ID: {response.get('scanId', 'unknown')}")
+    scan_id = response.get("scanId")
+    if scan_id is not None:
+        console.print(f"스캔 ID: {scan_id}")
+    else:
+        console.print("[yellow]스캔 ID: 백엔드 응답에 포함되지 않음[/yellow]")
+        console.print("[dim]업로드는 완료됐지만, 웹에서 결과를 찾기 어렵다면 최근 스캔 목록을 확인해 주세요.[/dim]")
+    if response.get("status"):
+        console.print(f"상태: {response['status']}")
     if response.get("viewUrl"):
         console.print(f"결과 보기: {response['viewUrl']}")
+    elif scan_id is not None:
+        status = str(response.get("status") or "").upper()
+        if status == "DONE":
+            console.print(f"결과 보기: {_web_url(response.get('_apiUrl'), f'/results/{scan_id}')}")
+        else:
+            console.print(f"진행 상황 보기: {_web_url(response.get('_apiUrl'), f'/scans/{scan_id}')}")
+    else:
+        console.print("[dim]AI 분석이 끝나면 웹의 스캔 결과 화면에서 확인할 수 있습니다.[/dim]")
 
 
 def _print_server_audit_details(result: object) -> None:
@@ -1653,11 +1779,83 @@ def _latest_done_scan_id_or_exit(project_root: Path, *, project_id: int | None, 
     except httpx.HTTPError as exc:
         console.print(f"[red]최신 스캔 조회 실패:[/red] {_format_http_transport_error(exc)}")
     except (ValueError, RuntimeError) as exc:
-        console.print(f"[red]최신 스캔 조회 실패:[/red] {exc}")
+        message = str(exc)
+        if message == f"projectId={effective_project_id}에 완료된 스캔이 없습니다.":
+            message = (
+                f"projectId={effective_project_id}에 완료된 스캔이 없습니다. "
+                "먼저 ssafer run --upload 또는 ssafer upload로 분석이 완료된 스캔을 만든 뒤 다시 실행하세요."
+            )
+        console.print(f"[red]최신 스캔 조회 실패:[/red] {message}")
     raise typer.Exit(code=1)
 
 
-def _upload_or_exit(path: Path, api_url: str | None) -> dict:
+def _wait_for_uploaded_scan(
+    project_root: Path,
+    *,
+    response: dict,
+    api_url: str | None,
+    timeout_seconds: int = 300,
+    interval_seconds: int = 3,
+) -> dict:
+    scan_id = response.get("scanId")
+    if scan_id is None:
+        return response
+
+    from ssafer.core.auth import load_endpoint, load_token, normalize_api_url
+    from ssafer.core.config import load_project_config
+
+    project_config = load_project_config(project_root, [])
+    effective_url = api_url or project_config.upload.endpoint or load_endpoint()
+    base_url = normalize_api_url(effective_url)
+    token = load_token(project_config.upload.token_env)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    progress_url = _web_url(base_url, f"/scans/{scan_id}")
+
+    console.print(f"진행 상황 보기: {progress_url}")
+    deadline = time.monotonic() + timeout_seconds
+    latest = dict(response)
+    latest["_apiUrl"] = base_url
+
+    with console.status("[cyan]AI 분석 완료를 기다리는 중...[/cyan]", spinner="dots") as status:
+        while time.monotonic() < deadline:
+            status_data = _fetch_scan_status(base_url, scan_id, headers)
+            latest.update(status_data)
+            latest.setdefault("scanId", scan_id)
+            latest["_apiUrl"] = base_url
+            current_status = str(status_data.get("status") or latest.get("status") or "UNKNOWN").upper()
+            progress_step = status_data.get("progressStep") or "-"
+            status.update(f"[cyan]AI 분석 진행 중... 상태={current_status}, 단계={progress_step}[/cyan]")
+            if current_status == "DONE":
+                return latest
+            if current_status in {"FAILED", "CANCELED"}:
+                console.print(f"[red]AI 분석이 완료되지 못했습니다.[/red] 상태={current_status}")
+                if status_data.get("errorMessage"):
+                    console.print(f"[yellow]{status_data['errorMessage']}[/yellow]")
+                raise typer.Exit(code=1)
+            time.sleep(interval_seconds)
+
+    console.print("[yellow]AI 분석 완료 대기 시간이 초과되었습니다.[/yellow]")
+    console.print(f"[dim]웹에서 계속 확인하세요: {progress_url}[/dim]")
+    return latest
+
+
+def _fetch_scan_status(base_url: str, scan_id: object, headers: dict[str, str]) -> dict:
+    with httpx.Client(timeout=10) as client:
+        response = client.get(f"{base_url}/api/v1/scans/{scan_id}/status", headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+    data = payload.get("data")
+    return data if isinstance(data, dict) else payload
+
+
+def _web_url(api_url: object, path: str) -> str:
+    from ssafer.core.auth import DEFAULT_API_URL, normalize_api_url
+
+    base_url = normalize_api_url(str(api_url or DEFAULT_API_URL))
+    return f"{base_url}{path}"
+
+
+def _upload_or_exit(path: Path, api_url: str | None, on_step=None) -> dict:
     from ssafer.core.auth import load_endpoint, load_token
     from ssafer.core.config import load_project_config
 
@@ -1675,7 +1873,7 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
         )
         raise typer.Exit(code=1)
     try:
-        return upload_last_scan(path, api_url=effective_url, token=token)
+        return upload_last_scan(path, api_url=effective_url, token=token, on_step=on_step)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]업로드 실패:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
@@ -1686,7 +1884,7 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
     raise typer.Exit(code=1)
 
 
-def _upload_server_audit_or_exit(path: Path, api_url: str | None) -> dict:
+def _upload_server_audit_or_exit(path: Path, api_url: str | None, on_step=None) -> dict:
     from ssafer.core.auth import load_endpoint, load_token
     from ssafer.core.config import load_project_config
 
@@ -1704,7 +1902,7 @@ def _upload_server_audit_or_exit(path: Path, api_url: str | None) -> dict:
         )
         raise typer.Exit(code=1)
     try:
-        return upload_last_server_audit(path, api_url=effective_url, token=token)
+        return upload_last_server_audit(path, api_url=effective_url, token=token, on_step=on_step)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]업로드 실패:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")

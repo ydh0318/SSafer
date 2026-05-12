@@ -1,12 +1,15 @@
-type PixelGooseMood = 'idle' | 'happy' | 'alert' | 'working' | 'sleeping' | 'victory';
+import React from 'react';
+
+type PixelGooseMood = 'idle' | 'happy' | 'alert' | 'working' | 'sleeping' | 'victory' | 'eating';
 
 type PixelGooseProps = {
   mood?: PixelGooseMood;
   size?: number;
   className?: string;
+  style?: React.CSSProperties;
 };
 
-function PixelGoose({ mood = 'idle', size = 64, className = '' }: PixelGooseProps) {
+function PixelGoose({ mood = 'idle', size = 64, className = '', style }: PixelGooseProps) {
   const unit = size / 16;
   const pixel = (x: number, y: number, color: string, w = 1, h = 1) => (
     <rect x={x * unit} y={y * unit} width={w * unit} height={h * unit} fill={color} />
@@ -28,7 +31,7 @@ function PixelGoose({ mood = 'idle', size = 64, className = '' }: PixelGooseProp
       <svg
         className={className}
         height={size}
-        style={{ imageRendering: 'pixelated' }}
+        style={{ imageRendering: 'pixelated', ...style }}
         viewBox={`0 0 ${size} ${size}`}
         width={size}
       >
@@ -79,7 +82,7 @@ function PixelGoose({ mood = 'idle', size = 64, className = '' }: PixelGooseProp
       <svg
         className={className}
         height={size}
-        style={{ imageRendering: 'pixelated' }}
+        style={{ imageRendering: 'pixelated', ...style }}
         viewBox={`0 0 ${size} ${size}`}
         width={size}
       >
@@ -132,7 +135,7 @@ function PixelGoose({ mood = 'idle', size = 64, className = '' }: PixelGooseProp
       <svg
         className={className}
         height={size}
-        style={{ imageRendering: 'pixelated' }}
+        style={{ imageRendering: 'pixelated', ...style }}
         viewBox={`0 0 ${size} ${size}`}
         width={size}
       >
@@ -185,7 +188,7 @@ function PixelGoose({ mood = 'idle', size = 64, className = '' }: PixelGooseProp
       <svg
         className={className}
         height={size}
-        style={{ imageRendering: 'pixelated' }}
+        style={{ imageRendering: 'pixelated', ...style }}
         viewBox={`0 0 ${size} ${size}`}
         width={size}
       >
@@ -246,7 +249,7 @@ function PixelGoose({ mood = 'idle', size = 64, className = '' }: PixelGooseProp
     <svg
       className={className}
       height={size}
-      style={{ imageRendering: 'pixelated' }}
+      style={{ imageRendering: 'pixelated', ...style }}
       viewBox={`0 0 ${size} ${size}`}
       width={size}
     >

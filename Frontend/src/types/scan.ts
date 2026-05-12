@@ -168,22 +168,59 @@ export interface ScanFindingListQuery {
   size?: number;
 }
 
+export interface FindingExplanationData {
+  summary: string | null;
+  whyRisky: string | null;
+  abuseScenario: string | null;
+  expectedImpact: string | null;
+  severityInterpretation: string | null;
+}
+
+export interface FindingPatchData {
+  patchId: string | null;
+  findingId: string | null;
+  operation: 'replace' | 'append' | null;
+  filePath: string | null;
+  oldText?: string | null;
+  newText: string | null;
+  expectedFileHash: string | null;
+}
+
+export interface FindingFixData {
+  summary: string | null;
+  priority: string | null;
+  recommendedActions: string[] | null;
+  codeGuidance: string | null;
+  verification: string | null;
+  cautions: string[] | null;
+  patches?: FindingPatchData[] | null;
+}
+
 export interface ScanFindingDetailData {
   findingId: number;
   scanId: number;
   scanNodeId: number | null;
   sourceType: FindingSourceType;
+  source?: FindingSourceType; // 새로 추가된 필드 대응
   fingerprint: string | null;
   severity: FindingSeverity;
   category: string;
   title: string;
   description: string | null;
+  explanation?: FindingExplanationData;
+  impact?: string;
+  fix?: FindingFixData;
   filePath: string | null;
   lineNumber: number | null;
+  line?: number | null; // 새로 추가된 필드 대응
   resourceName: string | null;
-  ruleCode: string;
+  file?: string | null; // 새로 추가된 필드 대응
+  ruleCode: string | null;
+  ruleId?: string | null; // 새로 추가된 필드 대응
+  maskedEvidence?: string | null; // 새로 추가된 증거 필드
   attackScenario: string | null;
   remediationGuide: string | null;
+  targetFiles?: string[] | null; // 새로 추가된 연관 파일 목록
   rawSnippetJson: string | null;
   patchPayloadJson: string | null;
   resolutionStatus: FindingResolutionStatus;

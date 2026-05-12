@@ -123,6 +123,39 @@ public class ScanFinding {
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
 
+  public void refreshAnalysisPayload(
+      FindingSourceType sourceType,
+      String fingerprint,
+      Severity severity,
+      String category,
+      String title,
+      String description,
+      String filePath,
+      Integer lineNumber,
+      String resourceName,
+      String ruleCode,
+      String attackScenario,
+      String remediationGuide,
+      String rawSnippetJson,
+      String patchPayloadJson
+  ) {
+    // 재적재 시에는 사용자 조치 상태는 건드리지 않고, worker가 준 finding 본문만 최신 값으로 맞춘다.
+    this.sourceType = sourceType;
+    this.fingerprint = fingerprint;
+    this.severity = severity;
+    this.category = category;
+    this.title = title;
+    this.description = description;
+    this.filePath = filePath;
+    this.lineNumber = lineNumber;
+    this.resourceName = resourceName;
+    this.ruleCode = ruleCode;
+    this.attackScenario = attackScenario;
+    this.remediationGuide = remediationGuide;
+    this.rawSnippetJson = rawSnippetJson;
+    this.patchPayloadJson = patchPayloadJson;
+  }
+
   public void backfillPatchPayload(String patchPayloadJson) {
     if ((this.patchPayloadJson == null || this.patchPayloadJson.isBlank())
         && patchPayloadJson != null

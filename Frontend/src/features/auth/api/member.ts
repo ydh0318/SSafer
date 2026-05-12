@@ -18,6 +18,7 @@ import type {
   RegisterUserData,
   RegisterUserRequest,
   SendEmailVerificationCodeRequest,
+  SetupPasswordRequest,
   SocialAccount,
   SocialAccountsData,
   SocialConnectRequest,
@@ -135,6 +136,14 @@ export async function updateCurrentUserProfile(payload: UpdateUserProfileRequest
 export async function changeCurrentUserPassword(payload: ChangePasswordRequest) {
   const response = await apiClient.patch<ApiSuccessResponse<AuthTokenData>>(
     '/users/me/password',
+    payload,
+  );
+  return response.data.data;
+}
+
+export async function setupCurrentUserPassword(payload: SetupPasswordRequest) {
+  const response = await apiClient.post<ApiSuccessResponse<AuthTokenData>>(
+    '/users/me/password/setup',
     payload,
   );
   return response.data.data;

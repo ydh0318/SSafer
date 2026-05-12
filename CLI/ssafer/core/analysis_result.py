@@ -43,10 +43,10 @@ def find_latest_done_scan_id(api_url: str, *, project_id: int, token: str) -> in
     data = payload.get("data", payload)
     items = data.get("items") if isinstance(data, dict) else None
     if not isinstance(items, list) or not items:
-        raise ValueError(f"No DONE scans found for projectId={project_id}.")
+        raise ValueError(f"projectId={project_id}에 완료된 스캔이 없습니다.")
     scan_id = items[0].get("scanId") if isinstance(items[0], dict) else None
     if scan_id is None:
-        raise ValueError("Latest scan response is missing scanId.")
+        raise ValueError("최신 스캔 응답에 scanId가 없습니다.")
     return int(scan_id)
 
 
