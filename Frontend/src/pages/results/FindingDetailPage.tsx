@@ -66,6 +66,43 @@ function formatFindingLocation(finding: Pick<ScanFindingDetailData, 'filePath' |
   return target;
 }
 
+function ParsedTextList({ text, fallback }: { text: string | null | undefined; fallback: string }) {
+  if (!text || !text.trim()) {
+    return <p className="mt-3 leading-8 text-neutral-800">{fallback}</p>;
+  }
+
+  if (!/#\d+/.test(text)) {
+    return <p className="mt-3 leading-8 text-neutral-800">{text}</p>;
+  }
+
+  const parts = text.split(/(?=#\d+\.?\s*)/).filter((s) => s.trim().length > 0);
+
+  return (
+    <div className="mt-4 space-y-4">
+      {parts.map((part, index) => {
+        const match = part.match(/^#(\d+)\.?\s*(.*)/s);
+        if (match) {
+          const num = match[1];
+          const content = match[2].trim();
+          return (
+            <div className="flex items-start gap-3" key={index}>
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black text-xs font-bold text-white">
+                {num}
+              </span>
+              <p className="leading-7 text-neutral-800">{content}</p>
+            </div>
+          );
+        }
+        return (
+          <p className="leading-7 text-neutral-800" key={index}>
+            {part.trim()}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function FindingDetailPage() {
   const { scanId = '', findingId = '' } = useParams<{ scanId: string; findingId: string }>();
   const location = useLocation();
@@ -283,15 +320,11 @@ function FindingDetailPage() {
               <div className="mt-6 space-y-6">
                 <div className="border border-neutral-200 bg-white p-6">
                   <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">WHY RISKY</div>
-                  <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.description || '이 항목이 왜 위험한지에 대한 설명이 아직 제공되지 않았습니다.'}
-                  </p>
+                  <ParsedTextList fallback="이 항목이 왜 위험한지에 대한 설명이 아직 제공되지 않았습니다." text={finding.description} />
                 </div>
                 <div className="border border-neutral-200 bg-white p-6">
                   <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">REAL WORLD IMPACT</div>
-                  <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.attackScenario || '실제 공격 시나리오나 영향 범위 설명이 아직 제공되지 않았습니다.'}
-                  </p>
+                  <ParsedTextList fallback="실제 공격 시나리오나 영향 범위 설명이 아직 제공되지 않았습니다." text={finding.attackScenario} />
                 </div>
                 <div className="flex items-start gap-4 border border-[#FFE066] bg-[#FFF9DB] p-6">
                   <PixelGoose mood="alert" size={60} />
