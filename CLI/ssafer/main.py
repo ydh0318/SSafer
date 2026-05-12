@@ -240,8 +240,13 @@ def server_audit(
         _print_server_audit_details(result)
     if upload:
         console.print("[cyan]서버 점검 결과를 업로드합니다...[/cyan]")
-        with console.status("[cyan]백엔드 등록 및 S3 업로드 진행 중...[/cyan]", spinner="dots"):
-            response = _upload_server_audit_or_exit(output_root, api_url=api_url)
+        with console.status("[cyan]업로드 준비 중...[/cyan]", spinner="dots") as status:
+            response = _upload_server_audit_or_exit(
+                output_root,
+                api_url=api_url,
+                on_step=lambda message: status.update(f"[cyan]{message}[/cyan]"),
+            )
+        response = _wait_for_uploaded_scan(output_root, response=response, api_url=api_url)
         _print_upload_response(response)
     console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
 
@@ -259,7 +264,7 @@ def run(
     env: Optional[str] = typer.Option(None, "--env", "-e", help="환경 (local/production). 생략 시 자동 감지합니다."),
 ) -> None:
     """현재 프로젝트의 설정 파일을 점검하고 로컬 결과 JSON을 생성합니다."""
-    step_ref = ["스캔 준비 중..."]
+    step_ref = ["스캔을 준비하는 중..."]
     result_ref: list = [None]
     error_ref: list = [None]
 
@@ -298,8 +303,13 @@ def run(
     _print_scan_summary(result_ref[0])
     if upload:
         console.print("[cyan]스캔 결과를 업로드합니다...[/cyan]")
-        with console.status("[cyan]백엔드 등록 및 S3 업로드 진행 중...[/cyan]", spinner="dots"):
-            response = _upload_or_exit(path.resolve(), api_url=api_url)
+        with console.status("[cyan]업로드 준비 중...[/cyan]", spinner="dots") as status:
+            response = _upload_or_exit(
+                path.resolve(),
+                api_url=api_url,
+                on_step=lambda message: status.update(f"[cyan]{message}[/cyan]"),
+            )
+        response = _wait_for_uploaded_scan(path.resolve(), response=response, api_url=api_url)
         _print_upload_response(response)
 
 
@@ -310,8 +320,13 @@ def upload(
 ) -> None:
     """최근 로컬 스캔 결과 JSON을 백엔드/S3에 업로드합니다."""
     console.print("[cyan]스캔 결과를 업로드합니다...[/cyan]")
-    with console.status("[cyan]백엔드 등록 및 S3 업로드 진행 중...[/cyan]", spinner="dots"):
-        response = _upload_or_exit(path.resolve(), api_url=api_url)
+    with console.status("[cyan]업로드 준비 중...[/cyan]", spinner="dots") as status:
+        response = _upload_or_exit(
+            path.resolve(),
+            api_url=api_url,
+            on_step=lambda message: status.update(f"[cyan]{message}[/cyan]"),
+        )
+    response = _wait_for_uploaded_scan(path.resolve(), response=response, api_url=api_url)
     _print_upload_response(response)
 
 
@@ -991,6 +1006,8 @@ def login(
         console.print(f"[red]로그인 실패:[/red] {exc}")
         raise typer.Exit(code=1) from exc
     console.print("[green]로그인 완료. 토큰은 ~/.ssafer/config.yml에 저장됩니다.[/green]")
+    console.print(f"웹 대시보드: {_web_url(effective_endpoint, '/dashboard')}")
+    console.print("[dim]브라우저 로그인이 필요할 수 있습니다. CLI 로그인 토큰은 터미널 업로드/agent 연결에만 사용됩니다.[/dim]")
     _prompt_start_agent_after_login()
 
 
@@ -1198,9 +1215,7 @@ def _print_scan_summary(scan: dict) -> None:
 
     warnings = scan.get("warnings", [])
     if warnings:
-        console.print("[yellow]경고 목록[/yellow]")
-        for warning in warnings:
-            console.print(f"  - {_format_scan_warning(warning)}")
+        _print_scan_warnings(warnings, scan)
 
 
 def _print_scan_details(scan: dict, project_root: Path) -> None:
@@ -1434,29 +1449,110 @@ def _format_report_finding_evidence(finding: dict) -> str:
     return _format_report_evidence(finding.get("maskedEvidence"))
 
 
-def _format_scan_warning(warning: object) -> str:
+def _print_scan_warnings(warnings: list[object], scan: dict | None = None) -> None:
+    table = Table(title="경고 목록", show_lines=True)
+    table.add_column("번호", justify="right", no_wrap=True)
+    table.add_column("분류", no_wrap=True)
+    table.add_column("대상", overflow="fold")
+    table.add_column("내용", overflow="fold")
+    fallback_targets = iter(_compose_warning_fallback_targets(scan or {}))
+    for index, warning in enumerate(warnings, start=1):
+        category, target, message = _format_scan_warning_row(warning)
+        if target == "Compose 설정" and category.startswith("Compose"):
+            target = next(fallback_targets, target)
+        table.add_row(str(index), category, target, message)
+    console.print(table)
+
+
+def _compose_warning_fallback_targets(scan: dict) -> list[str]:
+    targets = scan.get("targets", {})
+    compose_sets = targets.get("composeSets", []) if isinstance(targets, dict) else []
+    result: list[str] = []
+    for compose_set in compose_sets:
+        if not isinstance(compose_set, dict):
+            continue
+        name = str(compose_set.get("name") or "compose")
+        files = [_format_warning_path(item) for item in compose_set.get("files", []) if item]
+        if not files:
+            continue
+        result.append(f"{name}: {_join_compact(files, max_items=2)}")
+    return result
+
+
+def _format_scan_warning_row(warning: object) -> tuple[str, str, str]:
     text = str(warning).replace("\r\n", "\n").strip()
     if not text:
-        return "-"
+        return ("기타", "-", "-")
+
+    compose_context = _extract_compose_warning_context(text)
+    if compose_context:
+        text = compose_context["message"]
 
     standalone_compose_match = re.search(r"(.+?)을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다\.", text)
-    if standalone_compose_match:
-        compose_path = Path(standalone_compose_match.group(1))
-        return f"기본 Compose 없이 단독 분석: {compose_path.name}"
+    standalone_compose_metadata_match = re.search(r"기본 Compose 파일 없이 단독으로 분석했습니다\.", text)
+    if standalone_compose_match or standalone_compose_metadata_match:
+        target = compose_context["target"] if compose_context else _format_warning_path(standalone_compose_match.group(1))
+        return (
+            "Compose 파일",
+            target,
+            "이 compose 파일만 단독으로 분석했습니다. 같은 폴더에 docker-compose.yml이 있으면 함께 분석됩니다.",
+        )
 
     missing_vars = list(dict.fromkeys(re.findall(r'The \\?"([^"\\]+)\\?" variable is not set', text)))
     if missing_vars:
-        return f"Docker Compose 환경변수 미설정: {_join_compact(missing_vars, max_items=8)}"
+        return (
+            "Compose 환경변수",
+            compose_context["target"] if compose_context else "Compose 설정",
+            f"필요한 환경변수가 비어 있습니다: {_join_compact(missing_vars, max_items=5)}",
+        )
 
     env_file_match = re.search(r"env file (.+?) not found", text)
     if env_file_match:
-        return f"Compose env 파일을 찾을 수 없음: {env_file_match.group(1)}"
+        return ("Compose env 파일", env_file_match.group(1), "Compose가 참조하는 env 파일을 찾지 못했습니다.")
 
     service_match = re.search(r'service "([^"]+)" has neither an image nor a build context specified', text)
     if service_match:
-        return f"Compose 서비스 '{service_match.group(1)}'에 image/build 설정이 없어 분석하지 못함"
+        return (
+            "Compose 서비스",
+            service_match.group(1),
+            "image 또는 build 설정이 없어 해당 서비스를 분석하지 못했습니다.",
+        )
 
-    return _format_report_evidence(text)
+    return ("기타", "-", _format_report_evidence(text))
+
+
+def _extract_compose_warning_context(text: str) -> dict[str, str] | None:
+    match = re.match(r"^\[ssafer-compose name=([^\] ]+) files=([^\]]*)\]\s*(.*)$", text, flags=re.DOTALL)
+    if not match:
+        return None
+    name = match.group(1)
+    files = [item.strip() for item in match.group(2).split(",") if item.strip()]
+    target_files = _join_compact([_format_warning_path(item) for item in files], max_items=2) if files else "Compose 설정"
+    return {
+        "name": name,
+        "files": ", ".join(files),
+        "target": f"{name}: {target_files}",
+        "message": match.group(3).strip(),
+    }
+
+
+def _format_warning_path(path: object) -> str:
+    text = str(path)
+    try:
+        parsed = Path(text)
+        if parsed.is_absolute():
+            try:
+                return str(parsed.relative_to(Path.cwd()))
+            except ValueError:
+                return parsed.name
+        return text
+    except (OSError, ValueError):
+        return text
+
+
+def _format_scan_warning(warning: object) -> str:
+    category, target, message = _format_scan_warning_row(warning)
+    return f"{category} - {target}: {message}" if target != "-" else f"{category}: {message}"
 
 
 def _count_trivy_artifact_findings(content: dict) -> int:
@@ -1476,9 +1572,24 @@ def _join_items(items: list[str]) -> str:
 
 def _print_upload_response(response: dict) -> None:
     console.print("[green]업로드 완료[/green]")
-    console.print(f"스캔 ID: {response.get('scanId', 'unknown')}")
+    scan_id = response.get("scanId")
+    if scan_id is not None:
+        console.print(f"스캔 ID: {scan_id}")
+    else:
+        console.print("[yellow]스캔 ID: 백엔드 응답에 포함되지 않음[/yellow]")
+        console.print("[dim]업로드는 완료됐지만, 웹에서 결과를 찾기 어렵다면 최근 스캔 목록을 확인해 주세요.[/dim]")
+    if response.get("status"):
+        console.print(f"상태: {response['status']}")
     if response.get("viewUrl"):
         console.print(f"결과 보기: {response['viewUrl']}")
+    elif scan_id is not None:
+        status = str(response.get("status") or "").upper()
+        if status == "DONE":
+            console.print(f"결과 보기: {_web_url(response.get('_apiUrl'), f'/results/{scan_id}')}")
+        else:
+            console.print(f"진행 상황 보기: {_web_url(response.get('_apiUrl'), f'/scans/{scan_id}')}")
+    else:
+        console.print("[dim]AI 분석이 끝나면 웹의 스캔 결과 화면에서 확인할 수 있습니다.[/dim]")
 
 
 def _print_server_audit_details(result: object) -> None:
@@ -1658,7 +1769,73 @@ def _latest_done_scan_id_or_exit(project_root: Path, *, project_id: int | None, 
     raise typer.Exit(code=1)
 
 
-def _upload_or_exit(path: Path, api_url: str | None) -> dict:
+def _wait_for_uploaded_scan(
+    project_root: Path,
+    *,
+    response: dict,
+    api_url: str | None,
+    timeout_seconds: int = 300,
+    interval_seconds: int = 3,
+) -> dict:
+    scan_id = response.get("scanId")
+    if scan_id is None:
+        return response
+
+    from ssafer.core.auth import load_endpoint, load_token, normalize_api_url
+    from ssafer.core.config import load_project_config
+
+    project_config = load_project_config(project_root, [])
+    effective_url = api_url or project_config.upload.endpoint or load_endpoint()
+    base_url = normalize_api_url(effective_url)
+    token = load_token(project_config.upload.token_env)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    progress_url = _web_url(base_url, f"/scans/{scan_id}")
+
+    console.print(f"진행 상황 보기: {progress_url}")
+    deadline = time.monotonic() + timeout_seconds
+    latest = dict(response)
+    latest["_apiUrl"] = base_url
+
+    with console.status("[cyan]AI 분석 완료를 기다리는 중...[/cyan]", spinner="dots") as status:
+        while time.monotonic() < deadline:
+            status_data = _fetch_scan_status(base_url, scan_id, headers)
+            latest.update(status_data)
+            latest.setdefault("scanId", scan_id)
+            latest["_apiUrl"] = base_url
+            current_status = str(status_data.get("status") or latest.get("status") or "UNKNOWN").upper()
+            progress_step = status_data.get("progressStep") or "-"
+            status.update(f"[cyan]AI 분석 진행 중... 상태={current_status}, 단계={progress_step}[/cyan]")
+            if current_status == "DONE":
+                return latest
+            if current_status in {"FAILED", "CANCELED"}:
+                console.print(f"[red]AI 분석이 완료되지 못했습니다.[/red] 상태={current_status}")
+                if status_data.get("errorMessage"):
+                    console.print(f"[yellow]{status_data['errorMessage']}[/yellow]")
+                raise typer.Exit(code=1)
+            time.sleep(interval_seconds)
+
+    console.print("[yellow]AI 분석 완료 대기 시간이 초과되었습니다.[/yellow]")
+    console.print(f"[dim]웹에서 계속 확인하세요: {progress_url}[/dim]")
+    return latest
+
+
+def _fetch_scan_status(base_url: str, scan_id: object, headers: dict[str, str]) -> dict:
+    with httpx.Client(timeout=10) as client:
+        response = client.get(f"{base_url}/api/v1/scans/{scan_id}/status", headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+    data = payload.get("data")
+    return data if isinstance(data, dict) else payload
+
+
+def _web_url(api_url: object, path: str) -> str:
+    from ssafer.core.auth import DEFAULT_API_URL, normalize_api_url
+
+    base_url = normalize_api_url(str(api_url or DEFAULT_API_URL))
+    return f"{base_url}{path}"
+
+
+def _upload_or_exit(path: Path, api_url: str | None, on_step=None) -> dict:
     from ssafer.core.auth import load_endpoint, load_token
     from ssafer.core.config import load_project_config
 
@@ -1676,7 +1853,7 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
         )
         raise typer.Exit(code=1)
     try:
-        return upload_last_scan(path, api_url=effective_url, token=token)
+        return upload_last_scan(path, api_url=effective_url, token=token, on_step=on_step)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]업로드 실패:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")
@@ -1687,7 +1864,7 @@ def _upload_or_exit(path: Path, api_url: str | None) -> dict:
     raise typer.Exit(code=1)
 
 
-def _upload_server_audit_or_exit(path: Path, api_url: str | None) -> dict:
+def _upload_server_audit_or_exit(path: Path, api_url: str | None, on_step=None) -> dict:
     from ssafer.core.auth import load_endpoint, load_token
     from ssafer.core.config import load_project_config
 
@@ -1705,7 +1882,7 @@ def _upload_server_audit_or_exit(path: Path, api_url: str | None) -> dict:
         )
         raise typer.Exit(code=1)
     try:
-        return upload_last_server_audit(path, api_url=effective_url, token=token)
+        return upload_last_server_audit(path, api_url=effective_url, token=token, on_step=on_step)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]업로드 실패:[/red] {_format_http_error(exc)}")
         console.print(f"[dim]Request URL: {_format_upload_request_url(exc.request.url)}[/dim]")

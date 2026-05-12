@@ -995,7 +995,12 @@ upload:
     monkeypatch.setenv("PROJECT_SSAFER_TOKEN", "project-token")
     captured: dict[str, Any] = {}
 
-    def fake_upload_last_scan(path: Path, api_url: str | None = None, token: str | None = None):
+    def fake_upload_last_scan(
+        path: Path,
+        api_url: str | None = None,
+        token: str | None = None,
+        on_step=None,
+    ):
         captured["path"] = path
         captured["api_url"] = api_url
         captured["token"] = token

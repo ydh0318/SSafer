@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -42,7 +42,9 @@ def upload_last_scan(
     project_root: Path,
     api_url: str | None = None,
     token: str | None = None,
+    on_step: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    _emit_step(on_step, "최근 로컬 스캔 결과를 확인하는 중...")
     scan = load_last_scan(project_root)
     if scan is None:
         raise RuntimeError("No local scan package found. Run 'ssafer run' first.")
@@ -59,7 +61,8 @@ def upload_last_scan(
         scan_type=None,
         source="CLI",
         name=_scan_name(scan),
-)
+        on_step=on_step,
+    )
 
 
 def _scan_has_targets(scan: dict[str, Any]) -> bool:
@@ -87,7 +90,9 @@ def upload_scan_result_to_registered_scan(
     token: str | None,
     scan_id: int,
     raw_upload_url: str,
+    on_step: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    _emit_step(on_step, "업로드할 스캔 결과를 검증하는 중...")
     suspicious_paths = find_unmasked_secret_paths(scan)
     if suspicious_paths:
         paths = "\n".join(f"- {path}" for path in suspicious_paths[:20])
@@ -104,6 +109,7 @@ def upload_scan_result_to_registered_scan(
 
     scan_json = _scan_json_bytes(scan)
     with httpx.Client(timeout=30) as client:
+        _emit_step(on_step, "S3에 스캔 결과 JSON을 업로드하는 중...")
         upload_response = client.put(
             raw_upload_url,
             content=scan_json,
@@ -111,6 +117,7 @@ def upload_scan_result_to_registered_scan(
         )
         upload_response.raise_for_status()
 
+        _emit_step(on_step, "백엔드에 업로드 완료를 알리는 중...")
         callback_response = _post_preserving_redirects(
             client,
             f"{base_url}/api/v1/scans/{scan_id}/raw-results",
@@ -127,7 +134,9 @@ def upload_last_server_audit(
     project_root: Path,
     api_url: str | None = None,
     token: str | None = None,
+    on_step: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    _emit_step(on_step, "최근 서버 점검 결과를 확인하는 중...")
     audit = load_last_server_audit(project_root)
     if audit is None:
         raise RuntimeError("No local server audit package found. Run 'ssafer server-audit' first.")
@@ -139,6 +148,7 @@ def upload_last_server_audit(
         scan_type="SERVER_AUDIT",
         source="SERVER_AUDIT",
         name=_server_audit_name(audit, project_root),
+        on_step=on_step,
     )
 
 
@@ -151,7 +161,9 @@ def _upload_result(
     scan_type: str | None,
     source: str,
     name: str,
+    on_step: Callable[[str], None] | None,
 ) -> dict[str, Any]:
+    _emit_step(on_step, "업로드할 결과 JSON을 검증하는 중...")
     suspicious_paths = find_unmasked_secret_paths(result)
     if suspicious_paths:
         paths = "\n".join(f"- {path}" for path in suspicious_paths[:20])
@@ -167,6 +179,7 @@ def _upload_result(
     if token:
         headers["Authorization"] = f"Bearer {token}"
     with httpx.Client(timeout=30) as client:
+        _emit_step(on_step, "백엔드에 스캔 요청을 등록하는 중...")
         create_response = _post_preserving_redirects(
             client,
             f"{base_url}/api/v1/scans",
@@ -188,6 +201,7 @@ def _upload_result(
             raise RuntimeError("Backend scan registration response is missing raw upload information.")
 
         scan_json = _scan_json_bytes(result)
+        _emit_step(on_step, "S3에 결과 JSON을 업로드하는 중...")
         upload_response = client.put(
             raw_upload_url,
             content=scan_json,
@@ -195,6 +209,7 @@ def _upload_result(
         )
         upload_response.raise_for_status()
 
+        _emit_step(on_step, "백엔드에 업로드 완료를 알리는 중...")
         callback_response = _post_preserving_redirects(
             client,
             f"{base_url}/api/v1/scans/{remote_scan_id}/raw-results",
@@ -205,6 +220,11 @@ def _upload_result(
         callback_data = _response_data(callback_response.json())
         callback_data.setdefault("scanId", remote_scan_id)
         return callback_data
+
+
+def _emit_step(on_step: Callable[[str], None] | None, message: str) -> None:
+    if on_step is not None:
+        on_step(message)
 
 
 def _build_create_scan_payload(

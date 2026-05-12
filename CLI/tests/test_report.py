@@ -192,13 +192,54 @@ def test_format_scan_warning_summarizes_compose_missing_variables():
         'time="2026-05-07T12:26:52+09:00" level=warning msg="The \\"POSTGRES_PASSWORD\\" variable is not set. Defaulting to a blank string."',
     ])
 
-    assert _format_scan_warning(warning) == "Docker Compose 환경변수 미설정: POSTGRES_PASSWORD, REDIS_PASSWORD"
+    assert (
+        _format_scan_warning(warning)
+        == "Compose 환경변수 - Compose 설정: 필요한 환경변수가 비어 있습니다: POSTGRES_PASSWORD, REDIS_PASSWORD"
+    )
+
+
+def test_print_scan_warnings_uses_scan_targets_for_legacy_compose_warning(monkeypatch):
+    record_console = Console(record=True, width=120)
+    monkeypatch.setattr(main, "console", record_console)
+    warning = 'time="2026-05-07T12:26:52+09:00" level=warning msg="The \\"POSTGRES_PASSWORD\\" variable is not set. Defaulting to a blank string."'
+    scan = {
+        "targets": {
+            "composeSets": [
+                {
+                    "name": "front",
+                    "files": ["Frontend/docker-compose.front.yml"],
+                }
+            ]
+        }
+    }
+
+    main._print_scan_warnings([warning], scan)
+    output = record_console.export_text()
+
+    assert "front: Frontend/docker-compose.front.yml" in output
+    assert "Compose 설정" not in output
+
+
+def test_format_scan_warning_uses_compose_context_metadata():
+    warning = "\n".join([
+        "[ssafer-compose name=front files=Frontend/docker-compose.front.yml] "
+        'time="2026-05-07T12:26:52+09:00" level=warning msg="The \\"POSTGRES_PASSWORD\\" variable is not set. Defaulting to a blank string."',
+        'time="2026-05-07T12:26:52+09:00" level=warning msg="The \\"REDIS_PASSWORD\\" variable is not set. Defaulting to a blank string."',
+    ])
+
+    assert (
+        _format_scan_warning(warning)
+        == "Compose 환경변수 - front: Frontend/docker-compose.front.yml: 필요한 환경변수가 비어 있습니다: POSTGRES_PASSWORD, REDIS_PASSWORD"
+    )
 
 
 def test_format_scan_warning_summarizes_compose_service_without_image():
     warning = 'service "spring" has neither an image nor a build context specified: invalid compose project'
 
-    assert _format_scan_warning(warning) == "Compose 서비스 'spring'에 image/build 설정이 없어 분석하지 못함"
+    assert (
+        _format_scan_warning(warning)
+        == "Compose 서비스 - spring: image 또는 build 설정이 없어 해당 서비스를 분석하지 못했습니다."
+    )
 
 
 def test_format_scan_warning_summarizes_standalone_compose_file():
@@ -207,7 +248,19 @@ def test_format_scan_warning_summarizes_standalone_compose_file():
         "함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다."
     )
 
-    assert _format_scan_warning(warning) == "기본 Compose 없이 단독 분석: docker-compose.front.yml"
+    assert (
+        _format_scan_warning(warning)
+        == "Compose 파일 - docker-compose.front.yml: 이 compose 파일만 단독으로 분석했습니다. 같은 폴더에 docker-compose.yml이 있으면 함께 분석됩니다."
+    )
+
+
+def test_format_scan_warning_summarizes_standalone_compose_metadata():
+    warning = "[ssafer-compose name=front files=Frontend/docker-compose.front.yml] 기본 Compose 파일 없이 단독으로 분석했습니다."
+
+    assert (
+        _format_scan_warning(warning)
+        == "Compose 파일 - front: Frontend/docker-compose.front.yml: 이 compose 파일만 단독으로 분석했습니다. 같은 폴더에 docker-compose.yml이 있으면 함께 분석됩니다."
+    )
 
 
 def test_print_findings_separates_rows_for_readability(monkeypatch):

@@ -42,7 +42,10 @@ def build_compose_sets(compose_files: list[Path], warnings: list[str]) -> list[C
                 )
         else:
             for env_name, env_compose in env_files:
-                warnings.append(f"{env_compose}을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다.")
+                warnings.append(
+                    f"[ssafer-compose name={env_name} files={env_compose}] "
+                    "기본 Compose 파일 없이 단독으로 분석했습니다."
+                )
                 sets.append(
                     ComposeSet(env_name, directory, [env_compose], _matching_env_files(directory, env_name), True)
                 )
@@ -50,7 +53,7 @@ def build_compose_sets(compose_files: list[Path], warnings: list[str]) -> list[C
     return sets
 
 
-def render_effective_config(compose_set: ComposeSet) -> tuple[bool, str, str | None]:
+def render_effective_config(compose_set: ComposeSet) -> tuple[bool, str, str | None, str | None]:
     command = ["docker", "compose"]
     for env_file in compose_set.env_files:
         command.extend(["--env-file", str(env_file)])
@@ -69,14 +72,33 @@ def render_effective_config(compose_set: ComposeSet) -> tuple[bool, str, str | N
             timeout=60,
         )
     except FileNotFoundError:
-        return False, "", "Docker CLI was not found."
+        return False, "", "Docker CLI was not found.", None
     except subprocess.TimeoutExpired:
-        return False, "", f"docker compose config timed out for compose set '{compose_set.name}'."
+        return False, "", f"docker compose config timed out for compose set '{compose_set.name}'.", None
+
+    stdout, stdout_warnings = _split_compose_warning_lines(completed.stdout)
+    stderr_warning = completed.stderr.strip()
 
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip() or "docker compose config failed."
-        return False, "", detail
-    return True, completed.stdout, None
+        return False, "", detail, None
+    warning_parts = [part for part in [stderr_warning, *stdout_warnings] if part]
+    warning = "\n".join(warning_parts) or None
+    return True, stdout, None, warning
+
+
+def _split_compose_warning_lines(stdout: str) -> tuple[str, list[str]]:
+    config_lines: list[str] = []
+    warning_lines: list[str] = []
+    for line in stdout.splitlines():
+        if "level=warning" in line or "variable is not set" in line:
+            warning_lines.append(line)
+        else:
+            config_lines.append(line)
+    config = "\n".join(config_lines)
+    if stdout.endswith("\n") and config:
+        config += "\n"
+    return config, warning_lines
 
 
 def _env_compose_files(files: list[Path]) -> list[tuple[str, Path]]:

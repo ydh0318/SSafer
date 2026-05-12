@@ -350,13 +350,87 @@ def test_http_transport_error_masks_s3_presigned_url():
 
 
 def test_upload_command_prints_progress_before_upload(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(main_module, "_upload_or_exit", lambda path, api_url=None: {"scanId": 1001})
+    monkeypatch.setattr(main_module, "_upload_or_exit", lambda path, api_url=None, on_step=None: {"scanId": 1001})
+    monkeypatch.setattr(
+        main_module,
+        "_wait_for_uploaded_scan",
+        lambda path, response, api_url=None: {**response, "status": "DONE", "_apiUrl": "https://ssafer.co.kr"},
+    )
 
     result = CliRunner().invoke(app, ["upload", "--path", str(tmp_path)])
 
     assert result.exit_code == 0
     assert "1001" in result.output
     assert "1001" in result.output
+
+
+def test_wait_for_uploaded_scan_polls_until_done(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(main_module, "_fetch_scan_status", lambda base_url, scan_id, headers: {"scanId": scan_id, "status": "DONE"})
+    monkeypatch.setattr(main_module.time, "sleep", lambda seconds: None)
+
+    result = main_module._wait_for_uploaded_scan(
+        tmp_path,
+        response={"scanId": 1001, "status": "QUEUED"},
+        api_url="https://ssafer.co.kr",
+        timeout_seconds=1,
+        interval_seconds=1,
+    )
+
+    assert result["status"] == "DONE"
+    assert result["_apiUrl"] == "https://ssafer.co.kr"
+
+
+def test_upload_last_scan_reports_step_progress(tmp_path: Path, monkeypatch):
+    scan = {
+        "scanId": "local-scan-test",
+        "projectName": "sample-app",
+        "artifacts": [],
+        "findings": [{"id": "FND-0001"}],
+    }
+    _write_scan(tmp_path, scan)
+    steps: list[str] = []
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            request = httpx.Request("POST", url)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(200, json={"scanId": 1001, "status": "RAW_UPLOADED"}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    upload.upload_last_scan(tmp_path, api_url="http://backend.test/", on_step=steps.append)
+
+    assert steps == [
+        "최근 로컬 스캔 결과를 확인하는 중...",
+        "업로드할 결과 JSON을 검증하는 중...",
+        "백엔드에 스캔 요청을 등록하는 중...",
+        "S3에 결과 JSON을 업로드하는 중...",
+        "백엔드에 업로드 완료를 알리는 중...",
+    ]
 
 
 def test_upload_last_scan_rejects_empty_scan_package(tmp_path: Path):
