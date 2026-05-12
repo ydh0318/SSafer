@@ -119,6 +119,7 @@ def status() -> None:
     from ssafer.core.auth import (
         CONFIG_PATH,
         describe_token_source,
+        get_project_agent_status,
         load_agent_config,
         load_endpoint,
         load_token,
@@ -130,6 +131,17 @@ def status() -> None:
     endpoint = load_endpoint()
     agent_config = load_agent_config(Path("."))
     agent_config_path = project_agent_config_path(Path("."))
+    backend_agent_status = None
+    backend_agent_error = None
+    if token and _has_saved_agent_config(agent_config):
+        try:
+            backend_agent_status = get_project_agent_status(endpoint, int(agent_config.get("projectId")), token)
+        except httpx.HTTPStatusError as exc:
+            backend_agent_error = _format_http_error(exc)
+        except httpx.HTTPError as exc:
+            backend_agent_error = _format_http_transport_error(exc)
+        except (TypeError, ValueError) as exc:
+            backend_agent_error = str(exc)
 
     table = Table(title="SSAfer 상태")
     table.add_column("항목")
@@ -137,16 +149,27 @@ def status() -> None:
     table.add_column("설명", overflow="fold")
     table.add_row("로그인", "[green]됨[/green]" if token else "[red]안 됨[/red]", "저장된 access token 기준")
     table.add_row("토큰 출처", token_source, "환경변수 토큰이 저장된 로그인 토큰보다 우선됩니다")
+    table.add_row("계정 방식", "회원/게스트", "게스트로 쓰려면 ssafer login --guest를 실행하세요.")
     table.add_row("Endpoint", endpoint, "현재 사용할 백엔드 API")
     if _has_saved_agent_config(agent_config):
-        table.add_row(
-            "Local Agent",
-            "[green]설정됨[/green]",
-            (
-                f"agentId={agent_config.get('agentId')}, projectId={agent_config.get('projectId')}\n"
-                f"설정 파일: {agent_config_path}"
-            ),
+        detail = (
+            f"agentId={agent_config.get('agentId')}, projectId={agent_config.get('projectId')}\n"
+            f"설정 파일: {agent_config_path}"
         )
+        status_label = "[green]설정됨[/green]"
+        if backend_agent_status:
+            status_value = str(backend_agent_status.get("status") or "UNKNOWN")
+            status_label = "[green]ONLINE[/green]" if status_value == "ONLINE" else f"[yellow]{status_value}[/yellow]"
+            detail_lines = [detail, f"백엔드 상태: {status_value}"]
+            if backend_agent_status.get("lastSeenAt"):
+                detail_lines.append(f"마지막 확인: {backend_agent_status.get('lastSeenAt')}")
+            if backend_agent_status.get("currentTaskType"):
+                detail_lines.append(f"진행 중인 작업: {backend_agent_status.get('currentTaskType')}")
+            detail = "\n".join(detail_lines)
+        elif backend_agent_error:
+            status_label = "[yellow]확인 실패[/yellow]"
+            detail = f"{detail}\n백엔드 상태 확인 실패: {backend_agent_error}"
+        table.add_row("Local Agent", status_label, detail)
     else:
         table.add_row("Local Agent", "[yellow]미설정[/yellow]", "ssafer agent 실행 시 설정 가능")
     table.add_row("Config", str(CONFIG_PATH), "토큰 값은 출력하지 않음")
@@ -984,9 +1007,10 @@ def _format_patch_diff(old_text: str | None, new_text: str, *, operation: str = 
 def login(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="로그인할 SSAfer 백엔드 API URL입니다."),
     logout: bool = typer.Option(False, "--logout", help="저장된 로그인 토큰을 삭제합니다. 가능하면 ssafer logout 사용을 권장합니다."),
+    guest: bool = typer.Option(False, "--guest", help="이메일 없이 게스트 토큰을 발급받아 CLI를 사용합니다."),
 ) -> None:
     """SSAfer 서버에 로그인하고 토큰을 저장합니다."""
-    from ssafer.core.auth import clear_token, load_endpoint, login_with_credentials, save_auth_tokens
+    from ssafer.core.auth import clear_token, enter_guest_mode, load_endpoint, login_with_credentials, save_auth_tokens
 
     if logout:
         clear_token()
@@ -994,6 +1018,23 @@ def login(
         return
 
     effective_endpoint = endpoint or load_endpoint()
+    if guest:
+        try:
+            auth_data = enter_guest_mode(effective_endpoint)
+            save_auth_tokens(auth_data, effective_endpoint)
+        except httpx.HTTPStatusError as exc:
+            console.print(f"[red]게스트 로그인 실패:[/red] {_format_http_error(exc)}")
+            raise typer.Exit(code=1) from exc
+        except httpx.HTTPError as exc:
+            console.print(f"[red]게스트 로그인 실패:[/red] {_format_http_transport_error(exc)}")
+            raise typer.Exit(code=1) from exc
+        except ValueError as exc:
+            console.print(f"[red]게스트 로그인 실패:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+        console.print("[green]게스트 로그인 완료. 토큰은 ~/.ssafer/config.yml에 저장됩니다.[/green]")
+        console.print("[dim]게스트 토큰은 현재 CLI에서 만든 게스트 프로젝트/스캔에만 사용할 수 있습니다.[/dim]")
+        return
+
     email = typer.prompt("이메일")
     password = typer.prompt("비밀번호", hide_input=True)
     if not email.strip() or not password.strip():
@@ -1124,6 +1165,39 @@ def logout() -> None:
     clear_agent_config(Path("."))
     console.print("[green]저장된 SSAfer 로그인 정보와 현재 프로젝트의 Local Agent 설정을 삭제했습니다.[/green]")
     console.print("[dim]다른 터미널에서 Local Agent가 실행 중이면 Ctrl+C로 종료하세요.[/dim]")
+
+
+@app.command(help="현재 로그인한 회원 계정을 탈퇴하고 로컬 로그인 정보를 삭제합니다.", rich_help_panel="계정/상태")
+def withdraw(
+    yes: bool = typer.Option(False, "--yes", "-y", help="확인 질문 없이 회원탈퇴를 진행합니다."),
+) -> None:
+    """현재 로그인한 회원 계정을 탈퇴합니다. 게스트 토큰으로는 사용할 수 없습니다."""
+    from ssafer.core.auth import clear_agent_config, clear_token, load_endpoint, load_token, withdraw_current_user
+
+    token = load_token()
+    if not token:
+        console.print("[red]회원탈퇴를 진행하려면 먼저 ssafer login으로 로그인해야 합니다.[/red]")
+        raise typer.Exit(code=1)
+
+    if not yes:
+        confirmed = typer.confirm("정말 SSAfer 회원 계정을 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.", default=False)
+        if not confirmed:
+            console.print("[yellow]회원탈퇴를 취소했습니다.[/yellow]")
+            return
+
+    endpoint = load_endpoint()
+    try:
+        withdraw_current_user(endpoint, token)
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]회원탈퇴 실패:[/red] {_format_http_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(f"[red]회원탈퇴 실패:[/red] {_format_http_transport_error(exc)}")
+        raise typer.Exit(code=1) from exc
+
+    clear_token()
+    clear_agent_config(Path("."))
+    console.print("[green]회원탈퇴가 완료되었습니다. 저장된 로그인 정보와 현재 프로젝트의 Local Agent 설정을 삭제했습니다.[/green]")
 
 
 @app.command(help="최근 로컬 스캔 결과를 터미널에서 확인합니다.", rich_help_panel="로컬 점검")

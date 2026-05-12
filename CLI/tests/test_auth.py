@@ -17,6 +17,8 @@ from ssafer.core.auth import (
     clear_token,
     create_project,
     describe_token_source,
+    enter_guest_mode,
+    get_project_agent_status,
     issue_project_agent_token,
     list_projects,
     load_agent_config,
@@ -30,6 +32,7 @@ from ssafer.core.auth import (
     save_token,
     send_email_verification_code,
     verify_email_code,
+    withdraw_current_user,
 )
 from ssafer.core.result_store import load_last_scan
 from ssafer.core.upload import upload_last_scan
@@ -193,6 +196,27 @@ def test_save_auth_tokens_writes_backend_login_response(monkeypatch, tmp_path):
     assert "token" not in data["upload"]
 
 
+def test_save_auth_tokens_writes_guest_login_response(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    save_auth_tokens(
+        {
+            "guestAccessToken": "guest-access-token",
+            "expiresAt": "2026-05-12T00:00:00Z",
+        },
+        endpoint="https://api.example.com",
+    )
+
+    import yaml
+
+    data = yaml.safe_load(config_path.read_text())
+    assert data["upload"]["accessToken"] == "guest-access-token"
+    assert data["upload"]["authMode"] == "guest"
+    assert data["upload"]["guestAccessTokenExpiresAt"] == "2026-05-12T00:00:00Z"
+    assert data["upload"]["endpoint"] == "https://api.example.com"
+    assert "token" not in data["upload"]
+
+
 def test_issue_project_agent_token_posts_to_backend(monkeypatch):
     captured: dict[str, Any] = {}
 
@@ -273,6 +297,80 @@ def test_list_projects_fetches_backend_projects(monkeypatch):
         {"projectId": 10, "name": "first-project"},
         {"projectId": 20, "name": "second-project"},
     ]
+
+
+def test_get_project_agent_status_fetches_backend_status(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def get(self, url: str, headers: dict[str, str]):
+            captured["url"] = url
+            captured["headers"] = headers
+            request = httpx.Request("GET", url)
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "agentId": 3,
+                        "status": "ONLINE",
+                        "connectedAt": "2026-05-12T00:00:00Z",
+                        "lastSeenAt": "2026-05-12T00:00:10Z",
+                        "currentTaskType": None,
+                    }
+                },
+                request=request,
+            )
+
+    monkeypatch.setattr(auth_module.httpx, "Client", FakeClient)
+
+    status = get_project_agent_status("https://api.example.com/", 10, "access-token")
+
+    assert captured == {
+        "client_kwargs": {"timeout": 30, "follow_redirects": True},
+        "url": "https://api.example.com/api/v1/projects/10/agent/status",
+        "headers": {"Authorization": "Bearer access-token"},
+    }
+    assert status["status"] == "ONLINE"
+    assert status["agentId"] == 3
+
+
+def test_withdraw_current_user_deletes_backend_user(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def delete(self, url: str, headers: dict[str, str]):
+            captured["url"] = url
+            captured["headers"] = headers
+            request = httpx.Request("DELETE", url)
+            return httpx.Response(200, json={"data": None}, request=request)
+
+    monkeypatch.setattr(auth_module.httpx, "Client", FakeClient)
+
+    withdraw_current_user("https://api.example.com/", "access-token")
+
+    assert captured == {
+        "client_kwargs": {"timeout": 30, "follow_redirects": True},
+        "url": "https://api.example.com/api/v1/users",
+        "headers": {"Authorization": "Bearer access-token"},
+    }
 
 
 def test_create_project_posts_backend_project(monkeypatch):
@@ -375,6 +473,47 @@ def test_login_with_credentials_posts_to_backend_auth_login(monkeypatch):
         "json": {"email": "user@example.com", "password": "pw"},
     }
     assert data["accessToken"] == "access-token"
+
+
+def test_enter_guest_mode_posts_to_backend_guest_enter(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, url: str, json: dict):
+            captured["url"] = url
+            captured["json"] = json
+            request = httpx.Request("POST", url)
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "guestAccessToken": "guest-token",
+                        "expiresAt": "2026-05-12T00:00:00Z",
+                    }
+                },
+                request=request,
+            )
+
+    def fake_client(**kwargs):
+        captured["client_kwargs"] = kwargs
+        return FakeClient()
+
+    monkeypatch.setattr(auth_module.httpx, "Client", fake_client)
+
+    data = enter_guest_mode("https://api.example.com/")
+
+    assert captured == {
+        "client_kwargs": {"timeout": 30},
+        "url": "https://api.example.com/api/v1/guests/enter",
+        "json": {},
+    }
+    assert data["guestAccessToken"] == "guest-token"
 
 
 def test_login_with_credentials_redirect_keeps_post_method(monkeypatch):
@@ -555,6 +694,45 @@ def test_logout_command_clears_saved_token(monkeypatch, tmp_path):
     assert load_agent_config(tmp_path) == {}
 
 
+def test_withdraw_command_calls_backend_and_clears_local_state(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SSAFER_TOKEN", raising=False)
+    save_auth_tokens({"accessToken": "access-token"}, "https://api.example.com")
+    save_agent_config(
+        {"agentId": 1, "projectId": 2, "agentToken": "agent-token"},
+        "https://api.example.com",
+        tmp_path,
+    )
+    captured: dict[str, str] = {}
+
+    def fake_withdraw(endpoint: str, access_token: str) -> None:
+        captured["endpoint"] = endpoint
+        captured["access_token"] = access_token
+
+    monkeypatch.setattr(auth_module, "withdraw_current_user", fake_withdraw)
+
+    result = CliRunner().invoke(app, ["withdraw", "--yes"])
+
+    assert result.exit_code == 0
+    assert captured == {"endpoint": "https://api.example.com", "access_token": "access-token"}
+    assert load_token() is None
+    assert load_agent_config(tmp_path) == {}
+
+
+def test_withdraw_command_requires_login(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SSAFER_TOKEN", raising=False)
+
+    result = CliRunner().invoke(app, ["withdraw", "--yes"])
+
+    assert result.exit_code == 1
+    assert "회원탈퇴를 진행하려면" in result.output
+
+
 def test_login_command_authenticates_with_backend_and_saves_tokens(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
@@ -611,6 +789,25 @@ def test_login_command_can_start_agent_after_login(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert started == {"path": Path("."), "refresh_token": True}
+
+
+def test_login_command_guest_saves_guest_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+
+    def fake_guest(endpoint: str, device_id: str | None = None) -> dict[str, str]:
+        assert endpoint == "https://api.example.com"
+        assert device_id is None
+        return {"guestAccessToken": "guest-token", "expiresAt": "2026-05-12T00:00:00Z"}
+
+    monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
+
+    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"])
+
+    assert result.exit_code == 0
+    assert load_token() == "guest-token"
+    assert load_endpoint() == "https://api.example.com"
+    assert "게스트 로그인 완료" in result.output
 
 
 def test_start_agent_refresh_selects_project_instead_of_reusing_saved_project(monkeypatch, tmp_path):
