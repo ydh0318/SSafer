@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class FindingPatchContext(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
+    operation: Literal["replace", "append"] | None = None
     old_text: str | None = Field(default=None, alias="oldText")
     expected_file_hash: str = Field(alias="expectedFileHash")
 
@@ -62,12 +63,19 @@ class ScanResult(BaseModel):
 
     schema_version: Literal["0.1"] = Field(alias="schemaVersion")
     scan_id: str = Field(alias="scanId")
-    source: Literal["cli"]
+    source: str
     scanned_at: str = Field(alias="scannedAt")
     analysis_status: Literal["SUCCESS", "PARTIAL", "FAILED"] = Field(
         alias="analysisStatus"
     )
     findings: list[Any]
+
+    @field_validator("source")
+    @classmethod
+    def validate_source(cls, value: str) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("must be a non-empty string")
+        return value
 
     @field_validator("scan_id")
     @classmethod

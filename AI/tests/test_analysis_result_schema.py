@@ -275,6 +275,7 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
     def test_normalize_analysis_result_patches_uses_patch_context_old_text_verbatim(self):
         finding = build_finding(
             patchContext={
+                "operation": "replace",
                 "oldText": "USER    root",
                 "expectedFileHash": "sha256:fresh",
             }
@@ -297,9 +298,33 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
             "USER    root",
         )
 
+    def test_normalize_analysis_result_patches_uses_patch_context_operation(self):
+        finding = build_finding(
+            patchContext={
+                "operation": "replace",
+                "oldText": "USER root",
+                "expectedFileHash": "sha256:fresh",
+            }
+        )
+        analysis_result = build_analysis_result_with_patch(
+            build_patch(operation="append")
+        )
+
+        normalize_analysis_result_patches(
+            findings=[finding],
+            scan_result={"sourceFileHashes": {"Dockerfile": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        self.assertEqual(
+            analysis_result["results"][0]["fix"]["patches"][0]["operation"],
+            "replace",
+        )
+
     def test_normalize_analysis_result_patches_accepts_safe_dockerfile_append(self):
         finding = build_finding(
             patchContext={
+                "operation": "append",
                 "expectedFileHash": "sha256:fresh",
             },
         )

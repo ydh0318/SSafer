@@ -26,7 +26,6 @@ REQUIRED_STRING_SCAN_RESULT_FIELDS = (
 )
 
 SUPPORTED_SCAN_RESULT_SCHEMA_VERSIONS = ("0.1",)
-ALLOWED_SCAN_RESULT_SOURCES = ("cli",)
 ALLOWED_ANALYSIS_STATUSES = ("SUCCESS", "PARTIAL", "FAILED")
 REQUIRED_FINDING_FIELDS = (
     "id",
@@ -132,13 +131,6 @@ def validate_scan_result_required_fields(scan_result: dict[str, Any]) -> None:
         raise ValueError("scan_result.json scanId must be a valid UUID.") from exc
     if scan_id.version != 4:
         raise ValueError("scan_result.json scanId must be a valid UUID v4.")
-
-    source = scan_result["source"]
-    if source not in ALLOWED_SCAN_RESULT_SOURCES:
-        raise ValueError(
-            "scan_result.json source must be one of: "
-            f"{', '.join(ALLOWED_SCAN_RESULT_SOURCES)}."
-        )
 
     scanned_at = scan_result["scannedAt"]
     if not _is_iso8601_datetime(scanned_at):

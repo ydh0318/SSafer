@@ -376,9 +376,15 @@ def normalize_fix_patch_for_finding(
     if not normalized_patch.get("filePath") and legacy_target_file:
         normalized_patch["filePath"] = legacy_target_file
 
-    operation = normalized_patch.get("operation")
+    context_operation = patch_context.get("operation")
+    operation = (
+        context_operation
+        if isinstance(context_operation, str) and context_operation
+        else normalized_patch.get("operation")
+    )
     if operation not in ALLOWED_FIX_PATCH_OPERATIONS:
         return None
+    normalized_patch["operation"] = operation
 
     file_path = _patch_context_file_path(
         finding=finding,
