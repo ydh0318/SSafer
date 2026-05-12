@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ssafer import __version__
-from ssafer.core.compose import build_compose_sets, render_effective_config
+from ssafer.core.compose import build_compose_sets, detect_environment_from_compose_sets, render_effective_config
 from ssafer.core.config import load_project_config
 from ssafer.core.env_parser import parse_env_metadata
 from ssafer.core.finder import discover_project_files
@@ -28,6 +28,7 @@ def run_scan(
     project_root: Path,
     save_raw: bool = False,
     on_step: Callable[[str], None] | None = None,
+    environment: str | None = None,
 ) -> dict[str, Any]:
     def _step(msg: str) -> None:
         if on_step:
@@ -91,11 +92,13 @@ def run_scan(
         for a in artifacts
         if a["type"] == "sanitized-effective-compose"
     }
+    resolved_env = environment or detect_environment_from_compose_sets(compose_sets, effective_configs)
     scan_context = ScanContext(
         compose_sets=compose_sets,
         effective_configs=effective_configs,
         env_files=files.env_files,
         project_root=project_root,
+        environment=resolved_env,
     )
     rule_engine = RuleEngine(excluded_rule_ids=project_config.rules.exclude)
     custom_rule_findings = rule_engine.run(scan_context)
@@ -147,6 +150,7 @@ def run_scan(
         "scanId": scan_id,
         "projectName": project_config.project_name,
         "source": "cli",
+        "environment": resolved_env,
         "scannedAt": scanned_at,
         "toolVersion": __version__,
         "os": platform.system().lower(),
