@@ -63,21 +63,24 @@ REQUIRED_FIX_PATCH_FIELDS = (
     "patchId",
     "filePath",
     "operation",
-    "oldText",
     "newText",
-    "requiresApproval",
+    "expectedFileHash",
 )
 REQUIRED_FIX_PATCH_STRING_FIELDS = (
     "patchId",
     "filePath",
     "operation",
-    "oldText",
     "newText",
-)
-OPTIONAL_FIX_PATCH_STRING_FIELDS = (
     "expectedFileHash",
 )
-ALLOWED_FIX_PATCH_OPERATIONS = ("replace",)
+REPLACE_FIX_PATCH_FIELDS = (
+    "oldText",
+)
+REPLACE_FIX_PATCH_STRING_FIELDS = (
+    "oldText",
+)
+ALLOWED_FIX_PATCH_OPERATIONS = ("replace", "append")
+ALLOWED_FIX_PATCH_ROLLBACK_OPERATIONS = ("replace",)
 DISALLOWED_PATCH_TEXT_TOKENS = (
     "***MASKED***",
     "[MASKED]",
@@ -304,44 +307,64 @@ def normalize_fix_patch_for_finding(
     if not isinstance(patch, dict):
         return None
 
+    patch_context = finding.get("patchContext")
+    if not isinstance(patch_context, dict):
+        return None
+
+    expected_file_hash = patch_context.get("expectedFileHash")
+    if not isinstance(expected_file_hash, str) or not expected_file_hash.startswith("sha256:"):
+        return None
+
     normalized_patch = dict(patch)
     legacy_target_file = normalized_patch.pop("targetFile", None)
     if not normalized_patch.get("filePath") and legacy_target_file:
         normalized_patch["filePath"] = legacy_target_file
 
-    old_text = normalized_patch.get("oldText")
-    if not isinstance(old_text, str) or not old_text:
+    operation = normalized_patch.get("operation")
+    if operation not in ALLOWED_FIX_PATCH_OPERATIONS:
         return None
 
-    file_path = _select_patch_file_path(
+    file_path = _patch_context_file_path(
         finding=finding,
         patch_file_path=normalized_patch.get("filePath"),
-        old_text=old_text,
-        content_by_target=content_by_target,
     )
     if file_path is None:
         return None
 
-    target_content = content_by_target.get(file_path)
-    if target_content is not None and target_content.count(old_text) != 1:
-        return None
+    if source_hashes:
+        source_file_hash = source_hashes.get(file_path)
+        if source_file_hash is not None and source_file_hash != expected_file_hash:
+            return None
 
-    expected_file_hash = source_hashes.get(file_path)
-    if not isinstance(expected_file_hash, str) or not expected_file_hash.startswith("sha256:"):
-        return None
+    if operation == "replace":
+        old_text = patch_context.get("oldText")
+        if not isinstance(old_text, str) or not old_text:
+            return None
+        target_content = content_by_target.get(file_path)
+        if target_content is not None and target_content.count(old_text) != 1:
+            return None
+        normalized_patch["oldText"] = old_text
+    else:
+        if "oldText" in normalized_patch:
+            return None
+        if not _is_safe_append_target(file_path):
+            return None
 
+    finding_id = finding.get("id")
+    if isinstance(finding_id, str) and finding_id.strip():
+        normalized_patch["findingId"] = finding_id
+        normalized_patch.setdefault("patchId", f"PATCH-{finding_id}")
     normalized_patch["filePath"] = file_path
     normalized_patch["expectedFileHash"] = expected_file_hash
-    normalized_patch["requiresApproval"] = True
+    if "requiresApproval" in normalized_patch:
+        normalized_patch["requiresApproval"] = True
     return normalized_patch
 
 
-def _select_patch_file_path(
+def _patch_context_file_path(
     *,
     finding: dict[str, Any],
     patch_file_path: Any,
-    old_text: str,
-    content_by_target: dict[str, str],
 ) -> str | None:
     finding_file_path = finding.get("filePath")
     if isinstance(finding_file_path, str) and finding_file_path.strip():
@@ -349,25 +372,14 @@ def _select_patch_file_path(
             return None
         return finding_file_path
 
-    target_files = finding.get("targetFiles")
-    if not isinstance(target_files, list):
-        return None
-    candidate_files = [
-        value
-        for value in target_files
-        if isinstance(value, str) and value.strip()
-    ]
-    if not candidate_files:
-        return None
-
-    exact_matches = [
-        candidate
-        for candidate in candidate_files
-        if content_by_target.get(candidate, "").count(old_text) == 1
-    ]
-    if len(exact_matches) == 1:
-        return exact_matches[0]
     return None
+
+
+def _is_safe_append_target(file_path: str) -> bool:
+    path_name = PurePosixPath(file_path).name.lower()
+    if path_name == "dockerfile" or path_name.endswith(".dockerfile"):
+        return True
+    return False
 
 
 def _artifact_text_content_by_target(scan_result: dict[str, Any]) -> dict[str, str]:
@@ -598,11 +610,7 @@ def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
             raise ValueError(f"{path}.{field} must be a non-empty string.")
 
     validate_patch_target_file(patch["filePath"], f"{path}.filePath")
-    validate_patch_replacement_text(
-        old_text=patch["oldText"],
-        new_text=patch["newText"],
-        path=path,
-    )
+    validate_patch_text_safety(patch["newText"], f"{path}.newText")
 
     operation = patch["operation"]
     if operation not in ALLOWED_FIX_PATCH_OPERATIONS:
@@ -611,18 +619,31 @@ def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
             f"{', '.join(ALLOWED_FIX_PATCH_OPERATIONS)}."
         )
 
-    for field in OPTIONAL_FIX_PATCH_STRING_FIELDS:
-        if field not in patch:
-            continue
-        value = patch[field]
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"{path}.{field} must be a non-empty string.")
+    if operation == "replace":
+        missing_replace_fields = [
+            field for field in REPLACE_FIX_PATCH_FIELDS if field not in patch
+        ]
+        if missing_replace_fields:
+            raise ValueError(
+                f"{path} missing required fields: {', '.join(missing_replace_fields)}"
+            )
+        for field in REPLACE_FIX_PATCH_STRING_FIELDS:
+            value = patch[field]
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{path}.{field} must be a non-empty string.")
+        validate_patch_replacement_text(
+            old_text=patch["oldText"],
+            new_text=patch["newText"],
+            path=path,
+        )
+    elif "oldText" in patch:
+        raise ValueError(f"{path}.oldText must be omitted for append patches.")
 
     expected_file_hash = patch.get("expectedFileHash")
     if expected_file_hash is not None and not expected_file_hash.startswith("sha256:"):
         raise ValueError(f"{path}.expectedFileHash must start with sha256:.")
 
-    if patch["requiresApproval"] is not True:
+    if "requiresApproval" in patch and patch["requiresApproval"] is not True:
         raise ValueError(f"{path}.requiresApproval must be true.")
 
     if "rollback" in patch:
@@ -650,10 +671,10 @@ def validate_fix_patch_rollback_schema(
             raise ValueError(f"{path}.{field} must be a non-empty string.")
 
     operation = rollback["operation"]
-    if operation not in ALLOWED_FIX_PATCH_OPERATIONS:
+    if operation not in ALLOWED_FIX_PATCH_ROLLBACK_OPERATIONS:
         raise ValueError(
             f"{path}.operation must be one of: "
-            f"{', '.join(ALLOWED_FIX_PATCH_OPERATIONS)}."
+            f"{', '.join(ALLOWED_FIX_PATCH_ROLLBACK_OPERATIONS)}."
         )
 
 
@@ -677,11 +698,14 @@ def validate_patch_replacement_text(
     if old_text == new_text:
         raise ValueError(f"{path}.oldText and {path}.newText must be different.")
 
+    validate_patch_text_safety(old_text, f"{path}.oldText")
+    validate_patch_text_safety(new_text, f"{path}.newText")
+
+
+def validate_patch_text_safety(text: str, path: str) -> None:
     for token in DISALLOWED_PATCH_TEXT_TOKENS:
-        if token in old_text or token in new_text:
-            raise ValueError(
-                f"{path}.oldText and {path}.newText must not contain masked values."
-            )
+        if token in text:
+            raise ValueError(f"{path} must not contain masked values.")
 
 
 def save_analysis_result(

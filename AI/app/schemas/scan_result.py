@@ -4,6 +4,27 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class FindingPatchContext(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    old_text: str | None = Field(default=None, alias="oldText")
+    expected_file_hash: str = Field(alias="expectedFileHash")
+
+    @field_validator("old_text")
+    @classmethod
+    def validate_optional_old_text(cls, value: str | None) -> str | None:
+        if value is not None and (not isinstance(value, str) or not value):
+            raise ValueError("must be a non-empty string when provided")
+        return value
+
+    @field_validator("expected_file_hash")
+    @classmethod
+    def validate_expected_file_hash(cls, value: str) -> str:
+        if not isinstance(value, str) or not value.startswith("sha256:"):
+            raise ValueError("must start with sha256:")
+        return value
+
+
 class ScanFinding(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -15,6 +36,10 @@ class ScanFinding(BaseModel):
     line: int | None
     title: str
     masked_evidence: str = Field(alias="maskedEvidence")
+    patch_context: FindingPatchContext | None = Field(
+        default=None,
+        alias="patchContext",
+    )
 
     @field_validator(
         "id",
