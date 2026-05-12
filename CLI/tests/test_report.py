@@ -167,6 +167,31 @@ def test_print_scan_summary_guides_when_no_targets(monkeypatch):
     assert "ssafer run --path .." in output
 
 
+def test_print_findings_guides_when_no_findings(monkeypatch):
+    record_console = Console(record=True, width=120)
+    monkeypatch.setattr(main, "console", record_console)
+
+    main._print_findings({"findings": []})
+
+    output = record_console.export_text()
+
+    assert "발견된 보안 항목이 없습니다" in output
+    assert " - " not in output
+
+
+def test_scan_has_targets_uses_targets_when_summary_missing():
+    scan = {
+        "analysisStatus": "SUCCESS",
+        "targets": {
+            "composeSets": [{"name": "default"}],
+            "envFiles": [],
+            "dockerfiles": [],
+        },
+    }
+
+    assert main._scan_has_targets(scan)
+
+
 def test_group_report_findings_localizes_trivy_messages():
     grouped = _group_report_findings([
         {

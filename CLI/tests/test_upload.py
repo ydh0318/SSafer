@@ -638,12 +638,12 @@ upload:
 
 
 def test_upload_last_scan_requires_existing_scan(tmp_path: Path):
-    with pytest.raises(RuntimeError, match="No local scan package found"):
+    with pytest.raises(RuntimeError, match="업로드할 로컬 스캔 결과가 없습니다"):
         upload.upload_last_scan(tmp_path)
 
 
 def test_upload_last_server_audit_requires_existing_result(tmp_path: Path):
-    with pytest.raises(RuntimeError, match="No local server audit package found"):
+    with pytest.raises(RuntimeError, match="업로드할 server-audit 결과가 없습니다"):
         upload.upload_last_server_audit(tmp_path)
 
 
@@ -692,7 +692,7 @@ def test_upload_last_scan_blocks_unmasked_secret_before_backend_or_s3_requests(t
         upload.upload_last_scan(tmp_path)
 
     message = str(exc_info.value)
-    assert "Upload blocked" in message
+    assert "업로드를 중단했습니다" in message
     assert "$.artifacts[0].content.Results[0].Secrets[0].Match" in message
 
 

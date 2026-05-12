@@ -385,9 +385,10 @@ def apply_fix(
 
         candidates = load_patch_candidates_from_file(analysis_path)
         if not candidates:
-            console.print("[yellow]이 분석 결과에는 자동 적용 가능한 patch payload가 없습니다.[/yellow]")
+            console.print("[yellow]적용할 자동 수정안이 없습니다.[/yellow]")
             console.print(
-                "[dim]파일은 변경하지 않았습니다. 웹 결과나 analysis_result.json의 권장 조치를 확인해 주세요.[/dim]"
+                "[dim]파일은 변경하지 않았습니다. AI가 patch payload를 만들지 않은 결과입니다. "
+                "웹 결과나 analysis_result.json의 권장 조치를 확인해 주세요.[/dim]"
             )
             return
 
@@ -399,9 +400,9 @@ def apply_fix(
         _print_patch_preview(selected)
 
         if not dry_run and not yes:
-            confirmed = typer.confirm("Apply selected patches?")
+            confirmed = typer.confirm("선택한 수정안을 적용할까요?")
             if not confirmed:
-                console.print("[yellow]Patch apply canceled.[/yellow]")
+                console.print("[yellow]수정 적용을 취소했습니다. 파일은 변경하지 않았습니다.[/yellow]")
                 raise typer.Exit(code=1)
 
         selected_patch_id = selected[0].patch_id if len(selected) == 1 else None
@@ -762,7 +763,7 @@ def _run_agent_watch(
                 if once:
                     console.print("[dim]처리할 pending task가 없습니다.[/dim]")
                 elif verbose:
-                    console.print("[dim]No pending tasks. Agent is watching.[/dim]")
+                    console.print("[dim]처리할 pending task가 없습니다. Agent가 계속 대기합니다.[/dim]")
                 return
             task_types = ", ".join(str(getattr(task, "task_type", "UNKNOWN")) for task in tasks)
             console.print(f"[cyan]처리할 task {len(tasks)}개를 찾았습니다.[/cyan] {task_types}")
@@ -1177,10 +1178,15 @@ def _format_upload_request_url(url: object) -> str:
 
 def _scan_has_targets(scan: dict) -> bool:
     summary = scan.get("cliSummary", {})
-    return any(
-        int(summary.get(key) or 0) > 0
-        for key in ("composeSets", "envFiles", "dockerfiles")
-    )
+    target_counts = [summary.get(key) for key in ("composeSets", "envFiles", "dockerfiles")]
+    if any(value is not None for value in target_counts):
+        return any(int(value or 0) > 0 for value in target_counts)
+
+    targets = scan.get("targets", {})
+    if isinstance(targets, dict) and any(key in targets for key in ("composeSets", "envFiles", "dockerfiles")):
+        return any(len(targets.get(key) or []) > 0 for key in ("composeSets", "envFiles", "dockerfiles"))
+
+    return bool(scan.get("findings") or scan.get("artifacts"))
 
 
 def _scan_status_label(scan: dict) -> str:
@@ -1328,8 +1334,7 @@ def _print_findings(scan: dict) -> None:
     finding_table.add_column("Evidence", overflow="fold")
 
     if not finding_groups:
-        finding_table.add_row("-", "-", "-", "-", "-", "-", "-")
-        console.print(finding_table)
+        console.print(Panel.fit("발견된 보안 항목이 없습니다.", title="Findings"))
         return
 
     for group in finding_groups:
@@ -1774,7 +1779,13 @@ def _latest_done_scan_id_or_exit(project_root: Path, *, project_id: int | None, 
     except httpx.HTTPError as exc:
         console.print(f"[red]최신 스캔 조회 실패:[/red] {_format_http_transport_error(exc)}")
     except (ValueError, RuntimeError) as exc:
-        console.print(f"[red]최신 스캔 조회 실패:[/red] {exc}")
+        message = str(exc)
+        if message == f"projectId={effective_project_id}에 완료된 스캔이 없습니다.":
+            message = (
+                f"projectId={effective_project_id}에 완료된 스캔이 없습니다. "
+                "먼저 ssafer run --upload 또는 ssafer upload로 분석이 완료된 스캔을 만든 뒤 다시 실행하세요."
+            )
+        console.print(f"[red]최신 스캔 조회 실패:[/red] {message}")
     raise typer.Exit(code=1)
 
 

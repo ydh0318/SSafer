@@ -47,7 +47,9 @@ def upload_last_scan(
     _emit_step(on_step, "최근 로컬 스캔 결과를 확인하는 중...")
     scan = load_last_scan(project_root)
     if scan is None:
-        raise RuntimeError("No local scan package found. Run 'ssafer run' first.")
+        raise RuntimeError(
+            "업로드할 로컬 스캔 결과가 없습니다. 먼저 프로젝트 루트에서 'ssafer run'을 실행하세요."
+        )
     if not _scan_has_targets(scan):
         raise RuntimeError(
             "업로드할 스캔 대상이 없습니다. 프로젝트 루트에서 'ssafer run'을 다시 실행하거나 "
@@ -98,7 +100,7 @@ def upload_scan_result_to_registered_scan(
         paths = "\n".join(f"- {path}" for path in suspicious_paths[:20])
         suffix = "\n- ..." if len(suspicious_paths) > 20 else ""
         raise RuntimeError(
-            "Upload blocked because the scan package may contain unmasked secrets:\n"
+            "스캔 결과에 마스킹되지 않은 민감정보가 포함된 것으로 보여 업로드를 중단했습니다:\n"
             f"{paths}{suffix}"
         )
 
@@ -139,7 +141,9 @@ def upload_last_server_audit(
     _emit_step(on_step, "최근 서버 점검 결과를 확인하는 중...")
     audit = load_last_server_audit(project_root)
     if audit is None:
-        raise RuntimeError("No local server audit package found. Run 'ssafer server-audit' first.")
+        raise RuntimeError(
+            "업로드할 server-audit 결과가 없습니다. 먼저 'ssafer server-audit'을 실행하세요."
+        )
     return _upload_result(
         project_root=project_root,
         result=audit,
@@ -169,7 +173,7 @@ def _upload_result(
         paths = "\n".join(f"- {path}" for path in suspicious_paths[:20])
         suffix = "\n- ..." if len(suspicious_paths) > 20 else ""
         raise RuntimeError(
-            "Upload blocked because the scan package may contain unmasked secrets:\n"
+            "스캔 결과에 마스킹되지 않은 민감정보가 포함된 것으로 보여 업로드를 중단했습니다:\n"
             f"{paths}{suffix}"
         )
 

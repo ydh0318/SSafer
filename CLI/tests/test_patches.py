@@ -347,8 +347,9 @@ def test_apply_command_without_patch_payload_is_noop(tmp_path: Path):
     )
 
     assert result.exit_code == 0
-    assert "patch payload" in result.output
+    assert "적용할 자동 수정안이 없습니다" in result.output
     assert "Patch apply failed" not in result.output
+    assert "수정 적용 실패" not in result.output
 
 
 def test_apply_command_downloads_analysis_result_by_scan_id(monkeypatch, tmp_path: Path):
