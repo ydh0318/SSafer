@@ -100,3 +100,87 @@ def _matching_env_files(directory: Path, set_name: str) -> list[Path]:
     if set_name != "default":
         candidates.append(directory / f".env.{set_name}")
     return [path for path in candidates if path.exists()]
+
+
+_LOCAL_KEYWORDS = {"dev", "local", "development", "test"}
+_PROD_KEYWORDS = {"prod", "production"}
+
+_LOCAL_ENV_VALUES = {
+    "dev", "development", "local", "test", "debug",
+}
+_LOCAL_ENV_KEYS = {
+    "SPRING_PROFILES_ACTIVE",
+    "FLASK_ENV",
+    "NODE_ENV",
+    "APP_ENV",
+    "RAILS_ENV",
+    "ENVIRONMENT",
+}
+
+
+def detect_environment_from_compose_sets(
+    compose_sets: list[ComposeSet],
+    effective_configs: dict[str, str] | None = None,
+) -> str:
+    has_local = False
+    for cs in compose_sets:
+        for f in cs.files:
+            name_lower = f.name.lower()
+            if "override" in name_lower:
+                continue
+            path_lower = str(f).lower().replace("\\", "/")
+            for kw in _PROD_KEYWORDS:
+                if kw in name_lower or f"/{kw}/" in path_lower:
+                    return "production"
+            for kw in _LOCAL_KEYWORDS:
+                if kw in name_lower or f"/{kw}/" in path_lower:
+                    has_local = True
+
+    if has_local:
+        return "local"
+
+    if effective_configs:
+        result = _detect_from_compose_content(effective_configs)
+        if result:
+            return result
+
+    return "production"
+
+
+def _detect_from_compose_content(effective_configs: dict[str, str]) -> str | None:
+    import yaml
+
+    local_signals = 0
+    prod_signals = 0
+
+    for raw_yaml in effective_configs.values():
+        try:
+            doc = yaml.safe_load(raw_yaml) or {}
+        except yaml.YAMLError:
+            continue
+        for svc in (doc.get("services") or {}).values():
+            if not isinstance(svc, dict):
+                continue
+            if svc.get("build"):
+                local_signals += 1
+            env = svc.get("environment") or {}
+            env_items: dict[str, str] = {}
+            if isinstance(env, dict):
+                env_items = {str(k).upper(): str(v).lower() for k, v in env.items() if v is not None}
+            elif isinstance(env, list):
+                for entry in env:
+                    if isinstance(entry, str) and "=" in entry:
+                        k, v = entry.split("=", 1)
+                        env_items[k.strip().upper()] = v.strip().lower()
+            for key in _LOCAL_ENV_KEYS:
+                val = env_items.get(key)
+                if val and val in _LOCAL_ENV_VALUES:
+                    local_signals += 1
+                elif val and val in {"prod", "production"}:
+                    prod_signals += 1
+
+    if prod_signals > 0:
+        return "production"
+    if local_signals >= 2:
+        return "local"
+    return None

@@ -45,6 +45,13 @@ SECRET_KEYWORDS = {
 DB_PORTS = {3306, 5432, 6379, 27017, 1433, 1521}
 MASK = "***MASKED***"
 
+ENV_SEVERITY_OVERRIDES: dict[tuple[str, str], str] = {
+    ("COMPOSE_EXPOSED_DB_PORT", "local"): "LOW",
+    ("COMPOSE_HARDCODED_SECRET", "local"): "MEDIUM",
+    ("COMPOSE_PRIVILEGED_MODE", "local"): "MEDIUM",
+    ("COMPOSE_HOST_NETWORK", "local"): "MEDIUM",
+}
+
 SAFE_KEYS: frozenset[str] = frozenset({
     "NODE_ENV",
     "PORT",

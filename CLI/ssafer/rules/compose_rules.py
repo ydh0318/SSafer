@@ -28,6 +28,15 @@ _LOCAL_DEFAULT_SECRET_VALUES = {
     "test",
 }
 
+_LOCALHOST_ADDRESSES = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def _is_localhost_binding(address: str | None) -> bool:
+    if address is None:
+        return False
+    normalized = address.strip("[]")
+    return normalized in _LOCALHOST_ADDRESSES
+
 
 def _is_env_ref(value: str) -> bool:
     return bool(_ENV_REF_RE.match(str(value).strip()))
@@ -199,7 +208,7 @@ class ComposeExposedDbPortRule(BaseRule):
                     port_mapping = self._extract_port_mapping(port_entry)
                     if port_mapping is None:
                         continue
-                    host_port, container_port = port_mapping
+                    host_port, container_port, bind_address = port_mapping
                     if host_port and host_port in DB_PORTS:
                         patch_file_path, patch_line, patch_context = _unique_port_patch_target(
                             compose_files,
@@ -208,13 +217,19 @@ class ComposeExposedDbPortRule(BaseRule):
                             host_port,
                             container_port,
                         )
+                        if _is_localhost_binding(bind_address):
+                            severity = "LOW"
+                            title = f"DB 포트({host_port})가 호스트에 노출됨 (localhost 바인딩)"
+                        else:
+                            severity = self.effective_severity(context.environment)
+                            title = f"DB 포트({host_port})가 호스트에 노출됨"
                         findings.append(Finding(
                             rule_id=self.rule_id,
                             source="custom-rule",
-                            severity=self.severity,
+                            severity=severity,
                             file=f"docker-compose ({set_name})",
                             line=patch_line,
-                            title=f"DB 포트({host_port})가 호스트에 노출됨",
+                            title=title,
                             masked_evidence=make_masked_evidence(
                                 f"services.{svc_name}.ports", f"{host_port}:{container_port}"
                             ),
@@ -224,22 +239,26 @@ class ComposeExposedDbPortRule(BaseRule):
                         ))
         return findings
 
-    def _extract_port_mapping(self, port_entry: Any) -> tuple[int, int] | None:
+    def _extract_port_mapping(self, port_entry: Any) -> tuple[int, int, str | None] | None:
         if isinstance(port_entry, int):
-            return (port_entry, port_entry) if port_entry in DB_PORTS else None
+            return (port_entry, port_entry, None) if port_entry in DB_PORTS else None
         if isinstance(port_entry, str):
             parts = port_entry.split(":")
             try:
-                if len(parts) >= 2:
-                    return int(parts[-2]), int(parts[-1])
-                return int(parts[0]), int(parts[0])
+                if len(parts) >= 3:
+                    bind_address = ":".join(parts[:-2]) or None
+                    return int(parts[-2]), int(parts[-1]), bind_address
+                if len(parts) == 2:
+                    return int(parts[0]), int(parts[1]), None
+                return int(parts[0]), int(parts[0]), None
             except (ValueError, IndexError):
                 return None
         if isinstance(port_entry, dict):
             published = port_entry.get("published")
             target = port_entry.get("target") or published
+            host_ip = port_entry.get("host_ip")
             try:
-                return (int(published), int(target)) if published is not None else None
+                return (int(published), int(target), host_ip) if published is not None else None
             except (ValueError, TypeError):
                 return None
         return None
@@ -258,7 +277,7 @@ class ComposePrivilegedModeRule(BaseRule):
                     findings.append(Finding(
                         rule_id=self.rule_id,
                         source="custom-rule",
-                        severity=self.severity,
+                        severity=self.effective_severity(context.environment),
                         file=f"docker-compose ({set_name})",
                         line=None,
                         title=f"서비스 '{svc_name}'이 privileged 모드로 실행됨",
@@ -282,7 +301,7 @@ class ComposeHostNetworkRule(BaseRule):
                     findings.append(Finding(
                         rule_id=self.rule_id,
                         source="custom-rule",
-                        severity=self.severity,
+                        severity=self.effective_severity(context.environment),
                         file=f"docker-compose ({set_name})",
                         line=None,
                         title=f"서비스 '{svc_name}'이 호스트 네트워크를 사용함",
@@ -301,7 +320,7 @@ class ComposeHardcodedSecretRule(BaseRule):
         findings: list[Finding] = []
         if not context.compose_sets:
             for set_name, raw_yaml in context.effective_configs.items():
-                findings.extend(self._check_compose_yaml(raw_yaml, Path(f"docker-compose ({set_name})"), context.project_root))
+                findings.extend(self._check_compose_yaml(raw_yaml, Path(f"docker-compose ({set_name})"), context))
             return findings
         seen_files: set[Path] = set()
         for compose_set in context.compose_sets:
@@ -313,13 +332,13 @@ class ComposeHardcodedSecretRule(BaseRule):
                     raw_yaml = compose_file.read_text(encoding="utf-8", errors="replace")
                 except OSError:
                     continue
-                findings.extend(self._check_compose_yaml(raw_yaml, compose_file, context.project_root))
+                findings.extend(self._check_compose_yaml(raw_yaml, compose_file, context))
         return findings
 
-    def _check_compose_yaml(self, raw_yaml: str, compose_file: Path, project_root: Path) -> list[Finding]:
+    def _check_compose_yaml(self, raw_yaml: str, compose_file: Path, context: ScanContext) -> list[Finding]:
         findings: list[Finding] = []
         try:
-            rel_file = str(compose_file.relative_to(project_root))
+            rel_file = str(compose_file.relative_to(context.project_root))
         except ValueError:
             rel_file = str(compose_file)
         doc = _parse_effective_yaml(raw_yaml)
@@ -346,7 +365,7 @@ class ComposeHardcodedSecretRule(BaseRule):
                     findings.append(Finding(
                         rule_id=self.rule_id,
                         source="custom-rule",
-                        severity=self.severity,
+                        severity=self.effective_severity(context.environment),
                         file=rel_file,
                         line=None,
                         title=f"서비스 '{svc_name}'에 민감한 환경변수가 설정됨",
@@ -376,7 +395,7 @@ class ComposeLatestTagRule(BaseRule):
                     findings.append(Finding(
                         rule_id=self.rule_id,
                         source="custom-rule",
-                        severity=self.severity,
+                        severity=self.effective_severity(context.environment),
                         file=f"docker-compose ({set_name})",
                         line=None,
                         title=f"서비스 '{svc_name}'이 고정되지 않은 이미지 태그를 사용함",
@@ -404,7 +423,7 @@ class ComposeRootUserRule(BaseRule):
                     findings.append(Finding(
                         rule_id=self.rule_id,
                         source="custom-rule",
-                        severity=self.severity,
+                        severity=self.effective_severity(context.environment),
                         file=f"docker-compose ({set_name})",
                         line=None,
                         title=f"서비스 '{svc_name}'이 root 사용자로 실행됨",
@@ -432,7 +451,7 @@ class ComposeNoMemoryLimitRule(BaseRule):
                     findings.append(Finding(
                         rule_id=self.rule_id,
                         source="custom-rule",
-                        severity=self.severity,
+                        severity=self.effective_severity(context.environment),
                         file=f"docker-compose ({set_name})",
                         line=None,
                         title=f"서비스 '{svc_name}'에 메모리 제한이 설정되지 않음",

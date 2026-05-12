@@ -92,6 +92,9 @@ def run_server_audit(
     if "os-packages" in selected:
         _audit_os_packages(result, command_runner, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
 
+    if "ports" in selected and "firewall" in selected:
+        _cross_validate_ports_firewall(result)
+
     _assign_finding_ids(result.findings)
     return result
 
@@ -491,6 +494,95 @@ def _short_command_error(result: CommandResult) -> str:
     if not text:
         return f"exit {result.exit_code}"
     return text.splitlines()[-1][:200]
+
+
+_UFW_RULE_RE = re.compile(r"^(\d+)(?:/\w+)?\s+(ALLOW|DENY|REJECT|LIMIT)\s+")
+_IPTABLES_DPORT_RE = re.compile(r"-A\s+INPUT\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT)")
+
+
+def parse_ufw_rules(output: str) -> dict[int, list[str]]:
+    rules: dict[int, list[str]] = {}
+    if "Status: inactive" in output:
+        return rules
+    for line in output.splitlines():
+        m = _UFW_RULE_RE.match(line.strip())
+        if m:
+            port = int(m.group(1))
+            action = m.group(2)
+            rules.setdefault(port, []).append(action)
+    return rules
+
+
+def parse_iptables_input_rules(output: str) -> dict[int, list[str]]:
+    rules: dict[int, list[str]] = {}
+    for line in output.splitlines():
+        if line.startswith("-P"):
+            continue
+        m = _IPTABLES_DPORT_RE.search(line)
+        if m:
+            port = int(m.group(1))
+            action = m.group(2)
+            normalized = "ALLOW" if action == "ACCEPT" else "DENY"
+            rules.setdefault(port, []).append(normalized)
+    return rules
+
+
+def _resolve_firewall_state(
+    ufw_rules: dict[int, list[str]],
+    iptables_rules: dict[int, list[str]],
+) -> dict[int, str]:
+    all_ports = set(ufw_rules) | set(iptables_rules)
+    state: dict[int, str] = {}
+    for port in all_ports:
+        actions = ufw_rules.get(port, []) + iptables_rules.get(port, [])
+        deny_actions = {"DENY", "REJECT"}
+        if any(a in deny_actions for a in actions):
+            state[port] = "DENY"
+        elif any(a == "ALLOW" for a in actions):
+            state[port] = "ALLOW"
+        else:
+            state[port] = "UNKNOWN"
+    return state
+
+
+def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
+    ufw_rules: dict[int, list[str]] = {}
+    iptables_rules: dict[int, list[str]] = {}
+    has_firewall_data = False
+    for artifact in result.artifacts:
+        if artifact.type != "command-output" or not isinstance(artifact.content, dict):
+            continue
+        stdout = artifact.content.get("stdout", "")
+        if artifact.target == "ufw status" and artifact.content.get("exit_code") == 0:
+            ufw_rules = parse_ufw_rules(stdout)
+            has_firewall_data = True
+        elif artifact.target == "iptables -S" and artifact.content.get("exit_code") == 0:
+            iptables_rules = parse_iptables_input_rules(stdout)
+            has_firewall_data = True
+
+    if not has_firewall_data:
+        return
+
+    firewall_state = _resolve_firewall_state(ufw_rules, iptables_rules)
+    result.artifacts.append(ServerArtifact("firewall-rules", "resolved", firewall_state))
+
+    for finding in result.findings:
+        if finding.ruleId != "SERVER_PUBLIC_SENSITIVE_PORT":
+            continue
+        port_match = re.search(r"포트\((\d+)\)", finding.title)
+        if not port_match:
+            continue
+        port = int(port_match.group(1))
+        fw = firewall_state.get(port)
+        if fw == "DENY":
+            finding.severity = "LOW"
+            finding.title += " (방화벽 차단됨)"
+        elif fw == "ALLOW":
+            finding.severity = "CRITICAL"
+            finding.title += " (방화벽 허용됨)"
+        elif fw is None:
+            finding.severity = "MEDIUM"
+            finding.title += " (방화벽 규칙 없음)"
 
 
 def _assign_finding_ids(findings: list[ServerFinding]) -> None:

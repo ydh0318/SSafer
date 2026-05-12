@@ -256,6 +256,7 @@ def run(
     upload: bool = typer.Option(False, "--upload", help="스캔 후 결과 JSON을 백엔드/S3에 바로 업로드합니다."),
     save_raw: bool = typer.Option(False, "--save-raw", help="마스킹 전 effective compose 설정도 로컬에 저장합니다. 민감정보 포함 가능성이 있어 주의하세요."),
     api_url: Optional[str] = typer.Option(None, "--api-url", help="--upload에 사용할 SSAfer 백엔드 API URL입니다."),
+    env: Optional[str] = typer.Option(None, "--env", "-e", help="환경 (local/production). 생략 시 자동 감지합니다."),
 ) -> None:
     """현재 프로젝트의 설정 파일을 점검하고 로컬 결과 JSON을 생성합니다."""
     step_ref = ["스캔 준비 중..."]
@@ -267,7 +268,7 @@ def run(
 
     def do_scan() -> None:
         try:
-            result_ref[0] = run_scan(path.resolve(), save_raw=save_raw, on_step=on_step)
+            result_ref[0] = run_scan(path.resolve(), save_raw=save_raw, on_step=on_step, environment=env)
         except Exception as exc:  # noqa: BLE001
             error_ref[0] = exc
 

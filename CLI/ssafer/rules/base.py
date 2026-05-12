@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from ssafer.core.constants import ENV_SEVERITY_OVERRIDES
+
 if TYPE_CHECKING:
     from ssafer.rules.engine import ScanContext
 
@@ -45,6 +47,9 @@ class Finding:
 class BaseRule(ABC):
     rule_id: str
     severity: str
+
+    def effective_severity(self, environment: str) -> str:
+        return ENV_SEVERITY_OVERRIDES.get((self.rule_id, environment), self.severity)
 
     @abstractmethod
     def check(self, context: "ScanContext") -> list[Finding]: ...
