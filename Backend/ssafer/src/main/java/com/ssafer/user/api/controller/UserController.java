@@ -1,4 +1,4 @@
-package com.ssafer.user.api.controller;
+﻿package com.ssafer.user.api.controller;
 
 import com.ssafer.auth.api.dto.LoginResponseData;
 import com.ssafer.auth.application.service.AuthTokenResult;
@@ -46,7 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/users")
-@Tag(name = "회원", description = "회원 계정 및 프로필 관련 API")
+@Tag(name = "?뚯썝", description = "?뚯썝 怨꾩젙 諛??꾨줈??愿??API")
 public class UserController {
 
   private static final String REGISTER_SUCCESS_MESSAGE = "User registration succeeded";
@@ -86,22 +86,22 @@ public class UserController {
 
   @PostMapping
   @Operation(
-      summary = "회원가입",
-      description = "이메일, 닉네임, 비밀번호로 회원 계정을 생성합니다."
+      summary = "?뚯썝媛??,
+      description = "?대찓?? ?됰꽕?? 鍮꾨?踰덊샇濡??뚯썝 怨꾩젙???앹꽦?⑸땲??"
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "201",
-          description = "회원가입 성공",
+          description = "?뚯썝媛???깃났",
           content = @Content(schema = @Schema(implementation = RegisterUserResponseData.class))
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "요청 본문이 올바르지 않거나 필수 값이 누락되었습니다."
+          description = "?붿껌 蹂몃Ц???щ컮瑜댁? ?딄굅???꾩닔 媛믪씠 ?꾨씫?섏뿀?듬땲??"
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "409",
-          description = "이미 가입된 이메일이거나 사용 중인 닉네임입니다."
+          description = "?대? 媛?낅맂 ?대찓?쇱씠嫄곕굹 ?ъ슜 以묒씤 ?됰꽕?꾩엯?덈떎."
       )
   })
   public ResponseEntity<ApiResponse<RegisterUserResponseData>> register(
@@ -119,18 +119,18 @@ public class UserController {
 
   @GetMapping("/check-email")
   @Operation(
-      summary = "이메일 중복 확인",
-      description = "회원가입에 사용할 수 있는 이메일인지 확인합니다."
+      summary = "?대찓??以묐났 ?뺤씤",
+      description = "?뚯썝媛?낆뿉 ?ъ슜?????덈뒗 ?대찓?쇱씤吏 ?뺤씤?⑸땲??"
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "이메일 중복 확인 성공",
+          description = "?대찓??以묐났 ?뺤씤 ?깃났",
           content = @Content(schema = @Schema(implementation = CheckEmailResponseData.class))
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "이메일 형식이 올바르지 않거나 쿼리 파라미터가 누락되었습니다."
+          description = "?대찓???뺤떇???щ컮瑜댁? ?딄굅??荑쇰━ ?뚮씪誘명꽣媛 ?꾨씫?섏뿀?듬땲??"
       )
   })
   public ResponseEntity<ApiResponse<CheckEmailResponseData>> checkEmail(
@@ -144,18 +144,18 @@ public class UserController {
 
   @GetMapping("/check-nickname")
   @Operation(
-      summary = "닉네임 중복 확인",
-      description = "회원가입 또는 프로필 수정에 사용할 수 있는 닉네임인지 확인합니다."
+      summary = "?됰꽕??以묐났 ?뺤씤",
+      description = "?뚯썝媛???먮뒗 ?꾨줈???섏젙???ъ슜?????덈뒗 ?됰꽕?꾩씤吏 ?뺤씤?⑸땲??"
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "닉네임 중복 확인 성공",
+          description = "?됰꽕??以묐났 ?뺤씤 ?깃났",
           content = @Content(schema = @Schema(implementation = CheckNicknameResponseData.class))
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "닉네임 형식이 올바르지 않거나 쿼리 파라미터가 누락되었습니다."
+          description = "?됰꽕???뺤떇???щ컮瑜댁? ?딄굅??荑쇰━ ?뚮씪誘명꽣媛 ?꾨씫?섏뿀?듬땲??"
       )
   })
   public ResponseEntity<ApiResponse<CheckNicknameResponseData>> checkNickname(
@@ -169,26 +169,26 @@ public class UserController {
 
   @GetMapping("/me")
   @Operation(
-      summary = "내 프로필 조회",
-      description = "현재 로그인한 회원의 프로필 정보를 조회합니다."
+      summary = "???꾨줈??議고쉶",
+      description = "?꾩옱 濡쒓렇?명븳 ?뚯썝???꾨줈???뺣낫瑜?議고쉶?⑸땲??"
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "프로필 조회 성공",
+          description = "?꾨줈??議고쉶 ?깃났",
           content = @Content(schema = @Schema(implementation = UserProfileResponseData.class))
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+          description = "?몄쬆???꾩슂?섍굅???좏겙???щ컮瑜댁? ?딆뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
-          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
+          description = "寃뚯뒪??怨꾩젙? ?뚯썝 ?꾩슜 API???묎렐?????놁뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "404",
-          description = "회원 정보를 찾을 수 없습니다."
+          description = "?뚯썝 ?뺣낫瑜?李얠쓣 ???놁뒿?덈떎."
       )
   })
   public ResponseEntity<ApiResponse<UserProfileResponseData>> getCurrentUserProfile() {
@@ -202,18 +202,18 @@ public class UserController {
 
   @GetMapping("/me/socials")
   @Operation(
-      summary = "연결된 소셜 계정 조회",
-      description = "현재 로그인한 회원의 Google, GitHub 연결 상태를 조회합니다."
+      summary = "?곌껐???뚯뀥 怨꾩젙 議고쉶",
+      description = "?꾩옱 濡쒓렇?명븳 ?뚯썝??Google, GitHub ?곌껐 ?곹깭瑜?議고쉶?⑸땲??"
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "연결된 소셜 계정 조회 성공",
+          description = "?곌껐???뚯뀥 怨꾩젙 議고쉶 ?깃났",
           content = @Content(schema = @Schema(implementation = SocialAccountsResponseData.class))
       ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요합니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "게스트 계정은 회원 소셜 계정을 관리할 수 없습니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "현재 활성 회원 정보를 찾을 수 없습니다.")
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "?몄쬆???꾩슂?⑸땲??"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "寃뚯뒪??怨꾩젙? ?뚯썝 ?뚯뀥 怨꾩젙??愿由ы븷 ???놁뒿?덈떎."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "?꾩옱 ?쒖꽦 ?뚯썝 ?뺣낫瑜?李얠쓣 ???놁뒿?덈떎.")
   })
   public ResponseEntity<ApiResponse<SocialAccountsResponseData>> getCurrentUserSocialAccounts() {
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
@@ -230,19 +230,19 @@ public class UserController {
 
   @PostMapping("/me/socials/google")
   @Operation(
-      summary = "Google 계정 연결",
-      description = "OAuth 인가 코드를 사용해 현재 로그인한 회원 계정에 Google 계정을 연결합니다."
+      summary = "Google 怨꾩젙 ?곌껐",
+      description = "OAuth ?멸? 肄붾뱶瑜??ъ슜???꾩옱 濡쒓렇?명븳 ?뚯썝 怨꾩젙??Google 怨꾩젙???곌껐?⑸땲??"
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "Google 계정 연결 성공",
+          description = "Google 怨꾩젙 ?곌껐 ?깃났",
           content = @Content(schema = @Schema(implementation = SocialAccountResponseData.class))
       ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "인가 코드 또는 redirect URI 요청값이 올바르지 않습니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요하거나 Google 인증에 실패했습니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 연결된 Google 계정이거나 다른 회원에게 연결된 계정입니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "502", description = "Google OAuth 제공자를 사용할 수 없습니다.")
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "?멸? 肄붾뱶 ?먮뒗 redirect URI ?붿껌媛믪씠 ?щ컮瑜댁? ?딆뒿?덈떎."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "?몄쬆???꾩슂?섍굅??Google ?몄쬆???ㅽ뙣?덉뒿?덈떎."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "?대? ?곌껐??Google 怨꾩젙?닿굅???ㅻⅨ ?뚯썝?먭쾶 ?곌껐??怨꾩젙?낅땲??"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "502", description = "Google OAuth ?쒓났?먮? ?ъ슜?????놁뒿?덈떎.")
   })
   public ResponseEntity<ApiResponse<SocialAccountResponseData>> connectGoogleSocialAccount(
       @Valid @RequestBody(required = false) SocialAccountConnectRequest request
@@ -252,14 +252,14 @@ public class UserController {
 
   @DeleteMapping("/me/socials/google")
   @Operation(
-      summary = "Google 계정 연결 해제",
-      description = "현재 로그인한 회원 계정에서 Google 계정 연결을 해제합니다."
+      summary = "Google 怨꾩젙 ?곌껐 ?댁젣",
+      description = "?꾩옱 濡쒓렇?명븳 ?뚯썝 怨꾩젙?먯꽌 Google 怨꾩젙 ?곌껐???댁젣?⑸땲??"
   )
   @ApiResponses({
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Google 계정 연결 해제 성공"),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요합니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "연결된 Google 계정이 없습니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "마지막 로그인 수단은 해제할 수 없습니다.")
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Google 怨꾩젙 ?곌껐 ?댁젣 ?깃났"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "?몄쬆???꾩슂?⑸땲??"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "?곌껐??Google 怨꾩젙???놁뒿?덈떎."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "留덉?留?濡쒓렇???섎떒? ?댁젣?????놁뒿?덈떎.")
   })
   public ResponseEntity<ApiResponse<Void>> disconnectGoogleSocialAccount() {
     return disconnectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GOOGLE);
@@ -267,19 +267,19 @@ public class UserController {
 
   @PostMapping("/me/socials/github")
   @Operation(
-      summary = "GitHub 계정 연결",
-      description = "OAuth 인가 코드를 사용해 현재 로그인한 회원 계정에 GitHub 계정을 연결합니다."
+      summary = "GitHub 怨꾩젙 ?곌껐",
+      description = "OAuth ?멸? 肄붾뱶瑜??ъ슜???꾩옱 濡쒓렇?명븳 ?뚯썝 怨꾩젙??GitHub 怨꾩젙???곌껐?⑸땲??"
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "GitHub 계정 연결 성공",
+          description = "GitHub 怨꾩젙 ?곌껐 ?깃났",
           content = @Content(schema = @Schema(implementation = SocialAccountResponseData.class))
       ),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "인가 코드 또는 redirect URI 요청값이 올바르지 않습니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요하거나 GitHub 인증에 실패했습니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 연결된 GitHub 계정이거나 다른 회원에게 연결된 계정입니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "502", description = "GitHub OAuth 제공자를 사용할 수 없습니다.")
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "?멸? 肄붾뱶 ?먮뒗 redirect URI ?붿껌媛믪씠 ?щ컮瑜댁? ?딆뒿?덈떎."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "?몄쬆???꾩슂?섍굅??GitHub ?몄쬆???ㅽ뙣?덉뒿?덈떎."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "?대? ?곌껐??GitHub 怨꾩젙?닿굅???ㅻⅨ ?뚯썝?먭쾶 ?곌껐??怨꾩젙?낅땲??"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "502", description = "GitHub OAuth ?쒓났?먮? ?ъ슜?????놁뒿?덈떎.")
   })
   public ResponseEntity<ApiResponse<SocialAccountResponseData>> connectGithubSocialAccount(
       @Valid @RequestBody(required = false) SocialAccountConnectRequest request
@@ -289,14 +289,14 @@ public class UserController {
 
   @DeleteMapping("/me/socials/github")
   @Operation(
-      summary = "GitHub 계정 연결 해제",
-      description = "현재 로그인한 회원 계정에서 GitHub 계정 연결을 해제합니다."
+      summary = "GitHub 怨꾩젙 ?곌껐 ?댁젣",
+      description = "?꾩옱 濡쒓렇?명븳 ?뚯썝 怨꾩젙?먯꽌 GitHub 怨꾩젙 ?곌껐???댁젣?⑸땲??"
   )
   @ApiResponses({
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "GitHub 계정 연결 해제 성공"),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증이 필요합니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "연결된 GitHub 계정이 없습니다."),
-      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "마지막 로그인 수단은 해제할 수 없습니다.")
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "GitHub 怨꾩젙 ?곌껐 ?댁젣 ?깃났"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "?몄쬆???꾩슂?⑸땲??"),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "?곌껐??GitHub 怨꾩젙???놁뒿?덈떎."),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "留덉?留?濡쒓렇???섎떒? ?댁젣?????놁뒿?덈떎.")
   })
   public ResponseEntity<ApiResponse<Void>> disconnectGithubSocialAccount() {
     return disconnectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GITHUB);
@@ -304,40 +304,40 @@ public class UserController {
 
   @PatchMapping("/me/profile")
   @Operation(
-      summary = "내 프로필 수정",
-      description = "현재 로그인한 회원의 닉네임을 수정합니다."
+      summary = "???꾨줈???섏젙",
+      description = "?꾩옱 濡쒓렇?명븳 ?뚯썝???됰꽕?꾩쓣 ?섏젙?⑸땲??"
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "프로필 수정 성공",
+          description = "?꾨줈???섏젙 ?깃났",
           content = @Content(schema = @Schema(implementation = UserProfileResponseData.class))
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "요청 본문이 올바르지 않거나 필수 값이 누락되었습니다."
+          description = "?붿껌 蹂몃Ц???щ컮瑜댁? ?딄굅???꾩닔 媛믪씠 ?꾨씫?섏뿀?듬땲??"
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+          description = "?몄쬆???꾩슂?섍굅???좏겙???щ컮瑜댁? ?딆뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
-          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
+          description = "寃뚯뒪??怨꾩젙? ?뚯썝 ?꾩슜 API???묎렐?????놁뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "404",
-          description = "회원 정보를 찾을 수 없습니다."
+          description = "?뚯썝 ?뺣낫瑜?李얠쓣 ???놁뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "409",
-          description = "이미 사용 중인 닉네임입니다."
+          description = "?대? ?ъ슜 以묒씤 ?됰꽕?꾩엯?덈떎."
       )
   })
   public ResponseEntity<ApiResponse<UserProfileResponseData>> updateCurrentUserProfile(
       @Valid @RequestBody(required = false) UpdateUserProfileRequest request
   ) {
-    // 요청 본문 자체가 없거나 displayName 필드가 빠지면 잘못된 요청으로 본다.
+    // ?붿껌 蹂몃Ц ?먯껜媛 ?녾굅??displayName ?꾨뱶媛 鍮좎?硫??섎せ???붿껌?쇰줈 蹂몃떎.
     if (request == null || request.displayName() == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -352,36 +352,36 @@ public class UserController {
 
   @PatchMapping("/me/password")
   @Operation(
-      summary = "비밀번호 변경",
-      description = "현재 로그인한 회원의 비밀번호를 변경합니다."
+      summary = "鍮꾨?踰덊샇 蹂寃?,
+      description = "?꾩옱 濡쒓렇?명븳 ?뚯썝??鍮꾨?踰덊샇瑜?蹂寃쏀빀?덈떎."
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "비밀번호 변경 성공",
+          description = "鍮꾨?踰덊샇 蹂寃??깃났",
           content = @Content(schema = @Schema(implementation = LoginResponseData.class))
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "요청 본문이 올바르지 않거나 필수 값이 누락되었습니다."
+          description = "?붿껌 蹂몃Ц???щ컮瑜댁? ?딄굅???꾩닔 媛믪씠 ?꾨씫?섏뿀?듬땲??"
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+          description = "?몄쬆???꾩슂?섍굅???좏겙???щ컮瑜댁? ?딆뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
-          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
+          description = "寃뚯뒪??怨꾩젙? ?뚯썝 ?꾩슜 API???묎렐?????놁뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "404",
-          description = "회원 정보를 찾을 수 없습니다."
+          description = "?뚯썝 ?뺣낫瑜?李얠쓣 ???놁뒿?덈떎."
       )
   })
   public ResponseEntity<ApiResponse<LoginResponseData>> updateCurrentUserPassword(
       @Valid @RequestBody(required = false) UpdatePasswordRequest request
   ) {
-    // 비밀번호 변경은 현재 비밀번호와 새 비밀번호가 모두 있어야 처리할 수 있다.
+    // 鍮꾨?踰덊샇 蹂寃쎌? ?꾩옱 鍮꾨?踰덊샇? ??鍮꾨?踰덊샇媛 紐⑤몢 ?덉뼱??泥섎━?????덈떎.
     if (request == null || request.currentPassword() == null || request.newPassword() == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -405,40 +405,40 @@ public class UserController {
 
   @PostMapping("/me/password/setup")
   @Operation(
-      summary = "비밀번호 최초 설정",
-      description = "현재 로그인된 회원 계정에 로컬 로그인용 비밀번호를 최초 설정합니다."
+      summary = "소셜 계정 비밀번호 최초 설정",
+      description = "현재 로그인한 소셜 계정에 로컬 로그인용 비밀번호를 최초 설정합니다."
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "비밀번호 최초 설정 성공",
+          description = "鍮꾨?踰덊샇 理쒖큹 ?ㅼ젙 ?깃났",
           content = @Content(schema = @Schema(implementation = LoginResponseData.class))
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "요청 본문이 올바르지 않습니다."
+          description = "?붿껌 蹂몃Ц???щ컮瑜댁? ?딆뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "409",
-          description = "이미 비밀번호가 설정된 계정이거나 소셜 비밀번호 설정 대상이 아닙니다."
+          description = "?대? 鍮꾨?踰덊샇媛 ?ㅼ젙??怨꾩젙?닿굅???뚯뀥 鍮꾨?踰덊샇 ?ㅼ젙 ??곸씠 ?꾨떃?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+          description = "?몄쬆???꾩슂?섍굅???좏겙???щ컮瑜댁? ?딆뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
-          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
+          description = "寃뚯뒪??怨꾩젙? ?뚯썝 ?꾩슜 API???묎렐?????놁뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "404",
-          description = "회원 정보를 찾을 수 없습니다."
+          description = "?뚯썝 ?뺣낫瑜?李얠쓣 ???놁뒿?덈떎."
       )
   })
   public ResponseEntity<ApiResponse<LoginResponseData>> setupCurrentUserPassword(
       @Valid @RequestBody(required = false) SetupPasswordRequest request
   ) {
-    // 최초 설정은 새 비밀번호만 받되, 본문 자체가 없으면 잘못된 요청으로 처리한다.
+    // 理쒖큹 ?ㅼ젙? ??鍮꾨?踰덊샇留?諛쏅릺, 蹂몃Ц ?먯껜媛 ?놁쑝硫??섎せ???붿껌?쇰줈 泥섎━?쒕떎.
     if (request == null || request.newPassword() == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -458,29 +458,29 @@ public class UserController {
 
   @DeleteMapping
   @Operation(
-      summary = "회원 탈퇴",
-      description = "현재 로그인한 회원 계정을 비활성화하고 refresh token을 제거합니다."
+      summary = "?뚯썝 ?덊눜",
+      description = "?꾩옱 濡쒓렇?명븳 ?뚯썝 怨꾩젙??鍮꾪솢?깊솕?섍퀬 refresh token???쒓굅?⑸땲??"
   )
   @ApiResponses({
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "200",
-          description = "회원 탈퇴 성공"
+          description = "?뚯썝 ?덊눜 ?깃났"
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+          description = "?몄쬆???꾩슂?섍굅???좏겙???щ컮瑜댁? ?딆뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
-          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
+          description = "寃뚯뒪??怨꾩젙? ?뚯썝 ?꾩슜 API???묎렐?????놁뒿?덈떎."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "404",
-          description = "회원 정보를 찾을 수 없습니다."
+          description = "?뚯썝 ?뺣낫瑜?李얠쓣 ???놁뒿?덈떎."
       )
   })
   public ResponseEntity<ApiResponse<Void>> withdrawCurrentUser() {
-    // 탈퇴 후 계정은 비활성화되고 refresh token 도 함께 정리된다.
+    // ?덊눜 ??怨꾩젙? 鍮꾪솢?깊솕?섍퀬 refresh token ???④퍡 ?뺣━?쒕떎.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     userWithdrawalService.withdrawCurrentUser(actor);
     return ResponseEntity.ok(ApiResponse.success(WITHDRAWAL_SUCCESS_MESSAGE, null));
@@ -490,7 +490,7 @@ public class UserController {
       com.ssafer.auth.domain.enums.OAuthProvider provider,
       SocialAccountConnectRequest request
   ) {
-    // 소셜 계정 연결은 이미 로그인된 회원 세션에서만 수행한다.
+    // ?뚯뀥 怨꾩젙 ?곌껐? ?대? 濡쒓렇?몃맂 ?뚯썝 ?몄뀡?먯꽌留??섑뻾?쒕떎.
     if (request == null || request.authorizationCode() == null || request.redirectUri() == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -511,7 +511,7 @@ public class UserController {
   private ResponseEntity<ApiResponse<Void>> disconnectSocialAccount(
       com.ssafer.auth.domain.enums.OAuthProvider provider
   ) {
-    // 계정을 사용할 수 없는 상태로 만들지 않도록 마지막 로그인 수단 해제는 막는다.
+    // 怨꾩젙???ъ슜?????녿뒗 ?곹깭濡?留뚮뱾吏 ?딅룄濡?留덉?留?濡쒓렇???섎떒 ?댁젣??留됰뒗??
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     userSocialAccountService.disconnectCurrentUserSocialAccount(actor, provider);
     return ResponseEntity.ok(ApiResponse.success(SOCIAL_ACCOUNT_DISCONNECT_SUCCESS_MESSAGE, null));

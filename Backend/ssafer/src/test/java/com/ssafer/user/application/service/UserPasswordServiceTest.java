@@ -75,6 +75,98 @@ class UserPasswordServiceTest {
   }
 
   @Test
+  void setupPasswordUpdatesPasswordHashForSocialOnlyMember() {
+    User user = createUser(1L, "user@ssafer.co.kr", "Alice", null);
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
+    given(userSocialAccountRepository.countByUserId(1L)).willReturn(1L);
+    given(passwordEncoder.encode("new-password123")).willReturn("encoded-new-password");
+    AuthTokenResult tokenResult = new AuthTokenResult(
+        "new-access-token",
+        Instant.parse("2026-05-12T00:00:00Z"),
+        "new-refresh-token",
+        Instant.parse("2026-05-26T00:00:00Z")
+    );
+    given(authTokenProvider.issueTokens(1L)).willReturn(tokenResult);
+
+    AuthTokenResult result = userPasswordService.setupPassword(
+        AuthenticatedActor.member(1L),
+        "new-password123"
+    );
+
+    assertThat(result).isEqualTo(tokenResult);
+    assertThat(user.getPasswordHash()).isEqualTo("encoded-new-password");
+    then(refreshTokenStore).should().delete(1L);
+    then(authTokenProvider).should().issueTokens(1L);
+  }
+
+  @Test
+  void setupPasswordThrowsPasswordSetupNotAllowedWhenPasswordAlreadyExists() {
+    User user = createUser(1L, "user@ssafer.co.kr", "Alice", "encoded-password");
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
+
+    assertThatThrownBy(() -> userPasswordService.setupPassword(
+        AuthenticatedActor.member(1L),
+        "new-password123"
+    ))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.PASSWORD_SETUP_NOT_ALLOWED);
+  }
+
+  @Test
+  void setupPasswordThrowsPasswordSetupNotAllowedWhenSocialAccountIsNotLinked() {
+    User user = createUser(1L, "user@ssafer.co.kr", "Alice", null);
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
+    given(userSocialAccountRepository.countByUserId(1L)).willReturn(0L);
+
+    assertThatThrownBy(() -> userPasswordService.setupPassword(
+        AuthenticatedActor.member(1L),
+        "new-password123"
+    ))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.PASSWORD_SETUP_NOT_ALLOWED);
+  }
+
+  @Test
+  void setupPasswordThrowsForbiddenForGuest() {
+    assertThatThrownBy(() -> userPasswordService.setupPassword(
+        AuthenticatedActor.guest("guest-hash"),
+        "new-password123"
+    ))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.FORBIDDEN);
+  }
+
+  @Test
+  void setupPasswordThrowsNotFoundWhenUserDoesNotExist() {
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.empty());
+
+    assertThatThrownBy(() -> userPasswordService.setupPassword(
+        AuthenticatedActor.member(1L),
+        "new-password123"
+    ))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.NOT_FOUND);
+  }
+
+  @Test
+  void setupPasswordThrowsInvalidParameterWhenNewPasswordIsTooShort() {
+    User user = createUser(1L, "user@ssafer.co.kr", "Alice", null);
+    given(userRepository.findByIdAndAccountStatus(1L, AccountStatus.ACTIVE)).willReturn(Optional.of(user));
+
+    assertThatThrownBy(() -> userPasswordService.setupPassword(
+        AuthenticatedActor.member(1L),
+        "short"
+    ))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.INVALID_PARAMETER);
+  }
+
+  @Test
   void resetPasswordUpdatesPasswordHashAndDeletesRefreshToken() {
     User user = createUser(1L, "user@ssafer.co.kr", "Alice", "encoded-old-password");
     given(userRepository.findByEmail("user@ssafer.co.kr")).willReturn(Optional.of(user));
