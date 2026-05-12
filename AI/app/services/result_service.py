@@ -32,6 +32,7 @@ REQUIRED_RESULT_FIELDS = (
     "title",
     "maskedEvidence",
     "explanation",
+    "impact",
     "fix",
 )
 REQUIRED_RESULT_STRING_FIELDS = (
@@ -42,7 +43,14 @@ REQUIRED_RESULT_STRING_FIELDS = (
     "file",
     "title",
     "maskedEvidence",
-    "explanation",
+    "impact",
+)
+REQUIRED_EXPLANATION_FIELDS = (
+    "summary",
+    "whyRisky",
+    "abuseScenario",
+    "expectedImpact",
+    "severityInterpretation",
 )
 REQUIRED_FIX_FIELDS = (
     "summary",
@@ -143,9 +151,10 @@ def _map_ai_results_by_finding_id(
 
 def build_structured_analysis_result(
     finding: dict[str, Any],
-    explanation: str,
+    explanation: str | dict[str, Any],
     fix: dict[str, Any],
 ) -> dict[str, Any]:
+    explanation_sections, impact_text = normalize_explanation_payload(explanation)
     result = {
         "findingId": finding["id"],
         "ruleId": finding["ruleId"],
@@ -155,7 +164,8 @@ def build_structured_analysis_result(
         "line": finding["line"],
         "title": finding["title"],
         "maskedEvidence": finding["maskedEvidence"],
-        "explanation": explanation,
+        "explanation": explanation_sections,
+        "impact": impact_text,
         "fix": fix,
     }
     if finding.get("filePath"):
@@ -163,6 +173,52 @@ def build_structured_analysis_result(
     if finding.get("targetFiles"):
         result["targetFiles"] = finding["targetFiles"]
     return result
+
+
+def normalize_explanation_payload(
+    explanation: str | dict[str, Any],
+) -> tuple[dict[str, str], str]:
+    if isinstance(explanation, dict):
+        explanation_sections = explanation.get("explanation")
+        impact_text = explanation.get("impact")
+        if isinstance(explanation_sections, str) and explanation_sections.strip():
+            explanation_sections = _legacy_explanation_sections(explanation_sections)
+        validate_explanation_sections(explanation_sections, "explanation")
+        if isinstance(impact_text, str) and impact_text.strip():
+            return explanation_sections, impact_text
+        raise ValueError(
+            "Explanation result must include non-empty explanation and impact."
+        )
+
+    if isinstance(explanation, str) and explanation.strip():
+        return _legacy_explanation_sections(explanation), explanation
+
+    raise ValueError("Explanation result must be a non-empty string or object.")
+
+
+def _legacy_explanation_sections(explanation: str) -> dict[str, str]:
+    return {
+        field: explanation
+        for field in REQUIRED_EXPLANATION_FIELDS
+    }
+
+
+def validate_explanation_sections(explanation: Any, path: str) -> None:
+    if not isinstance(explanation, dict):
+        raise ValueError(f"{path} must be an object.")
+
+    missing_fields = [
+        field for field in REQUIRED_EXPLANATION_FIELDS if field not in explanation
+    ]
+    if missing_fields:
+        raise ValueError(
+            f"{path} missing required fields: {', '.join(missing_fields)}"
+        )
+
+    for field in REQUIRED_EXPLANATION_FIELDS:
+        value = explanation[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{path}.{field} must be a non-empty string.")
 
 
 def build_structured_analysis_results(
@@ -527,6 +583,7 @@ def validate_analysis_result_item(result: Any, index: int) -> None:
     if line is not None and type(line) is not int:
         raise ValueError(f"{result_path}.line must be an integer or null.")
 
+    validate_explanation_sections(result["explanation"], f"{result_path}.explanation")
     validate_fix_schema(result["fix"], f"{result_path}.fix")
 
 

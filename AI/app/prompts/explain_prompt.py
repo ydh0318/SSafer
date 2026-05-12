@@ -27,7 +27,10 @@ EXPLAIN_PROMPT = ChatPromptTemplate.from_messages(
                 "영어 단어가 포함된 문장을 만들었다면 답변 전에 반드시 한국어로 다시 고쳐 쓰세요. "
                 "번역투나 어색한 외국어 표현을 피하세요. "
                 "불확실한 내용은 단정하지 말고, finding에 있는 정보 기준으로 설명하세요. "
-                "응답은 지정된 5개 섹션만 포함하고, 앞뒤 인사말이나 추가 요약은 쓰지 마세요."
+                "응답은 JSON 객체 하나만 작성하고, 앞뒤 인사말이나 추가 요약은 쓰지 마세요. "
+                "JSON에는 explanation과 impact 필드만 포함하세요. "
+                "explanation은 왜 위험한가 화면에 표시될 구조화된 분석 설명입니다. "
+                "impact는 완전 초보자도 이해할 수 있도록 쉬운 비유를 사용한 현실 영향 설명입니다."
             ),
         ),
         (
@@ -35,18 +38,25 @@ EXPLAIN_PROMPT = ChatPromptTemplate.from_messages(
             (
                 "아래 보안 finding을 설명하세요.\n\n"
                 "{finding_input}\n\n"
-                "다음 섹션 형식으로만 답변하세요. 섹션 이름과 순서를 바꾸지 마세요:\n"
-                "1. 취약점 요약\n"
-                "2. 위험한 이유\n"
-                "3. 악용 가능 시나리오\n"
-                "4. 예상 영향\n"
-                "5. 심각도 해석\n\n"
+                "다음 JSON 형식으로만 답변하세요. 마크다운을 쓰지 마세요:\n"
+                "{{\n"
+                '  "explanation": {{\n'
+                '    "summary": "취약점 요약",\n'
+                '    "whyRisky": "위험한 이유",\n'
+                '    "abuseScenario": "악용 가능 시나리오",\n'
+                '    "expectedImpact": "예상 영향",\n'
+                '    "severityInterpretation": "심각도 해석"\n'
+                "  }},\n"
+                '  "impact": "현실 영향에 표시할 쉬운 비유 설명"\n'
+                "}}\n\n"
                 "섹션별 작성 기준:\n"
-                "- 1. 취약점 요약: 이 finding이 무엇을 뜻하는지 2문장으로 설명\n"
-                "- 2. 위험한 이유: 보안상 문제가 되는 이유를 2~3문장으로 설명\n"
-                "- 3. 악용 가능 시나리오: finding 정보로 추론 가능한 악용 흐름만 2~3문장으로 설명\n"
-                "- 4. 예상 영향: 서비스, 운영, 데이터 관점의 영향을 2~3문장으로 설명\n"
-                "- 5. 심각도 해석: 입력 심각도를 기준으로 우선순위를 2문장으로 설명\n\n"
+                "- explanation.summary: 이 finding이 무엇을 뜻하는지 1~2문장으로 설명\n"
+                "- explanation.whyRisky: 보안상 문제가 되는 이유를 2~3문장으로 설명\n"
+                "- explanation.abuseScenario: finding 정보로 추론 가능한 악용 흐름만 2~3문장으로 설명\n"
+                "- explanation.expectedImpact: 서비스, 운영, 데이터 관점의 영향을 2~3문장으로 설명\n"
+                "- explanation.severityInterpretation: 입력 심각도를 기준으로 우선순위를 1~2문장으로 설명\n"
+                "- impact: 완전 초보자가 이해할 수 있게 쉬운 비유를 사용해서 2~4문장으로 작성\n"
+                "- impact는 실제 서비스나 데이터에 생길 수 있는 일을 일상적인 상황에 빗대어 설명\n\n"
                 "답변 스타일:\n"
                 "- 보안 초보도 이해할 수 있게 쉽게 설명\n"
                 "- 긴 문장보다 짧은 문장 사용\n"
@@ -60,7 +70,7 @@ EXPLAIN_PROMPT = ChatPromptTemplate.from_messages(
                 "- 비밀 값이나 민감한 값을 추측하거나 복원하지 않기\n"
                 "- 코드 예시, 설정 예시, 명령어, 표, 코드 블록 출력 금지\n"
                 "- 수정 방법은 자세히 쓰지 않기\n"
-                "- 지정된 5개 섹션 외의 문장 출력 금지"
+                "- JSON 외의 문장 출력 금지"
             ),
         ),
     ]
