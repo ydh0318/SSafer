@@ -112,6 +112,7 @@ function TypingLine({
   isDark,
   autoPlay,
   onTypeActivity,
+  onStroke,
 }: {
   command: string;
   onDone: () => void;

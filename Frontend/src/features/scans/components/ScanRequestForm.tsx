@@ -10,6 +10,7 @@ type ScanRequestFormProps = {
   scanRequestMethod: ScanRequestMethod;
   agentAvailable?: boolean;
   agentStatus?: { status: string } | null;
+  isAgentLoading?: boolean;
   selectedFiles: File[];
   isSubmitting: boolean;
   errorMessage: string | null;
@@ -24,6 +25,7 @@ function ScanRequestForm({
   scanRequestMethod,
   agentAvailable = true,
   agentStatus = null,
+  isAgentLoading = false,
   selectedFiles,
   isSubmitting,
   errorMessage,
@@ -41,10 +43,15 @@ function ScanRequestForm({
 
   const isAgentMode = scanRequestMethod === 'AGENT';
   const agentOnline = agentStatus?.status === 'ONLINE';
-  const isAgentSubmitBlocked = isAgentMode && !agentOnline;
-  const agentBlockReason = isAgentMode && !agentStatus
+  // 로딩 중에는 차단하지 않음: agentStatus가 null인 것이 "없음"이 아닌 "아직 확인 안 됨"일 수 있기 때문
+  const isAgentSubmitBlocked = isAgentMode && !isAgentLoading && !agentOnline;
+  const agentBlockReason = !isAgentMode
+    ? null
+    : isAgentLoading
+    ? null // 로딩 중에는 차단 안 함
+    : !agentStatus
     ? 'Agent가 연결되어 있지 않습니다.'
-    : isAgentMode && !agentOnline
+    : !agentOnline
     ? 'Agent가 현재 오프라인 상태입니다. Agent를 실행한 후 다시 시도해 주세요.'
     : null;
 

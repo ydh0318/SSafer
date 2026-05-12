@@ -662,6 +662,7 @@ function ProjectDetailPage() {
         <ScanRequestForm
           agentAvailable={Boolean(scanOptions?.availableScanModes.includes('AGENT'))}
           agentStatus={agentStatus}
+          isAgentLoading={isAgentLoading}
           errorMessage={scanRequestError}
           isSubmitting={isScanRequestSubmitting}
           onChange={setScanRequestForm}
