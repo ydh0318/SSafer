@@ -1,4 +1,4 @@
-import { ArrowLeft, FileSearch } from 'lucide-react';
+import { ArrowLeft, FileSearch, Gamepad2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -174,21 +174,31 @@ function ScanDetailPage() {
           프로젝트 화면으로 돌아가기
         </Link>
 
-        {canOpenResult ? (
+        <div className="flex flex-wrap items-center gap-3">
           <Link
-            className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
-            state={routeState}
-            to={ROUTES.resultDetail.replace(':scanId', scanId)}
+            className="inline-flex items-center gap-2 bg-[#D4FC64] px-5 py-3 text-sm font-bold text-black transition hover:brightness-95"
+            to={ROUTES.typingGame}
           >
-            결과 보기
-            <FileSearch className="h-4 w-4" />
+            <Gamepad2 className="h-4 w-4" />
+            기다리면서 보안 타이핑하기
           </Link>
-        ) : (
-          <span className="inline-flex items-center gap-2 bg-neutral-200 px-5 py-3 text-sm font-bold text-neutral-500">
-            결과 준비 중
-            <FileSearch className="h-4 w-4" />
-          </span>
-        )}
+
+          {canOpenResult ? (
+            <Link
+              className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
+              state={routeState}
+              to={ROUTES.resultDetail.replace(':scanId', scanId)}
+            >
+              결과 보기
+              <FileSearch className="h-4 w-4" />
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-2 bg-neutral-200 px-5 py-3 text-sm font-bold text-neutral-500">
+              결과 준비 중
+              <FileSearch className="h-4 w-4" />
+            </span>
+          )}
+        </div>
       </div>
 
       <ScanProgressPanel

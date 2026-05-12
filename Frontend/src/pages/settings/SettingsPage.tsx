@@ -3,15 +3,19 @@ import { AlertTriangle, BellRing, KeyRound, Lock, LogOut, User } from 'lucide-re
 import { useEffect, useMemo, useState } from 'react';
 
 import { getApiFieldErrors } from '../../api/error';
+import ModalFrame from '../../components/common/ModalFrame';
 import PageHero from '../../components/common/PageHero';
+import PixelGoose from '../../components/common/PixelGoose';
 import {
   changeCurrentUserPassword,
   checkNicknameAvailability,
   getCurrentUserProfile,
   logoutCurrentUser,
   updateCurrentUserProfile,
+  withdrawCurrentUser,
 } from '../../features/auth/api/member';
 import SocialAccountsPanel from '../../features/auth/components/SocialAccountsPanel';
+import { useToast } from '../../features/feedback/useToast';
 import { useAuthStore } from '../../store/authStore';
 import type { AuthUser } from '../../types/auth';
 
@@ -226,6 +230,9 @@ function SettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState<MessageState | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isCurrentPasswordRejected, setIsCurrentPasswordRejected] = useState(false);
+  
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const toast = useToast();
 
   const isGuestUser = user?.role === 'GUEST';
   const isProfileDirty = useMemo(
@@ -532,6 +539,17 @@ function SettingsPage() {
     }
   };
 
+  const handleWithdraw = async () => {
+    setIsWithdrawModalOpen(false);
+    try {
+      await withdrawCurrentUser();
+      toast.success('회원 탈퇴 처리가 완료되었습니다.');
+      logout();
+    } catch (error) {
+      toast.error('회원 탈퇴 처리 중 오류가 발생했습니다. 다시 시도해 주세요.');
+    }
+  };
+
   return (
     <section className="space-y-8">
       <PageHero description={null} eyebrow="SETTINGS" title="설정" />
@@ -697,27 +715,79 @@ function SettingsPage() {
 
           {tab === 'token' ? <SocialAccountsPanel /> : null}
 
-          {tab === 'danger' ? (
+        {tab === 'danger' ? (
             <div className="space-y-4 border-2 border-[#E63946] bg-white p-8">
               <h2 className="text-xl font-black tracking-tight text-[#E63946]">Danger Zone</h2>
-              <div className="flex items-center justify-between border-t border-neutral-200 pt-4">
-                <div>
-                  <div className="font-bold">로그아웃</div>
-                  <div className="mt-1 text-xs text-neutral-500">현재 로그인 세션을 종료합니다.</div>
+              <div className="flex flex-col gap-4 border-t border-neutral-200 pt-4">
+                <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
+                  <div>
+                    <div className="font-bold">로그아웃</div>
+                    <div className="mt-1 text-xs text-neutral-500">현재 로그인 세션을 종료합니다.</div>
+                  </div>
+                  <button
+                    className="inline-flex items-center gap-1.5 border border-neutral-300 px-4 py-2 text-sm"
+                    onClick={() => void handleLogout()}
+                    type="button"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    로그아웃
+                  </button>
                 </div>
-                <button
-                  className="inline-flex items-center gap-1.5 border border-neutral-300 px-4 py-2 text-sm"
-                  onClick={() => void handleLogout()}
-                  type="button"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  로그아웃
-                </button>
+
+                <div className="flex items-center justify-between pt-1">
+                  <div>
+                    <div className="font-bold text-[#E63946]">회원 탈퇴</div>
+                    <div className="mt-1 text-xs text-neutral-500">계정과 관련된 모든 데이터가 삭제되며, 복구할 수 없습니다.</div>
+                  </div>
+                  <button
+                    className="inline-flex items-center gap-1.5 bg-[#E63946] px-4 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90"
+                    onClick={() => setIsWithdrawModalOpen(true)}
+                    type="button"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    탈퇴하기
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}
         </main>
       </div>
+
+      {isWithdrawModalOpen ? (
+        <ModalFrame onClose={() => setIsWithdrawModalOpen(false)}>
+          <div className="rounded-2xl border border-white/50 bg-white/85 p-8 shadow-2xl backdrop-blur-lg">
+            <h3 className="text-xl font-black text-[#E63946]">정말로 탈퇴하시겠습니까?</h3>
+            <p className="mt-4 text-sm text-neutral-600">
+              이 작업은 취소할 수 없으며, 프로젝트, 스캔 기록 등 계정과 관련된 <strong>모든 데이터가 영구적으로 삭제</strong>됩니다.
+            </p>
+            <div className="mt-8 flex items-center justify-end gap-3">
+              <button
+                className="rounded bg-neutral-200 px-5 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-neutral-300"
+                onClick={() => setIsWithdrawModalOpen(false)}
+                type="button"
+              >
+                취소
+              </button>
+              <div className="group relative">
+                <div className="pointer-events-none absolute -top-20 left-1/2 flex -translate-x-1/2 translate-y-4 flex-col items-center opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+                  <div className="mb-1 animate-bounce whitespace-nowrap rounded-lg bg-white px-2 py-1 text-[10px] font-black text-black shadow-lg">
+                    또 보자!
+                  </div>
+                  <PixelGoose mood="victory" size={48} />
+                </div>
+                <button
+                  className="relative z-10 rounded bg-[#E63946] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-rose-600"
+                  onClick={() => void handleWithdraw()}
+                  type="button"
+                >
+                  탈퇴 진행
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalFrame>
+      ) : null}
     </section>
   );
 }
