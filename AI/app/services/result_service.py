@@ -624,8 +624,8 @@ def validate_fix_schema(fix: Any, path: str = "fix") -> None:
     cautions = fix["cautions"]
     if not isinstance(cautions, list):
         raise ValueError(f"{path}.cautions must be an array.")
-    if not 1 <= len(cautions) <= 3:
-        raise ValueError(f"{path}.cautions must contain 1 to 3 items.")
+    if len(cautions) > 3:
+        raise ValueError(f"{path}.cautions must contain 0 to 3 items.")
 
     for field, values in (
         ("recommendedActions", recommended_actions),

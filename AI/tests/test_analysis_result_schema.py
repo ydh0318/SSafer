@@ -116,6 +116,13 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
     def test_validate_fix_schema_accepts_existing_description_only_fix(self):
         validate_fix_schema(build_fix())
 
+    def test_validate_fix_schema_accepts_empty_cautions(self):
+        validate_fix_schema(build_fix(cautions=[]))
+
+    def test_validate_fix_schema_rejects_too_many_cautions(self):
+        with self.assertRaisesRegex(ValueError, "cautions must contain 0 to 3 items"):
+            validate_fix_schema(build_fix(cautions=["c1", "c2", "c3", "c4"]))
+
     def test_validate_fix_schema_accepts_optional_replace_patches(self):
         validate_fix_schema(
             build_fix(

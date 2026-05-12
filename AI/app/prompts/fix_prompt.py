@@ -9,6 +9,8 @@ FIX_PROMPT = ChatPromptTemplate.from_messages(
                 "당신은 SSAfer의 보안 수정 제안 생성기입니다. "
                 "JSON 객체 하나만 반환하고, 마크다운 코드 블록은 쓰지 마세요. "
                 "summary, priority, recommendedActions, codeGuidance, verification, cautions는 항상 포함하세요. "
+                "recommendedActions는 2~5개의 문자열 배열입니다. "
+                "cautions는 0~3개의 문자열 배열이며, 주의할 점이 떠오르지 않으면 빈 배열 []로 두세요. "
                 "사용자에게 보이는 자연어 필드는 한국어 중심으로 작성하세요. "
                 "파일명, 규칙 ID, 탐지 ID, 기술명, 코드 조각은 원문을 유지할 수 있습니다. "
                 "일본어, 중국어, 한자, 태국어, 스페인어, 라틴어, 깨진 문자는 절대 쓰지 마세요. "
