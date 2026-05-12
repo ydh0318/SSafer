@@ -19,7 +19,7 @@ class PatchCandidate:
     finding_id: str | None
     file_path: str
     operation: str
-    old_text: str
+    old_text: str | None
     new_text: str
     expected_file_hash: str | None = None
 
@@ -107,8 +107,23 @@ def apply_patch_candidate(
                 f"(expected {candidate.expected_file_hash}, actual {actual_hash})"
             )
 
-    if candidate.operation != "replace":
+    if candidate.operation == "replace":
+        return _apply_replace_patch(root, target, candidate, dry_run=dry_run)
+    if candidate.operation == "append":
+        return _apply_append_patch(root, target, candidate, dry_run=dry_run)
+    else:
         raise PatchError(f"Unsupported patch operation: {candidate.operation}")
+
+
+def _apply_replace_patch(
+    root: Path,
+    target: Path,
+    candidate: PatchCandidate,
+    *,
+    dry_run: bool,
+) -> PatchApplyResult:
+    if candidate.old_text is None:
+        raise PatchError(f"Patch oldText is required for replace operation: {candidate.file_path}")
 
     content = target.read_text(encoding="utf-8")
     occurrences = content.count(candidate.old_text)
@@ -134,6 +149,35 @@ def apply_patch_candidate(
         file_path=candidate.file_path,
         status="SUCCESS",
         message="Patch applied successfully.",
+        backup_path=str(backup_path),
+    )
+
+
+def _apply_append_patch(
+    root: Path,
+    target: Path,
+    candidate: PatchCandidate,
+    *,
+    dry_run: bool,
+) -> PatchApplyResult:
+    content = target.read_text(encoding="utf-8")
+    if dry_run:
+        return PatchApplyResult(
+            patch_id=candidate.patch_id,
+            finding_id=candidate.finding_id,
+            file_path=candidate.file_path,
+            status="DRY_RUN",
+            message="Patch can be appended.",
+        )
+
+    backup_path = _write_backup(root, target)
+    target.write_text(content + candidate.new_text, encoding="utf-8")
+    return PatchApplyResult(
+        patch_id=candidate.patch_id,
+        finding_id=candidate.finding_id,
+        file_path=candidate.file_path,
+        status="SUCCESS",
+        message="Patch appended successfully.",
         backup_path=str(backup_path),
     )
 
@@ -182,20 +226,24 @@ def _build_candidate(item: dict[str, Any], index: int) -> PatchCandidate | None:
     old_text = source.get("oldText")
     new_text = source.get("newText")
     file_path = source.get("filePath") or source.get("file") or source.get("path")
-    if not isinstance(old_text, str) or not isinstance(new_text, str) or not isinstance(file_path, str):
+    operation = str(source.get("operation") or "replace").strip().lower()
+    if not isinstance(new_text, str) or not isinstance(file_path, str):
+        return None
+    if operation == "replace" and not isinstance(old_text, str):
+        return None
+    if operation == "append" and old_text is not None and not isinstance(old_text, str):
         return None
 
     finding_id = source.get("findingId")
     patch_id = source.get("patchId") or source.get("id") or finding_id or f"PATCH-{index:04d}"
-    operation = source.get("operation") or "replace"
     expected_file_hash = source.get("expectedFileHash") or source.get("fileHash")
 
     return PatchCandidate(
         patch_id=str(patch_id),
         finding_id=str(finding_id) if finding_id is not None else None,
         file_path=file_path,
-        operation=str(operation),
-        old_text=old_text,
+        operation=operation,
+        old_text=old_text if isinstance(old_text, str) else None,
         new_text=new_text,
         expected_file_hash=str(expected_file_hash) if expected_file_hash else None,
     )
