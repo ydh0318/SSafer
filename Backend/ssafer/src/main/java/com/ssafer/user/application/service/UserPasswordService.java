@@ -59,6 +59,21 @@ public class UserPasswordService {
   }
 
   @Transactional
+  public AuthTokenResult setupPassword(AuthenticatedActor actor, String rawNewPassword) {
+    User user = loadCurrentMemberOrThrow(actor);
+    String newPassword = normalizePasswordOrThrow(rawNewPassword);
+
+    // 최초 설정 API는 로컬 비밀번호가 없는 계정에서만 허용한다.
+    if (user.hasPasswordCredential()) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
+    user.updatePasswordHash(passwordEncoder.encode(newPassword));
+    refreshTokenStore.delete(user.getId());
+    return authTokenProvider.issueTokens(user.getId());
+  }
+
+  @Transactional
   public void resetPassword(String rawEmail, String rawNewPassword) {
     String email = normalizeEmailOrThrow(rawEmail);
     String newPassword = normalizePasswordOrThrow(rawNewPassword);

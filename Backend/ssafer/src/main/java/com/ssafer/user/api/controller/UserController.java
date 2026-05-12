@@ -13,6 +13,7 @@ import com.ssafer.user.api.dto.CheckNicknameRequest;
 import com.ssafer.user.api.dto.CheckNicknameResponseData;
 import com.ssafer.user.api.dto.RegisterUserRequest;
 import com.ssafer.user.api.dto.RegisterUserResponseData;
+import com.ssafer.user.api.dto.SetupPasswordRequest;
 import com.ssafer.user.api.dto.SocialAccountConnectRequest;
 import com.ssafer.user.api.dto.SocialAccountResponseData;
 import com.ssafer.user.api.dto.SocialAccountsResponseData;
@@ -53,6 +54,7 @@ public class UserController {
   private static final String CHECK_NICKNAME_SUCCESS_MESSAGE = "Nickname availability check succeeded";
   private static final String PROFILE_RETRIEVE_SUCCESS_MESSAGE = "User profile retrieval succeeded";
   private static final String PROFILE_UPDATE_SUCCESS_MESSAGE = "User profile update succeeded";
+  private static final String PASSWORD_SETUP_SUCCESS_MESSAGE = "Password setup succeeded";
   private static final String PASSWORD_CHANGE_SUCCESS_MESSAGE = "Password change succeeded";
   private static final String WITHDRAWAL_SUCCESS_MESSAGE = "User withdrawal succeeded";
   private static final String SOCIAL_ACCOUNTS_RETRIEVE_SUCCESS_MESSAGE = "Connected social accounts retrieval succeeded";
@@ -392,6 +394,55 @@ public class UserController {
     );
     return ResponseEntity.ok(ApiResponse.success(
         PASSWORD_CHANGE_SUCCESS_MESSAGE,
+        new LoginResponseData(
+            tokenResult.accessToken(),
+            tokenResult.accessTokenExpiresAt(),
+            tokenResult.refreshToken(),
+            tokenResult.refreshTokenExpiresAt()
+        )
+    ));
+  }
+
+  @PostMapping("/me/password/setup")
+  @Operation(
+      summary = "비밀번호 최초 설정",
+      description = "현재 로그인된 회원 계정에 로컬 로그인용 비밀번호를 최초 설정합니다."
+  )
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "비밀번호 최초 설정 성공",
+          content = @Content(schema = @Schema(implementation = LoginResponseData.class))
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "400",
+          description = "요청 본문이 올바르지 않거나 이미 비밀번호가 설정된 계정입니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "401",
+          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "403",
+          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "404",
+          description = "회원 정보를 찾을 수 없습니다."
+      )
+  })
+  public ResponseEntity<ApiResponse<LoginResponseData>> setupCurrentUserPassword(
+      @Valid @RequestBody(required = false) SetupPasswordRequest request
+  ) {
+    // 최초 설정은 새 비밀번호만 받되, 본문 자체가 없으면 잘못된 요청으로 처리한다.
+    if (request == null || request.newPassword() == null) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
+    AuthenticatedActor actor = currentActorProvider.getCurrentActor();
+    AuthTokenResult tokenResult = userPasswordService.setupPassword(actor, request.newPassword());
+    return ResponseEntity.ok(ApiResponse.success(
+        PASSWORD_SETUP_SUCCESS_MESSAGE,
         new LoginResponseData(
             tokenResult.accessToken(),
             tokenResult.accessTokenExpiresAt(),
