@@ -208,7 +208,7 @@ function getPasswordSetupErrorMessage(error: unknown) {
     }
 
     if (code === 'PASSWORD_SETUP_NOT_ALLOWED' || status === 409) {
-      return '현재 계정 상태에서는 비밀번호 최초 설정을 진행할 수 없습니다.';
+      return '이메일 로그인 비밀번호를 설정할 수 없는 상태입니다. 이미 비밀번호가 설정되어 있거나, 연결된 소셜 계정이 없는 경우에 발생합니다.';
     }
   }
 
