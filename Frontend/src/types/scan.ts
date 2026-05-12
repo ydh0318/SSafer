@@ -168,6 +168,34 @@ export interface ScanFindingListQuery {
   size?: number;
 }
 
+export interface FindingExplanationData {
+  summary: string;
+  whyRisky: string;
+  abuseScenario: string;
+  expectedImpact: string;
+  severityInterpretation: string;
+}
+
+export interface FindingPatchData {
+  patchId: string;
+  findingId: string;
+  operation: 'replace' | 'append';
+  filePath: string;
+  oldText?: string;
+  newText: string;
+  expectedFileHash: string;
+}
+
+export interface FindingFixData {
+  summary: string;
+  priority: string;
+  recommendedActions: string[];
+  codeGuidance: string;
+  verification: string;
+  cautions: string[];
+  patches?: FindingPatchData[];
+}
+
 export interface ScanFindingDetailData {
   findingId: number;
   scanId: number;
@@ -178,6 +206,9 @@ export interface ScanFindingDetailData {
   category: string;
   title: string;
   description: string | null;
+  explanation?: FindingExplanationData;
+  impact?: string;
+  fix?: FindingFixData;
   filePath: string | null;
   lineNumber: number | null;
   resourceName: string | null;
