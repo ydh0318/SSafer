@@ -110,6 +110,11 @@ def test_help_shows_user_facing_commands_only():
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
+    assert "프로젝트와 서버 보안 점검" in result.output
+    assert "계정/상태" in result.output
+    assert "로컬 점검" in result.output
+    assert "수정 적용" in result.output
+    assert "로컬 Agent" in result.output
     assert "status" in result.output
     assert "login" in result.output
     assert "signup" in result.output
@@ -121,6 +126,8 @@ def test_help_shows_user_facing_commands_only():
     assert "agent-init" not in result.output
     assert "send-email-code" not in result.output
     assert "verify-email" not in result.output
+    assert "install-completion" not in result.output
+    assert "show-completion" not in result.output
 
 
 def test_status_command_prints_saved_login_and_agent_config(monkeypatch, tmp_path):
@@ -742,6 +749,10 @@ def test_signup_command_registers_backend_user(monkeypatch):
     )
 
     assert result.exit_code == 0
+    assert "SSAfer 계정을 생성합니다" in result.output
+    assert "이메일 인증 코드를 발송합니다" in result.output
+    assert "인증 코드를 확인합니다" in result.output
+    assert "회원가입을 요청합니다" in result.output
     assert calls == [
         ("send", "https://api.example.com", "user@example.com", None),
         ("verify", "https://api.example.com", "user@example.com", "123456"),

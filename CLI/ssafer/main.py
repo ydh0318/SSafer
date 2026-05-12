@@ -23,7 +23,12 @@ from ssafer.core.doctor import collect_doctor_status, install_trivy_with_winget
 from ssafer.core.result_store import load_last_scan, run_scan
 from ssafer.core.upload import upload_last_scan, upload_last_server_audit
 
-app = typer.Typer(help="SSAfer 보안 점검 CLI.")
+app = typer.Typer(
+    help="프로젝트와 서버 보안 점검을 터미널에서 실행하고 웹 대시보드와 연결합니다.",
+    add_completion=False,
+    options_metavar="[옵션]",
+    subcommand_metavar="명령어",
+)
 console = Console()
 
 _STATUS_KO = {
@@ -102,13 +107,13 @@ def callback() -> None:
     """SSAfer CLI."""
 
 
-@app.command(help="CLI 버전을 출력합니다.", rich_help_panel="기본")
+@app.command(help="현재 설치된 SSAfer CLI 버전을 확인합니다.", rich_help_panel="기본")
 def version() -> None:
     """CLI 버전을 출력합니다."""
     console.print(__version__)
 
 
-@app.command(help="로그인/Agent 설정 상태를 확인합니다.", rich_help_panel="계정/상태")
+@app.command(help="로그인, 백엔드 endpoint, Local Agent 설정 상태를 확인합니다.", rich_help_panel="계정/상태")
 def status() -> None:
     """로그인과 Local Agent 설정 상태를 확인합니다."""
     from ssafer.core.auth import (
@@ -164,7 +169,7 @@ def doctor() -> None:
         console.print("[yellow]Trivy 설치:[/yellow] ssafer install-tools")
 
 
-@app.command("install-tools", help="Trivy 등 선택 도구를 설치합니다.", rich_help_panel="서버 점검")
+@app.command("install-tools", help="스캔에 필요한 선택 도구(Trivy)를 설치합니다.", rich_help_panel="서버 점검")
 def install_tools() -> None:
     """Trivy 등 SSAfer가 선택적으로 사용하는 도구를 설치합니다."""
     console.print("[cyan]Trivy를 설치합니다. 몇 분 정도 걸릴 수 있습니다...[/cyan]")
@@ -177,7 +182,7 @@ def install_tools() -> None:
     raise typer.Exit(code=1)
 
 
-@app.command("server-audit", help="서버 내부 런타임 보안 상태를 점검합니다.", rich_help_panel="서버 점검")
+@app.command("server-audit", help="EC2/서버 내부의 포트, 프로세스, Docker 등 런타임 상태를 점검합니다.", rich_help_panel="서버 점검")
 def server_audit(
     path: Optional[Path] = typer.Option(None, "--path", "-p", help="server-audit 결과를 저장할 기준 폴더입니다. 생략하면 홈 디렉터리를 사용합니다."),
     upload: bool = typer.Option(False, "--upload", help="점검 결과를 생성한 뒤 백엔드/S3에 업로드합니다."),
@@ -255,7 +260,7 @@ def _can_prompt_for_sudo() -> bool:
     return bool(getattr(sys.stdin, "isatty", lambda: False)())
 
 
-@app.command(help="현재 프로젝트를 스캔하고 로컬 결과 JSON을 생성합니다.", rich_help_panel="로컬 점검")
+@app.command(help="프로젝트 설정 파일을 스캔하고 결과 JSON을 로컬에 저장합니다.", rich_help_panel="로컬 점검")
 def run(
     path: Path = typer.Option(Path("."), "--path", "-p", help="스캔할 프로젝트 루트입니다. CLI 폴더 안이면 보통 --path .. 를 사용합니다."),
     upload: bool = typer.Option(False, "--upload", help="스캔 후 결과 JSON을 백엔드/S3에 바로 업로드합니다."),
@@ -313,7 +318,7 @@ def run(
         _print_upload_response(response)
 
 
-@app.command(help="최근 로컬 스캔 결과를 백엔드/S3에 업로드합니다.", rich_help_panel="로컬 점검")
+@app.command(help="최근 로컬 스캔 결과를 웹 대시보드로 업로드합니다.", rich_help_panel="로컬 점검")
 def upload(
     path: Path = typer.Option(Path("."), "--path", "-p", help=".ssafer/results가 있는 프로젝트 루트입니다."),
     api_url: Optional[str] = typer.Option(None, "--api-url", help="업로드에 사용할 SSAfer 백엔드 API URL입니다."),
@@ -330,7 +335,7 @@ def upload(
     _print_upload_response(response)
 
 
-@app.command("apply", help="승인된 수정안을 로컬 프로젝트 파일에 적용합니다.", rich_help_panel="수정 적용")
+@app.command("apply", help="AI가 제안한 수정안을 미리 보고 로컬 파일에 적용합니다.", rich_help_panel="수정 적용")
 def apply_fix(
     path: Path = typer.Option(Path("."), "--path", "-p", help="수정안을 적용할 프로젝트 루트입니다."),
     analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="patch payload가 들어있는 analysis_result.json 경로입니다."),
@@ -460,7 +465,7 @@ def agent_watch(
     )
 
 
-@app.command("agent", help="Local Agent를 설정하고 실행합니다.", rich_help_panel="Local Agent")
+@app.command("agent", help="웹 요청을 현재 PC/서버에서 처리하도록 Local Agent를 연결합니다.", rich_help_panel="로컬 Agent")
 def agent(
     path: Path = typer.Option(Path("."), "--path", "-p", help="agent가 연결될 프로젝트 루트입니다."),
 ) -> None:
@@ -525,7 +530,7 @@ def agent_init(
     console.print("[dim]ssafer agent를 실행하면 웹 요청을 받을 수 있습니다.[/dim]")
 
 
-@app.command("project-create", help="SSAfer 프로젝트를 생성합니다.", rich_help_panel="계정/상태")
+@app.command("project-create", help="웹/Agent 연동에 사용할 SSAfer 프로젝트를 생성합니다.", rich_help_panel="계정/상태")
 def project_create(
     name: Optional[str] = typer.Option(None, "--name", help="생성할 프로젝트 이름입니다. 생략하면 현재 폴더명을 기본값으로 사용합니다."),
     description: Optional[str] = typer.Option(None, "--description", help="프로젝트 설명입니다."),
@@ -974,7 +979,7 @@ def _format_patch_diff(old_text: str | None, new_text: str, *, operation: str = 
     return "\n".join(diff_lines)
 
 
-@app.command(help="SSAfer 서버에 로그인합니다.", rich_help_panel="계정/상태")
+@app.command(help="계정을 연결하고 업로드/Agent 실행에 필요한 토큰을 저장합니다.", rich_help_panel="계정/상태")
 def login(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="로그인할 SSAfer 백엔드 API URL입니다."),
     logout: bool = typer.Option(False, "--logout", help="저장된 로그인 토큰을 삭제합니다. 가능하면 ssafer logout 사용을 권장합니다."),
@@ -1021,7 +1026,7 @@ def _prompt_start_agent_after_login() -> None:
     console.print("[dim]Agent는 시작하지 않았습니다. 나중에 연결하려면 [bold]ssafer agent[/bold]를 실행하세요.[/dim]")
 
 
-@app.command(help="이메일 인증을 거쳐 SSAfer 계정을 생성합니다.", rich_help_panel="계정/상태")
+@app.command(help="이메일 인증부터 회원가입까지 터미널에서 한 번에 진행합니다.", rich_help_panel="계정/상태")
 def signup(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="회원가입에 사용할 SSAfer 백엔드 API URL입니다."),
 ) -> None:
@@ -1034,6 +1039,7 @@ def signup(
     )
 
     effective_endpoint = endpoint or load_endpoint()
+    console.print("[cyan]SSAfer 계정을 생성합니다. 이메일 인증 코드 확인까지 한 번에 진행합니다.[/cyan]")
     email = typer.prompt("이메일")
     display_name = typer.prompt("표시 이름")
     password = typer.prompt("비밀번호", hide_input=True)
@@ -1041,13 +1047,16 @@ def signup(
         console.print("[red]이메일, 표시 이름, 비밀번호를 모두 입력해야 합니다.[/red]")
         raise typer.Exit(code=1)
     try:
+        console.print("[cyan]이메일 인증 코드를 발송합니다...[/cyan]")
         send_email_verification_code(effective_endpoint, email.strip())
-        console.print("[green]인증 코드를 보냈습니다. 이메일함을 확인해 주세요.[/green]")
-        code = typer.prompt("이메일 인증 코드")
+        console.print("[green]인증 코드를 보냈습니다. 이메일함을 확인한 뒤 코드를 입력하세요.[/green]")
+        code = typer.prompt("인증 코드")
         if not code.strip():
             console.print("[red]이메일 인증 코드를 입력해야 합니다.[/red]")
             raise typer.Exit(code=1)
+        console.print("[cyan]인증 코드를 확인합니다...[/cyan]")
         verify_email_code(effective_endpoint, email.strip(), code.strip())
+        console.print("[cyan]회원가입을 요청합니다...[/cyan]")
         register_user(effective_endpoint, email.strip(), display_name.strip(), password)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]회원가입 실패:[/red] {_format_http_error(exc)}")
@@ -1066,19 +1075,19 @@ def send_email_code(
     from ssafer.core.auth import load_endpoint, send_email_verification_code
 
     effective_endpoint = endpoint or load_endpoint()
-    email = typer.prompt("Email")
+    email = typer.prompt("이메일")
     if not email.strip():
-        console.print("[red]Email is required.[/red]")
+        console.print("[red]이메일을 입력해야 합니다.[/red]")
         raise typer.Exit(code=1)
     try:
         send_email_verification_code(effective_endpoint, email.strip())
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Email code request failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]이메일 인증 코드 발송 실패:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email code request failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]이메일 인증 코드 발송 실패:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
-    console.print("[green]Verification code sent. Check your email.[/green]")
+    console.print("[green]인증 코드를 보냈습니다. 이메일함을 확인하세요.[/green]")
 
 
 @app.command("verify-email", hidden=True)
@@ -1089,34 +1098,34 @@ def verify_email(
     from ssafer.core.auth import load_endpoint, verify_email_code
 
     effective_endpoint = endpoint or load_endpoint()
-    email = typer.prompt("Email")
-    code = typer.prompt("Verification code")
+    email = typer.prompt("이메일")
+    code = typer.prompt("인증 코드")
     if not email.strip() or not code.strip():
-        console.print("[red]Email and verification code are required.[/red]")
+        console.print("[red]이메일과 인증 코드를 모두 입력해야 합니다.[/red]")
         raise typer.Exit(code=1)
     try:
         verify_email_code(effective_endpoint, email.strip(), code.strip())
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Email verification failed:[/red] {_format_http_error(exc)}")
+        console.print(f"[red]이메일 인증 실패:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
-        console.print(f"[red]Email verification failed:[/red] {_format_http_transport_error(exc)}")
+        console.print(f"[red]이메일 인증 실패:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
-    console.print("[green]Email verified. Run 'ssafer signup' to create your account.[/green]")
+    console.print("[green]이메일 인증이 완료되었습니다. 회원가입은 ssafer signup에서 이어서 진행할 수 있습니다.[/green]")
 
 
-@app.command(help="저장된 로그인 토큰을 삭제합니다.", rich_help_panel="계정/상태")
+@app.command(help="저장된 로그인/Agent 정보를 삭제하고 CLI 연결을 해제합니다.", rich_help_panel="계정/상태")
 def logout() -> None:
     """저장된 로그인 토큰과 현재 프로젝트의 agent 설정을 삭제합니다."""
     from ssafer.core.auth import clear_agent_config, clear_token
 
     clear_token()
     clear_agent_config(Path("."))
-    console.print("[green]Saved SSAfer login and local-agent config cleared.[/green]")
-    console.print("[dim]If a local agent is already running in another terminal, stop it with Ctrl+C.[/dim]")
+    console.print("[green]저장된 SSAfer 로그인 정보와 현재 프로젝트의 Local Agent 설정을 삭제했습니다.[/green]")
+    console.print("[dim]다른 터미널에서 Local Agent가 실행 중이면 Ctrl+C로 종료하세요.[/dim]")
 
 
-@app.command(help="최근 로컬 스캔 결과 요약을 출력합니다.", rich_help_panel="로컬 점검")
+@app.command(help="최근 로컬 스캔 결과를 터미널에서 확인합니다.", rich_help_panel="로컬 점검")
 def report(
     path: Path = typer.Option(Path("."), "--path", "-p", help=".ssafer/results가 있는 프로젝트 루트입니다."),
     details: bool = typer.Option(False, "--details", "-d", help="스캔 대상, 산출물 경로, finding 상세를 함께 출력합니다."),
