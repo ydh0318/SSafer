@@ -21,7 +21,7 @@ REQUIRED_FIX_FIELDS = (
     "verification",
     "cautions",
 )
-ALLOWED_FIX_PRIORITIES = ("high", "medium", "low")
+ALLOWED_FIX_PRIORITIES = ("critical", "high", "medium", "low")
 
 
 def _normalize_json_response(response: str) -> str:
@@ -105,7 +105,7 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
             f"검증 오류: {error_message}",
             "JSON 객체만 다시 출력하세요.",
             "필수 필드: summary, priority, recommendedActions, codeGuidance, verification, cautions.",
-            "priority는 high, medium, low 중 하나입니다.",
+            "priority는 critical, high, medium, low 중 하나입니다.",
             "recommendedActions는 2~5개의 문자열 배열, cautions는 0~3개의 문자열 배열입니다.",
             "주의할 점이 떠오르지 않으면 cautions를 빈 배열 []로 두세요.",
             "자연어는 한국어 중심으로 작성하세요.",
