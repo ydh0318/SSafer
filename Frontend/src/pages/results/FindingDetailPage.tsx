@@ -274,8 +274,8 @@ function FindingDetailPage() {
                     {finding.severity}
                   </span>
                   <span className="font-mono text-xs text-neutral-500">findingId #{finding.findingId}</span>
-                  <span className="font-mono text-xs text-neutral-500">{finding.ruleCode}</span>
-                  <span className="border border-neutral-300 px-2 py-0.5 text-xs">{finding.sourceType}</span>
+                  <span className="font-mono text-xs text-neutral-500">{finding.ruleId || finding.ruleCode}</span>
+                  <span className="border border-neutral-300 px-2 py-0.5 text-xs">{finding.source || finding.sourceType}</span>
                   <span className="bg-neutral-100 px-2 py-0.5 text-xs">{finding.category}</span>
                 </div>
                 <span className="border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-600">
@@ -283,11 +283,19 @@ function FindingDetailPage() {
                 </span>
               </div>
               <h1 className="mt-4 text-3xl font-black tracking-tight">{finding.title}</h1>
-              <div className="mt-3 flex flex-wrap items-center gap-3 font-mono text-sm text-neutral-500">
-                <span>{formatFindingLocation(finding)}</span>
-                <span>scanId #{scanId}</span>
-                {finding.scanNodeId ? <span>scanNodeId #{finding.scanNodeId}</span> : null}
-                {finding.fingerprint ? <span>{finding.fingerprint}</span> : null}
+              <div className="mt-4 flex flex-col gap-3 font-mono text-sm text-neutral-500">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span>{finding.file || finding.resourceName || finding.filePath || '위치를 확인할 수 없는 항목'}</span>
+                  {finding.line || finding.lineNumber ? <span>line {finding.line || finding.lineNumber}</span> : null}
+                  <span>scanId #{scanId}</span>
+                  {finding.scanNodeId ? <span>scanNodeId #{finding.scanNodeId}</span> : null}
+                </div>
+                {finding.maskedEvidence ? (
+                  <div className="bg-neutral-100 px-3 py-2 text-xs text-neutral-700 w-fit">
+                    <span className="mr-2 font-bold text-neutral-500">Evidence:</span>
+                    {finding.maskedEvidence}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -318,7 +326,7 @@ function FindingDetailPage() {
 
             {view === 'explain' ? (
               <div className="mt-6 space-y-6">
-                {finding.impact ? (
+                {finding.impact?.trim() ? (
                   <div className="flex items-start gap-4 border border-[#FFE066] bg-[#FFF9DB] p-6">
                     <PixelGoose mood="alert" size={60} />
                     <div>
@@ -328,39 +336,29 @@ function FindingDetailPage() {
                       </p>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex items-start gap-4 border border-[#FFE066] bg-[#FFF9DB] p-6">
-                    <PixelGoose mood="alert" size={60} />
-                    <div>
-                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">PLAIN LANGUAGE</div>
-                      <p className="mt-2 text-sm leading-7 text-neutral-800">
-                        이 설정은 외부에 노출되었거나 권한이 넓어 보일 수 있습니다. 우선 탐지 위치와 수정 가이드를 보고, 적용 가능한 수정안을 먼저 확인해 보세요.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                ) : null}
 
                 {finding.explanation ? (
                   <>
                     <div className="border border-neutral-200 bg-white p-6">
                       <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">취약점 요약</div>
-                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.summary}</p>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.summary || '내용이 제공되지 않았습니다.'}</p>
                     </div>
                     <div className="border border-neutral-200 bg-white p-6">
                       <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">위험한 이유</div>
-                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.whyRisky}</p>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.whyRisky || '내용이 제공되지 않았습니다.'}</p>
                     </div>
                     <div className="border border-neutral-200 bg-white p-6">
                       <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">악용 가능 시나리오</div>
-                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.abuseScenario}</p>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.abuseScenario || '내용이 제공되지 않았습니다.'}</p>
                     </div>
                     <div className="border border-neutral-200 bg-white p-6">
                       <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">예상 영향</div>
-                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.expectedImpact}</p>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.expectedImpact || '내용이 제공되지 않았습니다.'}</p>
                     </div>
                     <div className="border border-neutral-200 bg-white p-6">
                       <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">심각도 해석</div>
-                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.severityInterpretation}</p>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.severityInterpretation || '내용이 제공되지 않았습니다.'}</p>
                     </div>
                   </>
                 ) : (
@@ -384,21 +382,26 @@ function FindingDetailPage() {
                   <>
                     <div className="border border-neutral-200 bg-white p-6">
                       <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">수정 요약</div>
-                      <p className="mt-3 leading-8 text-neutral-800">{finding.fix.summary}</p>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.fix.summary || '내용이 제공되지 않았습니다.'}</p>
                     </div>
                     <div className="border border-neutral-200 bg-white p-6">
                       <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">권장 조치</div>
-                      <ul className="mt-3 list-disc pl-5 leading-8 text-neutral-800">
-                        {finding.fix.recommendedActions.map((action, idx) => (
-                          <li key={idx}>{action}</li>
-                        ))}
-                      </ul>
+                      {finding.fix.recommendedActions && finding.fix.recommendedActions.length > 0 ? (
+                        <ul className="mt-3 list-disc pl-5 leading-8 text-neutral-800">
+                          {finding.fix.recommendedActions.map((action, idx) => (
+                            <li key={idx}>{action}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-3 leading-8 text-neutral-400">등록된 권장 조치가 없습니다.</p>
+                      )}
                     </div>
                     <div className="border border-neutral-200 bg-white p-6">
                       <div className="flex items-center justify-between border-b border-neutral-200 bg-[#E6F9EE] -mx-6 -mt-6 mb-4 px-6 py-4 text-xs font-bold tracking-[0.24em] text-[#0A7C2E]">
                         <span>코드 가이드</span>
                         <button
                           className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#0A7C2E] hover:underline"
+                          disabled={!finding.fix?.codeGuidance}
                           onClick={() => void copyText(finding.fix?.codeGuidance || '', '코드 가이드가 복사되었습니다.')}
                           type="button"
                         >
@@ -407,12 +410,12 @@ function FindingDetailPage() {
                         </button>
                       </div>
                       <pre className="overflow-x-auto whitespace-pre-wrap bg-neutral-900 p-5 font-mono text-sm leading-7 text-neutral-100">
-                        {finding.fix.codeGuidance}
+                        {finding.fix.codeGuidance || '제공된 코드 가이드가 없습니다.'}
                       </pre>
                     </div>
                     <div className="border border-neutral-200 bg-white p-6">
                       <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">검증 방법</div>
-                      <p className="mt-3 leading-8 text-neutral-800">{finding.fix.verification}</p>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.fix.verification || '내용이 제공되지 않았습니다.'}</p>
                     </div>
                     {finding.fix.cautions && finding.fix.cautions.length > 0 && (
                       <div className="border border-rose-200 bg-rose-50 p-6">
@@ -513,17 +516,17 @@ function FindingDetailPage() {
                           <div className="grid grid-cols-1 divide-y divide-neutral-200 font-mono text-sm md:grid-cols-2 md:divide-x md:divide-y-0">
                             <div className="whitespace-pre-wrap bg-rose-50 p-4 text-rose-900">
                               <div className="mb-2 text-xs font-bold text-rose-500">- OLD</div>
-                              {patch.oldText}
+                              {patch.oldText || <span className="text-rose-400 italic">(원본 텍스트 없음 혹은 파일 내용 전체 교체)</span>}
                             </div>
                             <div className="whitespace-pre-wrap bg-emerald-50 p-4 text-emerald-900">
                               <div className="mb-2 text-xs font-bold text-emerald-500">+ NEW</div>
-                              {patch.newText}
+                              {patch.newText || <span className="text-emerald-400 italic">(제거됨)</span>}
                             </div>
                           </div>
                         ) : (
                           <div className="whitespace-pre-wrap bg-emerald-50 p-4 font-mono text-sm text-emerald-900">
                             <div className="mb-2 text-xs font-bold text-emerald-500">+ APPEND (파일 끝에 추가)</div>
-                            {patch.newText}
+                            {patch.newText || <span className="text-emerald-400 italic">(추가할 내용 없음)</span>}
                           </div>
                         )}
                       </div>

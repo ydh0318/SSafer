@@ -169,31 +169,31 @@ export interface ScanFindingListQuery {
 }
 
 export interface FindingExplanationData {
-  summary: string;
-  whyRisky: string;
-  abuseScenario: string;
-  expectedImpact: string;
-  severityInterpretation: string;
+  summary: string | null;
+  whyRisky: string | null;
+  abuseScenario: string | null;
+  expectedImpact: string | null;
+  severityInterpretation: string | null;
 }
 
 export interface FindingPatchData {
-  patchId: string;
-  findingId: string;
-  operation: 'replace' | 'append';
-  filePath: string;
-  oldText?: string;
-  newText: string;
-  expectedFileHash: string;
+  patchId: string | null;
+  findingId: string | null;
+  operation: 'replace' | 'append' | null;
+  filePath: string | null;
+  oldText?: string | null;
+  newText: string | null;
+  expectedFileHash: string | null;
 }
 
 export interface FindingFixData {
-  summary: string;
-  priority: string;
-  recommendedActions: string[];
-  codeGuidance: string;
-  verification: string;
-  cautions: string[];
-  patches?: FindingPatchData[];
+  summary: string | null;
+  priority: string | null;
+  recommendedActions: string[] | null;
+  codeGuidance: string | null;
+  verification: string | null;
+  cautions: string[] | null;
+  patches?: FindingPatchData[] | null;
 }
 
 export interface ScanFindingDetailData {
@@ -201,6 +201,7 @@ export interface ScanFindingDetailData {
   scanId: number;
   scanNodeId: number | null;
   sourceType: FindingSourceType;
+  source?: FindingSourceType; // 새로 추가된 필드 대응
   fingerprint: string | null;
   severity: FindingSeverity;
   category: string;
@@ -211,10 +212,15 @@ export interface ScanFindingDetailData {
   fix?: FindingFixData;
   filePath: string | null;
   lineNumber: number | null;
+  line?: number | null; // 새로 추가된 필드 대응
   resourceName: string | null;
-  ruleCode: string;
+  file?: string | null; // 새로 추가된 필드 대응
+  ruleCode: string | null;
+  ruleId?: string | null; // 새로 추가된 필드 대응
+  maskedEvidence?: string | null; // 새로 추가된 증거 필드
   attackScenario: string | null;
   remediationGuide: string | null;
+  targetFiles?: string[] | null; // 새로 추가된 연관 파일 목록
   rawSnippetJson: string | null;
   patchPayloadJson: string | null;
   resolutionStatus: FindingResolutionStatus;
