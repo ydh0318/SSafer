@@ -9,6 +9,7 @@ import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
+import com.ssafer.user.domain.repository.UserSocialAccountRepository;
 import java.util.Locale;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,17 +23,20 @@ public class UserPasswordService {
   private static final int MAX_PASSWORD_LENGTH = 72;
 
   private final UserRepository userRepository;
+  private final UserSocialAccountRepository userSocialAccountRepository;
   private final PasswordEncoder passwordEncoder;
   private final RefreshTokenStore refreshTokenStore;
   private final AuthTokenProvider authTokenProvider;
 
   public UserPasswordService(
       UserRepository userRepository,
+      UserSocialAccountRepository userSocialAccountRepository,
       PasswordEncoder passwordEncoder,
       RefreshTokenStore refreshTokenStore,
       AuthTokenProvider authTokenProvider
   ) {
     this.userRepository = userRepository;
+    this.userSocialAccountRepository = userSocialAccountRepository;
     this.passwordEncoder = passwordEncoder;
     this.refreshTokenStore = refreshTokenStore;
     this.authTokenProvider = authTokenProvider;
@@ -63,9 +67,12 @@ public class UserPasswordService {
     User user = loadCurrentMemberOrThrow(actor);
     String newPassword = normalizePasswordOrThrow(rawNewPassword);
 
-    // 최초 설정 API는 로컬 비밀번호가 없는 계정에서만 허용한다.
+    // 최초 설정 API는 로컬 비밀번호가 없고, 실제로 소셜 로그인 수단이 연결된 계정에서만 허용한다.
     if (user.hasPasswordCredential()) {
-      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+      throw new BusinessException(ErrorCode.PASSWORD_SETUP_NOT_ALLOWED);
+    }
+    if (userSocialAccountRepository.countByUserId(user.getId()) < 1) {
+      throw new BusinessException(ErrorCode.PASSWORD_SETUP_NOT_ALLOWED);
     }
 
     user.updatePasswordHash(passwordEncoder.encode(newPassword));

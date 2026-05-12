@@ -416,7 +416,11 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "400",
-          description = "요청 본문이 올바르지 않거나 이미 비밀번호가 설정된 계정입니다."
+          description = "요청 본문이 올바르지 않습니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "409",
+          description = "이미 비밀번호가 설정된 계정이거나 소셜 비밀번호 설정 대상이 아닙니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",

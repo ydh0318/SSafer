@@ -14,6 +14,7 @@ import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
+import com.ssafer.user.domain.repository.UserSocialAccountRepository;
 import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class UserPasswordServiceTest {
 
   private UserRepository userRepository;
+  private UserSocialAccountRepository userSocialAccountRepository;
   private PasswordEncoder passwordEncoder;
   private RefreshTokenStore refreshTokenStore;
   private AuthTokenProvider authTokenProvider;
@@ -33,11 +35,13 @@ class UserPasswordServiceTest {
   @BeforeEach
   void setUp() {
     userRepository = Mockito.mock(UserRepository.class);
+    userSocialAccountRepository = Mockito.mock(UserSocialAccountRepository.class);
     passwordEncoder = Mockito.mock(PasswordEncoder.class);
     refreshTokenStore = Mockito.mock(RefreshTokenStore.class);
     authTokenProvider = Mockito.mock(AuthTokenProvider.class);
     userPasswordService = new UserPasswordService(
         userRepository,
+        userSocialAccountRepository,
         passwordEncoder,
         refreshTokenStore,
         authTokenProvider
