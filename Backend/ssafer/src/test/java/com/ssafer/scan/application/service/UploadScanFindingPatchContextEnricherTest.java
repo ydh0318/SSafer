@@ -95,6 +95,46 @@ class UploadScanFindingPatchContextEnricherTest {
     assertThat(enriched.getFirst().patchContext()).isSameAs(patchContext);
   }
 
+  @Test
+  void enrichSkipsPatchContextForEnvSecretFinding() throws Exception {
+    Path envFile = tempDir.resolve(".env");
+    Files.writeString(envFile, "DB_PASSWORD=plain-secret", StandardCharsets.UTF_8);
+    UploadScanFinding finding = new UploadScanFinding(
+        "FND-0001",
+        "ENV_PLAIN_SECRET",
+        "custom-rule",
+        "HIGH",
+        ".env",
+        1,
+        "secret found",
+        "DB_PASSWORD=***MASKED***"
+    );
+
+    List<UploadScanFinding> enriched = enricher.enrich(List.of(finding), List.of(envFile));
+
+    assertThat(enriched.getFirst().patchContext()).isNull();
+  }
+
+  @Test
+  void enrichSkipsPatchContextForTrivySecretFinding() throws Exception {
+    Path dockerfile = tempDir.resolve("Dockerfile");
+    Files.writeString(dockerfile, "ENV AWS_ACCESS_KEY_ID=plain-secret", StandardCharsets.UTF_8);
+    UploadScanFinding finding = new UploadScanFinding(
+        "FND-0001",
+        "aws-access-key-id",
+        "trivy",
+        "HIGH",
+        "Dockerfile",
+        1,
+        "AWS Access Key ID",
+        "AWS_ACCESS_KEY_ID=***MASKED***"
+    );
+
+    List<UploadScanFinding> enriched = enricher.enrich(List.of(finding), List.of(dockerfile));
+
+    assertThat(enriched.getFirst().patchContext()).isNull();
+  }
+
   private String fileHash(Path file) throws Exception {
     MessageDigest digest = MessageDigest.getInstance("SHA-256");
     byte[] hash = digest.digest(Files.readAllBytes(file));

@@ -9,10 +9,33 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 @Component
 public class UploadScanFindingPatchContextEnricher {
+
+  private static final Set<String> SENSITIVE_RULE_IDS = Set.of(
+      "ENV_PLAIN_SECRET",
+      "COMPOSE_HARDCODED_SECRET"
+  );
+  private static final List<String> SENSITIVE_KEYWORDS = List.of(
+      "SECRET",
+      "PASSWORD",
+      "TOKEN",
+      "API KEY",
+      "API_KEY",
+      "ACCESS KEY",
+      "ACCESS_KEY",
+      "PRIVATE KEY",
+      "PRIVATE_KEY",
+      "CREDENTIAL"
+  );
+  private static final Pattern SENSITIVE_ASSIGNMENT = Pattern.compile(
+      ".*(PASSWORD|SECRET|TOKEN|ACCESS_KEY|PRIVATE_KEY|API_KEY|CREDENTIAL).*[:=].*",
+      Pattern.CASE_INSENSITIVE
+  );
 
   public List<UploadScanFinding> enrich(List<UploadScanFinding> findings, List<Path> uploadedFiles) {
     // 웹 업로드 스캔 결과에 AI diff 생성을 위한 원본 코드 컨텍스트를 보강한다.
@@ -29,7 +52,8 @@ public class UploadScanFindingPatchContextEnricher {
 
   private UploadScanFinding enrich(UploadScanFinding finding, List<Path> uploadedFiles) {
     // 이미 엔진이 patchContext를 내려준 경우에는 백엔드가 덮어쓰지 않는다.
-    if (finding == null || finding.patchContext() != null || finding.line() == null || finding.line() < 1) {
+    if (finding == null || finding.patchContext() != null || isSensitiveFinding(finding)
+        || finding.line() == null || finding.line() < 1) {
       return finding;
     }
 
@@ -47,6 +71,10 @@ public class UploadScanFindingPatchContextEnricher {
 
       String oldText = lines.get(lineIndex);
       if (oldText == null || oldText.isBlank()) {
+        return finding;
+      }
+      // CLI와 동일하게 secret 계열 원문은 oldText로 내보내지 않는다.
+      if (SENSITIVE_ASSIGNMENT.matcher(oldText).matches()) {
         return finding;
       }
 
@@ -76,6 +104,37 @@ public class UploadScanFindingPatchContextEnricher {
         .toList();
 
     return matches.size() == 1 ? matches.getFirst() : null;
+  }
+
+  private boolean isSensitiveFinding(UploadScanFinding finding) {
+    if (SENSITIVE_RULE_IDS.contains(normalize(finding.ruleId()))) {
+      return true;
+    }
+    if (isEnvFile(finding.file()) || isEnvFile(finding.filePath())) {
+      return true;
+    }
+    if (!"trivy".equalsIgnoreCase(finding.source())) {
+      return false;
+    }
+    String searchable = normalize(String.join(" ",
+        nullToEmpty(finding.ruleId()),
+        nullToEmpty(finding.title()),
+        nullToEmpty(finding.maskedEvidence())
+    ));
+    return SENSITIVE_KEYWORDS.stream().anyMatch(searchable::contains);
+  }
+
+  private boolean isEnvFile(String path) {
+    String fileName = extractFileName(path);
+    return fileName != null && (fileName.equals(".env") || fileName.startsWith(".env."));
+  }
+
+  private String normalize(String value) {
+    return nullToEmpty(value).toUpperCase(Locale.ROOT);
+  }
+
+  private String nullToEmpty(String value) {
+    return value == null ? "" : value;
   }
 
   private String extractFileName(String path) {
