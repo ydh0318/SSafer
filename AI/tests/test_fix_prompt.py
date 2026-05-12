@@ -13,7 +13,7 @@ class FixPromptTest(unittest.TestCase):
         self.assertIn('"operation": "replace"', rendered_prompt)
         self.assertIn('"filePath": "Dockerfile"', rendered_prompt)
         self.assertIn("patchContext.oldText", rendered_prompt)
-        self.assertIn("operation: append", rendered_prompt)
+        self.assertIn("append:", rendered_prompt)
         self.assertIn("PATCH-{findingId}", rendered_prompt)
         self.assertIn("패치 조건을 만족하지 못하면", rendered_prompt)
         self.assertIn("한국어 중심", rendered_prompt)
@@ -26,12 +26,10 @@ class FixPromptTest(unittest.TestCase):
         )
 
         self.assertIn("patches field failed validation", retry_prompt)
-        self.assertIn("finding.patchContext", retry_prompt)
-        self.assertIn("patches[].operation은 replace 또는 append", retry_prompt)
-        self.assertIn("patches[].filePath", retry_prompt)
+        self.assertIn("patchContext.oldText", retry_prompt)
+        self.assertIn("patch operation은 replace 또는 append", retry_prompt)
         self.assertIn("docker-compose YAML", retry_prompt)
         self.assertIn("한국어 중심", retry_prompt)
-        self.assertIn("***MASKED***", retry_prompt)
 
 
 if __name__ == "__main__":

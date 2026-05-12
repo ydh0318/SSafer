@@ -1,14 +1,18 @@
 import json
+import logging
 from typing import Any
 
 from app.chains.fix_chain import create_fix_chain
+from app.core.config import LLM_FIX_MAX_TOKENS
 from app.core.llm import invoke_llm_with_retry
 from app.services.explain_service import contains_disallowed_script
-from app.services.input_service import format_finding_for_llm
+from app.services.input_service import format_finding_for_fix_llm
+from app.services.llm_usage_service import get_llm_response_text, log_llm_usage
 from app.services.result_service import validate_fix_schema
 
 
-MAX_FIX_RETRIES = 2
+MAX_FIX_RETRIES = 1
+logger = logging.getLogger(__name__)
 REQUIRED_FIX_FIELDS = (
     "summary",
     "priority",
@@ -99,31 +103,22 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
             "",
             "이전 수정 JSON이 검증에 실패했으므로 다시 작성하세요.",
             f"검증 오류: {error_message}",
-            "JSON 객체 하나만 반환하고, 마크다운 코드 블록은 쓰지 마세요.",
-            "summary, priority, recommendedActions, codeGuidance, verification, cautions를 항상 포함하세요.",
-            "사용자에게 보이는 자연어 필드는 한국어 중심으로 작성하세요.",
-            "파일명, 규칙 ID, 탐지 ID, 기술명, 코드 조각은 원문을 유지할 수 있습니다.",
-            "priority는 high, medium, low 중 하나여야 합니다.",
-            "recommendedActions는 비어 있지 않은 문자열 2~5개여야 합니다.",
-            "cautions는 비어 있지 않은 문자열 1~3개여야 합니다.",
-            "finding.patchContext가 없으면 patches를 생략하세요.",
-            "replace patch는 patchId, findingId, operation, filePath, oldText, newText, expectedFileHash를 포함해야 합니다.",
-            "append patch는 patchId, findingId, operation, filePath, newText, expectedFileHash를 포함하고 oldText를 생략해야 합니다.",
-            "patches[].operation은 replace 또는 append여야 합니다.",
-            "patches[].filePath는 finding.filePath와 같아야 하며 슬래시를 사용해야 합니다.",
-            "patches[].expectedFileHash는 sha256:으로 시작해야 합니다.",
-            "replace patch에서는 patchContext.oldText를 oldText에 그대로 복사하세요.",
-            "append patch는 완성된 명령을 파일 끝에 추가해도 안전한 Dockerfile에만 사용하세요.",
-            "docker-compose YAML에는 append를 사용하지 마세요.",
-            "oldText나 newText에 ***MASKED***, [MASKED], <MASKED> 같은 마스킹 값을 넣지 마세요.",
-            "대상 파일, 정확한 oldText, 안전한 newText가 불확실하면 patches 키를 생략하세요.",
+            "JSON 객체만 다시 출력하세요.",
+            "필수 필드: summary, priority, recommendedActions, codeGuidance, verification, cautions.",
+            "priority는 high, medium, low 중 하나입니다.",
+            "자연어는 한국어 중심으로 작성하세요.",
+            "patches는 안전할 때만 포함하고, 불확실하면 생략하세요.",
+            "patch operation은 replace 또는 append만 허용합니다.",
+            "replace는 oldText를 patchContext.oldText 그대로 사용하고, append는 oldText를 생략하세요.",
+            "append는 Dockerfile에만 사용하고 docker-compose YAML에는 쓰지 마세요.",
         ]
     )
 
 
 def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
     chain = create_fix_chain()
-    finding_input = format_finding_for_llm(finding)
+    finding_input = format_finding_for_fix_llm(finding)
+    finding_id = finding.get("id")
     last_error: ValueError | None = None
 
     for attempt in range(MAX_FIX_RETRIES + 1):
@@ -134,7 +129,17 @@ def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
                 error_message=str(last_error),
             )
 
-        raw_fix = invoke_llm_with_retry(chain, {"finding_input": prompt_input})
+        raw_fix_response = invoke_llm_with_retry(chain, {"finding_input": prompt_input})
+        raw_fix = get_llm_response_text(raw_fix_response)
+        log_llm_usage(
+            logger=logger,
+            stage="FIX",
+            finding_id=finding_id if isinstance(finding_id, str) else None,
+            input_text=prompt_input,
+            response=raw_fix_response,
+            attempt_count=attempt + 1,
+            max_output_tokens=LLM_FIX_MAX_TOKENS,
+        )
         if contains_disallowed_script(raw_fix):
             last_error = ValueError(
                 "Fix Chain output contains Japanese, Chinese, Hanja, or broken characters."
