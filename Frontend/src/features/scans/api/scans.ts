@@ -4,6 +4,8 @@ import { apiClient } from '../../../api/client';
 import { getApiErrorCode, getApiErrorMessage } from '../../../api/error';
 import type { ApiErrorResponse, ApiSuccessResponse } from '../../../types/api';
 import type {
+  AgentScanRequestPayload,
+  AgentScanResponseData,
   ApproveFindingPatchResponseData,
   CreateScanRequestPayload,
   CreateScanResponseData,
@@ -17,6 +19,7 @@ import type {
 import { UploadScanRequestError } from '../utils/uploadScanFeedback';
 
 const CREATE_SCAN_ERROR = '스캔 요청에 실패했습니다.';
+const AGENT_SCAN_REQUEST_ERROR = 'Agent 기반 점검 요청에 실패했습니다.';
 const GET_SCAN_OPTIONS_ERROR = '프로젝트의 스캔 옵션을 불러오지 못했습니다.';
 const GET_PROJECT_SCANS_ERROR = '프로젝트의 스캔 목록을 불러오지 못했습니다.';
 const GET_SCAN_STATUS_ERROR = '스캔 진행 상태를 불러오지 못했습니다.';
@@ -29,6 +32,36 @@ export async function createScanRequest(payload: CreateScanRequestPayload) {
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, CREATE_SCAN_ERROR));
+  }
+}
+
+export async function requestAgentScan(projectId: string, payload: AgentScanRequestPayload) {
+  try {
+    const response = await apiClient.post<ApiSuccessResponse<AgentScanResponseData>>(
+      `/projects/${projectId}/scans/agent`,
+      payload,
+    );
+    return response.data.data;
+  } catch (error) {
+    const errorCode = getApiErrorCode(error);
+
+    if (errorCode === 'AGENT_NOT_FOUND') {
+      throw new Error('이 프로젝트에 연결된 Agent가 없습니다. 먼저 Agent를 연결해 주세요.');
+    }
+
+    if (errorCode === 'AGENT_OFFLINE') {
+      throw new Error('Agent가 현재 오프라인 상태입니다. Agent를 실행한 후 다시 시도해 주세요.');
+    }
+
+    if (errorCode === 'FORBIDDEN') {
+      throw new Error('이 프로젝트에 대한 점검 요청 권한이 없습니다.');
+    }
+
+    if (errorCode === 'NOT_FOUND') {
+      throw new Error('프로젝트를 찾을 수 없습니다.');
+    }
+
+    throw new Error(getApiErrorMessage(error, AGENT_SCAN_REQUEST_ERROR));
   }
 }
 

@@ -37,6 +37,20 @@ export interface CreateScanResponseData {
   rawUploadUrl: string;
 }
 
+export interface AgentScanRequestPayload {
+  targetPath: string;
+  scanName?: string;
+  includeLogs?: boolean;
+}
+
+export interface AgentScanResponseData {
+  scanId: number;
+  agentTaskId: number;
+  status: ScanStatus;
+  agentTaskStatus: AgentTaskStatus;
+  notificationSent: boolean;
+}
+
 export interface ProjectScanOptionsData {
   defaultScanMode: 'UPLOAD' | 'AGENT';
   availableScanModes: Array<'UPLOAD' | 'AGENT'>;
