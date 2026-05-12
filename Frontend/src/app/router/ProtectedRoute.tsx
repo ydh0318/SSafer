@@ -17,11 +17,11 @@ function ProtectedRoute() {
 
   if (isAuthenticated && !refreshToken && (!accessToken || hasInvalidAccessToken(accessToken) || isTokenExpired(accessToken))) {
     clearSessionWithMessage(logout);
-    return <Navigate replace state={{ from: location }} to={ROUTES.login} />;
+    return <Navigate replace state={{ from: location }} to={ROUTES.welcome} />;
   }
 
   if (!isAuthenticated) {
-    return <Navigate replace state={{ from: location }} to={ROUTES.login} />;
+    return <Navigate replace state={{ from: location }} to={ROUTES.welcome} />;
   }
 
   return <Outlet />;
