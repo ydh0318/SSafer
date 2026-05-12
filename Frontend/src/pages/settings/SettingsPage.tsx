@@ -11,6 +11,7 @@ import {
   checkNicknameAvailability,
   getCurrentUserProfile,
   logoutCurrentUser,
+  setupCurrentUserPassword,
   updateCurrentUserProfile,
   withdrawCurrentUser,
 } from '../../features/auth/api/member';
@@ -62,13 +63,15 @@ function validateDisplayName(value: string) {
   return '';
 }
 
-function validatePasswordForm(values: PasswordFormValues): PasswordFieldErrors {
+function validatePasswordForm(values: PasswordFormValues, isSetup: boolean): PasswordFieldErrors {
   const errors: PasswordFieldErrors = {};
 
-  if (!values.currentPassword) {
-    errors.currentPassword = '현재 비밀번호를 입력해 주세요.';
-  } else if (values.currentPassword.length < 8 || values.currentPassword.length > 72) {
-    errors.currentPassword = '현재 비밀번호는 8자 이상 72자 이하로 입력해 주세요.';
+  if (!isSetup) {
+    if (!values.currentPassword) {
+      errors.currentPassword = '현재 비밀번호를 입력해 주세요.';
+    } else if (values.currentPassword.length < 8 || values.currentPassword.length > 72) {
+      errors.currentPassword = '현재 비밀번호는 8자 이상 72자 이하로 입력해 주세요.';
+    }
   }
 
   if (!values.newPassword) {
@@ -187,6 +190,31 @@ function getPasswordChangeErrorMessage(error: unknown) {
   return '비밀번호 변경 중 문제가 발생했습니다.';
 }
 
+function getPasswordSetupErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const code = error.response?.data?.code;
+
+    if (status === 400) {
+      return '비밀번호는 8자 이상 72자 이하로 입력해주세요.';
+    }
+
+    if (status === 401) {
+      return '로그인이 필요하거나 세션이 만료되었습니다.';
+    }
+
+    if (status === 403) {
+      return '회원 계정만 사용할 수 있는 기능입니다.';
+    }
+
+    if (code === 'PASSWORD_SETUP_NOT_ALLOWED' || status === 409) {
+      return '이메일 로그인 비밀번호를 설정할 수 없는 상태입니다. 이미 비밀번호가 설정되어 있거나, 연결된 소셜 계정이 없는 경우에 발생합니다.';
+    }
+  }
+
+  return '비밀번호 설정 중 문제가 발생했습니다.';
+}
+
 function renderMessage(message: MessageState | null) {
   if (!message) {
     return null;
@@ -230,6 +258,7 @@ function SettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState<MessageState | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isCurrentPasswordRejected, setIsCurrentPasswordRejected] = useState(false);
+  const [hasLocalPassword, setHasLocalPassword] = useState(true);
   
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const toast = useToast();
@@ -239,9 +268,10 @@ function SettingsPage() {
     () => displayName.trim() !== initialDisplayName.trim(),
     [displayName, initialDisplayName],
   );
+  const isSetupMode = !hasLocalPassword;
   const isCurrentPasswordReady =
     passwordValues.currentPassword.trim().length > 0 && !isCurrentPasswordRejected;
-  const areNewPasswordFieldsLocked = !isCurrentPasswordReady;
+  const areNewPasswordFieldsLocked = !isSetupMode && !isCurrentPasswordReady;
   const isConfirmPasswordMatched =
     passwordValues.newPassword.length > 0 &&
     passwordValues.confirmPassword.length > 0 &&
@@ -273,6 +303,7 @@ function SettingsPage() {
         setDisplayName(profile.displayName);
         setInitialDisplayName(profile.displayName);
         setIsDisplayNameConfirmed(true);
+        setHasLocalPassword(profile.hasLocalPassword ?? true);
         setUser({
           id: user?.id ?? profile.email,
           email: profile.email,
@@ -457,7 +488,7 @@ function SettingsPage() {
   };
 
   const handlePasswordChange = async () => {
-    const nextErrors = validatePasswordForm(passwordValues);
+    const nextErrors = validatePasswordForm(passwordValues, isSetupMode);
 
     if (areNewPasswordFieldsLocked) {
       nextErrors.currentPassword =
@@ -476,25 +507,38 @@ function SettingsPage() {
     setIsChangingPassword(true);
 
     try {
-      const tokenData = await changeCurrentUserPassword({
-        currentPassword: passwordValues.currentPassword,
-        newPassword: passwordValues.newPassword,
-      });
-
-      if (tokenData.accessToken) {
-        setTokens({
-          accessToken: tokenData.accessToken,
-          refreshToken: tokenData.refreshToken,
+      let tokenData;
+      if (isSetupMode) {
+        tokenData = await setupCurrentUserPassword({ newPassword: passwordValues.newPassword });
+      } else {
+        tokenData = await changeCurrentUserPassword({
+          currentPassword: passwordValues.currentPassword,
+          newPassword: passwordValues.newPassword,
         });
       }
+
+      // 토큰이 누락된 경우 상태 불일치를 방지하기 위해 에러로 처리합니다.
+      // UI를 "설정 완료"로 전환하기 전에 반드시 세션 갱신이 성공해야 합니다.
+      if (!tokenData.accessToken) {
+        throw new Error('Token missing in response');
+      }
+
+      // 토큰 저장이 완전히 완료된 후에만 UI 상태를 전환합니다.
+      setTokens({
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken,
+      });
 
       setPasswordValues(initialPasswordForm);
       setPasswordErrors({});
       setPasswordMessage({
         tone: 'success',
-        text: '비밀번호가 변경되었습니다.',
+        text: isSetupMode
+          ? '비밀번호가 설정되었습니다. 이제 이메일/비밀번호 로그인도 사용할 수 있습니다.'
+          : '비밀번호가 변경되었습니다.',
       });
       setIsCurrentPasswordRejected(false);
+      setHasLocalPassword(true);
     } catch (error) {
       const fieldErrors = getApiFieldErrors(error);
 
@@ -521,7 +565,7 @@ function SettingsPage() {
         }));
         setPasswordMessage({
           tone: 'error',
-          text: getPasswordChangeErrorMessage(error),
+          text: isSetupMode ? getPasswordSetupErrorMessage(error) : getPasswordChangeErrorMessage(error),
         });
       }
     } finally {
@@ -635,25 +679,45 @@ function SettingsPage() {
 
           {tab === 'security' ? (
             <div className="theme-settings-panel space-y-5 border border-neutral-200 bg-white p-8">
-              <div className="grid gap-4">
-                <label className="block">
-                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CURRENT PASSWORD</span>
-                  <input
-                    className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
-                      passwordErrors.currentPassword ? 'border-rose-500' : 'border-neutral-300'
-                    }`}
-                    onChange={(event) => handleCurrentPasswordChange(event.target.value)}
-                    type="password"
-                    value={passwordValues.currentPassword}
-                  />
-                  {passwordErrors.currentPassword ? (
-                    <p className="mt-2 text-sm text-rose-600">{passwordErrors.currentPassword}</p>
+              
+              {/* Account Status Header */}
+              <div className="mb-6 flex items-center justify-between border border-neutral-200 bg-[#fafafa] px-5 py-4">
+                <div className="text-sm text-neutral-800 font-bold">
+                  이메일 로그인 비밀번호:{' '}
+                  {hasLocalPassword ? (
+                    <span className="text-emerald-600">설정 완료</span>
                   ) : (
-                    <p className="mt-2 text-sm text-neutral-500">
-                      현재 비밀번호가 맞아야 새 비밀번호 입력 필드가 정상적으로 열립니다.
-                    </p>
+                    <span className="text-[#E63946]">미설정</span>
                   )}
-                </label>
+                </div>
+                {!hasLocalPassword && (
+                  <div className="text-xs text-neutral-500 hidden sm:block">
+                    이 계정은 소셜 로그인만 사용할 수 있습니다. 이메일 로그인도 사용하려면 비밀번호를 설정하세요.
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-4">
+                {!isSetupMode && (
+                  <label className="block">
+                    <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CURRENT PASSWORD</span>
+                    <input
+                      className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
+                        passwordErrors.currentPassword ? 'border-rose-500' : 'border-neutral-300'
+                      }`}
+                      onChange={(event) => handleCurrentPasswordChange(event.target.value)}
+                      type="password"
+                      value={passwordValues.currentPassword}
+                    />
+                    {passwordErrors.currentPassword ? (
+                      <p className="mt-2 text-sm text-rose-600">{passwordErrors.currentPassword}</p>
+                    ) : (
+                      <p className="mt-2 text-sm text-neutral-500">
+                        현재 비밀번호가 맞아야 새 비밀번호 입력 필드가 정상적으로 열립니다.
+                      </p>
+                    )}
+                  </label>
+                )}
 
                 <label className="block">
                   <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">NEW PASSWORD</span>
@@ -696,13 +760,13 @@ function SettingsPage() {
 
               {renderMessage(passwordMessage)}
 
-              <button
+                <button
                 className="bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={isChangingPassword}
                 onClick={() => void handlePasswordChange()}
                 type="button"
               >
-                {isChangingPassword ? 'Updating...' : 'Change Password'}
+                {isChangingPassword ? 'Updating...' : (isSetupMode ? 'Set Password' : 'Change Password')}
               </button>
             </div>
           ) : null}
