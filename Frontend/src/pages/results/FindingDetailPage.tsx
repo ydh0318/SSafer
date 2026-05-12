@@ -11,6 +11,8 @@ import { useToast } from '../../features/feedback/useToast';
 import ServerAuditFindingDetailView from '../../features/results/components/ServerAuditFindingDetailView';
 import { getScanBasic, getScanFindingDetail, getScanFindings } from '../../features/results/api/results';
 import { approveFindingPatch } from '../../features/scans/api/scans';
+import PatchAvailabilityBadge from '../../features/scans/components/PatchAvailabilityBadge';
+import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
 import { formatDateTime, getSafeScanType } from '../../features/scans/utils/scanPresentation';
 import { buildMockServerAuditResult, getMockServerAuditFinding } from '../../mocks/serverAudit';
@@ -54,16 +56,6 @@ function getPracticeSnippet(finding: ScanFindingDetailData | null) {
   const preferred = [finding.remediationGuide, finding.patchResultMessage, finding.title].find((value) => Boolean(value && value.trim()));
 
   return preferred ?? '';
-}
-
-function formatFindingLocation(finding: Pick<ScanFindingDetailData, 'filePath' | 'resourceName' | 'lineNumber'>) {
-  const target = finding.filePath || finding.resourceName || '위치를 확인할 수 없는 항목';
-
-  if (finding.lineNumber && finding.lineNumber > 0) {
-    return `${target}:${finding.lineNumber}`;
-  }
-
-  return target;
 }
 
 function ParsedTextList({ text, fallback }: { text: string | null | undefined; fallback: string }) {
@@ -190,6 +182,7 @@ function FindingDetailPage() {
   const practiceSnippet = useMemo(() => getPracticeSnippet(finding), [finding]);
   const rawSnippetText = useMemo(() => prettyJsonText(finding?.rawSnippetJson ?? null), [finding?.rawSnippetJson]);
   const currentScanType = getSafeScanType(scanBasic?.scanType);
+  const hasPatches = Boolean(finding?.fix?.patches?.length);
 
   const copyText = async (value: string, successMessage: string) => {
     try {
@@ -277,6 +270,8 @@ function FindingDetailPage() {
                   <span className="font-mono text-xs text-neutral-500">{finding.ruleId || finding.ruleCode}</span>
                   <span className="border border-neutral-300 px-2 py-0.5 text-xs">{finding.source || finding.sourceType}</span>
                   <span className="bg-neutral-100 px-2 py-0.5 text-xs">{finding.category}</span>
+                  {scanBasic?.scanMode ? <ScanModeBadge scanMode={scanBasic.scanMode} /> : null}
+                  <PatchAvailabilityBadge hasPatches={hasPatches} />
                 </div>
                 <span className="border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-600">
                   {finding.resolutionStatus}

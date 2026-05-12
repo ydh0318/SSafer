@@ -143,6 +143,29 @@ export function getScanModeLabel(scanMode: ScanMode) {
   return '파일 업로드 스캔';
 }
 
+export function getScanModeClassName(scanMode: ScanMode) {
+  switch (scanMode) {
+    case 'AGENT':
+      return 'border-violet-200 bg-violet-50 text-violet-800';
+    case 'CLI':
+      return 'border-cyan-200 bg-cyan-50 text-cyan-800';
+    case 'UPLOAD':
+    default:
+      return 'border-orange-200 bg-orange-50 text-orange-800';
+  }
+}
+
+export function getScanSourceLabel(source?: string | null) {
+  if (!source) return null;
+  const map: Record<string, string> = {
+    CLI: 'CLI',
+    WEB: 'Web 업로드',
+    AGENT: 'Agent',
+    UPLOAD: 'Web 업로드',
+  };
+  return map[source] ?? source;
+}
+
 export function getSafeScanType(scanType?: ScanType | null): ScanType {
   return scanType ?? 'PROJECT_FILE';
 }
