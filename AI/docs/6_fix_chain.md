@@ -88,7 +88,7 @@ LLM 응답은 반드시 아래 JSON 객체 하나여야 합니다.
 
 ```text
 summary: 한 문장, 80자 이내
-priority: high, medium, low 중 하나
+priority: critical, high, medium, low 중 하나
 recommendedActions: 2~5개의 문자열 배열
 codeGuidance: 코드 예시 대신 변경 방향을 1~3문장으로 설명
 verification: 수정 후 확인 방법을 1~2문장으로 설명

@@ -85,6 +85,19 @@ class FixServiceTest(unittest.TestCase):
         self.assertEqual(parsed["patches"][0]["filePath"], "Dockerfile")
         self.assertNotIn("targetFile", parsed["patches"][0])
 
+    def test_parse_fix_response_accepts_critical_priority(self):
+        critical_fix = {**DESCRIPTION_ONLY_FIX, "priority": "critical"}
+
+        parsed = parse_fix_response(json.dumps(critical_fix))
+
+        self.assertEqual(parsed["priority"], "critical")
+
+    def test_parse_fix_response_rejects_unknown_priority(self):
+        invalid_fix = {**DESCRIPTION_ONLY_FIX, "priority": "urgent"}
+
+        with self.assertRaisesRegex(ValueError, "priority.*critical, high, medium, low"):
+            parse_fix_response(json.dumps(invalid_fix))
+
     def test_parse_fix_response_accepts_empty_cautions(self):
         empty_cautions_fix = {**DESCRIPTION_ONLY_FIX, "cautions": []}
 

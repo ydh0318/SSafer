@@ -66,7 +66,7 @@ REQUIRED_FIX_STRING_FIELDS = (
     "codeGuidance",
     "verification",
 )
-ALLOWED_FIX_PRIORITIES = ("high", "medium", "low")
+ALLOWED_FIX_PRIORITIES = ("critical", "high", "medium", "low")
 REQUIRED_FIX_PATCH_FIELDS = (
     "patchId",
     "filePath",
