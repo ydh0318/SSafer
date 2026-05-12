@@ -28,6 +28,11 @@ def get_disallowed_scripts(text: str) -> str:
     return "".join(sorted(set(DISALLOWED_SCRIPT_PATTERN.findall(text))))
 
 
+def validate_korean_natural_text(text: str, path: str) -> None:
+    if contains_disallowed_script(text):
+        raise ValueError(f"{path} contains disallowed foreign or broken characters.")
+
+
 def _normalize_json_response(response: str) -> str:
     normalized = response.strip()
 
@@ -49,6 +54,7 @@ def parse_explain_response(response: str) -> dict[str, Any]:
         parsed = json.loads(normalized)
     except json.JSONDecodeError:
         if normalized:
+            validate_korean_natural_text(normalized, "explanation")
             return {
                 "explanation": _legacy_explanation_sections(normalized),
                 "impact": normalized,
@@ -65,6 +71,7 @@ def parse_explain_response(response: str) -> dict[str, Any]:
     _validate_explanation_sections(explanation)
     if not isinstance(impact, str) or not impact.strip():
         raise ValueError("Explain Chain output field 'impact' must be a string.")
+    validate_korean_natural_text(impact, "impact")
 
     return {
         "explanation": explanation,
@@ -98,6 +105,7 @@ def _validate_explanation_sections(explanation: Any) -> None:
             raise ValueError(
                 f"Explain Chain output field 'explanation.{field}' must be a string."
             )
+        validate_korean_natural_text(value, f"explanation.{field}")
 
 
 def generate_finding_explanation(finding: dict[str, Any]) -> dict[str, Any]:
@@ -114,10 +122,9 @@ def generate_finding_explanation(finding: dict[str, Any]) -> dict[str, Any]:
                 "중요:",
                 "이전 답변에 허용되지 않는 문자가 포함되었습니다.",
                 f"금지 문자 예시: {last_disallowed_scripts}",
-                "자연어 설명은 한국어로만 작성하세요.",
+                "자연어 설명은 한국어 중심으로 작성하세요.",
                 "일본어, 중국어, 한자, 태국어, 스페인어, 라틴어, 깨진 문자를 절대 사용하지 마세요.",
-                "일반 영어 단어를 섞지 말고 쉬운 한국어로 바꾸세요.",
-                "파일명, 규칙 ID, 탐지 ID, 근거 값만 원문 그대로 유지할 수 있습니다.",
+                "설명은 한국어 중심으로 작성하고, 파일명, 규칙 ID, 탐지 ID, 기술명은 원문을 유지할 수 있습니다.",
                 "입력 finding에 없는 파일 구조, 코드 흐름, 프레임워크, 공격 성공 여부를 단정하지 마세요.",
                 "비밀 값이나 민감한 값을 추측하거나 복원하지 마세요.",
                 "코드 예시, 설정 예시, 명령어, 표, 마크다운 코드 블록은 작성하지 마세요.",

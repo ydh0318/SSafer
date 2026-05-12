@@ -15,7 +15,8 @@ class FixPromptTest(unittest.TestCase):
         self.assertIn("patchContext.oldText", rendered_prompt)
         self.assertIn("operation: append", rendered_prompt)
         self.assertIn("PATCH-{findingId}", rendered_prompt)
-        self.assertIn("If patch requirements are not satisfied", rendered_prompt)
+        self.assertIn("패치 조건을 만족하지 못하면", rendered_prompt)
+        self.assertIn("한국어 중심", rendered_prompt)
         self.assertIn("***MASKED***", rendered_prompt)
 
     def test_fix_retry_prompt_includes_patches_safety_rules(self):
@@ -26,9 +27,10 @@ class FixPromptTest(unittest.TestCase):
 
         self.assertIn("patches field failed validation", retry_prompt)
         self.assertIn("finding.patchContext", retry_prompt)
-        self.assertIn("patches[].operation must be replace or append.", retry_prompt)
+        self.assertIn("patches[].operation은 replace 또는 append", retry_prompt)
         self.assertIn("patches[].filePath", retry_prompt)
         self.assertIn("docker-compose YAML", retry_prompt)
+        self.assertIn("한국어 중심", retry_prompt)
         self.assertIn("***MASKED***", retry_prompt)
 
 

@@ -131,9 +131,9 @@ class FixServiceTest(unittest.TestCase):
         self.assertEqual(fix["summary"], DESCRIPTION_ONLY_FIX["summary"])
         self.assertEqual(invoke.call_count, 2)
         retry_prompt = invoke.call_args_list[1].args[1]["finding_input"]
-        self.assertIn("Validation error:", retry_prompt)
+        self.assertIn("검증 오류:", retry_prompt)
         self.assertIn("Fix Chain output failed schema validation", retry_prompt)
-        self.assertIn("patches[].operation must be replace or append.", retry_prompt)
+        self.assertIn("patches[].operation은 replace 또는 append", retry_prompt)
 
 
 if __name__ == "__main__":
