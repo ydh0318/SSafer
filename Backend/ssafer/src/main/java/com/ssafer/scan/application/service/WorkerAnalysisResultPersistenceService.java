@@ -14,16 +14,16 @@ import com.ssafer.scan.domain.enums.Severity;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanNodeRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -151,43 +151,39 @@ public class WorkerAnalysisResultPersistenceService {
   }
 
   private void persistFindings(Scan scan, ScanNode node, JsonNode root, LocalDateTime createdAt) {
-    JsonNode results = root.path("results");
-    if (!results.isArray()) {
-      throw new IllegalStateException("analysis result must contain results array");
-    }
+    // 현재 worker 스키마(results)와 이전 업로드 스키마(findings)를 모두 흡수한다.
+    JsonNode results = resolveFindings(root);
 
-    Set<String> existingFingerprints = new HashSet<>();
     Map<String, ScanFinding> existingFindingsByFingerprint = new HashMap<>();
     for (ScanFinding finding : scanFindingRepository.findAllByScanId(scan.getId())) {
-      existingFingerprints.add(finding.getFingerprint());
       existingFindingsByFingerprint.put(finding.getFingerprint(), finding);
     }
 
     List<ScanFinding> findingsToSave = new ArrayList<>();
     for (JsonNode result : results) {
-      String fingerprint = resolveFingerprint(result);
+      // source/severity 같은 표준 필드는 entity 컬럼으로 승격하고,
+      // 나머지 원본 필드는 rawSnippetJson에 최대한 보존한다.
+      FindingSourceType sourceType = mapSourceType(readRequiredText(result, "source"));
+      String fingerprint = resolveFingerprint(result, sourceType);
+      ScanFinding existingFinding = findExistingFinding(existingFindingsByFingerprint, result, fingerprint);
       String patchPayloadJson = supportsPatchGeneration(scan) ? buildPatchPayloadJson(result.path("fix")) : null;
-      if (existingFingerprints.contains(fingerprint)) {
-        ScanFinding existingFinding = existingFindingsByFingerprint.get(fingerprint);
-        if (existingFinding != null) {
-          existingFinding.backfillPatchPayload(patchPayloadJson);
-        }
+      if (existingFinding != null) {
+        existingFinding.backfillPatchPayload(patchPayloadJson);
         continue;
       }
 
-      FindingSourceType sourceType = mapSourceType(readRequiredText(result, "source"));
       findingsToSave.add(ScanFinding.builder()
           .scanId(scan.getId())
           .scanNodeId(node.getId())
           .sourceType(sourceType)
           .fingerprint(fingerprint)
           .severity(mapSeverity(readRequiredText(result, "severity")))
-          .category(sourceType.name())
+          .category(resolveCategory(result, sourceType))
           .title(readRequiredText(result, "title"))
           .description(readNullableText(result, "explanation"))
-          .filePath(readNullableText(result, "file"))
+          .filePath(resolveFindingFilePath(result))
           .lineNumber(readNullableInteger(result, "line"))
-          .resourceName(readText(root, "source", "worker-analysis"))
+          .resourceName(resolveResourceName(result, root))
           .ruleCode(readNullableText(result, "ruleId"))
           .attackScenario(readNullableText(result, "explanation"))
           .remediationGuide(buildRemediationGuide(result.path("fix")))
@@ -196,12 +192,27 @@ public class WorkerAnalysisResultPersistenceService {
           .resolutionStatus(ResolutionStatus.OPEN)
           .createdAt(createdAt)
           .build());
-      existingFingerprints.add(fingerprint);
+      existingFindingsByFingerprint.put(fingerprint, findingsToSave.get(findingsToSave.size() - 1));
     }
 
     if (!findingsToSave.isEmpty()) {
       scanFindingRepository.saveAll(findingsToSave);
     }
+  }
+
+  private JsonNode resolveFindings(JsonNode root) {
+    JsonNode results = root.path("results");
+    if (results.isArray()) {
+      return results;
+    }
+
+    // 기존 업로드 결과 JSON은 findings 배열을 사용한다.
+    JsonNode findings = root.path("findings");
+    if (findings.isArray()) {
+      return findings;
+    }
+
+    throw new IllegalStateException("analysis result must contain results or findings array");
   }
 
   private String buildNodeMetadataJson(JsonNode root) {
@@ -222,7 +233,12 @@ public class WorkerAnalysisResultPersistenceService {
   private String buildRawSnippetJson(JsonNode result) {
     try {
       ObjectNode snippet = objectMapper.createObjectNode();
+      // 조회 API 상세에서 원본 worker 식별자와 표시용 필드를 다시 사용할 수 있게 보존한다.
+      copyIfPresent(result, snippet, "findingId");
+      copyIfPresent(result, snippet, "id");
+      copyIfPresent(result, snippet, "filePath");
       copyIfPresent(result, snippet, "maskedEvidence");
+      copyIfPresent(result, snippet, "targetFiles");
       if (result.has("fix")) {
         snippet.set("fix", result.get("fix"));
       }
@@ -293,15 +309,112 @@ public class WorkerAnalysisResultPersistenceService {
     }
   }
 
-  private String resolveFingerprint(JsonNode result) {
-    String findingId = readNullableText(result, "findingId");
-    if (findingId != null) {
-      return findingId;
+  private ScanFinding findExistingFinding(
+      Map<String, ScanFinding> existingFindingsByFingerprint,
+      JsonNode result,
+      String preferredFingerprint
+  ) {
+    // 새 fingerprint 규칙으로 저장된 데이터가 있으면 그 값을 우선 사용한다.
+    ScanFinding existingFinding = existingFindingsByFingerprint.get(preferredFingerprint);
+    if (existingFinding != null) {
+      return existingFinding;
     }
-    return readText(result, "ruleId", "UNKNOWN")
-        + "|" + readText(result, "file", "")
+
+    // 과거에는 worker findingId(FND-0001 등)를 fingerprint로 저장했으므로 재적재 호환을 유지한다.
+    String externalFindingId = resolveExternalFindingId(result);
+    if (externalFindingId != null) {
+      existingFinding = existingFindingsByFingerprint.get(externalFindingId);
+      if (existingFinding != null) {
+        return existingFinding;
+      }
+    }
+
+    return null;
+  }
+
+  private String resolveFingerprint(JsonNode result, FindingSourceType sourceType) {
+    String explicitFingerprint = readNullableText(result, "fingerprint");
+    if (explicitFingerprint != null && !explicitFingerprint.isBlank()) {
+      return explicitFingerprint.trim();
+    }
+
+    // worker findingId는 스캔별 순번일 수 있어 비교 키로 불안정하므로 내용 기반 fingerprint를 만든다.
+    String material = sourceType.name()
+        + "|" + readText(result, "ruleId", "UNKNOWN")
+        + "|" + readText(result, "file", readText(result, "filePath", ""))
         + "|" + readText(result, "line", "")
-        + "|" + readText(result, "title", "");
+        + "|" + readText(result, "title", "")
+        + "|" + readText(result, "maskedEvidence", "");
+    return "sha256:" + sha256Hex(material);
+  }
+
+  private String resolveExternalFindingId(JsonNode result) {
+    String findingId = readNullableText(result, "findingId");
+    if (findingId != null && !findingId.isBlank()) {
+      return findingId.trim();
+    }
+
+    String legacyId = readNullableText(result, "id");
+    if (legacyId != null && !legacyId.isBlank()) {
+      return legacyId.trim();
+    }
+
+    return null;
+  }
+
+  private String resolveCategory(JsonNode result, FindingSourceType sourceType) {
+    String category = readNullableText(result, "category");
+    if (category != null && !category.isBlank()) {
+      return category.trim();
+    }
+    return sourceType.name();
+  }
+
+  private String resolveResourceName(JsonNode result, JsonNode root) {
+    String resourceName = readNullableText(result, "resourceName");
+    if (resourceName != null && !resourceName.isBlank()) {
+      return resourceName.trim();
+    }
+
+    String file = readNullableText(result, "file");
+    if (file != null && !file.isBlank()) {
+      return file.trim();
+    }
+
+    String filePath = readNullableText(result, "filePath");
+    if (filePath != null && !filePath.isBlank()) {
+      return filePath.trim();
+    }
+
+    return readText(root, "source", "worker-analysis");
+  }
+
+  private String resolveFindingFilePath(JsonNode result) {
+    String filePath = readNullableText(result, "filePath");
+    if (filePath != null && !filePath.isBlank()) {
+      return filePath.trim();
+    }
+
+    String file = readNullableText(result, "file");
+    if (file != null && !file.isBlank()) {
+      return file.trim();
+    }
+
+    return null;
+  }
+
+  private String sha256Hex(String value) {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      byte[] hashed = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+      StringBuilder builder = new StringBuilder(hashed.length * 2);
+      for (byte current : hashed) {
+        builder.append(String.format("%02x", current));
+      }
+      return builder.toString();
+    } catch (Exception ex) {
+      throw new IllegalStateException("Failed to create finding fingerprint", ex);
+    }
   }
 
   private FindingSourceType mapSourceType(String rawSource) {

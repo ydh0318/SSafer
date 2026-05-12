@@ -160,6 +160,29 @@ class WorkerAnalysisResultPersistenceServiceTest {
       }
       """;
 
+  private static final String LEGACY_ANALYSIS_RESULT_JSON = """
+      {
+        "schemaVersion": "0.1",
+        "scanId": "legacy-scan-1",
+        "source": "cli",
+        "generatedAt": "2026-05-04T01:57:29.596745+00:00",
+        "findings": [
+          {
+            "id": "FND-0001",
+            "ruleId": "ENV_PLAIN_SECRET",
+            "source": "custom-rule",
+            "severity": "HIGH",
+            "file": ".env",
+            "filePath": "Backend\\\\ssafer\\\\.env",
+            "targetFiles": ["Backend\\\\ssafer\\\\.env"],
+            "line": 1,
+            "title": "Legacy hardcoded secret",
+            "maskedEvidence": "DB_PASSWORD=***MASKED***"
+          }
+        ]
+      }
+      """;
+
   @Mock
   private ScanRepository scanRepository;
 
@@ -224,7 +247,13 @@ class WorkerAnalysisResultPersistenceServiceTest {
     assertThat(findingsCaptor.getValue()).hasSize(3);
     assertThat(findingsCaptor.getValue())
         .extracting(ScanFinding::getFingerprint)
-        .containsExactly("FND-0001", "FND-0002", "FND-0003");
+        .allMatch(fingerprint -> fingerprint.startsWith("sha256:"));
+    assertThat(findingsCaptor.getValue())
+        .extracting(ScanFinding::getResourceName)
+        .containsExactly(".env", "Dockerfile", "Dockerfile");
+    JsonNode rawSnippet = new ObjectMapper().readTree(findingsCaptor.getValue().getFirst().getRawSnippetJson());
+    assertThat(rawSnippet.path("findingId").asText()).isEqualTo("FND-0001");
+    assertThat(rawSnippet.has("fix")).isTrue();
     JsonNode patchPayload = new ObjectMapper().readTree(findingsCaptor.getValue().getFirst().getPatchPayloadJson());
     assertThat(patchPayload.path("patches")).hasSize(1);
     assertThat(patchPayload.path("patches").get(0).path("patchId").asText()).isEqualTo("PATCH-0001");
@@ -290,8 +319,8 @@ class WorkerAnalysisResultPersistenceServiceTest {
     verify(scanFindingRepository).saveAll(findingsCaptor.capture());
     assertThat(findingsCaptor.getValue()).hasSize(2);
     assertThat(findingsCaptor.getValue())
-        .extracting(ScanFinding::getFingerprint)
-        .containsExactly("FND-0002", "FND-0003");
+        .extracting(ScanFinding::getTitle)
+        .containsExactly("Image user should not be root", "No HEALTHCHECK defined");
     assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SUCCEEDED);
     assertThat(scan.getStatus()).isEqualTo(ScanStatus.DONE);
   }
@@ -404,6 +433,42 @@ class WorkerAnalysisResultPersistenceServiceTest {
     assertThat(findingsCaptor.getValue()).hasSize(1);
     assertThat(findingsCaptor.getValue().getFirst().getSourceType()).isEqualTo(FindingSourceType.SERVER_AUDIT);
     assertThat(findingsCaptor.getValue().getFirst().getPatchPayloadJson()).isNull();
+  }
+
+  @Test
+  void persistSupportsLegacyFindingsArrayAndIdField() {
+    Scan scan = runningScan();
+    AgentTask task = ackedTask(scan);
+    ScanNode savedNode = ScanNode.builder()
+        .id(200L)
+        .scanId(scan.getId())
+        .nodeKey("legacy-scan-1")
+        .nodeName("cli")
+        .nodeType("ANALYSIS_RESULT")
+        .metadataJson("{}")
+        .createdAt(LocalDateTime.now())
+        .build();
+
+    when(scanRepository.findByIdForUpdate(scan.getId())).thenReturn(Optional.of(scan));
+    when(agentTaskRepository.findByIdAndScanId(task.getId(), scan.getId())).thenReturn(Optional.of(task));
+    when(analysisResultObjectReader.read(scan.getAnalysisResultPath())).thenReturn(LEGACY_ANALYSIS_RESULT_JSON);
+    when(scanNodeRepository.findByScanIdAndNodeKey(scan.getId(), "legacy-scan-1"))
+        .thenReturn(Optional.empty());
+    when(scanNodeRepository.save(any(ScanNode.class))).thenReturn(savedNode);
+    when(scanFindingRepository.findAllByScanId(scan.getId())).thenReturn(List.of());
+    when(scanFindingRepository.countByScanId(scan.getId())).thenReturn(1L);
+
+    workerAnalysisResultPersistenceService.persist(event());
+
+    ArgumentCaptor<List<ScanFinding>> findingsCaptor = ArgumentCaptor.forClass(List.class);
+    verify(scanFindingRepository).saveAll(findingsCaptor.capture());
+    assertThat(findingsCaptor.getValue()).hasSize(1);
+    assertThat(findingsCaptor.getValue().getFirst().getFingerprint()).startsWith("sha256:");
+    assertThat(findingsCaptor.getValue().getFirst().getFilePath()).isEqualTo("Backend\\ssafer\\.env");
+    JsonNode rawSnippet = new ObjectMapper().readTree(findingsCaptor.getValue().getFirst().getRawSnippetJson());
+    assertThat(rawSnippet.path("id").asText()).isEqualTo("FND-0001");
+    assertThat(rawSnippet.path("filePath").asText()).isEqualTo("Backend\\ssafer\\.env");
+    assertThat(rawSnippet.path("targetFiles")).hasSize(1);
   }
 
   @Test
