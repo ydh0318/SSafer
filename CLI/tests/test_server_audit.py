@@ -401,12 +401,17 @@ def test_server_audit_command_uploads_saved_result(tmp_path: Path, monkeypatch):
 
     captured: dict[str, object] = {}
 
-    def fake_upload(path: Path, api_url: str | None = None):
+    def fake_upload(path: Path, api_url: str | None = None, on_step=None):
         captured["path"] = path
         captured["api_url"] = api_url
         return {"scanId": 777}
 
     monkeypatch.setattr(main_module, "_upload_server_audit_or_exit", fake_upload)
+    monkeypatch.setattr(
+        main_module,
+        "_wait_for_uploaded_scan",
+        lambda path, response, api_url=None: {**response, "status": "DONE", "_apiUrl": "https://api.example.com"},
+    )
 
     result = CliRunner().invoke(
         app,

@@ -16,6 +16,7 @@ import com.ssafer.user.application.service.UserPasswordService;
 import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
+import com.ssafer.user.domain.repository.UserSocialAccountRepository;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -43,10 +44,12 @@ class PasswordResetFlowTest {
   private AuthTokenRefreshService authTokenRefreshService;
   private UserPasswordService userPasswordService;
   private PasswordResetCodeService passwordResetCodeService;
+  private UserSocialAccountRepository userSocialAccountRepository;
 
   @BeforeEach
   void setUp() {
     userRepository = Mockito.mock(UserRepository.class);
+    userSocialAccountRepository = Mockito.mock(UserSocialAccountRepository.class);
     verificationCodeGenerator = Mockito.mock(VerificationCodeGenerator.class);
     passwordResetCodeEmailSender = new CapturingPasswordResetCodeEmailSender();
     passwordResetCodeStore = new InMemoryPasswordResetCodeStore();
@@ -66,6 +69,7 @@ class PasswordResetFlowTest {
     authTokenRefreshService = new AuthTokenRefreshService(authTokenProvider);
     userPasswordService = new UserPasswordService(
         userRepository,
+        userSocialAccountRepository,
         passwordEncoder,
         refreshTokenStore,
         authTokenProvider

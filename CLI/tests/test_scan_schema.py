@@ -119,6 +119,50 @@ def test_project_config_name_is_written_to_scan_result(tmp_path: Path, monkeypat
     assert scan["projectName"] == "my-app"
 
 
+def test_run_scan_reports_user_friendly_progress_steps(tmp_path: Path, monkeypatch):
+    (tmp_path / ".env").write_text("PUBLIC_MODE=dev\n", encoding="utf-8")
+    steps: list[str] = []
+
+    monkeypatch.setattr(result_store, "trivy_version", lambda: None)
+    monkeypatch.setattr(result_store, "_docker_compose_version", lambda: None)
+
+    result_store.run_scan(tmp_path, on_step=steps.append)
+
+    assert "프로젝트 설정을 읽는 중..." in steps
+    assert "스캔 대상 파일을 찾는 중..." in steps
+    assert "스캔 대상 확인 완료: .env 1개, Compose 0개, Dockerfile 0개" in steps
+    assert "대상 파일 해시를 계산하는 중..." in steps
+    assert "Compose 세트 0개 확인" in steps
+    assert "커스텀 보안 룰을 검사하는 중..." in steps
+    assert "환경변수 파일 1개를 파싱하는 중..." in steps
+    assert "발견 항목을 정리하는 중..." in steps
+    assert steps[-1] == "스캔 결과 JSON을 저장하는 중..."
+
+
+def test_run_scan_records_compose_warning_context(tmp_path: Path, monkeypatch):
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text("services: {}\n", encoding="utf-8")
+
+    monkeypatch.setattr(result_store, "trivy_version", lambda: None)
+    monkeypatch.setattr(result_store, "_docker_compose_version", lambda: None)
+    monkeypatch.setattr(
+        result_store,
+        "render_effective_config",
+        lambda compose_set: (
+            True,
+            "services: {}\n",
+            None,
+            'time="2026-05-07T12:26:52+09:00" level=warning msg="The \\"POSTGRES_PASSWORD\\" variable is not set. Defaulting to a blank string."',
+        ),
+    )
+
+    scan = result_store.run_scan(tmp_path)
+
+    assert scan["warnings"] == [
+        '[ssafer-compose name=default files=docker-compose.yml] time="2026-05-07T12:26:52+09:00" level=warning msg="The \\"POSTGRES_PASSWORD\\" variable is not set. Defaulting to a blank string."'
+    ]
+
+
 def test_invalid_project_config_is_recorded_as_scan_warning(tmp_path: Path, monkeypatch):
     (tmp_path / "ssafer.yml").write_text("upload: [", encoding="utf-8")
     monkeypatch.setattr(result_store, "trivy_version", lambda: None)

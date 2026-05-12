@@ -220,6 +220,7 @@ public class GlobalExceptionHandler {
       case PASSWORD_RESET_CODE_INVALID -> "Password reset verification code is invalid or expired.";
       case PASSWORD_RESET_CODE_ATTEMPTS_EXCEEDED -> "Password reset verification attempts exceeded.";
       case PASSWORD_RESET_TOKEN_INVALID -> "Password reset token is invalid or expired.";
+      case PASSWORD_SETUP_NOT_ALLOWED -> "Password setup is not allowed for the current account state.";
       case EMAIL_VERIFICATION_REQUEST_TOO_FREQUENT -> "Email verification requests are too frequent.";
       case EMAIL_DELIVERY_FAILED -> "Email delivery failed.";
       case INVALID_PARAMETER -> "Request parameter format is invalid.";
