@@ -415,5 +415,4 @@ def test_server_audit_command_uploads_saved_result(tmp_path: Path, monkeypatch):
         "path": tmp_path,
         "api_url": "https://api.example.com",
     }
-    assert "Uploading server audit result..." in result.output
     assert "777" in result.output

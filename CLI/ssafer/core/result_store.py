@@ -138,7 +138,7 @@ def run_scan(
         )
 
     custom_findings_dicts = [f.to_dict() for f in custom_rule_findings]
-    trivy_findings_dicts = _normalize_trivy_findings(artifacts, len(custom_findings_dicts))
+    trivy_findings_dicts = _normalize_trivy_findings(artifacts, len(custom_findings_dicts), source_hashes)
     findings = custom_findings_dicts + trivy_findings_dicts
 
     status = _analysis_status(artifacts, warnings)
@@ -238,7 +238,11 @@ def backend_finding_source_type(source: str) -> str:
         raise ValueError(f"Unsupported finding source for backend mapping: {source}") from exc
 
 
-def _normalize_trivy_findings(artifacts: list[dict[str, Any]], start_index: int) -> list[dict[str, Any]]:
+def _normalize_trivy_findings(
+    artifacts: list[dict[str, Any]],
+    start_index: int,
+    source_hashes: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     idx = start_index
     for artifact in artifacts:
@@ -250,7 +254,7 @@ def _normalize_trivy_findings(artifacts: list[dict[str, Any]], start_index: int)
             file_target = result.get("Target") or target_file
             for misconf in result.get("Misconfigurations") or []:
                 idx += 1
-                findings.append({
+                finding = {
                     "id": f"FND-{idx:04d}",
                     "ruleId": misconf.get("ID", "UNKNOWN"),
                     "source": "trivy",
@@ -260,7 +264,11 @@ def _normalize_trivy_findings(artifacts: list[dict[str, Any]], start_index: int)
                     "line": _trivy_misconfiguration_line(misconf),
                     "title": misconf.get("Title", ""),
                     "maskedEvidence": (misconf.get("Message") or "")[:120],
-                })
+                }
+                patch_context = _trivy_patch_context(misconf, target_file, source_hashes or {})
+                if patch_context:
+                    finding["patchContext"] = patch_context
+                findings.append(finding)
             for vuln in result.get("Vulnerabilities") or []:
                 idx += 1
                 findings.append({
@@ -293,6 +301,39 @@ def _normalize_trivy_findings(artifacts: list[dict[str, Any]], start_index: int)
 def _trivy_misconfiguration_line(misconfiguration: dict[str, Any]) -> int | None:
     line = (misconfiguration.get("CauseMetadata") or {}).get("StartLine")
     return line if isinstance(line, int) else None
+
+
+def _trivy_patch_context(
+    misconfiguration: dict[str, Any],
+    target_file: str,
+    source_hashes: dict[str, str],
+) -> dict[str, Any] | None:
+    cause_metadata = misconfiguration.get("CauseMetadata") or {}
+    lines = ((cause_metadata.get("Code") or {}).get("Lines") or [])
+    old_lines: list[str] = []
+    line_numbers: list[int] = []
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        content = line.get("Content")
+        number = line.get("Number")
+        if isinstance(content, str):
+            old_lines.append(content)
+        if isinstance(number, int):
+            line_numbers.append(number)
+    if not old_lines:
+        return None
+    context: dict[str, Any] = {
+        "type": "dockerfile",
+        "target": misconfiguration.get("ID", "UNKNOWN"),
+        "lineStart": min(line_numbers) if line_numbers else _trivy_misconfiguration_line(misconfiguration),
+        "lineEnd": max(line_numbers) if line_numbers else _trivy_misconfiguration_line(misconfiguration),
+        "oldText": "\n".join(old_lines),
+    }
+    expected_hash = source_hashes.get(target_file)
+    if expected_hash:
+        context["expectedFileHash"] = expected_hash
+    return context
 
 
 def _docker_compose_version() -> str | None:
