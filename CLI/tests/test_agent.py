@@ -134,6 +134,23 @@ def test_report_agent_task_result_posts_backend_payload(monkeypatch, tmp_path: P
     assert report == {"data": {"taskId": 10, "taskStatus": "SUCCEEDED", "findingId": 3}}
     assert requests == [
         (
+            "https://api.example.com/api/v1/internal/scans/2/findings/3/patch-results",
+            {"Authorization": "Bearer agent-token"},
+            {
+                "patchStatus": "SUCCEEDED",
+                "resultMessage": "Patch applied successfully.",
+                "backupFileName": backup.name,
+                "backupFilePath": str(backup),
+                "backupMetadata": {
+                    "taskId": 10,
+                    "taskType": "PATCH_APPLY",
+                    "patchId": "PATCH-1",
+                    "filePath": "Dockerfile",
+                },
+            },
+            {"timeout": 20.0, "follow_redirects": True},
+        ),
+        (
             "https://api.example.com/api/v1/internal/agents/7/tasks/10/result",
             {"Authorization": "Bearer agent-token"},
             {
@@ -199,6 +216,18 @@ def test_report_agent_task_result_reports_task_failure(monkeypatch):
     agent.report_agent_task_result("https://api.example.com", 7, "agent-token", task, result)
 
     assert requests == [
+        (
+            "https://api.example.com/api/v1/internal/scans/2/findings/3/patch-results",
+            {"Authorization": "Bearer agent-token"},
+            {
+                "patchStatus": "FAILED",
+                "resultMessage": "Patch oldText was not found: Dockerfile",
+                "backupMetadata": {
+                    "taskId": 10,
+                    "taskType": "PATCH_APPLY",
+                },
+            },
+        ),
         (
             "https://api.example.com/api/v1/internal/agents/7/tasks/10/result",
             {"Authorization": "Bearer agent-token"},
