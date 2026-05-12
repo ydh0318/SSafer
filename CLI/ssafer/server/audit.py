@@ -21,6 +21,11 @@ SENSITIVE_PORTS = {
     15672: ("RabbitMQ management", "MEDIUM"),
 }
 
+DEFAULT_ALLOWED_PORTS: frozenset[int] = frozenset({22, 80, 443})
+
+_PUBLIC_HOSTS = {"0.0.0.0", "::", ":::", "[::]", ""}
+_LOCALHOST_HOSTS = {"127.0.0.1", "localhost", "::1", "[::1]"}
+
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30
 TRIVY_ROOTFS_TIMEOUT_SECONDS = 600
 
@@ -72,9 +77,11 @@ def run_server_audit(
     allow_sudo: bool = False,
     runner: Runner | None = None,
     sshd_config: Path = Path("/etc/ssh/sshd_config"),
+    allowed_ports: frozenset[int] | None = None,
 ) -> ServerAuditResult:
     selected = set(checks or ["ports", "processes", "docker", "ssh", "firewall", "nginx", "os-packages"])
     command_runner = runner or run_command
+    effective_allowed = allowed_ports if allowed_ports is not None else DEFAULT_ALLOWED_PORTS
     result = ServerAuditResult()
 
     if "ports" in selected:
@@ -94,6 +101,8 @@ def run_server_audit(
 
     if "ports" in selected and "firewall" in selected:
         _cross_validate_ports_firewall(result)
+    if "docker" in selected and "firewall" in selected:
+        _audit_docker_ports(result, command_runner, effective_allowed)
 
     _assign_finding_ids(result.findings)
     return result
@@ -293,6 +302,16 @@ def _audit_firewall(result: ServerAuditResult, runner: Runner, *, allow_sudo: bo
         iptables = runner(["sudo", "-n", "iptables", "-S"])
     result.artifacts.append(ServerArtifact("command-output", "ufw status", asdict(ufw)))
     result.artifacts.append(ServerArtifact("command-output", "iptables -S", asdict(iptables)))
+
+    _collect_extra_iptables = lambda cmd: runner(["sudo", "-n", *cmd]) if allow_sudo else runner(cmd)
+    for extra_cmd, target_name in [
+        (["iptables", "-t", "nat", "-S"], "iptables -t nat -S"),
+        (["iptables", "-S", "DOCKER-USER"], "iptables -S DOCKER-USER"),
+        (["iptables", "-S", "FORWARD"], "iptables -S FORWARD"),
+    ]:
+        extra = _collect_extra_iptables(extra_cmd)
+        result.artifacts.append(ServerArtifact("command-output", target_name, asdict(extra)))
+
     if ufw.exit_code == 0 and "Status: inactive" in ufw.stdout:
         result.findings.append(
             ServerFinding(
@@ -583,6 +602,183 @@ def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
         elif fw is None:
             finding.severity = "MEDIUM"
             finding.title += " (방화벽 규칙 없음)"
+
+
+@dataclass(frozen=True)
+class DockerPublishedPort:
+    container_name: str
+    container_id: str
+    host_ip: str
+    host_port: int
+    container_port: int
+    protocol: str
+    public: bool
+
+
+_DOCKER_PORT_RE = re.compile(
+    r"(?:(?P<host_ip>[^:]+):)?(?P<host_port>\d+)->(?P<container_port>\d+)/(?P<proto>\w+)"
+)
+
+
+def _is_public_docker_host(host_ip: str) -> bool:
+    return host_ip.strip("[]") in _PUBLIC_HOSTS
+
+
+def parse_docker_ports_from_ps(containers: list[dict]) -> list[DockerPublishedPort]:
+    ports: list[DockerPublishedPort] = []
+    for container in containers:
+        name = str(container.get("Names") or container.get("names") or "")
+        cid = str(container.get("ID") or container.get("id") or "")[:12]
+        ports_str = str(container.get("Ports") or container.get("ports") or "")
+        for m in _DOCKER_PORT_RE.finditer(ports_str):
+            host_ip = (m.group("host_ip") or "").strip(", ")
+            normalized_ip = host_ip.strip("[]")
+            is_public = _is_public_docker_host(host_ip)
+            is_localhost = normalized_ip in {"127.0.0.1", "localhost", "::1"}
+            ports.append(DockerPublishedPort(
+                container_name=name,
+                container_id=cid,
+                host_ip=host_ip or "0.0.0.0",
+                host_port=int(m.group("host_port")),
+                container_port=int(m.group("container_port")),
+                protocol=m.group("proto"),
+                public=is_public and not is_localhost,
+            ))
+    return ports
+
+
+def parse_docker_inspect_ports(inspect_output: str) -> list[DockerPublishedPort]:
+    ports: list[DockerPublishedPort] = []
+    try:
+        containers = json.loads(inspect_output)
+    except (json.JSONDecodeError, TypeError):
+        return ports
+    if not isinstance(containers, list):
+        return ports
+    for container in containers:
+        name = str(container.get("Name", "")).lstrip("/")
+        cid = str(container.get("Id", ""))[:12]
+        network_settings = container.get("NetworkSettings") or {}
+        port_map = network_settings.get("Ports") or {}
+        for container_port_proto, bindings in port_map.items():
+            if not bindings:
+                continue
+            parts = container_port_proto.split("/")
+            container_port = int(parts[0])
+            protocol = parts[1] if len(parts) > 1 else "tcp"
+            for binding in bindings:
+                host_ip = binding.get("HostIp", "")
+                host_port_str = binding.get("HostPort", "")
+                if not host_port_str:
+                    continue
+                normalized_ip = host_ip.strip("[]")
+                is_public = _is_public_docker_host(host_ip)
+                is_localhost = normalized_ip in {"127.0.0.1", "localhost", "::1"}
+                ports.append(DockerPublishedPort(
+                    container_name=name,
+                    container_id=cid,
+                    host_ip=host_ip or "0.0.0.0",
+                    host_port=int(host_port_str),
+                    container_port=container_port,
+                    protocol=protocol,
+                    public=is_public and not is_localhost,
+                ))
+    return ports
+
+
+_DOCKER_USER_DPORT_RE = re.compile(
+    r"-A\s+DOCKER-USER\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT|RETURN)"
+)
+_FORWARD_DPORT_RE = re.compile(
+    r"-A\s+FORWARD\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT)"
+)
+
+
+def parse_docker_user_rules(output: str) -> dict[int, list[str]]:
+    rules: dict[int, list[str]] = {}
+    for line in output.splitlines():
+        m = _DOCKER_USER_DPORT_RE.search(line)
+        if m:
+            port = int(m.group(1))
+            action = m.group(2)
+            normalized = "DENY" if action in {"DROP", "REJECT"} else "ALLOW"
+            rules.setdefault(port, []).append(normalized)
+    return rules
+
+
+def _audit_docker_ports(
+    result: ServerAuditResult,
+    runner: Runner,
+    allowed_ports: frozenset[int],
+) -> None:
+    docker_containers_artifact = None
+    for artifact in result.artifacts:
+        if artifact.type == "docker-containers":
+            docker_containers_artifact = artifact
+            break
+
+    if docker_containers_artifact is None:
+        return
+
+    published = parse_docker_ports_from_ps(docker_containers_artifact.content)
+
+    container_ids = list(dict.fromkeys(
+        p.container_id for p in published if p.container_id
+    ))
+    if container_ids:
+        inspect_result = runner(["docker", "inspect", *container_ids])
+        if inspect_result.exit_code == 0:
+            result.artifacts.append(ServerArtifact(
+                "command-output", "docker inspect", asdict(inspect_result),
+            ))
+            inspect_ports = parse_docker_inspect_ports(inspect_result.stdout)
+            if inspect_ports:
+                published = inspect_ports
+
+    result.artifacts.append(ServerArtifact(
+        "docker-published-ports", "docker",
+        [asdict(p) for p in published],
+    ))
+
+    docker_user_rules: dict[int, list[str]] = {}
+    for artifact in result.artifacts:
+        if (
+            artifact.type == "command-output"
+            and isinstance(artifact.content, dict)
+            and artifact.target == "iptables -S DOCKER-USER"
+            and artifact.content.get("exit_code") == 0
+        ):
+            docker_user_rules = parse_docker_user_rules(artifact.content.get("stdout", ""))
+            break
+
+    for port in published:
+        if not port.public:
+            continue
+        if port.host_port in allowed_ports:
+            continue
+        du_actions = docker_user_rules.get(port.host_port, [])
+        if any(a == "DENY" for a in du_actions):
+            severity = "MEDIUM"
+            suffix = "(DOCKER-USER 차단됨)"
+        elif any(a == "ALLOW" for a in du_actions):
+            severity = "HIGH"
+            suffix = "(DOCKER-USER 허용됨)"
+        else:
+            severity = "HIGH"
+            suffix = "(DOCKER-USER 규칙 없음)"
+
+        result.findings.append(ServerFinding(
+            id="",
+            ruleId="SERVER_DOCKER_PUBLIC_PUBLISHED_PORT",
+            source="server-audit",
+            severity=severity,
+            target=f"{port.container_name or port.container_id}",
+            title=f"Docker가 포트({port.host_port})를 외부에 publish함 {suffix}",
+            evidence=(
+                f"{port.host_ip}:{port.host_port}->{port.container_port}/{port.protocol} "
+                f"({port.container_name})"
+            ),
+        ))
 
 
 def _assign_finding_ids(findings: list[ServerFinding]) -> None:

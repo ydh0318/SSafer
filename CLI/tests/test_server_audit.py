@@ -12,6 +12,9 @@ from ssafer.server.audit import (
     TRIVY_ROOTFS_TIMEOUT_SECONDS,
     _command_timeout_seconds,
     _resolve_firewall_state,
+    parse_docker_inspect_ports,
+    parse_docker_ports_from_ps,
+    parse_docker_user_rules,
     parse_iptables_input_rules,
     parse_ssh_settings,
     parse_ss_listening_ports,
@@ -121,7 +124,7 @@ def test_server_audit_records_firewall_inactive():
     def fake_runner(command: list[str]) -> CommandResult:
         if command == ["ufw", "status"]:
             return CommandResult(command, 0, "Status: inactive")
-        if command == ["iptables", "-S"]:
+        if "iptables" in command:
             return CommandResult(command, 0, "-P INPUT ACCEPT")
         raise AssertionError(command)
 
@@ -569,3 +572,188 @@ def test_cross_validate_no_firewall_data_preserves_severity():
     port_findings = [f for f in result.findings if f.ruleId == "SERVER_PUBLIC_SENSITIVE_PORT"]
     assert len(port_findings) == 1
     assert port_findings[0].severity == "HIGH"
+
+
+# ── parse_docker_ports_from_ps ──────────────────────────────────────────────
+
+def test_parse_docker_ports_public_publish():
+    containers = [{"Names": "ssafer-spring", "ID": "abc123", "Ports": "0.0.0.0:8080->8080/tcp"}]
+    ports = parse_docker_ports_from_ps(containers)
+    assert len(ports) == 1
+    assert ports[0].host_port == 8080
+    assert ports[0].public is True
+
+
+def test_parse_docker_ports_localhost_publish():
+    containers = [{"Names": "redis", "ID": "def456", "Ports": "127.0.0.1:6379->6379/tcp"}]
+    ports = parse_docker_ports_from_ps(containers)
+    assert len(ports) == 1
+    assert ports[0].host_port == 6379
+    assert ports[0].public is False
+
+
+def test_parse_docker_ports_multiple():
+    containers = [{"Names": "app", "ID": "ghi789", "Ports": "0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp, 127.0.0.1:5432->5432/tcp"}]
+    ports = parse_docker_ports_from_ps(containers)
+    assert len(ports) == 3
+    public = [p for p in ports if p.public]
+    assert len(public) == 2
+
+
+def test_parse_docker_ports_empty_host_ip_is_public():
+    containers = [{"Names": "app", "ID": "jkl012", "Ports": "3306->3306/tcp"}]
+    ports = parse_docker_ports_from_ps(containers)
+    assert len(ports) == 1
+    assert ports[0].public is True
+
+
+# ── parse_docker_inspect_ports ──────────────────────────────────────────────
+
+def test_parse_docker_inspect_public():
+    inspect_json = json.dumps([{
+        "Id": "abc123456789",
+        "Name": "/ssafer-spring",
+        "NetworkSettings": {
+            "Ports": {
+                "8080/tcp": [{"HostIp": "0.0.0.0", "HostPort": "8080"}]
+            }
+        }
+    }])
+    ports = parse_docker_inspect_ports(inspect_json)
+    assert len(ports) == 1
+    assert ports[0].public is True
+    assert ports[0].container_name == "ssafer-spring"
+
+
+def test_parse_docker_inspect_localhost():
+    inspect_json = json.dumps([{
+        "Id": "def456789012",
+        "Name": "/redis",
+        "NetworkSettings": {
+            "Ports": {
+                "6379/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6379"}]
+            }
+        }
+    }])
+    ports = parse_docker_inspect_ports(inspect_json)
+    assert len(ports) == 1
+    assert ports[0].public is False
+
+
+def test_parse_docker_inspect_no_bindings():
+    inspect_json = json.dumps([{
+        "Id": "xyz",
+        "Name": "/internal",
+        "NetworkSettings": {"Ports": {"8080/tcp": None}}
+    }])
+    ports = parse_docker_inspect_ports(inspect_json)
+    assert ports == []
+
+
+# ── parse_docker_user_rules ─────────────────────────────────────────────────
+
+def test_parse_docker_user_drop():
+    output = "-A DOCKER-USER -p tcp --dport 3306 -j DROP\n-A DOCKER-USER -j RETURN\n"
+    rules = parse_docker_user_rules(output)
+    assert rules[3306] == ["DENY"]
+
+
+def test_parse_docker_user_accept():
+    output = "-A DOCKER-USER -p tcp --dport 8080 -j ACCEPT\n"
+    rules = parse_docker_user_rules(output)
+    assert rules[8080] == ["ALLOW"]
+
+
+def test_parse_docker_user_empty():
+    output = "-A DOCKER-USER -j RETURN\n"
+    rules = parse_docker_user_rules(output)
+    assert rules == {}
+
+
+# ── Docker publish finding (integration) ────────────────────────────────────
+
+def _docker_audit_runner(
+    docker_ps_ports: str = "0.0.0.0:3306->3306/tcp",
+    docker_user_output: str = "",
+    inspect_output: str = "",
+):
+    def fake_runner(command: list[str]) -> CommandResult:
+        if command == ["ss", "-tulpen"]:
+            return CommandResult(command, 0, "")
+        if command == ["docker", "ps", "--format", "{{json .}}"]:
+            return CommandResult(command, 0, json.dumps({"Names": "db", "ID": "abc123", "Ports": docker_ps_ports}))
+        if command[0] == "docker" and "inspect" in command:
+            return CommandResult(command, 0, inspect_output) if inspect_output else CommandResult(command, 1)
+        if "ufw" in command:
+            return CommandResult(command, 0, "Status: active\n")
+        if command[-1] == "DOCKER-USER":
+            return CommandResult(command, 0, docker_user_output)
+        if "iptables" in command:
+            return CommandResult(command, 0, "")
+        return CommandResult(command, 0, "")
+    return fake_runner
+
+
+def test_docker_public_publish_no_docker_user_is_high():
+    runner = _docker_audit_runner(docker_ps_ports="0.0.0.0:3306->3306/tcp")
+    result = run_server_audit(checks=["docker", "firewall"], runner=runner)
+    findings = [f for f in result.findings if f.ruleId == "SERVER_DOCKER_PUBLIC_PUBLISHED_PORT"]
+    assert len(findings) == 1
+    assert findings[0].severity == "HIGH"
+    assert "DOCKER-USER 규칙 없음" in findings[0].title
+
+
+def test_docker_public_publish_docker_user_drop_is_medium():
+    runner = _docker_audit_runner(
+        docker_ps_ports="0.0.0.0:3306->3306/tcp",
+        docker_user_output="-A DOCKER-USER -p tcp --dport 3306 -j DROP\n-A DOCKER-USER -j RETURN\n",
+    )
+    result = run_server_audit(checks=["docker", "firewall"], runner=runner)
+    findings = [f for f in result.findings if f.ruleId == "SERVER_DOCKER_PUBLIC_PUBLISHED_PORT"]
+    assert len(findings) == 1
+    assert findings[0].severity == "MEDIUM"
+    assert "DOCKER-USER 차단됨" in findings[0].title
+
+
+def test_docker_localhost_publish_no_finding():
+    runner = _docker_audit_runner(docker_ps_ports="127.0.0.1:6379->6379/tcp")
+    result = run_server_audit(checks=["docker", "firewall"], runner=runner)
+    findings = [f for f in result.findings if f.ruleId == "SERVER_DOCKER_PUBLIC_PUBLISHED_PORT"]
+    assert findings == []
+
+
+def test_docker_allowlist_port_no_finding():
+    runner = _docker_audit_runner(docker_ps_ports="0.0.0.0:443->443/tcp")
+    result = run_server_audit(checks=["docker", "firewall"], runner=runner)
+    findings = [f for f in result.findings if f.ruleId == "SERVER_DOCKER_PUBLIC_PUBLISHED_PORT"]
+    assert findings == []
+
+
+def test_docker_custom_allowlist():
+    runner = _docker_audit_runner(docker_ps_ports="0.0.0.0:8080->8080/tcp")
+    result = run_server_audit(
+        checks=["docker", "firewall"],
+        runner=runner,
+        allowed_ports=frozenset({22, 80, 443, 8080}),
+    )
+    findings = [f for f in result.findings if f.ruleId == "SERVER_DOCKER_PUBLIC_PUBLISHED_PORT"]
+    assert findings == []
+
+
+def test_docker_inspect_overrides_ps():
+    inspect_json = json.dumps([{
+        "Id": "abc123456789",
+        "Name": "/db",
+        "NetworkSettings": {
+            "Ports": {
+                "3306/tcp": [{"HostIp": "127.0.0.1", "HostPort": "3306"}]
+            }
+        }
+    }])
+    runner = _docker_audit_runner(
+        docker_ps_ports="0.0.0.0:3306->3306/tcp",
+        inspect_output=inspect_json,
+    )
+    result = run_server_audit(checks=["docker", "firewall"], runner=runner)
+    findings = [f for f in result.findings if f.ruleId == "SERVER_DOCKER_PUBLIC_PUBLISHED_PORT"]
+    assert findings == []
