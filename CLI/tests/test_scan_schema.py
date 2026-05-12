@@ -11,6 +11,7 @@ import pytest
 import ssafer.core.result_store as result_store
 from security_samples import AWS_ACCESS_KEY, MASKED_VALUE, trivy_secret_result
 from ssafer.core.result_store import _normalize_trivy_findings, backend_finding_source_type, load_last_scan
+from ssafer.rules.base import Finding
 from ssafer.core.trivy import sanitize_trivy_json
 
 
@@ -388,7 +389,7 @@ def test_trivy_misconfiguration_fields_map_from_raw_json():
         }
     ]
 
-    finding = _normalize_trivy_findings(artifacts, 0)[0]
+    finding = _normalize_trivy_findings(artifacts, 0, {"Dockerfile": "sha256:abc"})[0]
 
     assert FINDING_SCHEMA_KEYS <= set(finding)
     assert set(finding) <= FINDING_SCHEMA_KEYS | OPTIONAL_FINDING_SCHEMA_KEYS
@@ -408,10 +409,37 @@ def test_trivy_misconfiguration_fields_map_from_raw_json():
     assert finding["patchContext"] == {
         "type": "dockerfile",
         "target": "DS-0002",
+        "operation": "replace",
         "lineStart": 2,
         "lineEnd": 2,
         "oldText": "USER root",
+        "expectedFileHash": "sha256:abc",
     }
+
+
+def test_custom_rule_patch_context_defaults_replace_operation():
+    finding = Finding(
+        rule_id="COMPOSE_EXPOSED_DB_PORT",
+        source="custom-rule",
+        severity="CRITICAL",
+        file="docker-compose (default)",
+        line=10,
+        title="DB port exposed",
+        masked_evidence="services.db.ports=5432:5432",
+        file_path="docker-compose.yml",
+        patch_context={
+            "type": "yaml",
+            "target": "services.db.ports",
+            "lineStart": 10,
+            "lineEnd": 11,
+            "oldText": "    ports:\n      - \"5432:5432\"",
+            "expectedFileHash": "sha256:def",
+        },
+    ).to_dict()
+
+    assert finding["patchContext"]["operation"] == "replace"
+    assert finding["patchContext"]["oldText"] == "    ports:\n      - \"5432:5432\""
+    assert finding["patchContext"]["expectedFileHash"] == "sha256:def"
 
 
 def test_trivy_findings_vulnerabilities_normalized():

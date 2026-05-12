@@ -40,7 +40,10 @@ class Finding:
         if self.target_files:
             data["targetFiles"] = self.target_files
         if self.patch_context:
-            data["patchContext"] = self.patch_context
+            patch_context = dict(self.patch_context)
+            if patch_context.get("oldText") is not None:
+                patch_context.setdefault("operation", "replace")
+            data["patchContext"] = patch_context
         return data
 
 
