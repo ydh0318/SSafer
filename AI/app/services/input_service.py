@@ -9,6 +9,16 @@ def format_finding_for_llm(finding: dict[str, Any]) -> str:
         target_files_text = ", ".join(str(value) for value in target_files)
     else:
         target_files_text = "N/A"
+    patch_context = finding.get("patchContext")
+    if isinstance(patch_context, dict):
+        old_text = patch_context.get("oldText")
+        old_text_block = old_text if isinstance(old_text, str) and old_text else "N/A"
+        expected_file_hash_status = (
+            "available" if patch_context.get("expectedFileHash") else "missing"
+        )
+    else:
+        old_text_block = "N/A"
+        expected_file_hash_status = "N/A"
 
     return "\n".join(
         [
@@ -23,6 +33,9 @@ def format_finding_for_llm(finding: dict[str, Any]) -> str:
             f"Title: {finding['title']}",
             "Evidence:",
             finding["maskedEvidence"],
+            "patchContext.oldText:",
+            old_text_block,
+            f"patchContext.expectedFileHash: {expected_file_hash_status}",
         ]
     )
 

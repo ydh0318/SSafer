@@ -45,6 +45,41 @@ class ScanResultDtoTest(unittest.TestCase):
             "DB_PASSWORD=***MASKED***",
         )
 
+    def test_split_valid_invalid_findings_accepts_patch_context(self):
+        parsed = parse_scan_result(
+            build_scan_result(
+                findings=[
+                    {
+                        "id": "FND-0001",
+                        "ruleId": "DOCKER_ROOT_USER",
+                        "source": "custom-rule",
+                        "severity": "HIGH",
+                        "file": "Dockerfile",
+                        "filePath": "Dockerfile",
+                        "line": 12,
+                        "title": "Dockerfile runs as root",
+                        "maskedEvidence": "USER root",
+                        "patchContext": {
+                            "oldText": "USER root",
+                            "expectedFileHash": "sha256:abc123",
+                        },
+                    }
+                ]
+            )
+        )
+
+        valid_findings, invalid_findings = split_valid_invalid_findings(
+            extract_findings(parsed)
+        )
+
+        self.assertEqual(len(valid_findings), 1)
+        self.assertEqual(valid_findings[0]["patchContext"]["oldText"], "USER root")
+        self.assertEqual(
+            valid_findings[0]["patchContext"]["expectedFileHash"],
+            "sha256:abc123",
+        )
+        self.assertEqual(invalid_findings, [])
+
     def test_parse_scan_result_rejects_invalid_top_level_fields(self):
         scan_result = build_scan_result()
         scan_result["scanId"] = "not-a-uuid"
