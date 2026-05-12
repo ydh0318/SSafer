@@ -406,6 +406,9 @@ def test_apply_command_downloads_analysis_result_by_scan_id(monkeypatch, tmp_pat
 def test_apply_command_uses_latest_done_scan(monkeypatch, tmp_path: Path):
     target = tmp_path / "Dockerfile"
     target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+    agent_config = tmp_path / ".ssafer" / "agent.yml"
+    agent_config.parent.mkdir(parents=True)
+    agent_config.write_text("agentId: 9\nprojectId: 7\nagentToken: agent-token\n", encoding="utf-8")
     downloaded = tmp_path / ".ssafer" / "analysis" / "scans" / "321" / "analysis_result.json"
     calls = {}
 
@@ -449,8 +452,6 @@ def test_apply_command_uses_latest_done_scan(monkeypatch, tmp_path: Path):
             "--path",
             str(tmp_path),
             "--latest",
-            "--project-id",
-            "7",
             "--api-url",
             "https://api.example.com",
             "--yes",
