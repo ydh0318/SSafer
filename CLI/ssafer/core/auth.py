@@ -77,6 +77,22 @@ def login_with_credentials(endpoint: str, email: str, password: str) -> dict[str
     return data if isinstance(data, dict) else payload
 
 
+def enter_guest_mode(endpoint: str, device_id: str | None = None) -> dict[str, Any]:
+    """Issue a guest access token from the SSAfer backend."""
+    base_url = normalize_api_url(endpoint)
+    body = {"deviceId": device_id} if device_id else {}
+    with httpx.Client(timeout=30) as client:
+        response = _post_preserving_redirects(
+            client,
+            f"{base_url}/api/v1/guests/enter",
+            json=body,
+        )
+        response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data")
+    return data if isinstance(data, dict) else payload
+
+
 def register_user(endpoint: str, email: str, display_name: str, password: str) -> dict[str, Any]:
     """Create a SSAfer backend user account and return response data."""
     base_url = normalize_api_url(endpoint)
@@ -187,9 +203,36 @@ def list_projects(endpoint: str, access_token: str, *, page: int = 0, size: int 
     return data if isinstance(data, list) else []
 
 
+def get_project_agent_status(endpoint: str, project_id: int, access_token: str) -> dict[str, Any]:
+    """Return the backend-visible Local Agent status for a project."""
+    base_url = normalize_api_url(endpoint)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    with httpx.Client(timeout=30, follow_redirects=True) as client:
+        response = client.get(
+            f"{base_url}/api/v1/projects/{project_id}/agent/status",
+            headers=headers,
+        )
+        response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data")
+    return data if isinstance(data, dict) else payload
+
+
+def withdraw_current_user(endpoint: str, access_token: str) -> None:
+    """Withdraw the currently authenticated member account."""
+    base_url = normalize_api_url(endpoint)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    with httpx.Client(timeout=30, follow_redirects=True) as client:
+        response = client.delete(
+            f"{base_url}/api/v1/users",
+            headers=headers,
+        )
+        response.raise_for_status()
+
+
 def save_auth_tokens(auth_data: dict[str, Any], endpoint: str | None = None) -> None:
     """Persist backend-issued auth tokens for later upload requests."""
-    access_token = auth_data.get("accessToken")
+    access_token = auth_data.get("accessToken") or auth_data.get("guestAccessToken")
     if not access_token:
         raise ValueError("Login response is missing accessToken.")
 
@@ -203,6 +246,12 @@ def save_auth_tokens(auth_data: dict[str, Any], endpoint: str | None = None) -> 
         upload_config["refreshToken"] = str(auth_data["refreshToken"])
     if auth_data.get("refreshTokenExpiresAt"):
         upload_config["refreshTokenExpiresAt"] = str(auth_data["refreshTokenExpiresAt"])
+    if auth_data.get("guestAccessToken"):
+        upload_config["authMode"] = "guest"
+        upload_config["guestAccessTokenExpiresAt"] = str(auth_data.get("expiresAt") or "")
+    else:
+        upload_config["authMode"] = "member"
+        upload_config.pop("guestAccessTokenExpiresAt", None)
     upload_config.pop("token", None)
     if endpoint:
         upload_config["endpoint"] = normalize_api_url(endpoint)
