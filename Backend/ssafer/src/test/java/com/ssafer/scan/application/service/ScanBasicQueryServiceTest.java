@@ -60,6 +60,7 @@ class ScanBasicQueryServiceTest {
         .status(ScanStatus.DONE)
         .progressStep("completed")
         .rawResultPath("s3://ssafer/raw/1001/scan_result.json")
+        .analysisResultPath("s3://ssafer/result/1001/analysis_result.json")
         .requestedAt(requestedAt)
         .startedAt(startedAt)
         .completedAt(completedAt)
@@ -77,6 +78,7 @@ class ScanBasicQueryServiceTest {
     assertThat(response.scanType()).isEqualTo(ScanType.SERVER_AUDIT);
     assertThat(response.status()).isEqualTo(ScanStatus.DONE);
     assertThat(response.rawResultPath()).isEqualTo("s3://ssafer/raw/1001/scan_result.json");
+    assertThat(response.analysisResultPath()).isEqualTo("s3://ssafer/result/1001/analysis_result.json");
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);
   }
 
@@ -115,5 +117,30 @@ class ScanBasicQueryServiceTest {
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.FORBIDDEN);
+  }
+
+  @Test
+  void getScanBasicReturnsNullSourceWhenSnapshotHasNoSource() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Scan scan = Scan.builder()
+        .id(1001L)
+        .projectId(101L)
+        .requestedByUserId(1L)
+        .requestActorType(RequestActorType.USER)
+        .scanMode(ScanMode.AGENT)
+        .scanType(ScanType.PROJECT_FILE)
+        .targetSnapshotJson("{\"target\":\"repo\"}")
+        .status(ScanStatus.DONE)
+        .requestedAt(LocalDateTime.of(2026, 4, 23, 9, 0))
+        .lastUpdatedAt(LocalDateTime.of(2026, 4, 23, 9, 3))
+        .build();
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(scanRepository.findById(1001L)).thenReturn(Optional.of(scan));
+
+    ScanBasicResponse response = scanBasicQueryService.getScanBasic(1001L);
+
+    assertThat(response.source()).isNull();
+    verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);
   }
 }
