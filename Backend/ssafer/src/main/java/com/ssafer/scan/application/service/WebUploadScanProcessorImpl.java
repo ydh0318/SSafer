@@ -18,6 +18,7 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
 
   private final UploadScanTempWorkspaceManager tempWorkspaceManager;
   private final UploadFileScanner uploadFileScanner;
+  private final UploadScanFindingPatchContextEnricher uploadScanFindingPatchContextEnricher;
   private final ScanResultJsonBuilder scanResultJsonBuilder;
   private final UploadScanRawResultUploader uploadScanRawResultUploader;
   private final UploadScanAnalysisTaskDispatcher uploadScanAnalysisTaskDispatcher;
@@ -34,7 +35,11 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
       List<Path> savedFiles = tempWorkspaceManager.saveFiles(workspace, command.files());
 
       // 스캔 실행 방식은 UploadFileScanner 구현체가 결정하고, 이후 결과 처리 흐름은 이 클래스가 유지한다.
-      List<UploadScanFinding> findings = uploadFileScanner.scanAll(savedFiles);
+      // 웹 업로드는 로컬 경로를 모르므로, 저장된 업로드 파일에서 diff용 patchContext만 보강한다.
+      List<UploadScanFinding> findings = uploadScanFindingPatchContextEnricher.enrich(
+          uploadFileScanner.scanAll(savedFiles),
+          savedFiles
+      );
 
       Path resultPath = scanResultJsonBuilder.writeScanResultJson(
           workspace,

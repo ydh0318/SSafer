@@ -65,9 +65,26 @@ public class ScanResultJsonBuilder {
     mapped.put("source", finding.source());
     mapped.put("severity", finding.severity());
     mapped.put("file", finding.file());
+    // filePath는 AI가 fix.patches.filePath를 만들 때 참조하는 업로드 파일 식별자다.
+    if (finding.filePath() != null && !finding.filePath().isBlank()) {
+      mapped.put("filePath", finding.filePath());
+    }
     mapped.put("line", finding.line());
     mapped.put("title", finding.title());
     mapped.put("maskedEvidence", finding.maskedEvidence());
+    if (finding.patchContext() != null) {
+      mapped.put("patchContext", toPatchContextMap(finding.patchContext()));
+    }
+    return mapped;
+  }
+
+  private Map<String, Object> toPatchContextMap(UploadScanFindingPatchContext patchContext) {
+    // patchContext는 scan_result.json에 그대로 실려 AI 분석 입력으로 전달된다.
+    Map<String, Object> mapped = new LinkedHashMap<>();
+    mapped.put("oldText", patchContext.oldText());
+    mapped.put("lineStart", patchContext.lineStart());
+    mapped.put("lineEnd", patchContext.lineEnd());
+    mapped.put("expectedFileHash", patchContext.expectedFileHash());
     return mapped;
   }
 }
