@@ -262,6 +262,60 @@ class WorkerAnalysisResultPersistenceServiceTest {
       }
       """;
 
+  private static final String LATEST_WORKER_ANALYSIS_RESULT_JSON = """
+      {
+        "schemaVersion": "0.1",
+        "scanId": "uuid",
+        "source": "cli",
+        "scannedAt": "2026-05-12T00:00:00Z",
+        "generatedAt": "2026-05-12T00:00:00+00:00",
+        "resultCount": 1,
+        "results": [
+          {
+            "findingId": "FND-0001",
+            "ruleId": "COMPOSE_HARDCODED_SECRET",
+            "source": "custom-rule",
+            "severity": "HIGH",
+            "file": "docker-compose.yml",
+            "filePath": "docker-compose.yml",
+            "line": 12,
+            "title": "서비스에 민감한 환경변수가 설정됨",
+            "maskedEvidence": "DB_PASSWORD=***MASKED***",
+            "explanation": {
+              "summary": "취약점 요약",
+              "whyRisky": "위험한 이유",
+              "abuseScenario": "악용 가능 시나리오",
+              "expectedImpact": "예상 영향",
+              "severityInterpretation": "심각도 해석"
+            },
+            "impact": "초보자도 이해하기 쉬운 비유 중심 현실 영향 설명",
+            "fix": {
+              "summary": "수정 요약",
+              "priority": "high",
+              "recommendedActions": ["조치 1", "조치 2"],
+              "codeGuidance": "코드/설정 변경 가이드",
+              "verification": "검증 방법",
+              "cautions": ["주의사항"],
+              "patches": [
+                {
+                  "patchId": "PATCH-FND-0001",
+                  "findingId": "FND-0001",
+                  "operation": "replace",
+                  "filePath": "docker-compose.yml",
+                  "oldText": "기존 원문",
+                  "newText": "수정 후 원문",
+                  "expectedFileHash": "sha256:..."
+                }
+              ]
+            },
+            "targetFiles": [
+              "docker-compose.yml"
+            ]
+          }
+        ]
+      }
+      """;
+
   @Mock
   private ScanRepository scanRepository;
 
@@ -448,6 +502,11 @@ class WorkerAnalysisResultPersistenceServiceTest {
     verify(scanFindingRepository).saveAll(any());
     assertThat(existingFinding.getPatchPayloadJson()).isNotBlank();
     assertThat(existingFinding.getPatchPayloadJson()).contains("PATCH-0001");
+    assertThat(existingFinding.getFingerprint()).startsWith("sha256:");
+    assertThat(existingFinding.getDescription()).isEqualTo("summary 1");
+    assertThat(existingFinding.getAttackScenario()).isEqualTo("abuse scenario 1");
+    assertThat(existingFinding.getRemediationGuide()).contains("fix summary 1");
+    assertThat(existingFinding.getRawSnippetJson()).contains("\"impact\"");
     assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SUCCEEDED);
     assertThat(scan.getStatus()).isEqualTo(ScanStatus.DONE);
   }
@@ -584,6 +643,49 @@ class WorkerAnalysisResultPersistenceServiceTest {
     JsonNode patchPayload = new ObjectMapper().readTree(findingsCaptor.getValue().getFirst().getPatchPayloadJson());
     assertThat(patchPayload.path("patches")).hasSize(1);
     assertThat(patchPayload.path("patches").get(0).path("patchId").asText()).isEqualTo("PATCH-0001");
+  }
+
+  @Test
+  void persistSupportsLatestWorkerSchemaFields() throws Exception {
+    Scan scan = runningScan();
+    AgentTask task = ackedTask(scan);
+    ScanNode savedNode = ScanNode.builder()
+        .id(200L)
+        .scanId(scan.getId())
+        .nodeKey("uuid")
+        .nodeName("cli")
+        .nodeType("ANALYSIS_RESULT")
+        .metadataJson("{}")
+        .createdAt(LocalDateTime.now())
+        .build();
+
+    when(scanRepository.findByIdForUpdate(scan.getId())).thenReturn(Optional.of(scan));
+    when(agentTaskRepository.findByIdAndScanId(task.getId(), scan.getId())).thenReturn(Optional.of(task));
+    when(analysisResultObjectReader.read(scan.getAnalysisResultPath())).thenReturn(LATEST_WORKER_ANALYSIS_RESULT_JSON);
+    when(scanNodeRepository.findByScanIdAndNodeKey(scan.getId(), "uuid")).thenReturn(Optional.empty());
+    when(scanNodeRepository.save(any(ScanNode.class))).thenReturn(savedNode);
+    when(scanFindingRepository.findAllByScanId(scan.getId())).thenReturn(List.of());
+    when(scanFindingRepository.countByScanId(scan.getId())).thenReturn(1L);
+
+    workerAnalysisResultPersistenceService.persist(event());
+
+    ArgumentCaptor<List<ScanFinding>> findingsCaptor = ArgumentCaptor.forClass(List.class);
+    verify(scanFindingRepository).saveAll(findingsCaptor.capture());
+    assertThat(findingsCaptor.getValue()).hasSize(1);
+
+    ScanFinding finding = findingsCaptor.getValue().getFirst();
+    assertThat(finding.getFilePath()).isEqualTo("docker-compose.yml");
+    assertThat(finding.getDescription()).isEqualTo("취약점 요약");
+    assertThat(finding.getAttackScenario()).isEqualTo("악용 가능 시나리오");
+    assertThat(finding.getRemediationGuide()).contains("수정 요약");
+    assertThat(finding.getPatchPayloadJson()).contains("PATCH-FND-0001");
+
+    JsonNode rawSnippet = new ObjectMapper().readTree(finding.getRawSnippetJson());
+    assertThat(rawSnippet.path("filePath").asText()).isEqualTo("docker-compose.yml");
+    assertThat(rawSnippet.path("impact").asText()).isEqualTo("초보자도 이해하기 쉬운 비유 중심 현실 영향 설명");
+    assertThat(rawSnippet.path("targetFiles")).hasSize(1);
+    assertThat(rawSnippet.path("explanation").path("whyRisky").asText()).isEqualTo("위험한 이유");
+    assertThat(rawSnippet.path("fix").path("patches")).hasSize(1);
   }
 
   @Test

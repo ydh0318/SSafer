@@ -169,11 +169,40 @@ public class WorkerAnalysisResultPersistenceService {
       FindingSourceType sourceType = mapSourceType(readRequiredText(result, "source"));
       String fingerprint = resolveFingerprint(result, sourceType);
       ScanFinding existingFinding = findExistingFinding(existingFindingsByFingerprint, result, fingerprint);
+      Severity severity = mapSeverity(readRequiredText(result, "severity"));
+      String category = resolveCategory(result, sourceType);
+      String description = resolveDescription(result);
+      String filePath = resolveFindingFilePath(result);
+      Integer lineNumber = readNullableInteger(result, "line");
+      String resourceName = resolveResourceName(result, root);
+      String ruleCode = readNullableText(result, "ruleId");
+      String attackScenario = resolveAttackScenario(result);
+      String remediationGuide = buildRemediationGuide(result.path("fix"));
+      String rawSnippetJson = buildRawSnippetJson(result);
       String patchPayloadJson = supportsPatchGeneration(scan)
           ? buildPatchPayloadJson(rootPatchesByFindingId, result)
           : null;
       if (existingFinding != null) {
-        existingFinding.backfillPatchPayload(patchPayloadJson);
+        String previousFingerprint = existingFinding.getFingerprint();
+        // 예전 적재분이 있더라도 재적재 시 worker 본문은 최신 구조로 덮어써서 old/partial 데이터를 남기지 않는다.
+        existingFinding.refreshAnalysisPayload(
+            sourceType,
+            fingerprint,
+            severity,
+            category,
+            readRequiredText(result, "title"),
+            description,
+            filePath,
+            lineNumber,
+            resourceName,
+            ruleCode,
+            attackScenario,
+            remediationGuide,
+            rawSnippetJson,
+            patchPayloadJson
+        );
+        existingFindingsByFingerprint.remove(previousFingerprint);
+        existingFindingsByFingerprint.put(fingerprint, existingFinding);
         continue;
       }
 
@@ -182,17 +211,17 @@ public class WorkerAnalysisResultPersistenceService {
           .scanNodeId(node.getId())
           .sourceType(sourceType)
           .fingerprint(fingerprint)
-          .severity(mapSeverity(readRequiredText(result, "severity")))
-          .category(resolveCategory(result, sourceType))
+          .severity(severity)
+          .category(category)
           .title(readRequiredText(result, "title"))
-          .description(resolveDescription(result))
-          .filePath(resolveFindingFilePath(result))
-          .lineNumber(readNullableInteger(result, "line"))
-          .resourceName(resolveResourceName(result, root))
-          .ruleCode(readNullableText(result, "ruleId"))
-          .attackScenario(resolveAttackScenario(result))
-          .remediationGuide(buildRemediationGuide(result.path("fix")))
-          .rawSnippetJson(buildRawSnippetJson(result))
+          .description(description)
+          .filePath(filePath)
+          .lineNumber(lineNumber)
+          .resourceName(resourceName)
+          .ruleCode(ruleCode)
+          .attackScenario(attackScenario)
+          .remediationGuide(remediationGuide)
+          .rawSnippetJson(rawSnippetJson)
           .patchPayloadJson(patchPayloadJson)
           .resolutionStatus(ResolutionStatus.OPEN)
           .createdAt(createdAt)
