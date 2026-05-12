@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import AppRouter from './app/router';
+import HiddenGoose from './components/common/HiddenGoose';
 import { ToastProvider } from './features/feedback/ToastProvider';
 import { useUiStore } from './store/uiStore';
 
@@ -21,6 +22,7 @@ function App() {
   return (
     <ToastProvider>
       <AppRouter />
+      <HiddenGoose />
     </ToastProvider>
   );
 }

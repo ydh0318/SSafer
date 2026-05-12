@@ -6,6 +6,7 @@ import PixelGoose from '../../components/common/PixelGoose';
 import { useUiStore } from '../../store/uiStore';
 
 import SiteHeader from '../../components/layout/SiteHeader';
+import TypingGameEnding from './TypingGameEnding';
 
 /* ─── types ─── */
 type TokenTone = 'emerald' | 'sky' | 'amber' | 'rose' | 'slate';
@@ -78,11 +79,13 @@ function TypingLine({
   onDone,
   onEnterNext,
   isDark,
+  autoPlay,
 }: {
   command: string;
   onDone: () => void;
   onEnterNext: () => void;
   isDark: boolean;
+  autoPlay?: boolean;
 }) {
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -102,6 +105,28 @@ function TypingLine({
       onDone();
     }
   }, [done, onDone]);
+
+  // Ref to keep track of the latest onEnterNext without re-triggering the effect
+  const onEnterNextRef = useRef(onEnterNext);
+  useEffect(() => {
+    onEnterNextRef.current = onEnterNext;
+  }, [onEnterNext]);
+
+  // Auto-play logic
+  useEffect(() => {
+    if (!autoPlay) return;
+    if (!done) {
+      const timer = setTimeout(() => {
+        setInput((prev) => command.slice(0, prev.length + 1));
+      }, 100); // typing speed (slower)
+      return () => clearTimeout(timer);
+    } else {
+      const timer = setTimeout(() => {
+        onEnterNextRef.current();
+      }, 1500); // delay before advancing to next command
+      return () => clearTimeout(timer);
+    }
+  }, [input, done, command, autoPlay]);
 
   // light: black cursor / dark: lime cursor
   const caretStyle = isDark
@@ -182,6 +207,8 @@ export default function TypingGamePage() {
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState(0);
+  const [showEnding, setShowEnding] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(false);
   const theme = useUiStore((s) => s.theme);
   const isDark = theme === 'dark';
   const currentLineRef = useRef<HTMLDivElement>(null);
@@ -208,11 +235,40 @@ export default function TypingGamePage() {
   const handleEnterNext = () => {
     if (!isLastCmd) goNextCmd();
     else if (!isLastStage) goNextStage();
+    else setShowEnding(true);
   };
 
   const jumpTo = (si: number, ci: number) => {
     setStageIdx(si); setCmdIdx(ci); setSidebarOpen(false);
   };
+
+  // Easter egg: Ctrl x 3
+  const ctrlCount = useRef(0);
+  const ctrlTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setAutoPlay(false);
+      }
+      if (e.key === 'Control') {
+        ctrlCount.current += 1;
+        if (ctrlCount.current >= 3) {
+          setAutoPlay(true);
+          ctrlCount.current = 0;
+        }
+        if (ctrlTimeout.current) clearTimeout(ctrlTimeout.current);
+        ctrlTimeout.current = setTimeout(() => {
+          ctrlCount.current = 0;
+        }, 1000);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (ctrlTimeout.current) clearTimeout(ctrlTimeout.current);
+    };
+  }, []);
 
   // Auto-scroll to the current typing line whenever the command changes
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -232,7 +288,7 @@ export default function TypingGamePage() {
   }, [cmdIdx, stageIdx]);
 
   // theme-aware classes
-  const pageBg    = isDark ? 'bg-[#1a1a1a]' : 'bg-[#f2f1ec]';
+  const pageBg    = isDark ? 'bg-[#1a1a1a]' : 'bg-[#FAFAF7]';
   const borderCol = isDark ? 'border-neutral-700' : 'border-neutral-300';
   const doneCmd   = isDark ? 'text-neutral-500' : 'text-neutral-500';
   const doneDesc  = isDark ? 'text-neutral-600' : 'text-neutral-400';
@@ -328,6 +384,7 @@ export default function TypingGamePage() {
                 onDone={handleDone}
                 onEnterNext={handleEnterNext}
                 isDark={isDark}
+                autoPlay={autoPlay}
               />
             </div>
 
@@ -394,8 +451,8 @@ export default function TypingGamePage() {
                 </button>
               )}
               {isCurrentDone && isLastCmd && isLastStage && (
-                <span className={`flex items-center gap-1 text-xs font-bold ${summaryCol}`}>
-                  <Check className="h-4 w-4" /> 완료!
+                <span className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${isDark ? 'text-[#d9f66f]' : 'text-emerald-600'} animate-pulse`}>
+                  <Check className="h-4 w-4" /> 엔터(Enter)를 눌러 완료하세요
                 </span>
               )}
             </div>
@@ -505,6 +562,9 @@ export default function TypingGamePage() {
           </aside>
         </>
       )}
+
+      {/* Ending Overlay */}
+      {showEnding && <TypingGameEnding onClose={() => setShowEnding(false)} />}
     </div>
   );
 }
