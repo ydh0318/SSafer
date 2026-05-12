@@ -8,9 +8,10 @@ import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
 import { getScanBasic, getScanFindings, getScanSummary } from '../../features/results/api/results';
+import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
-import { formatDateTime, getSafeScanType, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
+import { formatDateTime, getSafeScanType } from '../../features/scans/utils/scanPresentation';
 import { buildMockServerAuditResult } from '../../mocks/serverAudit';
 import type {
   FindingResolutionStatus,
@@ -300,7 +301,7 @@ function ResultPage() {
               {scanBasic ? <ScanStatusBadge status={scanBasic.status} /> : null}
               {scanBasic ? <ScanTypeBadge scanType={scanBasic.scanType} /> : null}
               {currentProjectId ? <span>projectId #{currentProjectId}</span> : null}
-              {scanBasic ? <span>{getScanModeLabel(scanBasic.scanMode)}</span> : null}
+              {scanBasic ? <ScanModeBadge scanMode={scanBasic.scanMode} /> : null}
             </div>
             <p className="text-neutral-600">
               {scanBasic?.completedAt
