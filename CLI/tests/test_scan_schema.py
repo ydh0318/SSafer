@@ -29,6 +29,7 @@ FINDING_SCHEMA_KEYS = {
 OPTIONAL_FINDING_SCHEMA_KEYS = {
     "filePath",
     "targetFiles",
+    "patchContext",
 }
 
 
@@ -360,6 +361,13 @@ def test_trivy_misconfiguration_fields_map_from_raw_json():
     assert len(finding["title"]) <= 255
     assert finding["maskedEvidence"] == raw_misconfiguration["Message"]
     assert len(finding["maskedEvidence"]) <= 120
+    assert finding["patchContext"] == {
+        "type": "dockerfile",
+        "target": "DS-0002",
+        "lineStart": 2,
+        "lineEnd": 2,
+        "oldText": "USER root",
+    }
 
 
 def test_trivy_findings_vulnerabilities_normalized():

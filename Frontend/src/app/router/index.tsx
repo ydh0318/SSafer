@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import AppLayout from '../../components/layout/AppLayout';
 import { ROUTES } from '../../constants/routes';
 import EntryPage from '../../pages/auth/EntryPage';
+import WelcomePage from '../../pages/auth/WelcomePage';
 import OAuthCallbackPage from '../../pages/auth/OAuthCallbackPage';
 import DashboardPage from '../../pages/dashboard/DashboardPage';
 import GuidePage from '../../pages/guide/GuidePage';
@@ -25,6 +26,7 @@ function AppRouter() {
     <BrowserRouter>
       <Routes>
         <Route element={<LandingPage />} path={ROUTES.root} />
+        <Route element={<WelcomePage />} path={ROUTES.welcome} />
         <Route element={<GuidePage />} path={ROUTES.guide} />
         <Route element={<TypingGamePage />} path={ROUTES.typingGame} />
         <Route element={<OAuthCallbackPage provider="GOOGLE" />} path={ROUTES.oauthGoogleCallback} />

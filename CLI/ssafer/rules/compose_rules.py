@@ -7,6 +7,7 @@ from typing import Any
 import yaml
 
 from ssafer.core.constants import DB_PORTS
+from ssafer.core.hashing import hash_file
 from ssafer.core.sanitize import is_placeholder, is_safe_key, is_secret_key, make_masked_evidence
 from ssafer.rules.base import BaseRule, Finding
 from ssafer.rules.engine import ScanContext
@@ -62,6 +63,127 @@ def _compose_file_refs(context: ScanContext, set_name: str) -> tuple[str | None,
     return file_path, unique_files
 
 
+def _compose_files(context: ScanContext, set_name: str) -> list[Path]:
+    for compose_set in context.compose_sets:
+        if compose_set.name == set_name:
+            return compose_set.files
+    return []
+
+
+def _relative_path(path: Path, root: Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
+def _indent_width(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _yaml_key(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or stripped.startswith("-"):
+        return None
+    return stripped.split(":", 1)[0].strip().strip("'\"")
+
+
+def _line_matches_key(line: str, key: str) -> bool:
+    return _yaml_key(line) == key
+
+
+def _find_service_line(lines: list[str], service_name: str) -> int | None:
+    for index, line in enumerate(lines):
+        if _line_matches_key(line, service_name):
+            return index
+    return None
+
+
+def _find_key_in_block(lines: list[str], start: int, key: str) -> int | None:
+    base_indent = _indent_width(lines[start])
+    for index in range(start + 1, len(lines)):
+        line = lines[index]
+        if line.strip() and _indent_width(line) <= base_indent:
+            break
+        if _line_matches_key(line, key):
+            return index
+    return None
+
+
+def _port_text_matches(line: str, host_port: int, container_port: int) -> bool:
+    compact = line.replace("\"", "").replace("'", "").replace(" ", "")
+    return f"{host_port}:{container_port}" in compact
+
+
+def _find_port_patch_context(
+    compose_file: Path,
+    project_root: Path,
+    service_name: str,
+    host_port: int,
+    container_port: int,
+) -> dict | None:
+    try:
+        lines = compose_file.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    service_index = _find_service_line(lines, service_name)
+    if service_index is None:
+        return None
+    ports_index = _find_key_in_block(lines, service_index, "ports")
+    if ports_index is None:
+        return None
+
+    ports_indent = _indent_width(lines[ports_index])
+    item_indices: list[int] = []
+    matched_index: int | None = None
+    for index in range(ports_index + 1, len(lines)):
+        line = lines[index]
+        if line.strip() and _indent_width(line) <= ports_indent:
+            break
+        if line.strip().startswith("-"):
+            item_indices.append(index)
+            if _port_text_matches(line, host_port, container_port):
+                matched_index = index
+    if matched_index is None:
+        return None
+
+    if len(item_indices) == 1:
+        line_start = ports_index + 1
+        line_end = item_indices[-1] + 1
+        old_text = "\n".join(lines[ports_index:item_indices[-1] + 1])
+    else:
+        line_start = matched_index + 1
+        line_end = matched_index + 1
+        old_text = lines[matched_index]
+
+    return {
+        "type": "yaml",
+        "target": f"services.{service_name}.ports",
+        "lineStart": line_start,
+        "lineEnd": line_end,
+        "oldText": old_text,
+        "expectedFileHash": hash_file(compose_file),
+    }
+
+
+def _unique_port_patch_target(
+    compose_files: list[Path],
+    project_root: Path,
+    service_name: str,
+    host_port: int,
+    container_port: int,
+) -> tuple[str | None, int | None, dict | None]:
+    matches: list[tuple[Path, dict]] = []
+    for compose_file in compose_files:
+        patch_context = _find_port_patch_context(compose_file, project_root, service_name, host_port, container_port)
+        if patch_context:
+            matches.append((compose_file, patch_context))
+    if len(matches) != 1:
+        return None, None, None
+    compose_file, patch_context = matches[0]
+    return _relative_path(compose_file, project_root), patch_context["lineStart"], patch_context
+
+
 class ComposeExposedDbPortRule(BaseRule):
     rule_id = "COMPOSE_EXPOSED_DB_PORT"
     severity = "CRITICAL"
@@ -70,6 +192,7 @@ class ComposeExposedDbPortRule(BaseRule):
         findings: list[Finding] = []
         for set_name, raw_yaml in context.effective_configs.items():
             file_path, target_files = _compose_file_refs(context, set_name)
+            compose_files = _compose_files(context, set_name)
             doc = _parse_effective_yaml(raw_yaml)
             for svc_name, svc in _services(doc).items():
                 for port_entry in svc.get("ports") or []:
@@ -78,18 +201,26 @@ class ComposeExposedDbPortRule(BaseRule):
                         continue
                     host_port, container_port = port_mapping
                     if host_port and host_port in DB_PORTS:
+                        patch_file_path, patch_line, patch_context = _unique_port_patch_target(
+                            compose_files,
+                            context.project_root,
+                            svc_name,
+                            host_port,
+                            container_port,
+                        )
                         findings.append(Finding(
                             rule_id=self.rule_id,
                             source="custom-rule",
                             severity=self.severity,
                             file=f"docker-compose ({set_name})",
-                            line=None,
+                            line=patch_line,
                             title=f"DB 포트({host_port})가 호스트에 노출됨",
                             masked_evidence=make_masked_evidence(
                                 f"services.{svc_name}.ports", f"{host_port}:{container_port}"
                             ),
-                            file_path=file_path,
+                            file_path=patch_file_path or file_path,
                             target_files=target_files,
+                            patch_context=patch_context,
                         ))
         return findings
 

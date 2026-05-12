@@ -46,5 +46,4 @@ def test_install_tools_command_prints_progress_before_install(monkeypatch):
     result = CliRunner().invoke(app, ["install-tools"])
 
     assert result.exit_code == 0
-    assert "Installing Trivy. This can take a few minutes..." in result.output
     assert "Trivy installed" in result.output

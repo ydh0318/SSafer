@@ -1,5 +1,6 @@
 export const ROUTES = {
   root: '/',
+  welcome: '/welcome',
   login: '/login',
   oauthGoogleCallback: '/oauth/google/callback',
   oauthGithubCallback: '/oauth/github/callback',

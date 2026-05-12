@@ -82,24 +82,12 @@ function GuidePage() {
                 {active === 0 ? (
                   <>
                     <FeatureInfoCard
-                      description="설치가 끝나면 터미널에서 바로 SSAFER 명령어를 사용할 수 있습니다."
+                      description="SSAfer 계정으로 로그인하고, 스캔 결과를 웹에 업로드할 준비를 합니다."
                       eyebrow="01"
                       footer={
                         <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
                           <span>
-                            <span className="text-neutral-500">$</span> pip install ssafer
-                          </span>
-                          <Copy className="h-4 w-4 text-neutral-500" />
-                        </div>
-                      }
-                      title={<h3 className="text-xl font-black tracking-tight">설치</h3>}
-                    />
-                    <FeatureInfoCard
-                      eyebrow="02"
-                      footer={
-                        <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
-                          <span>
-                            <span className="text-neutral-500">$</span> ssafer login --token YOUR_TOKEN
+                            <span className="text-neutral-500">$</span> ssafer login
                           </span>
                           <Copy className="h-4 w-4 text-neutral-500" />
                         </div>
@@ -107,16 +95,30 @@ function GuidePage() {
                       title={<h3 className="text-xl font-black tracking-tight">로그인</h3>}
                     />
                     <FeatureInfoCard
-                      eyebrow="03"
+                      description="로컬 환경에서 점검한 프로젝트를 웹에서 관리할 수 있도록 새로 생성합니다."
+                      eyebrow="02"
                       footer={
                         <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
                           <span>
-                            <span className="text-neutral-500">$</span> ssafer run --upload --project shopping-mall-api
+                            <span className="text-neutral-500">$</span> ssafer project-create
                           </span>
                           <Copy className="h-4 w-4 text-neutral-500" />
                         </div>
                       }
-                      title={<h3 className="text-xl font-black tracking-tight">실행</h3>}
+                      title={<h3 className="text-xl font-black tracking-tight">프로젝트 생성</h3>}
+                    />
+                    <FeatureInfoCard
+                      description="현재 폴더를 점검하고 결과 JSON을 생성함과 동시에 웹으로 바로 업로드합니다."
+                      eyebrow="03"
+                      footer={
+                        <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
+                          <span>
+                            <span className="text-neutral-500">$</span> ssafer run --upload
+                          </span>
+                          <Copy className="h-4 w-4 text-neutral-500" />
+                        </div>
+                      }
+                      title={<h3 className="text-xl font-black tracking-tight">스캔 및 업로드</h3>}
                     />
                   </>
                 ) : null}
@@ -124,46 +126,43 @@ function GuidePage() {
                 {active === 1 ? (
                   <>
                     <FeatureInfoCard
-                      description="설치 스크립트를 실행하면 Agent 기본 파일이 서버에 배치됩니다."
+                      description="Agent를 통해 서버를 모니터링하기 전, 터미널 환경에서 로그인 상태를 만듭니다."
                       eyebrow="01"
                       footer={
                         <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
                           <span>
-                            <span className="text-neutral-500">$</span> curl -sSL https://ssafer.io/install-agent.sh | bash
+                            <span className="text-neutral-500">$</span> ssafer login
                           </span>
                           <Copy className="h-4 w-4 text-neutral-500" />
                         </div>
                       }
-                      title={<h3 className="text-xl font-black tracking-tight">Agent 설치</h3>}
+                      title={<h3 className="text-xl font-black tracking-tight">로그인</h3>}
                     />
                     <FeatureInfoCard
-                      description="발급받은 토큰과 projectId를 설정 파일에 넣어 연결 대상을 지정합니다."
+                      description="Trivy 등 서버나 컨테이너 점검에 필요한 외부 보안 도구들을 시스템에 설치합니다."
                       eyebrow="02"
                       footer={
-                        <div className="bg-black p-4 font-mono text-sm text-green-400">
-                          <div>
-                            <span className="text-neutral-500"># /etc/ssafer/agent.yml</span>
-                          </div>
-                          <div>token: AGENT_TOKEN_HERE</div>
-                          <div>projectId: 101</div>
-                          <div>endpoint: wss://api.ssafer.io/v1/agents/connect</div>
+                        <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
+                          <span>
+                            <span className="text-neutral-500">$</span> ssafer install-tools
+                          </span>
+                          <Copy className="h-4 w-4 text-neutral-500" />
                         </div>
                       }
-                      title={<h3 className="text-xl font-black tracking-tight">설정</h3>}
+                      title={<h3 className="text-xl font-black tracking-tight">필수 도구 설치</h3>}
                     />
                     <FeatureInfoCard
+                      description="웹에서 보낸 스캔 및 패치 적용 요청을 현재 환경에서 즉시 처리할 수 있도록 Agent를 실행합니다."
                       eyebrow="03"
                       footer={
-                        <div className="bg-black p-4 font-mono text-sm text-green-400">
-                          <div>
-                            <span className="text-neutral-500">$</span> sudo systemctl start ssafer-agent
-                          </div>
-                          <div>
-                            <span className="text-neutral-500">$</span> sudo systemctl enable ssafer-agent
-                          </div>
+                        <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
+                          <span>
+                            <span className="text-neutral-500">$</span> ssafer agent
+                          </span>
+                          <Copy className="h-4 w-4 text-neutral-500" />
                         </div>
                       }
-                      title={<h3 className="text-xl font-black tracking-tight">실행</h3>}
+                      title={<h3 className="text-xl font-black tracking-tight">Agent 실행</h3>}
                     />
                   </>
                 ) : null}
@@ -171,19 +170,43 @@ function GuidePage() {
                 {active === 2 ? (
                   <>
                     <FeatureInfoCard
-                      description="Before / After diff를 보면서 어떤 수정이 들어가는지 먼저 확인할 수 있습니다."
+                      description="실제 파일을 즉시 바꾸지 않고, 코드 상에 어떤 수정안이 들어갈지 diff 형태로 미리 확인합니다."
                       eyebrow="01"
+                      footer={
+                        <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
+                          <span>
+                            <span className="text-neutral-500">$</span> ssafer apply --dry-run
+                          </span>
+                          <Copy className="h-4 w-4 text-neutral-500" />
+                        </div>
+                      }
                       title={<h3 className="text-xl font-black tracking-tight">diff 확인</h3>}
                     />
                     <FeatureInfoCard
-                      description="패치 승인은 Agent와 CLI 흐름 모두에서 같은 방식으로 이어집니다."
+                      description="로컬에 남아있는 최근 분석 결과를 바탕으로 취약점 수정안(patch payload)을 프로젝트에 직접 적용합니다."
                       eyebrow="02"
-                      title={<h3 className="text-xl font-black tracking-tight">승인 진행</h3>}
+                      footer={
+                        <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
+                          <span>
+                            <span className="text-neutral-500">$</span> ssafer apply
+                          </span>
+                          <Copy className="h-4 w-4 text-neutral-500" />
+                        </div>
+                      }
+                      title={<h3 className="text-xl font-black tracking-tight">로컬 패치 적용</h3>}
                     />
                     <FeatureInfoCard
-                      description="적용 결과는 scanId 기준으로 남아서 이후 비교와 공유에 그대로 활용할 수 있습니다."
+                      description="웹 환경에서 완료된 스캔 결과를 내려받아 터미널에서 즉시 수정안을 원격으로 반영합니다."
                       eyebrow="03"
-                      title={<h3 className="text-xl font-black tracking-tight">결과 저장</h3>}
+                      footer={
+                        <div className="flex items-center justify-between bg-black p-4 font-mono text-sm text-green-400">
+                          <span>
+                            <span className="text-neutral-500">$</span> ssafer apply --latest --project-id {'<id>'}
+                          </span>
+                          <Copy className="h-4 w-4 text-neutral-500" />
+                        </div>
+                      }
+                      title={<h3 className="text-xl font-black tracking-tight">웹 결과 내려받아 적용</h3>}
                     />
                   </>
                 ) : null}

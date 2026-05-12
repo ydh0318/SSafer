@@ -167,7 +167,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
           ) : (
             <button
               className="site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 font-bold tracking-wide text-black transition hover:opacity-70 lg:h-auto lg:w-auto lg:gap-2 lg:rounded-sm lg:px-4 lg:py-2"
-              onClick={() => navigate(ROUTES.login)}
+              onClick={() => navigate(ROUTES.welcome)}
               type="button"
             >
               <LogIn className="h-4 w-4 shrink-0 lg:hidden" />

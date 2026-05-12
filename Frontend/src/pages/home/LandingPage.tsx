@@ -167,7 +167,7 @@ function LandingPage() {
 
     if (succeeded) {
       closeEntryModal();
-      navigate(ROUTES.projects);
+      navigate(ROUTES.welcome);
     }
   };
 
@@ -327,7 +327,7 @@ function LandingPage() {
           isGuestPending={isPending}
           onClose={closeEntryModal}
           onContinueAsGuest={() => void handleGuestStart()}
-          onLogin={() => navigate(ROUTES.login)}
+          onLogin={() => navigate(ROUTES.welcome)}
         />
       ) : null}
     </div>

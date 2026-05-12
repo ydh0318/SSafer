@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from ssafer.core.compose import ComposeSet
+from ssafer.core.hashing import hash_file
 from ssafer.rules import Finding, RuleEngine, ScanContext
 from ssafer.rules.compose_rules import (
     ComposeExposedDbPortRule,
@@ -52,6 +53,43 @@ services:
     findings = ComposeExposedDbPortRule().check(_ctx({"default": yaml}))
     assert len(findings) == 1
     assert findings[0].masked_evidence == "services.db.ports=5432:5432"
+
+
+def test_compose_exposed_db_port_adds_patch_context_for_single_source_file(tmp_path: Path):
+    compose_file = tmp_path / "docker-compose.yml"
+    yaml = """services:
+  db:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+"""
+    compose_file.write_text(yaml, encoding="utf-8")
+    context = ScanContext(
+        compose_sets=[
+            ComposeSet(
+                name="default",
+                directory=tmp_path,
+                files=[compose_file],
+                env_files=[],
+            )
+        ],
+        effective_configs={"default": yaml},
+        env_files=[],
+        project_root=tmp_path,
+    )
+
+    finding = ComposeExposedDbPortRule().check(context)[0]
+
+    assert finding.file_path == "docker-compose.yml"
+    assert finding.line == 4
+    assert finding.patch_context == {
+        "type": "yaml",
+        "target": "services.db.ports",
+        "lineStart": 4,
+        "lineEnd": 5,
+        "oldText": '    ports:\n      - "5432:5432"',
+        "expectedFileHash": hash_file(compose_file),
+    }
 
 
 def test_compose_exposed_db_port_ignores_non_db_port():

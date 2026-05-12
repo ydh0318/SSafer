@@ -19,6 +19,7 @@ class Finding:
     masked_evidence: str
     file_path: str | None = None
     target_files: list[str] = field(default_factory=list)
+    patch_context: dict | None = None
     id: str = field(default="")
 
     def to_dict(self) -> dict:
@@ -36,6 +37,8 @@ class Finding:
             data["filePath"] = self.file_path
         if self.target_files:
             data["targetFiles"] = self.target_files
+        if self.patch_context:
+            data["patchContext"] = self.patch_context
         return data
 
 

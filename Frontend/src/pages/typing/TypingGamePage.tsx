@@ -17,6 +17,35 @@ type TypingStage = { id: string; order: number; title: string; level: string; su
 /* ─── data ─── */
 const STAGES: TypingStage[] = [
   {
+    id: 's0', order: 0, title: 'SSAfer 명령어 습득하기', level: '튜토리얼',
+    summary: 'SSAfer 서비스에서 프로젝트를 스캔하고 관리하기 위한 핵심 명령어들을 익힙니다.',
+    commands: [
+      { id: 101, command: 'ssafer version', description: '현재 설치된 SSAfer CLI 버전을 확인합니다.', xp: 10, tokens: [{ label: 'ssafer version', meaning: 'CLI 버전 출력', tone: 'sky' }] },
+      { id: 102, command: 'ssafer status', description: '로그인 상태, 사용 중인 백엔드 주소, Local Agent 설정 여부를 확인합니다.', xp: 10, tokens: [{ label: 'ssafer status', meaning: '현재 인증/설정 상태', tone: 'emerald' }] },
+      { id: 103, command: 'ssafer signup', description: '터미널에서 이메일 인증까지 진행해 새 SSAfer 계정을 만듭니다.', xp: 15, tokens: [{ label: 'ssafer signup', meaning: '새 계정 생성', tone: 'sky' }] },
+      { id: 104, command: 'ssafer login', description: 'SSAfer 계정으로 로그인하고, 스캔 결과를 웹에 업로드할 준비를 합니다.', xp: 15, tokens: [{ label: 'ssafer login', meaning: '계정 로그인', tone: 'emerald' }] },
+      { id: 105, command: 'ssafer logout', description: '현재 기기에 저장된 로그인 토큰과 현재 프로젝트의 agent 설정을 삭제합니다.', xp: 15, tokens: [{ label: 'ssafer logout', meaning: '인증 정보 초기화', tone: 'rose' }] },
+      { id: 106, command: 'ssafer project-create', description: '웹에서 관리할 SSAfer 프로젝트를 새로 생성합니다.', xp: 20, tokens: [{ label: 'ssafer project-create', meaning: '신규 프로젝트 등록', tone: 'amber' }] },
+      { id: 107, command: 'ssafer install-tools', description: 'Trivy처럼 SSAfer 스캔에 필요한 외부 도구를 설치합니다.', xp: 20, tokens: [{ label: 'ssafer install-tools', meaning: '스캐너 의존성 설치', tone: 'sky' }] },
+      { id: 108, command: 'ssafer run', description: '현재 폴더의 .env, Dockerfile, docker-compose 파일을 점검하고 로컬 결과 JSON을 만듭니다.', xp: 20, tokens: [{ label: 'ssafer run', meaning: '로컬 인프라 스캔 실행', tone: 'emerald' }] },
+      { id: 109, command: 'ssafer run --path <dir>', description: '지정한 프로젝트 폴더를 기준으로 보안 점검을 실행합니다.', xp: 25, tokens: [{ label: 'ssafer run', meaning: '스캔 실행', tone: 'emerald' }, { label: '--path <dir>', meaning: '검사할 경로 지정', tone: 'slate' }] },
+      { id: 110, command: 'ssafer run --upload', description: '스캔 후 결과 JSON을 바로 백엔드/S3에 업로드해 웹에서 확인할 수 있게 합니다.', xp: 25, tokens: [{ label: 'ssafer run', meaning: '스캔 실행', tone: 'emerald' }, { label: '--upload', meaning: '웹으로 자동 업로드', tone: 'amber' }] },
+      { id: 111, command: 'ssafer run --save-raw', description: 'SSAfer가 분석한 compose 설정 원본을 로컬에 함께 저장해 디버깅할 수 있게 합니다.', xp: 25, tokens: [{ label: 'ssafer run', meaning: '스캔 실행', tone: 'emerald' }, { label: '--save-raw', meaning: '원본 설정 보존', tone: 'slate' }] },
+      { id: 112, command: 'ssafer report', description: '최근 로컬 스캔 결과의 요약을 확인합니다.', xp: 15, tokens: [{ label: 'ssafer report', meaning: '로컬 결과 요약 보기', tone: 'sky' }] },
+      { id: 113, command: 'ssafer report --details', description: '최근 로컬 스캔의 대상 파일, 산출물 경로, finding 상세 내용을 확인합니다.', xp: 20, tokens: [{ label: 'ssafer report', meaning: '결과 보기', tone: 'sky' }, { label: '--details', meaning: '상세 내역 포함', tone: 'slate' }] },
+      { id: 114, command: 'ssafer upload', description: '이미 로컬에 생성된 최근 스캔 결과 JSON을 웹으로 업로드합니다.', xp: 20, tokens: [{ label: 'ssafer upload', meaning: '로컬 결과 웹으로 전송', tone: 'amber' }] },
+      { id: 115, command: 'ssafer apply', description: '로컬 analysis_result.json 안의 patch payload를 확인하고 프로젝트 파일에 적용합니다.', xp: 25, tokens: [{ label: 'ssafer apply', meaning: '수정안(패치) 반영', tone: 'emerald' }] },
+      { id: 116, command: 'ssafer apply --scan-id <id>', description: '백엔드에서 해당 scanId의 analysis_result.json을 내려받아 수정안을 적용합니다.', xp: 30, tokens: [{ label: 'ssafer apply', meaning: '패치 반영', tone: 'emerald' }, { label: '--scan-id <id>', meaning: '특정 스캔의 결과 적용', tone: 'slate' }] },
+      { id: 117, command: 'ssafer apply --latest --project-id <id>', description: '해당 프로젝트의 최신 완료 스캔 분석 결과를 내려받아 수정안을 적용합니다.', xp: 30, tokens: [{ label: 'ssafer apply', meaning: '패치 반영', tone: 'emerald' }, { label: '--latest', meaning: '최신 스캔 기준', tone: 'sky' }, { label: '--project-id <id>', meaning: '대상 프로젝트 지정', tone: 'slate' }] },
+      { id: 118, command: 'ssafer apply --dry-run', description: '실제 파일은 바꾸지 않고 어떤 수정이 적용될지 diff만 확인합니다.', xp: 25, tokens: [{ label: 'ssafer apply', meaning: '패치 반영', tone: 'emerald' }, { label: '--dry-run', meaning: '변경사항 모의 실행', tone: 'rose' }] },
+      { id: 119, command: 'ssafer agent', description: '웹에서 보낸 스캔/수정 요청을 현재 PC 또는 서버에서 처리할 수 있도록 Local Agent를 실행합니다.', xp: 25, tokens: [{ label: 'ssafer agent', meaning: '로컬 에이전트 구동', tone: 'amber' }] },
+      { id: 120, command: 'ssafer server-audit', description: 'EC2 같은 실제 서버 안에서 포트, 프로세스, Docker, SSH, 방화벽, nginx 상태를 점검합니다.', xp: 30, tokens: [{ label: 'ssafer server-audit', meaning: '서버 인프라 스캔', tone: 'emerald' }] },
+      { id: 121, command: 'ssafer server-audit --details', description: '서버 점검 결과의 findings, warnings, artifacts를 자세히 확인합니다.', xp: 30, tokens: [{ label: 'ssafer server-audit', meaning: '서버 스캔', tone: 'emerald' }, { label: '--details', meaning: '상세 항목 출력', tone: 'slate' }] },
+      { id: 122, command: 'ssafer server-audit --include-os-packages', description: 'Trivy로 서버 OS 패키지 취약점까지 함께 점검합니다.', xp: 35, tokens: [{ label: 'ssafer server-audit', meaning: '서버 스캔', tone: 'emerald' }, { label: '--include-os-packages', meaning: 'OS 패키지 취약점 포함', tone: 'rose' }] },
+      { id: 123, command: 'ssafer server-audit --upload', description: '서버 점검 결과를 백엔드/S3에 업로드해 웹에서 확인할 수 있게 합니다.', xp: 35, tokens: [{ label: 'ssafer server-audit', meaning: '서버 스캔', tone: 'emerald' }, { label: '--upload', meaning: '결과 웹으로 전송', tone: 'amber' }] },
+    ],
+  },
+  {
     id: 's1', order: 1, title: '기본 탐색', level: '초급',
     summary: '서버에 처음 접속했을 때 현재 위치와 파일 구조를 파악하는 단계입니다.',
     commands: [
@@ -475,9 +504,12 @@ export default function TypingGamePage() {
             <div className={`flex items-center justify-between border-b px-6 py-5 ${
               isDark ? 'border-neutral-700' : 'border-neutral-200'
             }`}>
-              <span className={`text-base font-bold tracking-tight ${
-                isDark ? 'text-neutral-100' : 'text-neutral-900'
-              }`}>Current List</span>
+              <div className="flex items-center gap-2.5">
+                <span className={`flex h-2.5 w-2.5 rounded-full ${isDark ? 'bg-[#d9f66f] shadow-[0_0_8px_rgba(217,246,111,0.6)]' : 'bg-[#9FCC2E] shadow-[0_0_8px_rgba(159,204,46,0.6)]'}`} />
+                <span className={`text-base font-black tracking-tight ${
+                  isDark ? 'text-neutral-100' : 'text-neutral-900'
+                }`}>Current List</span>
+              </div>
               <button onClick={() => setSidebarOpen(false)} className={`transition-colors ${
                 isDark ? 'text-neutral-500 hover:text-neutral-100' : 'text-neutral-400 hover:text-black'
               }`}>
@@ -486,21 +518,21 @@ export default function TypingGamePage() {
             </div>
 
             {/* stage tabs */}
-            <div className={`flex border-b px-4 ${
+            <div className={`flex overflow-x-auto border-b px-2 ${
               isDark ? 'border-neutral-700' : 'border-neutral-200'
             }`}>
               {STAGES.map((s, si) => (
                 <button
                   key={s.id}
                   onClick={() => setSidebarTab(si)}
-                  className={`px-3 py-3 text-sm font-semibold transition-colors ${
+                  className={`shrink-0 whitespace-nowrap px-2.5 py-3 text-sm transition-colors ${
                     sidebarTab === si
                       ? isDark
-                        ? 'border-b-2 border-neutral-100 text-neutral-100'
-                        : 'border-b-2 border-neutral-900 text-neutral-900'
+                        ? 'border-b-2 border-[#d9f66f] font-black text-[#d9f66f]'
+                        : 'border-b-2 border-[#9FCC2E] font-black text-black'
                       : isDark
-                        ? 'text-neutral-600 hover:text-neutral-400'
-                        : 'text-neutral-400 hover:text-neutral-700'
+                        ? 'font-semibold text-neutral-600 hover:text-neutral-400'
+                        : 'font-semibold text-neutral-400 hover:text-neutral-700'
                   }`}
                 >
                   {s.order}단계
@@ -523,22 +555,25 @@ export default function TypingGamePage() {
                 const isCurrent = sidebarTab === stageIdx && ci === cmdIdx;
                 const isDone = doneIds.has(c.id);
                 const rowBg = isCurrent
-                  ? isDark ? 'bg-neutral-800' : 'bg-neutral-50'
+                  ? isDark ? 'bg-[#d9f66f]/5' : 'bg-[#F9FDE3]'
                   : isDark ? 'hover:bg-neutral-800' : 'hover:bg-neutral-50';
                 return (
                   <button
                     key={c.id}
                     onClick={() => jumpTo(sidebarTab, ci)}
-                    className={`flex w-full items-start gap-4 border-b px-6 py-4 text-left transition-colors ${
+                    className={`relative flex w-full items-start gap-4 border-b px-6 py-4 text-left transition-colors ${
                       isDark ? 'border-neutral-800' : 'border-neutral-100'
                     } ${rowBg}`}
                   >
+                    {isCurrent && (
+                      <div className={`absolute left-0 top-0 h-full w-1 ${isDark ? 'bg-[#d9f66f]' : 'bg-[#9FCC2E]'}`} />
+                    )}
                     <div
                       className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${
                         isDone
                           ? isDark ? 'border-neutral-300 bg-neutral-300 text-neutral-900' : 'border-neutral-800 bg-neutral-800 text-white'
                           : isCurrent
-                            ? isDark ? 'border-2 border-neutral-300 text-neutral-300' : 'border-2 border-neutral-800 text-neutral-800'
+                            ? isDark ? 'border-2 border-[#d9f66f] bg-[#d9f66f]/20 text-[#d9f66f]' : 'border-2 border-[#9FCC2E] bg-[#D4FC64] text-black'
                             : isDark ? 'border-neutral-600 text-neutral-600' : 'border-neutral-300 text-neutral-400'
                       }`}
                     >

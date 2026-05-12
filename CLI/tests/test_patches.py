@@ -93,6 +93,75 @@ def test_apply_patch_candidate_replaces_text_and_writes_backup(tmp_path: Path):
     assert Path(result.backup_path).read_text(encoding="utf-8") == "FROM alpine\nUSER root\n"
 
 
+def test_extract_patch_candidates_allows_append_without_old_text():
+    candidates = extract_patch_candidates(
+        {
+            "patches": [
+                {
+                    "patchId": "P1",
+                    "filePath": "Dockerfile",
+                    "operation": "append",
+                    "newText": "\nHEALTHCHECK CMD curl -f http://localhost/ || exit 1\n",
+                }
+            ]
+        }
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].operation == "append"
+    assert candidates[0].old_text is None
+    assert candidates[0].new_text == "\nHEALTHCHECK CMD curl -f http://localhost/ || exit 1\n"
+
+
+def test_apply_patch_candidate_appends_text_and_writes_backup(tmp_path: Path):
+    target = tmp_path / "Dockerfile"
+    target.write_text("FROM nginx\n", encoding="utf-8")
+    candidate = extract_patch_candidates(
+        {
+            "patches": [
+                {
+                    "patchId": "P1",
+                    "filePath": "Dockerfile",
+                    "operation": "append",
+                    "newText": "\nHEALTHCHECK CMD curl -f http://localhost/ || exit 1\n",
+                    "expectedFileHash": hash_file(target),
+                }
+            ]
+        }
+    )[0]
+
+    result = apply_patch_candidate(tmp_path, candidate)
+
+    assert result.status == "SUCCESS"
+    assert target.read_text(encoding="utf-8") == (
+        "FROM nginx\n\nHEALTHCHECK CMD curl -f http://localhost/ || exit 1\n"
+    )
+    assert result.backup_path is not None
+    assert Path(result.backup_path).read_text(encoding="utf-8") == "FROM nginx\n"
+
+
+def test_apply_patch_candidate_append_dry_run_does_not_modify_file(tmp_path: Path):
+    target = tmp_path / "Dockerfile"
+    target.write_text("FROM nginx\n", encoding="utf-8")
+    candidate = extract_patch_candidates(
+        {
+            "patches": [
+                {
+                    "patchId": "P1",
+                    "filePath": "Dockerfile",
+                    "operation": "append",
+                    "newText": "\nHEALTHCHECK CMD curl -f http://localhost/ || exit 1\n",
+                }
+            ]
+        }
+    )[0]
+
+    result = apply_patch_candidate(tmp_path, candidate, dry_run=True)
+
+    assert result.status == "DRY_RUN"
+    assert target.read_text(encoding="utf-8") == "FROM nginx\n"
+
+
 def test_apply_patch_candidate_rejects_path_outside_project(tmp_path: Path):
     candidate = extract_patch_candidates(
         {
@@ -219,6 +288,37 @@ def test_apply_command_dry_run_does_not_modify_file(tmp_path: Path):
     assert "Patch diff preview" in result.output
     assert "DRY_RUN" in result.output
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER root\n"
+
+
+def test_apply_command_previews_append_patch(tmp_path: Path):
+    target = tmp_path / "Dockerfile"
+    target.write_text("FROM nginx\n", encoding="utf-8")
+    analysis_result = tmp_path / "analysis_result.json"
+    analysis_result.write_text(
+        json.dumps(
+            {
+                "patches": [
+                    {
+                        "patchId": "P1",
+                        "filePath": "Dockerfile",
+                        "operation": "append",
+                        "newText": "\nHEALTHCHECK CMD curl -f http://localhost/ || exit 1\n",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["apply", "--path", str(tmp_path), "--analysis-result", str(analysis_result), "--dry-run", "--yes"],
+    )
+
+    assert result.exit_code == 0
+    assert "Patch diff preview" in result.output
+    assert "DRY_RUN" in result.output
+    assert target.read_text(encoding="utf-8") == "FROM nginx\n"
 
 
 def test_apply_command_without_patch_payload_is_noop(tmp_path: Path):
