@@ -274,8 +274,8 @@ function FindingDetailPage() {
                     {finding.severity}
                   </span>
                   <span className="font-mono text-xs text-neutral-500">findingId #{finding.findingId}</span>
-                  <span className="font-mono text-xs text-neutral-500">{finding.ruleCode}</span>
-                  <span className="border border-neutral-300 px-2 py-0.5 text-xs">{finding.sourceType}</span>
+                  <span className="font-mono text-xs text-neutral-500">{finding.ruleId || finding.ruleCode}</span>
+                  <span className="border border-neutral-300 px-2 py-0.5 text-xs">{finding.source || finding.sourceType}</span>
                   <span className="bg-neutral-100 px-2 py-0.5 text-xs">{finding.category}</span>
                 </div>
                 <span className="border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-600">
@@ -283,11 +283,19 @@ function FindingDetailPage() {
                 </span>
               </div>
               <h1 className="mt-4 text-3xl font-black tracking-tight">{finding.title}</h1>
-              <div className="mt-3 flex flex-wrap items-center gap-3 font-mono text-sm text-neutral-500">
-                <span>{formatFindingLocation(finding)}</span>
-                <span>scanId #{scanId}</span>
-                {finding.scanNodeId ? <span>scanNodeId #{finding.scanNodeId}</span> : null}
-                {finding.fingerprint ? <span>{finding.fingerprint}</span> : null}
+              <div className="mt-4 flex flex-col gap-3 font-mono text-sm text-neutral-500">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span>{finding.file || finding.resourceName || finding.filePath || '위치를 확인할 수 없는 항목'}</span>
+                  {finding.line || finding.lineNumber ? <span>line {finding.line || finding.lineNumber}</span> : null}
+                  <span>scanId #{scanId}</span>
+                  {finding.scanNodeId ? <span>scanNodeId #{finding.scanNodeId}</span> : null}
+                </div>
+                {finding.maskedEvidence ? (
+                  <div className="bg-neutral-100 px-3 py-2 text-xs text-neutral-700 w-fit">
+                    <span className="mr-2 font-bold text-neutral-500">Evidence:</span>
+                    {finding.maskedEvidence}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -318,74 +326,158 @@ function FindingDetailPage() {
 
             {view === 'explain' ? (
               <div className="mt-6 space-y-6">
-                <div className="border border-neutral-200 bg-white p-6">
-                  <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">WHY RISKY</div>
-                  <ParsedTextList fallback="이 항목이 왜 위험한지에 대한 설명이 아직 제공되지 않았습니다." text={finding.description} />
-                </div>
-                <div className="border border-neutral-200 bg-white p-6">
-                  <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">REAL WORLD IMPACT</div>
-                  <ParsedTextList fallback="실제 공격 시나리오나 영향 범위 설명이 아직 제공되지 않았습니다." text={finding.attackScenario} />
-                </div>
-                <div className="flex items-start gap-4 border border-[#FFE066] bg-[#FFF9DB] p-6">
-                  <PixelGoose mood="alert" size={60} />
-                  <div>
-                    <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">PLAIN LANGUAGE</div>
-                    <p className="mt-2 text-sm leading-7 text-neutral-800">
-                      이 설정은 외부에 노출되었거나 권한이 넓어 보일 수 있습니다. 우선 탐지 위치와 수정 가이드를 보고, 적용 가능한 수정안을 먼저 확인해 보세요.
-                    </p>
+                {finding.impact?.trim() ? (
+                  <div className="flex items-start gap-4 border border-[#FFE066] bg-[#FFF9DB] p-6">
+                    <PixelGoose mood="alert" size={60} />
+                    <div>
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">현실적 영향 (IMPACT)</div>
+                      <p className="mt-2 text-sm leading-7 text-neutral-800">
+                        {finding.impact}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                ) : null}
+
+                {finding.explanation ? (
+                  <>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">취약점 요약</div>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.summary || '내용이 제공되지 않았습니다.'}</p>
+                    </div>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">위험한 이유</div>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.whyRisky || '내용이 제공되지 않았습니다.'}</p>
+                    </div>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">악용 가능 시나리오</div>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.abuseScenario || '내용이 제공되지 않았습니다.'}</p>
+                    </div>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">예상 영향</div>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.expectedImpact || '내용이 제공되지 않았습니다.'}</p>
+                    </div>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">심각도 해석</div>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.explanation.severityInterpretation || '내용이 제공되지 않았습니다.'}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">WHY RISKY</div>
+                      <ParsedTextList fallback="이 항목이 왜 위험한지에 대한 설명이 아직 제공되지 않았습니다." text={finding.description} />
+                    </div>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">REAL WORLD IMPACT</div>
+                      <ParsedTextList fallback="실제 공격 시나리오나 영향 범위 설명이 아직 제공되지 않았습니다." text={finding.attackScenario} />
+                    </div>
+                  </>
+                )}
               </div>
             ) : null}
 
             {view === 'fix' ? (
               <div className="mt-6 space-y-6">
-                <div className="border border-neutral-200 bg-white p-6">
-                  <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">REMEDIATION GUIDE</div>
-                  <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.remediationGuide || '이 항목에 대한 수정 가이드가 아직 제공되지 않았습니다.'}
-                  </p>
-                </div>
+                {finding.fix ? (
+                  <>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">수정 요약</div>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.fix.summary || '내용이 제공되지 않았습니다.'}</p>
+                    </div>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">권장 조치</div>
+                      {finding.fix.recommendedActions && finding.fix.recommendedActions.length > 0 ? (
+                        <ul className="mt-3 list-disc pl-5 leading-8 text-neutral-800">
+                          {finding.fix.recommendedActions.map((action, idx) => (
+                            <li key={idx}>{action}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-3 leading-8 text-neutral-400">등록된 권장 조치가 없습니다.</p>
+                      )}
+                    </div>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="flex items-center justify-between border-b border-neutral-200 bg-[#E6F9EE] -mx-6 -mt-6 mb-4 px-6 py-4 text-xs font-bold tracking-[0.24em] text-[#0A7C2E]">
+                        <span>코드 가이드</span>
+                        <button
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#0A7C2E] hover:underline"
+                          disabled={!finding.fix?.codeGuidance}
+                          onClick={() => void copyText(finding.fix?.codeGuidance || '', '코드 가이드가 복사되었습니다.')}
+                          type="button"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          복사
+                        </button>
+                      </div>
+                      <pre className="overflow-x-auto whitespace-pre-wrap bg-neutral-900 p-5 font-mono text-sm leading-7 text-neutral-100">
+                        {finding.fix.codeGuidance || '제공된 코드 가이드가 없습니다.'}
+                      </pre>
+                    </div>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">검증 방법</div>
+                      <p className="mt-3 leading-8 text-neutral-800">{finding.fix.verification || '내용이 제공되지 않았습니다.'}</p>
+                    </div>
+                    {finding.fix.cautions && finding.fix.cautions.length > 0 && (
+                      <div className="border border-rose-200 bg-rose-50 p-6">
+                        <div className="text-xs font-bold uppercase tracking-[0.24em] text-rose-700">주의사항</div>
+                        <ul className="mt-3 list-disc pl-5 leading-8 text-rose-800">
+                          {finding.fix.cautions.map((caution, idx) => (
+                            <li key={idx}>{caution}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="border border-neutral-200 bg-white p-6">
+                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">REMEDIATION GUIDE</div>
+                      <p className="mt-3 leading-8 text-neutral-800">
+                        {finding.remediationGuide || '이 항목에 대한 수정 가이드가 아직 제공되지 않았습니다.'}
+                      </p>
+                    </div>
 
-                <div className="grid overflow-hidden border border-neutral-200 bg-white xl:grid-cols-2">
-                  <div>
-                    <div className="flex items-center justify-between border-b border-neutral-200 bg-[#FFE5E5] px-5 py-3 text-xs font-bold tracking-[0.24em] text-[#E63946]">
-                      <span>RAW SNIPPET</span>
-                      <button
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold"
-                        onClick={() => void copyText(rawSnippetText, '원본 코드가 복사되었습니다.')}
-                        type="button"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        복사
-                      </button>
+                    <div className="grid overflow-hidden border border-neutral-200 bg-white xl:grid-cols-2">
+                      <div>
+                        <div className="flex items-center justify-between border-b border-neutral-200 bg-[#FFE5E5] px-5 py-3 text-xs font-bold tracking-[0.24em] text-[#E63946]">
+                          <span>RAW SNIPPET</span>
+                          <button
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold"
+                            onClick={() => void copyText(rawSnippetText, '원본 코드가 복사되었습니다.')}
+                            type="button"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            복사
+                          </button>
+                        </div>
+                        <pre className="overflow-x-auto bg-neutral-900 p-5 font-mono text-sm leading-7 text-neutral-100">
+                          {rawSnippetText}
+                        </pre>
+                      </div>
+                      <div className="border-t border-neutral-200 xl:border-l xl:border-t-0">
+                        <div className="flex items-center justify-between border-b border-neutral-200 bg-[#E6F9EE] px-5 py-3 text-xs font-bold tracking-[0.24em] text-[#0A7C2E]">
+                          <span>RECOMMENDED ACTION</span>
+                          <button
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold"
+                            onClick={() =>
+                              void copyText(
+                                finding.remediationGuide || '수정 가이드가 아직 없습니다.',
+                                '수정 가이드가 복사되었습니다.',
+                              )
+                            }
+                            type="button"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            복사
+                          </button>
+                        </div>
+                        <pre className="overflow-x-auto whitespace-pre-wrap bg-neutral-900 p-5 font-mono text-sm leading-7 text-neutral-100">
+                          {finding.remediationGuide || '수정 가이드가 아직 없습니다.'}
+                        </pre>
+                      </div>
                     </div>
-                    <pre className="overflow-x-auto bg-neutral-900 p-5 font-mono text-sm leading-7 text-neutral-100">
-                      {rawSnippetText}
-                    </pre>
-                  </div>
-                  <div className="border-t border-neutral-200 xl:border-l xl:border-t-0">
-                    <div className="flex items-center justify-between border-b border-neutral-200 bg-[#E6F9EE] px-5 py-3 text-xs font-bold tracking-[0.24em] text-[#0A7C2E]">
-                      <span>RECOMMENDED ACTION</span>
-                      <button
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold"
-                        onClick={() =>
-                          void copyText(
-                            finding.remediationGuide || '수정 가이드가 아직 없습니다.',
-                            '수정 가이드가 복사되었습니다.',
-                          )
-                        }
-                        type="button"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        복사
-                      </button>
-                    </div>
-                    <pre className="overflow-x-auto whitespace-pre-wrap bg-neutral-900 p-5 font-mono text-sm leading-7 text-neutral-100">
-                      {finding.remediationGuide || '수정 가이드가 아직 없습니다.'}
-                    </pre>
-                  </div>
-                </div>
+                  </>
+                )}
 
                 {practiceSnippet ? (
                   <div className="border-2 border-black bg-white p-6">
@@ -409,6 +501,43 @@ function FindingDetailPage() {
 
             {view === 'apply' ? (
               <div className="mt-6 space-y-6">
+                {finding.fix?.patches && finding.fix.patches.length > 0 ? (
+                  <div className="space-y-4">
+                    <h3 className="text-xl font-black tracking-tight">자동 적용 가능한 패치</h3>
+                    {finding.fix.patches.map((patch) => (
+                      <div className="overflow-hidden border border-neutral-200 bg-white" key={patch.patchId}>
+                        <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-100 px-4 py-3">
+                          <div className="font-mono text-sm font-bold">{patch.filePath}</div>
+                          <span className="bg-black px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
+                            {patch.operation}
+                          </span>
+                        </div>
+                        {patch.operation === 'replace' ? (
+                          <div className="grid grid-cols-1 divide-y divide-neutral-200 font-mono text-sm md:grid-cols-2 md:divide-x md:divide-y-0">
+                            <div className="whitespace-pre-wrap bg-rose-50 p-4 text-rose-900">
+                              <div className="mb-2 text-xs font-bold text-rose-500">- OLD</div>
+                              {patch.oldText || <span className="text-rose-400 italic">(원본 텍스트 없음 혹은 파일 내용 전체 교체)</span>}
+                            </div>
+                            <div className="whitespace-pre-wrap bg-emerald-50 p-4 text-emerald-900">
+                              <div className="mb-2 text-xs font-bold text-emerald-500">+ NEW</div>
+                              {patch.newText || <span className="text-emerald-400 italic">(제거됨)</span>}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="whitespace-pre-wrap bg-emerald-50 p-4 font-mono text-sm text-emerald-900">
+                            <div className="mb-2 text-xs font-bold text-emerald-500">+ APPEND (파일 끝에 추가)</div>
+                            {patch.newText || <span className="text-emerald-400 italic">(추가할 내용 없음)</span>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-6 py-8 text-center text-sm text-neutral-500">
+                    자동 적용 가능한 패치가 없습니다. 권장 조치를 참고해 수동으로 수정해주세요.
+                  </div>
+                )}
+
                 <div className="border-2 border-black bg-white p-6">
                   <div className="flex items-center justify-between gap-4">
                     <div>
