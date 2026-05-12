@@ -517,12 +517,17 @@ function SettingsPage() {
         });
       }
 
-      if (tokenData.accessToken) {
-        setTokens({
-          accessToken: tokenData.accessToken,
-          refreshToken: tokenData.refreshToken,
-        });
+      // 토큰이 누락된 경우 상태 불일치를 방지하기 위해 에러로 처리합니다.
+      // UI를 "설정 완료"로 전환하기 전에 반드시 세션 갱신이 성공해야 합니다.
+      if (!tokenData.accessToken) {
+        throw new Error('Token missing in response');
       }
+
+      // 토큰 저장이 완전히 완료된 후에만 UI 상태를 전환합니다.
+      setTokens({
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken,
+      });
 
       setPasswordValues(initialPasswordForm);
       setPasswordErrors({});
