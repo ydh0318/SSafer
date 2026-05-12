@@ -406,12 +406,39 @@ class ScanQueryControllerTest {
             "CONFIG",
             "Image user should not be 'root'",
             "Running containers with root is risky",
+            "USER root",
+            new com.ssafer.scan.api.dto.ScanFindingExplanationResponse(
+                "취약점 요약",
+                "위험한 이유",
+                "악용 가능 시나리오",
+                "예상 영향",
+                "심각도 해석"
+            ),
+            "초보자도 이해하기 쉬운 영향",
             "Dockerfile",
             2,
             "Dockerfile",
             "DS-0002",
             "Container escape",
             "Use non-root user",
+            new com.ssafer.scan.api.dto.ScanFindingFixResponse(
+                "수정 요약",
+                "high",
+                List.of("조치 1", "조치 2"),
+                "코드 가이드",
+                "검증 방법",
+                List.of("주의사항"),
+                List.of(new com.ssafer.scan.api.dto.ScanFindingFixPatchResponse(
+                    "PATCH-0001",
+                    "FND-0001",
+                    "replace",
+                    "Dockerfile",
+                    "USER root",
+                    "USER app",
+                    "sha256:abc"
+                ))
+            ),
+            List.of("Dockerfile"),
             "{\"line\":2}",
             "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}",
             ResolutionStatus.OPEN,
@@ -436,9 +463,17 @@ class ScanQueryControllerTest {
         .andExpect(jsonPath("$.data.severity").value("HIGH"))
         .andExpect(jsonPath("$.data.category").value("CONFIG"))
         .andExpect(jsonPath("$.data.title").value("Image user should not be 'root'"))
+        .andExpect(jsonPath("$.data.maskedEvidence").value("USER root"))
+        .andExpect(jsonPath("$.data.explanation.summary").value("취약점 요약"))
+        .andExpect(jsonPath("$.data.explanation.whyRisky").value("위험한 이유"))
+        .andExpect(jsonPath("$.data.impact").value("초보자도 이해하기 쉬운 영향"))
         .andExpect(jsonPath("$.data.filePath").value("Dockerfile"))
         .andExpect(jsonPath("$.data.lineNumber").value(2))
         .andExpect(jsonPath("$.data.ruleCode").value("DS-0002"))
+        .andExpect(jsonPath("$.data.fix.summary").value("수정 요약"))
+        .andExpect(jsonPath("$.data.fix.priority").value("high"))
+        .andExpect(jsonPath("$.data.fix.patches[0].patchId").value("PATCH-0001"))
+        .andExpect(jsonPath("$.data.targetFiles[0]").value("Dockerfile"))
         .andExpect(jsonPath("$.data.patchPayloadJson").value("{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}"))
         .andExpect(jsonPath("$.data.patchApprovedActorType").value("USER"))
         .andExpect(jsonPath("$.data.resolutionStatus").value("OPEN"));

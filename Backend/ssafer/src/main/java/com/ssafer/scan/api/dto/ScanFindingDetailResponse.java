@@ -6,6 +6,7 @@ import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.Severity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record ScanFindingDetailResponse(
     @Schema(description = "취약점 결과 ID", example = "2001")
@@ -14,9 +15,9 @@ public record ScanFindingDetailResponse(
     Long scanId,
     @Schema(description = "스캔 노드 ID", example = "3001")
     Long scanNodeId,
-    @Schema(description = "탐지 출처", example = "TRIVY")
+    @Schema(description = "취약점 출처", example = "TRIVY")
     FindingSourceType sourceType,
-    @Schema(description = "중복 식별용 지문", example = "sha256:abc123")
+    @Schema(description = "중복 집계를 위한 지문", example = "sha256:abc123")
     String fingerprint,
     @Schema(description = "심각도", example = "HIGH")
     Severity severity,
@@ -26,21 +27,31 @@ public record ScanFindingDetailResponse(
     String title,
     @Schema(description = "취약점 설명")
     String description,
+    @Schema(description = "가려진 원문 증거")
+    String maskedEvidence,
+    @Schema(description = "구조화된 설명")
+    ScanFindingExplanationResponse explanation,
+    @Schema(description = "현실 영향 설명")
+    String impact,
     @Schema(description = "문제가 발생한 파일 경로", example = "Dockerfile")
     String filePath,
     @Schema(description = "문제가 발생한 줄 번호", example = "2")
     Integer lineNumber,
     @Schema(description = "관련 리소스 이름", example = "Dockerfile")
     String resourceName,
-    @Schema(description = "탐지 규칙 코드", example = "DS-0002")
+    @Schema(description = "취약점 규칙 코드", example = "DS-0002")
     String ruleCode,
     @Schema(description = "공격 시나리오 설명")
     String attackScenario,
     @Schema(description = "조치 가이드")
     String remediationGuide,
+    @Schema(description = "구조화된 수정 가이드")
+    ScanFindingFixResponse fix,
+    @Schema(description = "연관 파일 경로 목록")
+    List<String> targetFiles,
     @Schema(description = "원본 결과 일부 JSON")
     String rawSnippetJson,
-    @Schema(description = "워커가 전달한 패치 적용 payload JSON")
+    @Schema(description = "패치 적용용 payload JSON")
     String patchPayloadJson,
     @Schema(description = "조치 상태", example = "OPEN")
     ResolutionStatus resolutionStatus,
