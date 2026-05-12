@@ -198,6 +198,7 @@ class ScanQueryControllerTest {
         "completed",
         null,
         "s3://ssafer/raw/1001/scan_result.json",
+        "s3://ssafer/result/1001/analysis_result.json",
         requestedAt,
         startedAt,
         completedAt,
@@ -214,7 +215,8 @@ class ScanQueryControllerTest {
         .andExpect(jsonPath("$.data.scanType").value("PROJECT_FILE"))
         .andExpect(jsonPath("$.data.status").value("DONE"))
         .andExpect(jsonPath("$.data.progressStep").value("completed"))
-        .andExpect(jsonPath("$.data.rawResultPath").value("s3://ssafer/raw/1001/scan_result.json"));
+        .andExpect(jsonPath("$.data.rawResultPath").value("s3://ssafer/raw/1001/scan_result.json"))
+        .andExpect(jsonPath("$.data.analysisResultPath").value("s3://ssafer/result/1001/analysis_result.json"));
   }
 
   @Test

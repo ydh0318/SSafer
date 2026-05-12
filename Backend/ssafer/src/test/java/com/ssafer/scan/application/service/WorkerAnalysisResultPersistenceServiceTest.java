@@ -58,32 +58,23 @@ class WorkerAnalysisResultPersistenceServiceTest {
             "severity": "HIGH",
             "file": ".env",
             "line": 1,
-            "title": "환경변수 파일에 시크릿이 하드코딩됨: DB_PASSWORD",
+            "title": "?섍꼍蹂???뚯씪???쒗겕由우씠 ?섎뱶肄붾뵫?? DB_PASSWORD",
             "maskedEvidence": "DB_PASSWORD=***MASKED***",
-            "explanation": "설명 1",
+            "explanation": {
+              "summary": "summary 1",
+              "whyRisky": "why risky 1",
+              "abuseScenario": "abuse scenario 1",
+              "expectedImpact": "expected impact 1",
+              "severityInterpretation": "severity interpretation 1"
+            },
+            "impact": "beginner friendly impact 1",
             "fix": {
               "summary": "fix summary 1",
               "priority": "high",
               "recommendedActions": ["action-1", "action-2"],
               "codeGuidance": "code guidance 1",
               "verification": "verification 1",
-              "cautions": ["caution-1"],
-              "patches": [
-                {
-                  "patchId": "PATCH-0001",
-                  "targetFile": ".env",
-                  "operation": "replace",
-                  "oldText": "DB_PASSWORD=plain-text",
-                  "newText": "DB_PASSWORD=${DB_PASSWORD}",
-                  "expectedFileHash": "sha256:abc123...",
-                  "requiresApproval": true,
-                  "rollback": {
-                    "operation": "replace",
-                    "oldText": "DB_PASSWORD=${DB_PASSWORD}",
-                    "newText": "DB_PASSWORD=plain-text"
-                  }
-                }
-              ]
+              "cautions": ["caution-1"]
             }
           },
           {
@@ -95,7 +86,14 @@ class WorkerAnalysisResultPersistenceServiceTest {
             "line": null,
             "title": "Image user should not be root",
             "maskedEvidence": "Last USER command in Dockerfile should not be root",
-            "explanation": "설명 2",
+            "explanation": {
+              "summary": "summary 1",
+              "whyRisky": "why risky 1",
+              "abuseScenario": "abuse scenario 1",
+              "expectedImpact": "expected impact 1",
+              "severityInterpretation": "severity interpretation 1"
+            },
+            "impact": "beginner friendly impact 1",
             "fix": {
               "summary": "fix summary 2",
               "priority": "high",
@@ -114,7 +112,14 @@ class WorkerAnalysisResultPersistenceServiceTest {
             "line": null,
             "title": "No HEALTHCHECK defined",
             "maskedEvidence": "Add HEALTHCHECK instruction",
-            "explanation": "설명 3",
+            "explanation": {
+              "summary": "summary 1",
+              "whyRisky": "why risky 1",
+              "abuseScenario": "abuse scenario 1",
+              "expectedImpact": "expected impact 1",
+              "severityInterpretation": "severity interpretation 1"
+            },
+            "impact": "beginner friendly impact 1",
             "fix": {
               "summary": "fix summary 3",
               "priority": "low",
@@ -122,6 +127,23 @@ class WorkerAnalysisResultPersistenceServiceTest {
               "codeGuidance": "code guidance 3",
               "verification": "verification 3",
               "cautions": ["caution-3"]
+            }
+          }
+        ],
+        "patches": [
+          {
+            "patchId": "PATCH-0001",
+            "findingId": "FND-0001",
+            "targetFile": ".env",
+            "operation": "replace",
+            "oldText": "DB_PASSWORD=plain-text",
+            "newText": "DB_PASSWORD=${DB_PASSWORD}",
+            "expectedFileHash": "sha256:abc123...",
+            "requiresApproval": true,
+            "rollback": {
+              "operation": "replace",
+              "oldText": "DB_PASSWORD=${DB_PASSWORD}",
+              "newText": "DB_PASSWORD=plain-text"
             }
           }
         ]
@@ -146,7 +168,14 @@ class WorkerAnalysisResultPersistenceServiceTest {
             "line": 12,
             "title": "SSH port is publicly exposed",
             "maskedEvidence": "0.0.0.0:22",
-            "explanation": "SSH is exposed to the public network",
+            "explanation": {
+              "summary": "summary 1",
+              "whyRisky": "why risky 1",
+              "abuseScenario": "abuse scenario 1",
+              "expectedImpact": "expected impact 1",
+              "severityInterpretation": "severity interpretation 1"
+            },
+            "impact": "beginner friendly impact 1",
             "fix": {
               "summary": "Restrict network access",
               "priority": "high",
@@ -178,6 +207,56 @@ class WorkerAnalysisResultPersistenceServiceTest {
             "line": 1,
             "title": "Legacy hardcoded secret",
             "maskedEvidence": "DB_PASSWORD=***MASKED***"
+          }
+        ],
+        "patches": [
+          {
+            "patchId": "PATCH-0001",
+            "findingId": "FND-0001",
+            "targetFile": ".env",
+            "operation": "replace",
+            "oldText": "DB_PASSWORD=plain-text",
+            "newText": "DB_PASSWORD=${DB_PASSWORD}",
+            "expectedFileHash": "sha256:abc123...",
+            "requiresApproval": true,
+            "rollback": {
+              "operation": "replace",
+              "oldText": "DB_PASSWORD=${DB_PASSWORD}",
+              "newText": "DB_PASSWORD=plain-text"
+            }
+          }
+        ]
+      }
+      """;
+
+  private static final String NESTED_PATCH_ANALYSIS_RESULT_JSON = """
+      {
+        "schemaVersion": "0.2",
+        "scanId": "nested-patch-scan-1",
+        "source": "cli",
+        "generatedAt": "2026-05-04T01:57:29.596745+00:00",
+        "results": [
+          {
+            "findingId": "FND-0001",
+            "ruleId": "ENV_PLAIN_SECRET",
+            "source": "custom-rule",
+            "severity": "HIGH",
+            "file": ".env",
+            "line": 1,
+            "title": "Nested patch finding",
+            "maskedEvidence": "DB_PASSWORD=***MASKED***",
+            "fix": {
+              "summary": "fix summary 1",
+              "patches": [
+                {
+                  "patchId": "PATCH-0001",
+                  "targetFile": ".env",
+                  "operation": "replace",
+                  "oldText": "DB_PASSWORD=plain-text",
+                  "newText": "DB_PASSWORD=${DB_PASSWORD}"
+                }
+              ]
+            }
           }
         ]
       }
@@ -251,8 +330,12 @@ class WorkerAnalysisResultPersistenceServiceTest {
     assertThat(findingsCaptor.getValue())
         .extracting(ScanFinding::getResourceName)
         .containsExactly(".env", "Dockerfile", "Dockerfile");
+    assertThat(findingsCaptor.getValue().getFirst().getDescription()).isEqualTo("summary 1");
+    assertThat(findingsCaptor.getValue().getFirst().getAttackScenario()).isEqualTo("abuse scenario 1");
     JsonNode rawSnippet = new ObjectMapper().readTree(findingsCaptor.getValue().getFirst().getRawSnippetJson());
     assertThat(rawSnippet.path("findingId").asText()).isEqualTo("FND-0001");
+    assertThat(rawSnippet.path("impact").asText()).isEqualTo("beginner friendly impact 1");
+    assertThat(rawSnippet.path("explanation").path("summary").asText()).isEqualTo("summary 1");
     assertThat(rawSnippet.has("fix")).isTrue();
     JsonNode patchPayload = new ObjectMapper().readTree(findingsCaptor.getValue().getFirst().getPatchPayloadJson());
     assertThat(patchPayload.path("patches")).hasSize(1);
@@ -300,7 +383,7 @@ class WorkerAnalysisResultPersistenceServiceTest {
         .fingerprint("FND-0001")
         .severity(com.ssafer.scan.domain.enums.Severity.HIGH)
         .category("CUSTOM_RULE")
-        .title("기존 finding")
+        .title("湲곗〈 finding")
         .resolutionStatus(com.ssafer.scan.domain.enums.ResolutionStatus.OPEN)
         .createdAt(LocalDateTime.now())
         .build();
@@ -346,7 +429,7 @@ class WorkerAnalysisResultPersistenceServiceTest {
         .fingerprint("FND-0001")
         .severity(com.ssafer.scan.domain.enums.Severity.HIGH)
         .category("CUSTOM_RULE")
-        .title("기존 finding")
+        .title("湲곗〈 finding")
         .rawSnippetJson("{\"maskedEvidence\":\"DB_PASSWORD=***MASKED***\"}")
         .resolutionStatus(com.ssafer.scan.domain.enums.ResolutionStatus.OPEN)
         .createdAt(LocalDateTime.now())
@@ -472,6 +555,38 @@ class WorkerAnalysisResultPersistenceServiceTest {
   }
 
   @Test
+  void persistStillSupportsNestedFixPatchesWhenRootPatchesAreMissing() throws Exception {
+    Scan scan = runningScan();
+    AgentTask task = ackedTask(scan);
+    ScanNode savedNode = ScanNode.builder()
+        .id(200L)
+        .scanId(scan.getId())
+        .nodeKey("nested-patch-scan-1")
+        .nodeName("cli")
+        .nodeType("ANALYSIS_RESULT")
+        .metadataJson("{}")
+        .createdAt(LocalDateTime.now())
+        .build();
+
+    when(scanRepository.findByIdForUpdate(scan.getId())).thenReturn(Optional.of(scan));
+    when(agentTaskRepository.findByIdAndScanId(task.getId(), scan.getId())).thenReturn(Optional.of(task));
+    when(analysisResultObjectReader.read(scan.getAnalysisResultPath())).thenReturn(NESTED_PATCH_ANALYSIS_RESULT_JSON);
+    when(scanNodeRepository.findByScanIdAndNodeKey(scan.getId(), "nested-patch-scan-1"))
+        .thenReturn(Optional.empty());
+    when(scanNodeRepository.save(any(ScanNode.class))).thenReturn(savedNode);
+    when(scanFindingRepository.findAllByScanId(scan.getId())).thenReturn(List.of());
+    when(scanFindingRepository.countByScanId(scan.getId())).thenReturn(1L);
+
+    workerAnalysisResultPersistenceService.persist(event());
+
+    ArgumentCaptor<List<ScanFinding>> findingsCaptor = ArgumentCaptor.forClass(List.class);
+    verify(scanFindingRepository).saveAll(findingsCaptor.capture());
+    JsonNode patchPayload = new ObjectMapper().readTree(findingsCaptor.getValue().getFirst().getPatchPayloadJson());
+    assertThat(patchPayload.path("patches")).hasSize(1);
+    assertThat(patchPayload.path("patches").get(0).path("patchId").asText()).isEqualTo("PATCH-0001");
+  }
+
+  @Test
   void markFailedMarksTaskAndScanFailed() {
     Scan scan = runningScan();
     AgentTask task = ackedTask(scan);
@@ -565,3 +680,6 @@ class WorkerAnalysisResultPersistenceServiceTest {
     return new Project(20L, null, "test-project", null, ScanMode.AGENT, false);
   }
 }
+
+
+

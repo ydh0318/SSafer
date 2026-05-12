@@ -22,6 +22,7 @@ import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -100,6 +101,51 @@ class ScanSummaryQueryServiceTest {
     assertThat(response.categoryCounts()).containsEntry("CONFIG", 2L).containsEntry("SECRET", 1L);
     assertThat(response.sourceCounts()).containsEntry("TRIVY", 2L).containsEntry("CUSTOM_RULE", 1L);
     assertThat(response.resolutionCounts()).containsEntry("OPEN", 3L);
+  }
+
+  @Test
+  @DisplayName("summary 집계에서 null/blank group key는 응답에 노출하지 않는다")
+  void getScanSummarySkipsNullOrBlankGroupKeys() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Scan scan = Scan.builder()
+        .id(1001L)
+        .projectId(101L)
+        .requestedByUserId(1L)
+        .requestActorType(RequestActorType.USER)
+        .scanMode(ScanMode.AGENT)
+        .status(ScanStatus.DONE)
+        .requestedAt(LocalDateTime.of(2026, 4, 23, 9, 0))
+        .lastUpdatedAt(LocalDateTime.of(2026, 4, 23, 9, 3))
+        .build();
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(scanRepository.findById(1001L)).thenReturn(Optional.of(scan));
+    when(scanFindingRepository.countByScanId(1001L)).thenReturn(2L);
+    when(scanNodeRepository.countByScanId(1001L)).thenReturn(1L);
+    when(scanFindingRepository.countSeverityByScanId(1001L)).thenReturn(List.<Object[]>of(
+        new Object[]{null, 99L},
+        new Object[]{Severity.CRITICAL, 1L}
+    ));
+    when(scanFindingRepository.countCategoryByScanId(1001L)).thenReturn(List.<Object[]>of(
+        new Object[]{null, 5L},
+        new Object[]{"   ", 4L},
+        new Object[]{"CONFIG", 2L}
+    ));
+    when(scanFindingRepository.countSourceTypeByScanId(1001L)).thenReturn(List.<Object[]>of(
+        new Object[]{null, 5L},
+        new Object[]{"TRIVY", 2L}
+    ));
+    when(scanFindingRepository.countResolutionStatusByScanId(1001L)).thenReturn(List.<Object[]>of(
+        new Object[]{null, 5L},
+        new Object[]{"OPEN", 2L}
+    ));
+
+    ScanSummaryResponse response = scanSummaryQueryService.getScanSummary(1001L);
+
+    assertThat(response.criticalCount()).isEqualTo(1L);
+    assertThat(response.categoryCounts()).containsOnlyKeys("CONFIG");
+    assertThat(response.sourceCounts()).containsOnlyKeys("TRIVY");
+    assertThat(response.resolutionCounts()).containsOnlyKeys("OPEN");
   }
 
   @Test
