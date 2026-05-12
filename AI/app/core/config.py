@@ -43,7 +43,7 @@ GMS_BASE_URL = os.getenv(
     "GMS_BASE_URL",
     "https://gms.ssafy.io/gmsapi/api.anthropic.com",
 )
-GMS_MODEL = os.getenv("GMS_MODEL", "claude-3-5-haiku-latest")
+GMS_MODEL = os.getenv("GMS_MODEL", "claude-haiku-4-5-20251001")
 GMS_TEMPERATURE = _get_float_env("GMS_TEMPERATURE", 0.1)
 GMS_TIMEOUT_SECONDS = _get_float_env("GMS_TIMEOUT_SECONDS", 600.0)
 GMS_FORCE_JSON_RESPONSE_FORMAT = _get_bool_env(
