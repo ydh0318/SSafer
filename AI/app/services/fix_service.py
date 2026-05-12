@@ -74,8 +74,8 @@ def parse_fix_response(response: str) -> dict[str, Any]:
         )
 
     cautions = parsed["cautions"]
-    if not isinstance(cautions, list) or not 1 <= len(cautions) <= 3:
-        raise ValueError("Fix Chain output field 'cautions' must contain 1 to 3 items.")
+    if not isinstance(cautions, list) or len(cautions) > 3:
+        raise ValueError("Fix Chain output field 'cautions' must contain 0 to 3 items.")
 
     for field, values in (
         ("recommendedActions", recommended_actions),
@@ -106,6 +106,8 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
             "JSON 객체만 다시 출력하세요.",
             "필수 필드: summary, priority, recommendedActions, codeGuidance, verification, cautions.",
             "priority는 high, medium, low 중 하나입니다.",
+            "recommendedActions는 2~5개의 문자열 배열, cautions는 0~3개의 문자열 배열입니다.",
+            "주의할 점이 떠오르지 않으면 cautions를 빈 배열 []로 두세요.",
             "자연어는 한국어 중심으로 작성하세요.",
             "patches는 안전할 때만 포함하고, 불확실하면 생략하세요.",
             "patch operation은 replace 또는 append만 허용하며, finding.patchContext.operation 값을 그대로 쓰세요.",

@@ -114,7 +114,7 @@ cautions
 summary, priority, codeGuidance, verification은 비어 있지 않은 string이어야 함
 priority는 high, medium, low 중 하나여야 함
 recommendedActions는 2~5개의 string 배열이어야 함
-cautions는 1~3개의 string 배열이어야 함
+cautions는 0~3개의 string 배열이어야 함 (주의할 점이 없을 때는 빈 배열 허용)
 patches가 있으면 1개 이상의 patch object를 담은 array여야 함
 각 patch는 patchId, targetFile, operation, oldText, newText, requiresApproval을 반드시 포함해야 함
 patch.operation은 현재 replace만 허용함

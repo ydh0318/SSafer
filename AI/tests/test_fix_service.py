@@ -85,6 +85,22 @@ class FixServiceTest(unittest.TestCase):
         self.assertEqual(parsed["patches"][0]["filePath"], "Dockerfile")
         self.assertNotIn("targetFile", parsed["patches"][0])
 
+    def test_parse_fix_response_accepts_empty_cautions(self):
+        empty_cautions_fix = {**DESCRIPTION_ONLY_FIX, "cautions": []}
+
+        parsed = parse_fix_response(json.dumps(empty_cautions_fix))
+
+        self.assertEqual(parsed["cautions"], [])
+
+    def test_parse_fix_response_rejects_too_many_cautions(self):
+        too_many_cautions_fix = {
+            **DESCRIPTION_ONLY_FIX,
+            "cautions": ["c1", "c2", "c3", "c4"],
+        }
+
+        with self.assertRaisesRegex(ValueError, "cautions.*0 to 3 items"):
+            parse_fix_response(json.dumps(too_many_cautions_fix))
+
     def test_parse_fix_response_rejects_invalid_patch_fixture(self):
         invalid_fix = {
             **PATCH_FIX,
