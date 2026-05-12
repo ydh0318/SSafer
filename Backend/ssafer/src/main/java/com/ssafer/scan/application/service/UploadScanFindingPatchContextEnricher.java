@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class UploadScanFindingPatchContextEnricher {
 
+  private static final String COMPOSE_EXPOSED_DB_PORT = "COMPOSE_EXPOSED_DB_PORT";
   private static final Set<String> SENSITIVE_RULE_IDS = Set.of(
       "ENV_PLAIN_SECRET",
       "COMPOSE_HARDCODED_SECRET"
@@ -69,7 +70,8 @@ public class UploadScanFindingPatchContextEnricher {
         return finding;
       }
 
-      String oldText = lines.get(lineIndex);
+      LineTextRange textRange = extractPatchTextRange(finding, lines, lineIndex);
+      String oldText = textRange.oldText();
       if (oldText == null || oldText.isBlank()) {
         return finding;
       }
@@ -80,8 +82,8 @@ public class UploadScanFindingPatchContextEnricher {
 
       UploadScanFindingPatchContext patchContext = new UploadScanFindingPatchContext(
           oldText,
-          finding.line(),
-          finding.line(),
+          textRange.lineStart(),
+          textRange.lineEnd(),
           calculateFileHash(matchedFile)
       );
       // 서버 내부 임시 경로는 노출하지 않고 업로드 파일명만 filePath로 넘긴다.
@@ -89,6 +91,53 @@ public class UploadScanFindingPatchContextEnricher {
     } catch (IOException ex) {
       return finding;
     }
+  }
+
+  private LineTextRange extractPatchTextRange(UploadScanFinding finding, List<String> lines, int lineIndex) {
+    if (COMPOSE_EXPOSED_DB_PORT.equals(normalize(finding.ruleId()))) {
+      return extractYamlBlockTextRange(lines, lineIndex);
+    }
+    return new LineTextRange(lines.get(lineIndex), lineIndex + 1, lineIndex + 1);
+  }
+
+  private LineTextRange extractYamlBlockTextRange(List<String> lines, int lineIndex) {
+    String startLine = lines.get(lineIndex);
+    if (!isYamlKeyLine(startLine, "ports")) {
+      return new LineTextRange(startLine, lineIndex + 1, lineIndex + 1);
+    }
+
+    int startIndent = indentWidth(startLine);
+    int endIndex = lineIndex;
+    for (int index = lineIndex + 1; index < lines.size(); index++) {
+      String line = lines.get(index);
+      if (line.isBlank()) {
+        break;
+      }
+      if (indentWidth(line) <= startIndent) {
+        break;
+      }
+      endIndex = index;
+    }
+
+    String oldText = String.join("\n", lines.subList(lineIndex, endIndex + 1));
+    return new LineTextRange(oldText, lineIndex + 1, endIndex + 1);
+  }
+
+  private boolean isYamlKeyLine(String line, String expectedKey) {
+    String trimmed = line == null ? "" : line.strip();
+    if (trimmed.isBlank() || trimmed.startsWith("-") || !trimmed.contains(":")) {
+      return false;
+    }
+    String key = trimmed.split(":", 2)[0].strip().replace("\"", "").replace("'", "");
+    return expectedKey.equals(key);
+  }
+
+  private int indentWidth(String line) {
+    int width = 0;
+    while (width < line.length() && line.charAt(width) == ' ') {
+      width++;
+    }
+    return width;
   }
 
   private Path findUniqueFile(String findingFile, List<Path> uploadedFiles) {
@@ -165,5 +214,12 @@ public class UploadScanFindingPatchContextEnricher {
       builder.append(String.format(Locale.ROOT, "%02x", value));
     }
     return builder.toString();
+  }
+
+  private record LineTextRange(
+      String oldText,
+      Integer lineStart,
+      Integer lineEnd
+  ) {
   }
 }

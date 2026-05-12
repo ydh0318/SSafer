@@ -44,6 +44,39 @@ class UploadScanFindingPatchContextEnricherTest {
   }
 
   @Test
+  void enrichAddsYamlBlockPatchContextForComposeExposedDbPort() throws Exception {
+    Path compose = tempDir.resolve("docker-compose.yml");
+    Files.writeString(compose, """
+        services:
+          db:
+            image: postgres:16
+            ports:
+              - "5432:5432"
+            environment:
+              POSTGRES_DB: app
+        """, StandardCharsets.UTF_8);
+    UploadScanFinding finding = new UploadScanFinding(
+        "FND-0001",
+        "COMPOSE_EXPOSED_DB_PORT",
+        "custom-rule",
+        "CRITICAL",
+        "docker-compose.yml",
+        4,
+        "db port exposed",
+        "services.db.ports=5432:5432"
+    );
+
+    List<UploadScanFinding> enriched = enricher.enrich(List.of(finding), List.of(compose));
+
+    UploadScanFindingPatchContext patchContext = enriched.getFirst().patchContext();
+    assertThat(patchContext).isNotNull();
+    assertThat(patchContext.oldText()).isEqualTo("    ports:\n      - \"5432:5432\"");
+    assertThat(patchContext.lineStart()).isEqualTo(4);
+    assertThat(patchContext.lineEnd()).isEqualTo(5);
+    assertThat(patchContext.expectedFileHash()).isEqualTo(fileHash(compose));
+  }
+
+  @Test
   void enrichSkipsPatchContextWhenFileMatchIsAmbiguous() throws Exception {
     Path first = tempDir.resolve("a").resolve("Dockerfile");
     Path second = tempDir.resolve("b").resolve("Dockerfile");
