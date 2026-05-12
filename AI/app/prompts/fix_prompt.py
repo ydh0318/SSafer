@@ -15,6 +15,7 @@ FIX_PROMPT = ChatPromptTemplate.from_messages(
                 "finding.patchContext가 안전한 CLI 패치를 만들 수 있을 때만 patches를 포함하세요.\n\n"
                 "패치 규칙:\n"
                 "- patchContext가 없거나 수정이 불확실하면 patches를 생략하세요.\n"
+                "- operation은 finding.patchContext.operation 값을 그대로 쓰세요.\n"
                 "- replace: oldText는 patchContext.oldText 그대로, filePath는 finding.filePath, expectedFileHash는 patchContext.expectedFileHash.\n"
                 "- append: Dockerfile 끝 추가가 안전한 경우만 사용하고 oldText는 넣지 마세요.\n"
                 "- docker-compose YAML에는 append를 쓰지 마세요.\n"

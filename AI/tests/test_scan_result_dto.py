@@ -45,6 +45,14 @@ class ScanResultDtoTest(unittest.TestCase):
             "DB_PASSWORD=***MASKED***",
         )
 
+    def test_parse_scan_result_accepts_web_upload_source(self):
+        scan_result = build_scan_result()
+        scan_result["source"] = "web-upload"
+
+        parsed = parse_scan_result(scan_result)
+
+        self.assertEqual(parsed["source"], "web-upload")
+
     def test_split_valid_invalid_findings_accepts_patch_context(self):
         parsed = parse_scan_result(
             build_scan_result(
@@ -60,6 +68,7 @@ class ScanResultDtoTest(unittest.TestCase):
                         "title": "Dockerfile runs as root",
                         "maskedEvidence": "USER root",
                         "patchContext": {
+                            "operation": "replace",
                             "oldText": "USER root",
                             "expectedFileHash": "sha256:abc123",
                         },
@@ -73,6 +82,7 @@ class ScanResultDtoTest(unittest.TestCase):
         )
 
         self.assertEqual(len(valid_findings), 1)
+        self.assertEqual(valid_findings[0]["patchContext"]["operation"], "replace")
         self.assertEqual(valid_findings[0]["patchContext"]["oldText"], "USER root")
         self.assertEqual(
             valid_findings[0]["patchContext"]["expectedFileHash"],

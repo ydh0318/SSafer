@@ -108,7 +108,7 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
             "priority는 high, medium, low 중 하나입니다.",
             "자연어는 한국어 중심으로 작성하세요.",
             "patches는 안전할 때만 포함하고, 불확실하면 생략하세요.",
-            "patch operation은 replace 또는 append만 허용합니다.",
+            "patch operation은 replace 또는 append만 허용하며, finding.patchContext.operation 값을 그대로 쓰세요.",
             "replace는 oldText를 patchContext.oldText 그대로 사용하고, append는 oldText를 생략하세요.",
             "append는 Dockerfile에만 사용하고 docker-compose YAML에는 쓰지 마세요.",
         ]
