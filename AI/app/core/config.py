@@ -43,13 +43,15 @@ GMS_BASE_URL = os.getenv(
     "GMS_BASE_URL",
     "https://gms.ssafy.io/gmsapi/api.anthropic.com",
 )
-GMS_MODEL = os.getenv("GMS_MODEL", "claude-haiku-4-5-20251001")
+GMS_MODEL = os.getenv("GMS_MODEL", "claude-3-5-haiku-latest")
 GMS_TEMPERATURE = _get_float_env("GMS_TEMPERATURE", 0.1)
 GMS_TIMEOUT_SECONDS = _get_float_env("GMS_TIMEOUT_SECONDS", 600.0)
 GMS_FORCE_JSON_RESPONSE_FORMAT = _get_bool_env(
     "GMS_FORCE_JSON_RESPONSE_FORMAT",
     False,
 )
+LLM_EXPLAIN_MAX_TOKENS = _get_int_env("LLM_EXPLAIN_MAX_TOKENS", 900)
+LLM_FIX_MAX_TOKENS = _get_int_env("LLM_FIX_MAX_TOKENS", 800)
 S3_MAX_RETRIES = _get_int_env("S3_MAX_RETRIES", 2)
 S3_RETRY_BACKOFF_SECONDS = _get_float_env("S3_RETRY_BACKOFF_SECONDS", 1.0)
 

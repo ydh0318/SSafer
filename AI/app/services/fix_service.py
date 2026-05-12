@@ -1,14 +1,18 @@
 import json
+import logging
 from typing import Any
 
 from app.chains.fix_chain import create_fix_chain
+from app.core.config import LLM_FIX_MAX_TOKENS
 from app.core.llm import invoke_llm_with_retry
 from app.services.explain_service import contains_disallowed_script
-from app.services.input_service import format_finding_for_llm
+from app.services.input_service import format_finding_for_fix_llm
+from app.services.llm_usage_service import get_llm_response_text, log_llm_usage
 from app.services.result_service import validate_fix_schema
 
 
-MAX_FIX_RETRIES = 2
+MAX_FIX_RETRIES = 1
+logger = logging.getLogger(__name__)
 REQUIRED_FIX_FIELDS = (
     "summary",
     "priority",
@@ -97,31 +101,24 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
         [
             finding_input,
             "",
-            "Retry because the previous fix JSON failed validation.",
-            f"Validation error: {error_message}",
-            "Return only one valid JSON object. Do not use Markdown fences.",
-            "Always include: summary, priority, recommendedActions, codeGuidance, verification, cautions.",
-            "priority must be high, medium, or low.",
-            "recommendedActions must contain 2 to 5 non-empty strings.",
-            "cautions must contain 1 to 3 non-empty strings.",
-            "Omit patches when finding.patchContext is missing.",
-            "If replace patches are included, each patch must include patchId, findingId, operation, filePath, oldText, newText, and expectedFileHash.",
-            "If append patches are included, each patch must include patchId, findingId, operation, filePath, newText, and expectedFileHash, and must omit oldText.",
-            "patches[].operation must be replace or append.",
-            "patches[].filePath must equal finding.filePath and use forward slashes.",
-            "patches[].expectedFileHash must start with sha256:.",
-            "For replace patches, copy patchContext.oldText to oldText exactly.",
-            "For append patches, use only Dockerfile targets where appending a complete instruction is safe.",
-            "Do not use append for docker-compose YAML.",
-            "Do not include masked values such as ***MASKED***, [MASKED], or <MASKED> in oldText or newText.",
-            "If target file, exact oldText, or safe newText is uncertain, omit the patches key.",
+            "이전 수정 JSON이 검증에 실패했으므로 다시 작성하세요.",
+            f"검증 오류: {error_message}",
+            "JSON 객체만 다시 출력하세요.",
+            "필수 필드: summary, priority, recommendedActions, codeGuidance, verification, cautions.",
+            "priority는 high, medium, low 중 하나입니다.",
+            "자연어는 한국어 중심으로 작성하세요.",
+            "patches는 안전할 때만 포함하고, 불확실하면 생략하세요.",
+            "patch operation은 replace 또는 append만 허용합니다.",
+            "replace는 oldText를 patchContext.oldText 그대로 사용하고, append는 oldText를 생략하세요.",
+            "append는 Dockerfile에만 사용하고 docker-compose YAML에는 쓰지 마세요.",
         ]
     )
 
 
 def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
     chain = create_fix_chain()
-    finding_input = format_finding_for_llm(finding)
+    finding_input = format_finding_for_fix_llm(finding)
+    finding_id = finding.get("id")
     last_error: ValueError | None = None
 
     for attempt in range(MAX_FIX_RETRIES + 1):
@@ -132,7 +129,17 @@ def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
                 error_message=str(last_error),
             )
 
-        raw_fix = invoke_llm_with_retry(chain, {"finding_input": prompt_input})
+        raw_fix_response = invoke_llm_with_retry(chain, {"finding_input": prompt_input})
+        raw_fix = get_llm_response_text(raw_fix_response)
+        log_llm_usage(
+            logger=logger,
+            stage="FIX",
+            finding_id=finding_id if isinstance(finding_id, str) else None,
+            input_text=prompt_input,
+            response=raw_fix_response,
+            attempt_count=attempt + 1,
+            max_output_tokens=LLM_FIX_MAX_TOKENS,
+        )
         if contains_disallowed_script(raw_fix):
             last_error = ValueError(
                 "Fix Chain output contains Japanese, Chinese, Hanja, or broken characters."

@@ -48,7 +48,16 @@ class AnalysisPipelineApiFlowTest(unittest.TestCase):
 
             with patch(
                 "app.services.analysis_service.generate_finding_explanation",
-                return_value="테스트 설명",
+                return_value={
+                    "explanation": {
+                        "summary": "취약점 요약",
+                        "whyRisky": "위험한 이유",
+                        "abuseScenario": "악용 가능 시나리오",
+                        "expectedImpact": "예상 영향",
+                        "severityInterpretation": "심각도 해석",
+                    },
+                    "impact": "쉬운 비유 설명",
+                },
             ), patch(
                 "app.services.analysis_service.generate_finding_fix",
                 return_value={
@@ -92,6 +101,18 @@ class AnalysisPipelineApiFlowTest(unittest.TestCase):
                 analysis_result["results"][0]["fix"]["summary"],
                 "테스트 수정 요약",
             )
+            self.assertEqual(
+                analysis_result["results"][0]["explanation"]["summary"],
+                "취약점 요약",
+            )
+            self.assertEqual(
+                analysis_result["results"][0]["explanation"]["whyRisky"],
+                "위험한 이유",
+            )
+            self.assertEqual(
+                analysis_result["results"][0]["impact"],
+                "쉬운 비유 설명",
+            )
 
     def test_analyze_scan_result_reports_llm_timeout_error_code(self):
         with patch(
@@ -117,7 +138,16 @@ class AnalysisPipelineApiFlowTest(unittest.TestCase):
 
             with patch(
                 "app.services.analysis_service.generate_finding_explanation",
-                return_value="테스트 설명",
+                return_value={
+                    "explanation": {
+                        "summary": "취약점 요약",
+                        "whyRisky": "위험한 이유",
+                        "abuseScenario": "악용 가능 시나리오",
+                        "expectedImpact": "예상 영향",
+                        "severityInterpretation": "심각도 해석",
+                    },
+                    "impact": "쉬운 비유 설명",
+                },
             ), patch(
                 "app.services.analysis_service.generate_finding_fix",
                 return_value={

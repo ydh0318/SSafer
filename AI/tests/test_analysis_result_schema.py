@@ -1,7 +1,9 @@
 import unittest
 
 from app.services.result_service import (
+    build_structured_analysis_result,
     normalize_analysis_result_patches,
+    validate_analysis_result_item,
     validate_fix_schema,
 )
 
@@ -69,6 +71,48 @@ def build_analysis_result_with_patch(patch):
 
 
 class AnalysisResultFixSchemaTest(unittest.TestCase):
+    def test_build_structured_analysis_result_accepts_explanation_payload(self):
+        result = build_structured_analysis_result(
+            finding=build_finding(),
+            explanation={
+                "explanation": {
+                    "summary": "취약점 요약",
+                    "whyRisky": "위험한 이유",
+                    "abuseScenario": "악용 가능 시나리오",
+                    "expectedImpact": "예상 영향",
+                    "severityInterpretation": "심각도 해석",
+                },
+                "impact": "초보자를 위한 쉬운 비유 설명",
+            },
+            fix=build_fix(),
+        )
+
+        self.assertEqual(result["explanation"]["summary"], "취약점 요약")
+        self.assertEqual(result["explanation"]["whyRisky"], "위험한 이유")
+        self.assertEqual(result["impact"], "초보자를 위한 쉬운 비유 설명")
+
+    def test_validate_analysis_result_item_requires_explanation_sections(self):
+        result = build_structured_analysis_result(
+            finding=build_finding(),
+            explanation="기존 설명",
+            fix=build_fix(),
+        )
+        result["explanation"].pop("whyRisky")
+
+        with self.assertRaisesRegex(ValueError, "whyRisky"):
+            validate_analysis_result_item(result, 0)
+
+    def test_validate_analysis_result_item_requires_impact(self):
+        result = build_structured_analysis_result(
+            finding=build_finding(),
+            explanation="기존 설명",
+            fix=build_fix(),
+        )
+        result.pop("impact")
+
+        with self.assertRaisesRegex(ValueError, "impact"):
+            validate_analysis_result_item(result, 0)
+
     def test_validate_fix_schema_accepts_existing_description_only_fix(self):
         validate_fix_schema(build_fix())
 
