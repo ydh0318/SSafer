@@ -19,6 +19,7 @@ import {
   deleteScanHistory,
   getProjectScanOptions,
   getProjectScans,
+  requestAgentScan,
   requestUploadScan,
 } from '../../features/scans/api/scans';
 import ProjectScanList from '../../features/scans/components/ProjectScanList';
@@ -352,6 +353,14 @@ function ProjectDetailPage() {
       return;
     }
 
+    // AGENT 모드: targetPath 필수 검증
+    if (scanRequestMethod === 'AGENT') {
+      if (!scanRequestForm.targetPath?.trim()) {
+        setScanRequestError('점검 대상 경로(targetPath)를 입력해 주세요.');
+        return;
+      }
+    }
+
     if (scanRequestMethod === 'UPLOAD') {
       const validationIssue = getScanUploadValidationIssue(selectedUploadFiles);
 
@@ -367,22 +376,41 @@ function ProjectDetailPage() {
     setScanRequestError(null);
 
     try {
-      const data =
-        scanRequestMethod === 'UPLOAD' && selectedUploadFiles.length > 0
-          ? await requestUploadScan({
-              projectName: projectDetail.name,
-              scanName: scanRequestForm.scanName?.trim() || undefined,
-              files: selectedUploadFiles,
-            })
-          : await createScanRequest({
-              projectName: projectDetail.name,
-              source: scanRequestForm.source ?? 'CLI',
-              scanName: scanRequestForm.scanName?.trim() || undefined,
-              targetPath: scanRequestForm.targetPath?.trim() || undefined,
-              includeLogs: Boolean(scanRequestForm.includeLogs),
-            });
+      let scanId: number;
 
-      setLastCreatedScan({ scanId: data.scanId });
+      if (scanRequestMethod === 'AGENT') {
+        // Local Agent 기반 점검 요청 API
+        const data = await requestAgentScan(projectId, {
+          targetPath: scanRequestForm.targetPath!.trim(),
+          scanName: scanRequestForm.scanName?.trim() || undefined,
+          includeLogs: Boolean(scanRequestForm.includeLogs),
+        });
+        scanId = data.scanId;
+
+        if (!data.notificationSent) {
+          toast.warning('점검 요청은 생성됐지만 Agent 알림 전송에 실패했습니다. Agent가 다음 폴링 주기에 자동으로 작업을 수신합니다.', {
+            durationMs: 5000,
+          });
+        }
+      } else if (scanRequestMethod === 'UPLOAD' && selectedUploadFiles.length > 0) {
+        const data = await requestUploadScan({
+          projectName: projectDetail.name,
+          scanName: scanRequestForm.scanName?.trim() || undefined,
+          files: selectedUploadFiles,
+        });
+        scanId = data.scanId;
+      } else {
+        const data = await createScanRequest({
+          projectName: projectDetail.name,
+          source: scanRequestForm.source ?? 'CLI',
+          scanName: scanRequestForm.scanName?.trim() || undefined,
+          targetPath: scanRequestForm.targetPath?.trim() || undefined,
+          includeLogs: Boolean(scanRequestForm.includeLogs),
+        });
+        scanId = data.scanId;
+      }
+
+      setLastCreatedScan({ scanId });
       setScanRequestForm({
         projectName: projectDetail.name,
         source: 'CLI',
@@ -394,7 +422,7 @@ function ProjectDetailPage() {
       setScanRequestMethod('AGENT');
 
       await handleRefreshScans();
-      navigate(ROUTES.scanDetail.replace(':scanId', String(data.scanId)), {
+      navigate(ROUTES.scanDetail.replace(':scanId', String(scanId)), {
         state: { autoOpenedFromScanRequest: true, projectId },
       });
     } catch (error) {
@@ -633,6 +661,7 @@ function ProjectDetailPage() {
         >
         <ScanRequestForm
           agentAvailable={Boolean(scanOptions?.availableScanModes.includes('AGENT'))}
+          agentStatus={agentStatus}
           errorMessage={scanRequestError}
           isSubmitting={isScanRequestSubmitting}
           onChange={setScanRequestForm}

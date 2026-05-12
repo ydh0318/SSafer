@@ -1,4 +1,4 @@
-import { Terminal, Upload } from 'lucide-react';
+import { AlertCircle, Terminal, Upload } from 'lucide-react';
 
 import type { CreateScanRequestPayload } from '../../../types/scan';
 import { SCAN_UPLOAD_FILE_COUNT_LIMIT, SCAN_UPLOAD_FILE_SIZE_LIMIT_MB } from '../utils/uploadValidation';
@@ -9,6 +9,7 @@ type ScanRequestFormProps = {
   value: CreateScanRequestPayload;
   scanRequestMethod: ScanRequestMethod;
   agentAvailable?: boolean;
+  agentStatus?: { status: string } | null;
   selectedFiles: File[];
   isSubmitting: boolean;
   errorMessage: string | null;
@@ -22,6 +23,7 @@ function ScanRequestForm({
   value,
   scanRequestMethod,
   agentAvailable = true,
+  agentStatus = null,
   selectedFiles,
   isSubmitting,
   errorMessage,
@@ -36,6 +38,15 @@ function ScanRequestForm({
   ) => {
     onChange({ ...value, [key]: nextValue });
   };
+
+  const isAgentMode = scanRequestMethod === 'AGENT';
+  const agentOnline = agentStatus?.status === 'ONLINE';
+  const isAgentSubmitBlocked = isAgentMode && !agentOnline;
+  const agentBlockReason = isAgentMode && !agentStatus
+    ? 'Agent가 연결되어 있지 않습니다.'
+    : isAgentMode && !agentOnline
+    ? 'Agent가 현재 오프라인 상태입니다. Agent를 실행한 후 다시 시도해 주세요.'
+    : null;
 
   return (
     <div className="space-y-5">
@@ -88,16 +99,19 @@ function ScanRequestForm({
           />
         </label>
 
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold text-black">실행 방식</span>
-          <select
-            className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
-            onChange={(event) => handleFieldChange('source', event.target.value as CreateScanRequestPayload['source'])}
-            value={value.source ?? 'CLI'}
-          >
-            <option value="CLI">CLI</option>
-          </select>
-        </label>
+        {/* 실행 방식: UPLOAD 모드에서만 노출 (AGENT는 source 불필요) */}
+        {!isAgentMode && (
+          <label className="block space-y-2">
+            <span className="text-sm font-semibold text-black">실행 방식</span>
+            <select
+              className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
+              onChange={(event) => handleFieldChange('source', event.target.value as CreateScanRequestPayload['source'])}
+              value={value.source ?? 'CLI'}
+            >
+              <option value="CLI">CLI</option>
+            </select>
+          </label>
+        )}
 
         <label className="block space-y-2">
           <span className="text-sm font-semibold text-black">스캔 이름</span>
@@ -110,16 +124,22 @@ function ScanRequestForm({
           />
         </label>
 
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold text-black">대상 경로</span>
-          <input
-            className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
-            onChange={(event) => handleFieldChange('targetPath', event.target.value)}
-            placeholder="/opt/app"
-            type="text"
-            value={value.targetPath ?? ''}
-          />
-        </label>
+        {/* 대상 경로: AGENT 모드에서만 노출 */}
+        {isAgentMode && (
+          <label className="block space-y-2">
+            <span className="text-sm font-semibold text-black">
+              대상 경로 <span className="text-rose-500">*</span>
+            </span>
+            <input
+              className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
+              onChange={(event) => handleFieldChange('targetPath', event.target.value)}
+              placeholder="/opt/app"
+              type="text"
+              value={value.targetPath ?? ''}
+            />
+            <p className="text-xs text-neutral-500">Agent가 점검할 서버의 절대 경로를 입력하세요.</p>
+          </label>
+        )}
       </div>
 
       {scanRequestMethod === 'UPLOAD' ? (
@@ -167,17 +187,25 @@ function ScanRequestForm({
         <span className="text-sm font-medium text-neutral-700">로그 정보를 함께 점검합니다.</span>
       </label>
 
+      {agentBlockReason && (
+        <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{agentBlockReason}</span>
+        </div>
+      )}
+
       {errorMessage ? (
         <div className="border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-700">{errorMessage}</div>
       ) : null}
 
       <button
         className="inline-flex bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
-        disabled={isSubmitting}
+        disabled={isSubmitting || isAgentSubmitBlocked}
         onClick={onSubmit}
+        title={agentBlockReason ?? undefined}
         type="button"
       >
-        {isSubmitting ? '요청 중...' : scanRequestMethod === 'UPLOAD' ? '업로드 후 스캔 요청' : '스캔 요청 시작'}
+        {isSubmitting ? '요청 중...' : isAgentMode ? 'Agent 점검 시작' : '업로드 후 스캔 요청'}
       </button>
     </div>
   );
