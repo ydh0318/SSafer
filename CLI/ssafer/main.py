@@ -934,12 +934,16 @@ def _print_patch_preview(candidates: list["PatchCandidate"]) -> None:
             candidate.patch_id,
             candidate.finding_id or "-",
             candidate.file_path,
-            _format_patch_diff(candidate.old_text, candidate.new_text),
+            _format_patch_diff(candidate.old_text, candidate.new_text, operation=candidate.operation),
         )
     console.print(table)
 
 
-def _format_patch_diff(old_text: str, new_text: str) -> str:
+def _format_patch_diff(old_text: str | None, new_text: str, *, operation: str = "replace") -> str:
+    if operation == "append":
+        return "\n".join(f"+ {line}" for line in new_text.splitlines()) or "+ "
+    if old_text is None:
+        return "\n".join(f"+ {line}" for line in new_text.splitlines()) or "+ "
     old_lines = old_text.splitlines()
     new_lines = new_text.splitlines()
     if len(old_lines) <= 1 and len(new_lines) <= 1:
