@@ -2,6 +2,7 @@ package com.ssafer.agent.ws;
 
 import com.ssafer.agent.application.service.AgentTaskAvailableRequestedEvent;
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,18 +21,12 @@ public class AgentTaskAvailableNotificationService {
   private final ObjectMapper objectMapper;
   private final AgentSessionRegistry sessionRegistry;
 
-  public void notifyTaskAvailable(AgentTaskAvailableRequestedEvent event) {
+  public boolean notifyTaskAvailable(AgentTaskAvailableRequestedEvent event) {
     try {
       String payload = objectMapper.writeValueAsString(new AgentOutgoingMessage(
           TYPE_TASK_AVAILABLE,
           "새 agent task가 준비되었습니다.",
-          Map.of(
-              "taskId", event.taskId(),
-              "taskType", event.taskType(),
-              "projectId", event.projectId(),
-              "scanId", event.scanId(),
-              "findingId", event.findingId()
-          ),
+          buildData(event),
           null
       ));
 
@@ -41,11 +36,23 @@ public class AgentTaskAvailableNotificationService {
             event.agentId(),
             event.taskId());
       }
+      return sent;
     } catch (IOException ex) {
       log.warn("Failed to send task available notification: agentId={}, taskId={}", event.agentId(), event.taskId(), ex);
     } catch (Exception ex) {
       log.warn("Failed to build task available notification: agentId={}, taskId={}", event.agentId(), event.taskId(), ex);
     }
+    return false;
+  }
+
+  private Map<String, Object> buildData(AgentTaskAvailableRequestedEvent event) {
+    Map<String, Object> data = new LinkedHashMap<>();
+    data.put("taskId", event.taskId());
+    data.put("taskType", event.taskType());
+    data.put("projectId", event.projectId());
+    data.put("scanId", event.scanId());
+    data.put("findingId", event.findingId());
+    return data;
   }
 
   private record AgentOutgoingMessage(

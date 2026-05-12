@@ -109,6 +109,16 @@ public enum ErrorCode {
       "ANALYSIS_RESULT_NOT_FOUND",
       "Analysis result object not found"
   ),
+  AGENT_NOT_FOUND(
+      HttpStatus.NOT_FOUND,
+      "AGENT_NOT_FOUND",
+      "Local Agent is not registered for this project"
+  ),
+  AGENT_OFFLINE(
+      HttpStatus.CONFLICT,
+      "AGENT_OFFLINE",
+      "Local Agent is not online"
+  ),
   PATCH_PAYLOAD_NOT_FOUND(
       HttpStatus.CONFLICT,
       "PATCH_PAYLOAD_NOT_FOUND",

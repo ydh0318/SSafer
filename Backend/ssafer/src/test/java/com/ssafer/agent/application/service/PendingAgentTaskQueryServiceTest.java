@@ -16,6 +16,7 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.project.domain.entity.Project;
 import com.ssafer.project.domain.enums.ScanMode;
+import com.ssafer.scan.application.service.RawUploadUrlIssuer;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanStatus;
@@ -34,13 +35,15 @@ class PendingAgentTaskQueryServiceTest {
 
   private AgentRepository agentRepository;
   private AgentTaskRepository agentTaskRepository;
+  private RawUploadUrlIssuer rawUploadUrlIssuer;
   private PendingAgentTaskQueryService service;
 
   @BeforeEach
   void setUp() {
     agentRepository = Mockito.mock(AgentRepository.class);
     agentTaskRepository = Mockito.mock(AgentTaskRepository.class);
-    service = new PendingAgentTaskQueryService(agentRepository, agentTaskRepository, new ObjectMapper());
+    rawUploadUrlIssuer = Mockito.mock(RawUploadUrlIssuer.class);
+    service = new PendingAgentTaskQueryService(agentRepository, agentTaskRepository, rawUploadUrlIssuer, new ObjectMapper());
   }
 
   @Test
@@ -60,13 +63,78 @@ class PendingAgentTaskQueryServiceTest {
     ArgumentCaptor<java.util.Collection<AgentTaskStatus>> statusCaptor = ArgumentCaptor.forClass(java.util.Collection.class);
     Mockito.verify(agentTaskRepository).findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(Mockito.eq(1L), statusCaptor.capture());
 
-    assertThat(statusCaptor.getValue()).containsExactly(AgentTaskStatus.PENDING);
+    assertThat(statusCaptor.getValue()).containsExactly(AgentTaskStatus.PENDING, AgentTaskStatus.SENT);
 
     assertThat(result).hasSize(1);
     assertThat(result.get(0).taskId()).isEqualTo(101L);
     assertThat(result.get(0).taskStatus()).isEqualTo(AgentTaskStatus.SENT);
     assertThat(first.getTaskStatus()).isEqualTo(AgentTaskStatus.SENT);
     assertThat(first.getSentAt()).isNotNull();
+  }
+
+  @Test
+  void getPendingTasksParsesScanRequestPayloadForLocalAgentScan() {
+    Agent agent = buildAgent(1L, 10L);
+    AgentTask task = buildTask(
+        101L,
+        agent,
+        AgentTaskStatus.PENDING,
+        """
+            {
+              "targetPath": "/opt/app",
+              "scanName": "운영 서버 점검",
+              "includeLogs": false,
+              "rawResultPath": "s3://ssafer/raw/55/upload/scan_result.json"
+            }
+            """,
+        Instant.parse("2026-04-23T09:00:00Z"),
+        AgentTaskType.SCAN_REQUEST
+    );
+
+    given(agentRepository.findById(1L)).willReturn(Optional.of(agent));
+    given(agentTaskRepository.findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(
+        Mockito.eq(1L),
+        Mockito.anyCollection()
+    )).willReturn(List.of(task));
+    given(rawUploadUrlIssuer.issuePutUrl("raw/55/upload/scan_result.json"))
+        .willReturn("https://upload.example.com/fresh-raw-url");
+
+    List<PendingAgentTaskResponseData> result = service.getPendingTasks(1L, 1L);
+
+    assertThat(result).hasSize(1);
+    assertThat(result.get(0).taskType()).isEqualTo(AgentTaskType.SCAN_REQUEST);
+    assertThat(result.get(0).taskStatus()).isEqualTo(AgentTaskStatus.SENT);
+    assertThat(result.get(0).payload().get("targetPath").asText()).isEqualTo("/opt/app");
+    assertThat(result.get(0).payload().get("scanName").asText()).isEqualTo("운영 서버 점검");
+    assertThat(result.get(0).payload().get("includeLogs").asBoolean()).isFalse();
+    assertThat(result.get(0).payload().get("rawResultPath").asText()).isEqualTo("s3://ssafer/raw/55/upload/scan_result.json");
+    assertThat(result.get(0).payload().get("rawUploadUrl").asText()).isEqualTo("https://upload.example.com/fresh-raw-url");
+  }
+
+  @Test
+  void getPendingTasksReturnsSentTaskAgainWithoutChangingStatus() {
+    Agent agent = buildAgent(1L, 10L);
+    AgentTask task = buildTask(
+        101L,
+        agent,
+        AgentTaskStatus.SENT,
+        "{\"targetPath\":\"/opt/app\"}",
+        Instant.parse("2026-04-23T09:00:00Z"),
+        AgentTaskType.SCAN_REQUEST
+    );
+
+    given(agentRepository.findById(1L)).willReturn(Optional.of(agent));
+    given(agentTaskRepository.findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(
+        Mockito.eq(1L),
+        Mockito.anyCollection()
+    )).willReturn(List.of(task));
+
+    List<PendingAgentTaskResponseData> result = service.getPendingTasks(1L, 1L);
+
+    assertThat(result).hasSize(1);
+    assertThat(result.get(0).taskStatus()).isEqualTo(AgentTaskStatus.SENT);
+    assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SENT);
+    assertThat(task.getSentAt()).isNull();
   }
 
   @Test
@@ -99,6 +167,17 @@ class PendingAgentTaskQueryServiceTest {
   }
 
   private AgentTask buildTask(Long taskId, Agent agent, AgentTaskStatus status, String payload, Instant queuedAt) {
+    return buildTask(taskId, agent, status, payload, queuedAt, AgentTaskType.PATCH_APPLY);
+  }
+
+  private AgentTask buildTask(
+      Long taskId,
+      Agent agent,
+      AgentTaskStatus status,
+      String payload,
+      Instant queuedAt,
+      AgentTaskType taskType
+  ) {
     Scan scan = Scan.builder()
         .projectId(agent.getProject().getId())
         .requestedByUserId(1L)
@@ -110,7 +189,7 @@ class PendingAgentTaskQueryServiceTest {
         .build();
     ReflectionTestUtils.setField(scan, "id", 55L);
 
-    AgentTask task = new AgentTask(agent, agent.getProject(), scan, null, AgentTaskType.PATCH_APPLY, status, payload);
+    AgentTask task = new AgentTask(agent, agent.getProject(), scan, null, taskType, status, payload);
     ReflectionTestUtils.setField(task, "id", taskId);
     ReflectionTestUtils.setField(task, "queuedAt", queuedAt);
     return task;
