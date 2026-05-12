@@ -773,10 +773,11 @@ def _audit_docker_ports(
             source="server-audit",
             severity=severity,
             target=f"{port.container_name or port.container_id}",
-            title=f"Docker가 포트({port.host_port})를 외부에 publish함 {suffix}",
+            title=f"Docker가 포트({port.host_port})를 외부 인터페이스에 publish함 {suffix}",
             evidence=(
                 f"{port.host_ip}:{port.host_port}->{port.container_port}/{port.protocol} "
-                f"({port.container_name})"
+                f"({port.container_name}) "
+                f"[서버 내부 설정 기준, SG/NACL 미반영]"
             ),
         ))
 
