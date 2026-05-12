@@ -27,6 +27,7 @@ export interface CheckNicknameAvailabilityData {
 export interface UserProfileData {
   email: string;
   displayName: string;
+  hasLocalPassword?: boolean;
 }
 
 export interface UpdateUserProfileRequest {
@@ -117,6 +118,10 @@ export interface LogoutRequest {
 
 export interface ChangePasswordRequest {
   currentPassword: string;
+  newPassword: string;
+}
+
+export interface SetupPasswordRequest {
   newPassword: string;
 }
 
