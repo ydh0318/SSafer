@@ -42,7 +42,7 @@ export default function TypingStageReportModal({
       >
         {/* Header Ribbon */}
         <div className={`py-3 px-5 text-center font-black tracking-widest text-xs uppercase ${
-          isDark ? 'bg-[#d9f66f] text-black' : 'bg-black text-white'
+          isDark ? 'bg-[#d9f66f] text-[#000000]' : 'bg-black text-white'
         }`}>
           Stage {stageOrder} Cleared!
         </div>
@@ -99,8 +99,8 @@ export default function TypingStageReportModal({
           <button
             onClick={onNext}
             className={`w-full flex items-center justify-center gap-2 py-4 font-black uppercase tracking-widest transition-all ${
-              isDark 
-                ? 'bg-[#d9f66f] text-black hover:bg-white hover:scale-[1.02]' 
+              isDark
+                ? 'bg-[#d9f66f] text-[#000000] hover:bg-[#f0f0f0] hover:scale-[1.02]'
                 : 'bg-black text-white hover:bg-neutral-800 hover:scale-[1.02]'
             }`}
           >

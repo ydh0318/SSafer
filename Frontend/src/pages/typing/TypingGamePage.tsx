@@ -151,6 +151,13 @@ function TypingLine({
     onEnterNextRef.current = onEnterNext;
   }, [onEnterNext]);
 
+  // ESC로 autoPlay가 꺼지면 즉시 input에 포커스를 돌려줌
+  useEffect(() => {
+    if (!autoPlay) {
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [autoPlay]);
+
   // Auto-play logic
   useEffect(() => {
     if (!autoPlay) return;
@@ -175,8 +182,9 @@ function TypingLine({
   const pendingCls = isDark ? 'text-neutral-600' : 'text-neutral-400';
   // correctly typed
   const correctCls = isDark ? 'text-neutral-200' : 'text-neutral-800';
-  // wrong typed — text only, no background
-  const wrongCls   = 'text-red-500';
+  const wrongCls = isDark
+    ? 'rounded-[4px] bg-red-900/50 text-red-400'
+    : 'text-red-500';
 
   return (
     <div className="relative cursor-text w-full">
