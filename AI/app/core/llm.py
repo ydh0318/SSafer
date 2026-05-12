@@ -21,14 +21,26 @@ class LLMTimeoutError(LLMCallError):
     pass
 
 
-def get_ollama_llm(response_format: str | None = None) -> ChatOllama:
+def get_ollama_llm(
+    response_format: str | None = None,
+    max_tokens: int | None = None,
+) -> ChatOllama:
     provider = get_llm_provider("ollama")
     provider.timeout_seconds = OLLAMA_TIMEOUT_SECONDS
-    return provider.create_chat_model(response_format=response_format)
+    return provider.create_chat_model(
+        response_format=response_format,
+        max_tokens=max_tokens,
+    )
 
 
-def get_llm(response_format: str | None = None) -> Any:
-    return get_llm_provider().create_chat_model(response_format=response_format)
+def get_llm(
+    response_format: str | None = None,
+    max_tokens: int | None = None,
+) -> Any:
+    return get_llm_provider().create_chat_model(
+        response_format=response_format,
+        max_tokens=max_tokens,
+    )
 
 
 def is_timeout_error(exc: BaseException) -> bool:

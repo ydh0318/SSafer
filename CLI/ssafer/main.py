@@ -1759,7 +1759,7 @@ def _latest_done_scan_id_or_exit(project_root: Path, *, project_id: int | None, 
 
     effective_project_id = project_id
     if effective_project_id is None:
-        agent_config = load_agent_config(Path("."))
+        agent_config = load_agent_config(project_root)
         saved_project_id = agent_config.get("projectId")
         if saved_project_id is not None:
             try:

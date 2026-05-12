@@ -347,6 +347,7 @@ def _trivy_patch_context(
     context: dict[str, Any] = {
         "type": "dockerfile",
         "target": misconfiguration.get("ID", "UNKNOWN"),
+        "operation": "replace",
         "lineStart": min(line_numbers) if line_numbers else _trivy_misconfiguration_line(misconfiguration),
         "lineEnd": max(line_numbers) if line_numbers else _trivy_misconfiguration_line(misconfiguration),
         "oldText": "\n".join(old_lines),

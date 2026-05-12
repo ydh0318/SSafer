@@ -31,7 +31,11 @@ class LLMProvider(ABC):
     provider_name: str
 
     @abstractmethod
-    def create_chat_model(self, response_format: str | None = None) -> Any:
+    def create_chat_model(
+        self,
+        response_format: str | None = None,
+        max_tokens: int | None = None,
+    ) -> Any:
         raise NotImplementedError
 
     @abstractmethod
@@ -67,14 +71,21 @@ class OllamaProvider(LLMProvider):
         self.temperature = temperature
         self.timeout_seconds = timeout_seconds
 
-    def create_chat_model(self, response_format: str | None = None) -> ChatOllama:
-        return ChatOllama(
-            model=self.model,
-            base_url=self.base_url,
-            temperature=self.temperature,
-            format=response_format,
-            sync_client_kwargs={"timeout": self.timeout_seconds},
-        )
+    def create_chat_model(
+        self,
+        response_format: str | None = None,
+        max_tokens: int | None = None,
+    ) -> ChatOllama:
+        model_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "base_url": self.base_url,
+            "temperature": self.temperature,
+            "format": response_format,
+            "sync_client_kwargs": {"timeout": self.timeout_seconds},
+        }
+        if max_tokens is not None:
+            model_kwargs["num_predict"] = max_tokens
+        return ChatOllama(**model_kwargs)
 
     def get_model_name(self) -> str:
         return self.model
@@ -103,7 +114,11 @@ class AnthropicProvider(LLMProvider):
         self.temperature = temperature
         self.timeout_seconds = timeout_seconds
 
-    def create_chat_model(self, response_format: str | None = None) -> Any:
+    def create_chat_model(
+        self,
+        response_format: str | None = None,
+        max_tokens: int | None = None,
+    ) -> Any:
         if not self.api_key:
             raise LLMConfigurationError("ANTHROPIC_API_KEY must be set.")
 
@@ -114,12 +129,15 @@ class AnthropicProvider(LLMProvider):
                 "langchain-anthropic must be installed to use AnthropicProvider."
             ) from exc
 
-        return ChatAnthropic(
-            model=self.model,
-            api_key=self.api_key,
-            temperature=self.temperature,
-            timeout=self.timeout_seconds,
-        )
+        model_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "api_key": self.api_key,
+            "temperature": self.temperature,
+            "timeout": self.timeout_seconds,
+        }
+        if max_tokens is not None:
+            model_kwargs["max_tokens"] = max_tokens
+        return ChatAnthropic(**model_kwargs)
 
     def get_model_name(self) -> str:
         return self.model
@@ -154,15 +172,22 @@ class GmsProvider(LLMProvider):
         self.timeout_seconds = timeout_seconds
         self.force_json_response_format = force_json_response_format
 
-    def create_chat_model(self, response_format: str | None = None) -> Any:
+    def create_chat_model(
+        self,
+        response_format: str | None = None,
+        max_tokens: int | None = None,
+    ) -> Any:
         if self._uses_anthropic_messages_api():
-            return self._create_anthropic_chat_model()
-        return self._create_openai_compatible_chat_model(response_format)
+            return self._create_anthropic_chat_model(max_tokens=max_tokens)
+        return self._create_openai_compatible_chat_model(
+            response_format=response_format,
+            max_tokens=max_tokens,
+        )
 
     def _uses_anthropic_messages_api(self) -> bool:
         return self.model.startswith("claude-")
 
-    def _create_anthropic_chat_model(self) -> Any:
+    def _create_anthropic_chat_model(self, max_tokens: int | None = None) -> Any:
         try:
             from langchain_anthropic import ChatAnthropic
         except ImportError as exc:
@@ -171,17 +196,21 @@ class GmsProvider(LLMProvider):
             ) from exc
 
         api_key = self._get_api_key()
-        return ChatAnthropic(
-            model=self.model,
-            api_key=api_key,
-            base_url=self.base_url,
-            temperature=self.temperature,
-            timeout=self.timeout_seconds,
-        )
+        model_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "api_key": api_key,
+            "base_url": self.base_url,
+            "temperature": self.temperature,
+            "timeout": self.timeout_seconds,
+        }
+        if max_tokens is not None:
+            model_kwargs["max_tokens"] = max_tokens
+        return ChatAnthropic(**model_kwargs)
 
     def _create_openai_compatible_chat_model(
         self,
         response_format: str | None = None,
+        max_tokens: int | None = None,
     ) -> Any:
         try:
             from langchain.chat_models import init_chat_model
@@ -203,6 +232,8 @@ class GmsProvider(LLMProvider):
         }
         if response_format == "json" and self.force_json_response_format:
             model_kwargs["response_format"] = {"type": "json_object"}
+        if max_tokens is not None:
+            model_kwargs["max_tokens"] = max_tokens
 
         return init_chat_model(
             self.model,

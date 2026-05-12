@@ -48,6 +48,39 @@ class ScanResultJsonBuilderTest {
   }
 
   @Test
+  void writeScanResultJsonIncludesPatchContextWhenPresent() throws Exception {
+    UploadScanFindingPatchContext patchContext = new UploadScanFindingPatchContext(
+        "USER root",
+        3,
+        3,
+        "sha256:abc123"
+    );
+    List<UploadScanFinding> findings = List.of(
+        new UploadScanFinding(
+            "FND-9999",
+            "DOCKERFILE_ROOT_USER",
+            "custom-rule",
+            "MEDIUM",
+            "Dockerfile",
+            3,
+            "root user",
+            "USER root",
+            "Dockerfile",
+            patchContext
+        )
+    );
+
+    Path outputPath = builder.writeScanResultJson(tempDir, 1003L, "project-c", findings);
+
+    JsonNode finding = objectMapper.readTree(outputPath.toFile()).path("findings").get(0);
+    assertThat(finding.path("filePath").asText()).isEqualTo("Dockerfile");
+    assertThat(finding.path("patchContext").path("oldText").asText()).isEqualTo("USER root");
+    assertThat(finding.path("patchContext").path("lineStart").asInt()).isEqualTo(3);
+    assertThat(finding.path("patchContext").path("lineEnd").asInt()).isEqualTo(3);
+    assertThat(finding.path("patchContext").path("expectedFileHash").asText()).isEqualTo("sha256:abc123");
+  }
+
+  @Test
   void writeScanResultJsonIncludesEmptyFindingsArray() throws Exception {
     // finding이 없어도 findings 키는 빈 배열로 유지되어야 한다.
     Path outputPath = builder.writeScanResultJson(tempDir, 1002L, "project-b", List.of());

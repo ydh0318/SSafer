@@ -45,7 +45,7 @@ services:
       ANTHROPIC_TIMEOUT_SECONDS: ${ANTHROPIC_TIMEOUT_SECONDS:-600}
       GMS_API_KEY: ${GMS_API_KEY}
       GMS_BASE_URL: ${GMS_BASE_URL:-https://gms.ssafy.io/gmsapi/api.anthropic.com}
-      GMS_MODEL: ${GMS_MODEL:-claude-haiku-4-5-20251001}
+      GMS_MODEL: ${GMS_MODEL:-claude-3-5-haiku-latest}
       GMS_TEMPERATURE: ${GMS_TEMPERATURE:-0.1}
       GMS_TIMEOUT_SECONDS: ${GMS_TIMEOUT_SECONDS:-600}
       GMS_FORCE_JSON_RESPONSE_FORMAT: ${GMS_FORCE_JSON_RESPONSE_FORMAT:-false}

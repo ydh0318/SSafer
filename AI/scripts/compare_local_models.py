@@ -196,7 +196,7 @@ def main() -> None:
         default=list(DEFAULT_MODELS),
         help=(
             "Model specs to evaluate. Use plain Ollama names like qwen2.5:3b "
-            "or provider-prefixed specs like gms:claude-haiku-4-5-20251001."
+            "or provider-prefixed specs like gms:claude-3-5-haiku-latest."
         ),
     )
     parser.add_argument(
