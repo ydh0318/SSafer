@@ -67,9 +67,9 @@ async def scan_upload(
         if not saved_paths:
             raise HTTPException(status_code=400, detail="No valid files to scan")
 
-        findings, warnings = scan_uploaded_files(saved_paths, temp_dir)
+        result = scan_uploaded_files(saved_paths, temp_dir)
 
-        return JSONResponse(content={"findings": findings, "warnings": warnings})
+        return JSONResponse(content=result)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
