@@ -2,6 +2,7 @@ package com.ssafer.user.api.controller;
 
 import com.ssafer.auth.api.dto.LoginResponseData;
 import com.ssafer.auth.application.service.AuthTokenResult;
+import com.ssafer.auth.domain.enums.OAuthProvider;
 import com.ssafer.global.api.ApiResponse;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
@@ -13,6 +14,7 @@ import com.ssafer.user.api.dto.CheckNicknameRequest;
 import com.ssafer.user.api.dto.CheckNicknameResponseData;
 import com.ssafer.user.api.dto.RegisterUserRequest;
 import com.ssafer.user.api.dto.RegisterUserResponseData;
+import com.ssafer.user.api.dto.SetupPasswordRequest;
 import com.ssafer.user.api.dto.SocialAccountConnectRequest;
 import com.ssafer.user.api.dto.SocialAccountResponseData;
 import com.ssafer.user.api.dto.SocialAccountsResponseData;
@@ -53,11 +55,15 @@ public class UserController {
   private static final String CHECK_NICKNAME_SUCCESS_MESSAGE = "Nickname availability check succeeded";
   private static final String PROFILE_RETRIEVE_SUCCESS_MESSAGE = "User profile retrieval succeeded";
   private static final String PROFILE_UPDATE_SUCCESS_MESSAGE = "User profile update succeeded";
+  private static final String PASSWORD_SETUP_SUCCESS_MESSAGE = "Password setup succeeded";
   private static final String PASSWORD_CHANGE_SUCCESS_MESSAGE = "Password change succeeded";
   private static final String WITHDRAWAL_SUCCESS_MESSAGE = "User withdrawal succeeded";
-  private static final String SOCIAL_ACCOUNTS_RETRIEVE_SUCCESS_MESSAGE = "Connected social accounts retrieval succeeded";
-  private static final String SOCIAL_ACCOUNT_CONNECT_SUCCESS_MESSAGE = "Social account connection succeeded";
-  private static final String SOCIAL_ACCOUNT_DISCONNECT_SUCCESS_MESSAGE = "Social account disconnection succeeded";
+  private static final String SOCIAL_ACCOUNTS_RETRIEVE_SUCCESS_MESSAGE =
+      "Connected social accounts retrieval succeeded";
+  private static final String SOCIAL_ACCOUNT_CONNECT_SUCCESS_MESSAGE =
+      "Social account connection succeeded";
+  private static final String SOCIAL_ACCOUNT_DISCONNECT_SUCCESS_MESSAGE =
+      "Social account disconnection succeeded";
 
   private final CurrentActorProvider currentActorProvider;
   private final UserRegistrationService userRegistrationService;
@@ -99,7 +105,7 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "409",
-          description = "이미 가입된 이메일이거나 사용 중인 닉네임입니다."
+          description = "이미 가입한 이메일이거나 사용 중인 닉네임입니다."
       )
   })
   public ResponseEntity<ApiResponse<RegisterUserResponseData>> register(
@@ -178,7 +184,7 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+          description = "인증이 필요하거나 토큰이 유효하지 않습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
@@ -245,7 +251,7 @@ public class UserController {
   public ResponseEntity<ApiResponse<SocialAccountResponseData>> connectGoogleSocialAccount(
       @Valid @RequestBody(required = false) SocialAccountConnectRequest request
   ) {
-    return connectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GOOGLE, request);
+    return connectSocialAccount(OAuthProvider.GOOGLE, request);
   }
 
   @DeleteMapping("/me/socials/google")
@@ -260,7 +266,7 @@ public class UserController {
       @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "마지막 로그인 수단은 해제할 수 없습니다.")
   })
   public ResponseEntity<ApiResponse<Void>> disconnectGoogleSocialAccount() {
-    return disconnectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GOOGLE);
+    return disconnectSocialAccount(OAuthProvider.GOOGLE);
   }
 
   @PostMapping("/me/socials/github")
@@ -282,7 +288,7 @@ public class UserController {
   public ResponseEntity<ApiResponse<SocialAccountResponseData>> connectGithubSocialAccount(
       @Valid @RequestBody(required = false) SocialAccountConnectRequest request
   ) {
-    return connectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GITHUB, request);
+    return connectSocialAccount(OAuthProvider.GITHUB, request);
   }
 
   @DeleteMapping("/me/socials/github")
@@ -297,7 +303,7 @@ public class UserController {
       @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "마지막 로그인 수단은 해제할 수 없습니다.")
   })
   public ResponseEntity<ApiResponse<Void>> disconnectGithubSocialAccount() {
-    return disconnectSocialAccount(com.ssafer.auth.domain.enums.OAuthProvider.GITHUB);
+    return disconnectSocialAccount(OAuthProvider.GITHUB);
   }
 
   @PatchMapping("/me/profile")
@@ -317,7 +323,7 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+          description = "인증이 필요하거나 토큰이 유효하지 않습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
@@ -335,7 +341,7 @@ public class UserController {
   public ResponseEntity<ApiResponse<UserProfileResponseData>> updateCurrentUserProfile(
       @Valid @RequestBody(required = false) UpdateUserProfileRequest request
   ) {
-    // 요청 본문 자체가 없거나 displayName 필드가 빠지면 잘못된 요청으로 본다.
+    // 요청 본문 자체가 없거나 displayName 필드가 비면 잘못된 요청으로 본다.
     if (request == null || request.displayName() == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -365,7 +371,7 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+          description = "인증이 필요하거나 토큰이 유효하지 않습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
@@ -401,6 +407,59 @@ public class UserController {
     ));
   }
 
+  @PostMapping("/me/password/setup")
+  @Operation(
+      summary = "소셜 계정 비밀번호 최초 설정",
+      description = "현재 로그인한 소셜 계정에 로컬 로그인용 비밀번호를 최초 설정합니다."
+  )
+  @ApiResponses({
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "200",
+          description = "소셜 계정 비밀번호 최초 설정 성공",
+          content = @Content(schema = @Schema(implementation = LoginResponseData.class))
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "400",
+          description = "요청 본문이 올바르지 않거나 비밀번호 형식이 잘못되었습니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "409",
+          description = "이미 비밀번호가 설정된 계정이거나 소셜 비밀번호 설정 대상이 아닙니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "401",
+          description = "인증이 필요하거나 토큰이 유효하지 않습니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "403",
+          description = "게스트 계정은 회원 전용 API에 접근할 수 없습니다."
+      ),
+      @io.swagger.v3.oas.annotations.responses.ApiResponse(
+          responseCode = "404",
+          description = "회원 정보를 찾을 수 없습니다."
+      )
+  })
+  public ResponseEntity<ApiResponse<LoginResponseData>> setupCurrentUserPassword(
+      @Valid @RequestBody(required = false) SetupPasswordRequest request
+  ) {
+    // 최초 설정은 새 비밀번호만 받으며, 본문 자체가 없으면 잘못된 요청으로 처리한다.
+    if (request == null || request.newPassword() == null) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+
+    AuthenticatedActor actor = currentActorProvider.getCurrentActor();
+    AuthTokenResult tokenResult = userPasswordService.setupPassword(actor, request.newPassword());
+    return ResponseEntity.ok(ApiResponse.success(
+        PASSWORD_SETUP_SUCCESS_MESSAGE,
+        new LoginResponseData(
+            tokenResult.accessToken(),
+            tokenResult.accessTokenExpiresAt(),
+            tokenResult.refreshToken(),
+            tokenResult.refreshTokenExpiresAt()
+        )
+    ));
+  }
+
   @DeleteMapping
   @Operation(
       summary = "회원 탈퇴",
@@ -413,7 +472,7 @@ public class UserController {
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "401",
-          description = "인증이 필요하거나 토큰이 올바르지 않습니다."
+          description = "인증이 필요하거나 토큰이 유효하지 않습니다."
       ),
       @io.swagger.v3.oas.annotations.responses.ApiResponse(
           responseCode = "403",
@@ -425,17 +484,17 @@ public class UserController {
       )
   })
   public ResponseEntity<ApiResponse<Void>> withdrawCurrentUser() {
-    // 탈퇴 후 계정은 비활성화되고 refresh token 도 함께 정리된다.
+    // 탈퇴 시 계정은 비활성화되고 refresh token도 함께 정리한다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     userWithdrawalService.withdrawCurrentUser(actor);
     return ResponseEntity.ok(ApiResponse.success(WITHDRAWAL_SUCCESS_MESSAGE, null));
   }
 
   private ResponseEntity<ApiResponse<SocialAccountResponseData>> connectSocialAccount(
-      com.ssafer.auth.domain.enums.OAuthProvider provider,
+      OAuthProvider provider,
       SocialAccountConnectRequest request
   ) {
-    // 소셜 계정 연결은 이미 로그인된 회원 세션에서만 수행한다.
+    // 소셜 계정 연결은 이미 로그인한 회원 세션에서만 수행한다.
     if (request == null || request.authorizationCode() == null || request.redirectUri() == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
@@ -453,10 +512,8 @@ public class UserController {
     ));
   }
 
-  private ResponseEntity<ApiResponse<Void>> disconnectSocialAccount(
-      com.ssafer.auth.domain.enums.OAuthProvider provider
-  ) {
-    // 계정을 사용할 수 없는 상태로 만들지 않도록 마지막 로그인 수단 해제는 막는다.
+  private ResponseEntity<ApiResponse<Void>> disconnectSocialAccount(OAuthProvider provider) {
+    // 계정을 사용할 수 없는 상태로 만들지 않도록 마지막 로그인 수단 해제를 막는다.
     AuthenticatedActor actor = currentActorProvider.getCurrentActor();
     userSocialAccountService.disconnectCurrentUserSocialAccount(actor, provider);
     return ResponseEntity.ok(ApiResponse.success(SOCIAL_ACCOUNT_DISCONNECT_SUCCESS_MESSAGE, null));

@@ -64,6 +64,11 @@ public enum ErrorCode {
       "PASSWORD_RESET_TOKEN_INVALID",
       "Password reset token is invalid or expired"
   ),
+  PASSWORD_SETUP_NOT_ALLOWED(
+      HttpStatus.CONFLICT,
+      "PASSWORD_SETUP_NOT_ALLOWED",
+      "Password setup is not allowed for current account state"
+  ),
   EMAIL_VERIFICATION_REQUEST_TOO_FREQUENT(
       HttpStatus.TOO_MANY_REQUESTS,
       "EMAIL_VERIFICATION_REQUEST_TOO_FREQUENT",
