@@ -593,6 +593,22 @@ function ProjectDetailPage() {
         errorMessage={agentError}
         isLoading={isAgentLoading}
         onRefresh={() => void handleRefreshAgentStatus()}
+        onRequestApply={() => {
+          const latestDoneScan = scans.find((s) => s.status === 'DONE');
+          if (latestDoneScan) {
+            navigate(ROUTES.scanDetail.replace(':scanId', String(latestDoneScan.scanId)), { state: { projectId } });
+          } else {
+            toast.warning('적용 가능한 완료된 스캔이 없습니다. 먼저 스캔을 실행해 주세요.', { durationMs: 3000 });
+          }
+        }}
+        onRequestScan={() => {
+          setScanRequestMethod('AGENT');
+          document.getElementById('scan-request-section')?.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onRequestUpload={() => {
+          setScanRequestMethod('UPLOAD');
+          document.getElementById('scan-request-section')?.scrollIntoView({ behavior: 'smooth' });
+        }}
       />
 
       <article className="border border-neutral-200 bg-white p-5 shadow-sm">
@@ -609,11 +625,12 @@ function ProjectDetailPage() {
         </div>
       </article>
 
-      <SectionPanel
-        description="Agent, CLI, 업로드 방식 중 하나를 골라 새 스캔을 시작할 수 있습니다."
-        eyebrow="NEW SCAN"
-        title="새 스캔 요청"
-      >
+      <div id="scan-request-section">
+        <SectionPanel
+          description="Agent, CLI, 업로드 방식 중 하나를 골라 새 스캔을 시작할 수 있습니다."
+          eyebrow="NEW SCAN"
+          title="새 스캔 요청"
+        >
         <ScanRequestForm
           agentAvailable={Boolean(scanOptions?.availableScanModes.includes('AGENT'))}
           errorMessage={scanRequestError}
@@ -626,7 +643,8 @@ function ProjectDetailPage() {
           selectedFiles={selectedUploadFiles}
           value={scanRequestForm}
         />
-      </SectionPanel>
+        </SectionPanel>
+      </div>
 
       {isDeleteModalOpen && targetProject ? (
         <ProjectDeleteModal
