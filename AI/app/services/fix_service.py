@@ -151,6 +151,13 @@ def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
         try:
             return parse_fix_response(raw_fix)
         except ValueError as exc:
+            logger.warning(
+                "Fix Chain parse failed. findingId=%s attempt=%d error=%s raw_fix=%r",
+                finding_id,
+                attempt + 1,
+                exc,
+                raw_fix,
+            )
             last_error = exc
 
     message = "Fix Chain output could not be parsed."
