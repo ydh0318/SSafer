@@ -36,16 +36,17 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
 
       // 스캔 실행 방식은 UploadFileScanner 구현체가 결정하고, 이후 결과 처리 흐름은 이 클래스가 유지한다.
       // 웹 업로드는 로컬 경로를 모르므로, 저장된 업로드 파일에서 diff용 patchContext만 보강한다.
-      List<UploadScanFinding> findings = uploadScanFindingPatchContextEnricher.enrich(
-          uploadFileScanner.scanAll(savedFiles),
-          savedFiles
-      );
+      UploadFileScanResult scanResult = uploadFileScanner.scanAll(savedFiles);
+      List<UploadScanFinding> findings = scanResult.patchContextFallbackAllowed()
+          ? uploadScanFindingPatchContextEnricher.enrich(scanResult.findings(), savedFiles)
+          : scanResult.findings();
+      UploadFileScanResult enrichedScanResult = scanResult.withFindings(findings);
 
       Path resultPath = scanResultJsonBuilder.writeScanResultJson(
           workspace,
           command.scanId(),
           command.projectName(),
-          findings
+          enrichedScanResult
       );
       // worker 추적 메타데이터(resultCount/tool/toolVersion/payloadHash)를 계산한다.
       String payloadHash = calculatePayloadHash(resultPath);

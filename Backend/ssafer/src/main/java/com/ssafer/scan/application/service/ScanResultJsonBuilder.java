@@ -26,6 +26,20 @@ public class ScanResultJsonBuilder {
       String projectName,
       List<UploadScanFinding> findings
   ) {
+    return writeScanResultJson(
+        workspace,
+        scanId,
+        projectName,
+        new UploadFileScanResult(findings, null, null, null, null)
+    );
+  }
+
+  public Path writeScanResultJson(
+      Path workspace,
+      Long scanId,
+      String projectName,
+      UploadFileScanResult scanResult
+  ) {
     // Worker가 읽는 scan_result.json 계약(schemaVersion 0.1)에 맞춰 payload를 만든다.
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("schemaVersion", "0.1");
@@ -35,7 +49,11 @@ public class ScanResultJsonBuilder {
     payload.put("source", "cli");
     payload.put("scannedAt", Instant.now().toString());
     payload.put("analysisStatus", "SUCCESS");
-    payload.put("findings", toFindingMaps(findings));
+    payload.put("findings", toFindingMaps(scanResult.findings()));
+    payload.put("warnings", scanResult.warnings());
+    payload.put("sourceFileHashes", scanResult.sourceFileHashes());
+    payload.put("targets", scanResult.targets());
+    payload.put("summary", scanResult.summary());
     payload.put("uploadScanId", scanId);
 
     Path outputPath = workspace.resolve("scan_result.json");
@@ -69,6 +87,7 @@ public class ScanResultJsonBuilder {
     if (finding.filePath() != null && !finding.filePath().isBlank()) {
       mapped.put("filePath", finding.filePath());
     }
+    mapped.put("targetFiles", finding.targetFiles());
     mapped.put("line", finding.line());
     mapped.put("title", finding.title());
     mapped.put("maskedEvidence", finding.maskedEvidence());
@@ -81,6 +100,15 @@ public class ScanResultJsonBuilder {
   private Map<String, Object> toPatchContextMap(UploadScanFindingPatchContext patchContext) {
     // patchContext는 scan_result.json에 그대로 실려 AI 분석 입력으로 전달된다.
     Map<String, Object> mapped = new LinkedHashMap<>();
+    if (patchContext.operation() != null && !patchContext.operation().isBlank()) {
+      mapped.put("operation", patchContext.operation());
+    }
+    if (patchContext.type() != null && !patchContext.type().isBlank()) {
+      mapped.put("type", patchContext.type());
+    }
+    if (patchContext.target() != null && !patchContext.target().isBlank()) {
+      mapped.put("target", patchContext.target());
+    }
     mapped.put("oldText", patchContext.oldText());
     mapped.put("lineStart", patchContext.lineStart());
     mapped.put("lineEnd", patchContext.lineEnd());

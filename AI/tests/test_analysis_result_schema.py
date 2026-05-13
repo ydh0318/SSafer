@@ -116,6 +116,13 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
     def test_validate_fix_schema_accepts_existing_description_only_fix(self):
         validate_fix_schema(build_fix())
 
+    def test_validate_fix_schema_accepts_critical_priority(self):
+        validate_fix_schema(build_fix(priority="critical"))
+
+    def test_validate_fix_schema_rejects_unknown_priority(self):
+        with self.assertRaisesRegex(ValueError, "priority.*critical, high, medium, low"):
+            validate_fix_schema(build_fix(priority="urgent"))
+
     def test_validate_fix_schema_accepts_empty_cautions(self):
         validate_fix_schema(build_fix(cautions=[]))
 

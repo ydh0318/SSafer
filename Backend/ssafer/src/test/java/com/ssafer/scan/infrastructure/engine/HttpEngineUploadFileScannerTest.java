@@ -3,6 +3,7 @@ package com.ssafer.scan.infrastructure.engine;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.ssafer.scan.application.service.UploadFileScanResult;
 import com.ssafer.scan.application.service.UploadScanFinding;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -63,10 +64,16 @@ class HttpEngineUploadFileScannerTest {
                 "file": ".env",
                 "line": 3,
                 "title": "Plain secret",
-                "maskedEvidence": "DB_PASSWORD=***MASKED***"
+                "maskedEvidence": "DB_PASSWORD=***MASKED***",
+                "filePath": ".env",
+                "targetFiles": [".env"],
+                "patchContext": null
               }
             ],
-            "warnings": ["compose file skipped"]
+            "warnings": ["compose file skipped"],
+            "sourceFileHashes": {".env": "sha256:abc123"},
+            "targets": {"envFiles": [".env"], "dockerfiles": [], "composeFiles": []},
+            "summary": {"customRuleFindings": 1, "trivyFindings": 0, "totalFindings": 1, "warnings": 1}
           }
           """);
     });
@@ -75,14 +82,14 @@ class HttpEngineUploadFileScannerTest {
 
     HttpEngineUploadFileScanner scanner = scanner("test-token");
 
-    List<UploadScanFinding> findings = scanner.scanAll(List.of(uploadFile));
+    UploadFileScanResult result = scanner.scanAll(List.of(uploadFile));
 
     assertThat(methodRef.get()).isEqualTo("POST");
     assertThat(pathRef.get()).isEqualTo("/api/v1/scan/upload");
     assertThat(tokenRef.get()).isEqualTo("test-token");
     assertThat(bodyRef.get()).contains("name=\"files\"");
     assertThat(bodyRef.get()).contains("DB_PASSWORD=plain");
-    assertThat(findings).containsExactly(new UploadScanFinding(
+    assertThat(result.findings()).containsExactly(new UploadScanFinding(
         "FND-0001",
         "ENV_PLAIN_SECRET",
         "custom-rule",
@@ -90,8 +97,15 @@ class HttpEngineUploadFileScannerTest {
         ".env",
         3,
         "Plain secret",
-        "DB_PASSWORD=***MASKED***"
+        "DB_PASSWORD=***MASKED***",
+        ".env",
+        List.of(".env"),
+        null
     ));
+    assertThat(result.warnings()).containsExactly("compose file skipped");
+    assertThat(result.sourceFileHashes()).containsEntry(".env", "sha256:abc123");
+    assertThat(result.targets()).containsKey("envFiles");
+    assertThat(result.summary()).containsEntry("totalFindings", 1);
   }
 
   @Test
