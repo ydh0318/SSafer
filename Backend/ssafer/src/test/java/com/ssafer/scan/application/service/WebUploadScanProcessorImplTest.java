@@ -64,9 +64,14 @@ class WebUploadScanProcessorImplTest {
     List<UploadScanFinding> scannedFindings = List.of(
         new UploadScanFinding("FND-0001", "ENV_PLAIN_SECRET", "custom-rule", "HIGH", ".env", 1, "secret", "DB_PASSWORD=***MASKED***")
     );
-    when(uploadFileScanner.scanAll(List.of(file))).thenReturn(scannedFindings);
-    when(uploadScanFindingPatchContextEnricher.enrich(scannedFindings, List.of(file))).thenReturn(scannedFindings);
-    when(scanResultJsonBuilder.writeScanResultJson(any(), any(), any(), any())).thenReturn(output);
+    when(uploadFileScanner.scanAll(List.of(file)))
+        .thenReturn(new UploadFileScanResult(scannedFindings, List.of(), null, null, null));
+    when(scanResultJsonBuilder.writeScanResultJson(
+        any(),
+        any(),
+        any(),
+        any(UploadFileScanResult.class)
+    )).thenReturn(output);
     when(uploadScanRawResultUploader.upload(1001L, output)).thenReturn(rawResultPath);
     when(uploadScanToolMetadata.toolName()).thenReturn("ssafer-web-upload");
     when(uploadScanToolMetadata.toolVersion()).thenReturn("0.1.0");
@@ -89,6 +94,64 @@ class WebUploadScanProcessorImplTest {
     assertThat(payloadHashCaptor.getValue()).isEqualTo(calculatePayloadHash(output));
     verify(uploadScanStatusUpdater).markQueued(1001L);
     verify(uploadScanStatusUpdater, never()).markExecutionFailed(any(), any());
+    verify(uploadScanFindingPatchContextEnricher, never()).enrich(any(), any());
+    verify(tempWorkspaceManager).cleanup(workspace);
+  }
+
+  @Test
+  void processEnrichesPatchContextOnlyWhenFallbackIsAllowed() throws Exception {
+    UploadScanProcessingCommand command = command();
+    Path workspace = Path.of("C:/tmp/upload-scan");
+    Path file = workspace.resolve("Dockerfile");
+    Path output = tempDir.resolve("scan_result-fallback.json");
+    String rawResultPath = "s3://ssafer/raw/1001/uuid/scan_result.json";
+    Files.writeString(output, "{\"findings\":[1]}", StandardCharsets.UTF_8);
+
+    List<UploadScanFinding> scannedFindings = List.of(
+        new UploadScanFinding("FND-0001", "DOCKERFILE_ROOT_USER", "custom-rule", "MEDIUM", "Dockerfile", 3, "root", "USER root")
+    );
+    List<UploadScanFinding> enrichedFindings = List.of(
+        new UploadScanFinding(
+            "FND-0001",
+            "DOCKERFILE_ROOT_USER",
+            "custom-rule",
+            "MEDIUM",
+            "Dockerfile",
+            3,
+            "root",
+            "USER root",
+            "Dockerfile",
+            new UploadScanFindingPatchContext("USER root", 3, 3, "sha256:abc123")
+        )
+    );
+
+    when(tempWorkspaceManager.createWorkspace(1001L)).thenReturn(workspace);
+    when(tempWorkspaceManager.saveFiles(any(), any())).thenReturn(List.of(file));
+    when(uploadFileScanner.scanAll(List.of(file)))
+        .thenReturn(new UploadFileScanResult(scannedFindings, List.of(), null, null, null, true));
+    when(uploadScanFindingPatchContextEnricher.enrich(scannedFindings, List.of(file))).thenReturn(enrichedFindings);
+    when(scanResultJsonBuilder.writeScanResultJson(
+        any(),
+        any(),
+        any(),
+        any(UploadFileScanResult.class)
+    )).thenReturn(output);
+    when(uploadScanRawResultUploader.upload(1001L, output)).thenReturn(rawResultPath);
+    when(uploadScanToolMetadata.toolName()).thenReturn("ssafer-web-upload");
+    when(uploadScanToolMetadata.toolVersion()).thenReturn("0.1.0");
+
+    UploadScanProcessingResult result = processor.process(command);
+
+    assertThat(result.status()).isEqualTo(ScanStatus.QUEUED);
+    verify(uploadScanFindingPatchContextEnricher).enrich(scannedFindings, List.of(file));
+    ArgumentCaptor<UploadFileScanResult> scanResultCaptor = ArgumentCaptor.forClass(UploadFileScanResult.class);
+    verify(scanResultJsonBuilder).writeScanResultJson(
+        org.mockito.ArgumentMatchers.eq(workspace),
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.eq("project-a"),
+        scanResultCaptor.capture()
+    );
+    assertThat(scanResultCaptor.getValue().findings()).isEqualTo(enrichedFindings);
     verify(tempWorkspaceManager).cleanup(workspace);
   }
 
@@ -123,9 +186,14 @@ class WebUploadScanProcessorImplTest {
 
     when(tempWorkspaceManager.createWorkspace(1001L)).thenReturn(workspace);
     when(tempWorkspaceManager.saveFiles(any(), any())).thenReturn(List.of(file));
-    when(uploadFileScanner.scanAll(List.of(file))).thenReturn(List.of());
-    when(uploadScanFindingPatchContextEnricher.enrich(List.of(), List.of(file))).thenReturn(List.of());
-    when(scanResultJsonBuilder.writeScanResultJson(any(), any(), any(), any())).thenReturn(output);
+    when(uploadFileScanner.scanAll(List.of(file)))
+        .thenReturn(new UploadFileScanResult(List.of(), List.of(), null, null, null));
+    when(scanResultJsonBuilder.writeScanResultJson(
+        any(),
+        any(),
+        any(),
+        any(UploadFileScanResult.class)
+    )).thenReturn(output);
     when(uploadScanRawResultUploader.upload(1001L, output))
         .thenThrow(new UploadScanS3UploadException("s3 failed", new RuntimeException("boom")));
 
@@ -150,9 +218,14 @@ class WebUploadScanProcessorImplTest {
 
     when(tempWorkspaceManager.createWorkspace(1001L)).thenReturn(workspace);
     when(tempWorkspaceManager.saveFiles(any(), any())).thenReturn(List.of(file));
-    when(uploadFileScanner.scanAll(List.of(file))).thenReturn(List.of());
-    when(uploadScanFindingPatchContextEnricher.enrich(List.of(), List.of(file))).thenReturn(List.of());
-    when(scanResultJsonBuilder.writeScanResultJson(any(), any(), any(), any())).thenReturn(output);
+    when(uploadFileScanner.scanAll(List.of(file)))
+        .thenReturn(new UploadFileScanResult(List.of(), List.of(), null, null, null));
+    when(scanResultJsonBuilder.writeScanResultJson(
+        any(),
+        any(),
+        any(),
+        any(UploadFileScanResult.class)
+    )).thenReturn(output);
     when(uploadScanRawResultUploader.upload(1001L, output)).thenReturn(rawResultPath);
     when(uploadScanToolMetadata.toolName()).thenReturn("ssafer-web-upload");
     when(uploadScanToolMetadata.toolVersion()).thenReturn("0.1.0");
