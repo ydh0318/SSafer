@@ -1,10 +1,12 @@
 package com.ssafer.scan.infrastructure.engine;
 
 import com.ssafer.scan.application.service.UploadFileScanner;
+import com.ssafer.scan.application.service.UploadFileScanResult;
 import com.ssafer.scan.application.service.UploadScanFinding;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,7 +71,7 @@ public class HttpEngineUploadFileScanner implements UploadFileScanner {
   }
 
   @Override
-  public List<UploadScanFinding> scanAll(List<Path> targetFiles) {
+  public UploadFileScanResult scanAll(List<Path> targetFiles) {
     MultiValueMap<String, Object> multipartBody = new LinkedMultiValueMap<>();
     for (Path targetFile : targetFiles) {
       // engine API 명세의 multipart form field 이름은 files이다.
@@ -88,7 +90,13 @@ public class HttpEngineUploadFileScanner implements UploadFileScanner {
 
       EngineUploadScanResponse safeResponse = Objects.requireNonNull(response);
       logWarnings(safeResponse.warnings());
-      return safeResponse.findings() == null ? List.of() : safeResponse.findings();
+      return new UploadFileScanResult(
+          safeResponse.findings(),
+          safeResponse.warnings(),
+          safeResponse.sourceFileHashes(),
+          safeResponse.targets(),
+          safeResponse.summary()
+      );
     } catch (RestClientResponseException ex) {
       log.error(
           "Upload scan engine returned error. status={}, response={}",
@@ -134,7 +142,10 @@ public class HttpEngineUploadFileScanner implements UploadFileScanner {
 
   private record EngineUploadScanResponse(
       List<UploadScanFinding> findings,
-      List<String> warnings
+      List<String> warnings,
+      Map<String, String> sourceFileHashes,
+      Map<String, Object> targets,
+      Map<String, Object> summary
   ) {
   }
 }
