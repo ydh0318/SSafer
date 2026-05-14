@@ -121,12 +121,12 @@ def status() -> None:
     from ssafer.core.auth import (
         CONFIG_PATH,
         describe_token_source,
+        find_agent_config_path,
         get_project_agent_status,
         load_auth_mode,
         load_agent_config,
         load_endpoint,
         load_token,
-        project_agent_config_path,
     )
 
     token = load_token()
@@ -134,7 +134,7 @@ def status() -> None:
     auth_mode = load_auth_mode()
     endpoint = load_endpoint()
     agent_config = load_agent_config(Path("."))
-    agent_config_path = project_agent_config_path(Path("."))
+    agent_config_path = find_agent_config_path(Path("."))
     backend_agent_status = None
     backend_agent_error = None
     if token and _has_saved_agent_config(agent_config):
@@ -508,13 +508,14 @@ def agent_watch(
 
 @app.command("agent", help="웹 요청을 현재 PC/서버에서 처리하도록 Local Agent를 연결합니다.", rich_help_panel="로컬 Agent")
 def agent(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="agent 연결, heartbeat, task 조회 상세 로그를 출력합니다."),
     path: Path = typer.Option(Path("."), "--path", "-p", help="agent가 연결될 프로젝트 루트입니다."),
 ) -> None:
     """Local Agent를 설정하고 웹 요청을 처리할 수 있게 실행합니다."""
-    _start_agent(path=path)
+    _start_agent(path=path, verbose=verbose)
 
 
-def _start_agent(*, path: Path, refresh_token: bool = False) -> None:
+def _start_agent(*, path: Path, refresh_token: bool = False, verbose: bool = False) -> None:
     from ssafer.core.auth import load_agent_config, load_endpoint, load_token
 
     project_root = path.resolve()
@@ -549,7 +550,7 @@ def _start_agent(*, path: Path, refresh_token: bool = False) -> None:
         reconnect=True,
         max_retries=None,
         reconnect_max_delay=30.0,
-        verbose=False,
+        verbose=verbose,
         agent_config=agent_config,
     )
 
@@ -1029,7 +1030,14 @@ def login(
     guest: bool = typer.Option(False, "--guest", help="이메일 없이 게스트 토큰을 발급받아 CLI를 사용합니다."),
 ) -> None:
     """SSAfer 서버에 로그인하고 토큰을 저장합니다."""
-    from ssafer.core.auth import clear_token, enter_guest_mode, load_endpoint, login_with_credentials, save_auth_tokens
+    from ssafer.core.auth import (
+        clear_token,
+        enter_guest_mode,
+        load_auth_identity,
+        load_endpoint,
+        login_with_credentials,
+        save_auth_tokens,
+    )
 
     if logout:
         clear_token()
@@ -1037,6 +1045,7 @@ def login(
         return
 
     effective_endpoint = endpoint or load_endpoint()
+    previous_auth_mode, previous_auth_subject = load_auth_identity()
     if guest and guest_token:
         console.print("[red]--guest와 --guest-token은 함께 사용할 수 없습니다.[/red]")
         raise typer.Exit(code=1)
@@ -1047,6 +1056,7 @@ def login(
             raise typer.Exit(code=1)
         try:
             save_auth_tokens({"guestAccessToken": token}, effective_endpoint)
+            _clear_agent_config_if_auth_changed(previous_auth_mode, previous_auth_subject)
         except ValueError as exc:
             console.print(f"[red]게스트 토큰 저장 실패:[/red] {exc}")
             raise typer.Exit(code=1) from exc
@@ -1058,6 +1068,7 @@ def login(
         try:
             auth_data = enter_guest_mode(effective_endpoint)
             save_auth_tokens(auth_data, effective_endpoint)
+            _clear_agent_config_if_auth_changed(previous_auth_mode, previous_auth_subject)
         except httpx.HTTPStatusError as exc:
             console.print(f"[red]게스트 로그인 실패:[/red] {_format_http_error(exc)}")
             raise typer.Exit(code=1) from exc
@@ -1089,6 +1100,7 @@ def login(
     try:
         auth_data = login_with_credentials(effective_endpoint, email.strip(), password)
         save_auth_tokens(auth_data, effective_endpoint)
+        _clear_agent_config_if_auth_changed(previous_auth_mode, previous_auth_subject)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]로그인 실패:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
@@ -1102,6 +1114,19 @@ def login(
     console.print(f"웹 대시보드: {_web_url(effective_endpoint, '/dashboard')}")
     console.print("[dim]브라우저 로그인이 필요할 수 있습니다. CLI 로그인 토큰은 터미널 업로드/agent 연결에만 사용됩니다.[/dim]")
     _prompt_start_agent_after_login()
+
+
+def _clear_agent_config_if_auth_changed(previous_mode: str | None, previous_subject: str | None) -> None:
+    from ssafer.core.auth import clear_agent_config, load_auth_identity
+
+    current_mode, current_subject = load_auth_identity()
+    if not previous_mode and not previous_subject:
+        return
+    if previous_mode and current_mode and previous_mode != current_mode:
+        clear_agent_config(Path("."))
+        return
+    if previous_subject and current_subject and previous_subject != current_subject:
+        clear_agent_config(Path("."))
 
 
 def _prompt_start_agent_after_login() -> None:
@@ -1120,6 +1145,20 @@ def guest(
     show_url: bool = typer.Option(False, "--show-url", help="웹에서 이어보기 URL의 토큰 원문을 출력합니다."),
 ) -> None:
     """게스트 모드로 CLI를 시작합니다."""
+    from ssafer.core.auth import load_auth_mode, load_endpoint, load_token
+
+    effective_endpoint = endpoint or load_endpoint()
+    current_token = load_token()
+    if load_auth_mode() == "guest" and current_token:
+        console.print("[green]저장된 게스트 세션을 사용합니다.[/green]")
+        if show_url:
+            continue_url = _guest_continue_url(effective_endpoint, current_token)
+            console.print(f"웹에서 이어 보기: [link={escape(continue_url)}]{escape(continue_url)}[/link]")
+            console.print("[yellow]URL에 게스트 토큰이 포함되어 있습니다. 다른 사람에게 공유하지 마세요.[/yellow]")
+        else:
+            console.print("[dim]웹에서 이어 보기 URL은 토큰이 포함되어 있어 기본 출력에서는 숨깁니다.[/dim]")
+            console.print("[dim]원문 URL이 필요하면 [bold]ssafer guest --show-url[/bold]을 실행하세요.[/dim]")
+        return
     login(endpoint=endpoint, logout=False, guest=True, guest_token=None, show_url=show_url)
 
 
@@ -1339,10 +1378,16 @@ def _print_scan_target_hint(scan: dict) -> None:
 def _print_scan_summary(scan: dict) -> None:
     summary = scan.get("cliSummary", {})
     status_label = _scan_status_label(scan)
+    local_scan_id = scan.get("scanId", "unknown")
+
+    console.print(f"[cyan]로컬 스캔 ID:[/cyan] {local_scan_id}")
+    console.print("[dim]웹에서 쓰는 백엔드 scanId는 upload 후 별도로 발급됩니다.[/dim]")
 
     table = Table(title=f"스캔 결과  {status_label}")
     table.add_column("항목")
     table.add_column("수량", justify="right")
+    console.print(f"[bold]스캔 결과:[/bold] {status_label}")
+    table.title = None
     rows = [
         ("Compose 세트", "composeSets"),
         ("환경변수 파일 (.env)", "envFiles"),

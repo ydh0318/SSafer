@@ -147,6 +147,7 @@ def test_print_scan_summary_guides_when_no_targets(monkeypatch):
 
     main._print_scan_summary(
         {
+            "scanId": "local-scan-123",
             "analysisStatus": "FAILED",
             "cliSummary": {
                 "composeSets": 0,
@@ -164,6 +165,7 @@ def test_print_scan_summary_guides_when_no_targets(monkeypatch):
     output = record_console.export_text()
 
     assert "스캔 대상 없음" in output
+    assert "local-scan-123" in output
     assert "ssafer run --path .." in output
 
 
@@ -274,9 +276,9 @@ def test_format_scan_warning_summarizes_standalone_compose_file():
     )
 
     assert (
-        _format_scan_warning(warning)
-        == "Compose 파일 - docker-compose.front.yml: 이 compose 파일만 단독으로 분석했습니다. 같은 폴더에 docker-compose.yml이 있으면 함께 분석됩니다."
-    )
+            _format_scan_warning(warning)
+            == r"Compose 파일 - Frontend\docker-compose.front.yml: 이 compose 파일만 단독으로 분석했습니다. 같은 폴더에 docker-compose.yml이 있으면 함께 분석됩니다."
+        )
 
 
 def test_format_scan_warning_summarizes_standalone_compose_metadata():
