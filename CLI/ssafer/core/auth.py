@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, urlunparse
@@ -262,6 +263,18 @@ def project_agent_config_path(project_root: Path | None = None) -> Path:
     return (project_root or Path(".")).resolve() / ".ssafer" / PROJECT_AGENT_CONFIG_NAME
 
 
+def _fallback_project_agent_config_path(project_root: Path | None = None) -> Path:
+    project_key = str((project_root or Path(".")).resolve())
+    project_hash = hashlib.sha256(project_key.encode("utf-8")).hexdigest()[:16]
+    return CONFIG_PATH.parent / "projects" / project_hash / PROJECT_AGENT_CONFIG_NAME
+
+
+def _project_agent_config_paths(project_root: Path | None = None) -> list[Path]:
+    local_path = project_agent_config_path(project_root)
+    fallback_path = _fallback_project_agent_config_path(project_root)
+    return [local_path] if local_path == fallback_path else [local_path, fallback_path]
+
+
 def save_agent_config(agent_data: dict[str, Any], endpoint: str | None = None, project_root: Path | None = None) -> None:
     agent_id = agent_data.get("agentId")
     project_id = agent_data.get("projectId")
@@ -269,34 +282,44 @@ def save_agent_config(agent_data: dict[str, Any], endpoint: str | None = None, p
     if agent_id is None or project_id is None or not agent_token:
         raise ValueError("Agent token response is missing agentId, projectId, or agentToken.")
 
-    path = project_agent_config_path(project_root)
-    path.parent.mkdir(parents=True, exist_ok=True)
     agent_config: dict[str, Any] = {}
     agent_config["agentId"] = int(agent_id)
     agent_config["projectId"] = int(project_id)
     agent_config["agentToken"] = str(agent_token)
     if endpoint:
         agent_config["endpoint"] = normalize_api_url(endpoint)
-    path.write_text(yaml.safe_dump(agent_config, allow_unicode=True), encoding="utf-8")
+
+    local_path = project_agent_config_path(project_root)
+    fallback_path = _fallback_project_agent_config_path(project_root)
+    try:
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_text(yaml.safe_dump(agent_config, allow_unicode=True), encoding="utf-8")
+        return
+    except OSError:
+        fallback_path.parent.mkdir(parents=True, exist_ok=True)
+        fallback_path.write_text(yaml.safe_dump(agent_config, allow_unicode=True), encoding="utf-8")
+        return
 
 
 def load_agent_config(project_root: Path | None = None) -> dict[str, Any]:
-    path = project_agent_config_path(project_root)
-    if not path.exists():
-        return {}
-    try:
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
-        return {}
-    agent_config = loaded if isinstance(loaded, dict) else {}
-    return agent_config if isinstance(agent_config, dict) else {}
+    for path in _project_agent_config_paths(project_root):
+        if not path.exists():
+            continue
+        try:
+            loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        agent_config = loaded if isinstance(loaded, dict) else {}
+        if isinstance(agent_config, dict):
+            return agent_config
+    return {}
 
 
 def clear_agent_config(project_root: Path | None = None) -> None:
     """Remove saved project-local agent credentials."""
-    path = project_agent_config_path(project_root)
-    if path.exists():
-        path.unlink()
+    for path in _project_agent_config_paths(project_root):
+        if path.exists():
+            path.unlink()
 
 
 def save_token(token: str, endpoint: str | None = None) -> None:

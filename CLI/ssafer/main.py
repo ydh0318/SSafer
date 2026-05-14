@@ -15,6 +15,7 @@ import httpx
 import typer
 from rich.console import Console
 from rich.live import Live
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -193,7 +194,7 @@ def doctor() -> None:
         console.print("[yellow]Trivy 설치:[/yellow] ssafer install-tools")
 
 
-@app.command("install-tools", help="스캔에 필요한 선택 도구(Trivy)를 설치합니다.", rich_help_panel="서버 점검")
+@app.command("install-tools", hidden=True)
 def install_tools() -> None:
     """Trivy 등 SSAfer가 선택적으로 사용하는 도구를 설치합니다."""
     console.print("[cyan]Trivy를 설치합니다. 몇 분 정도 걸릴 수 있습니다...[/cyan]")
@@ -206,7 +207,7 @@ def install_tools() -> None:
     raise typer.Exit(code=1)
 
 
-@app.command("server-audit", help="EC2/서버 내부의 포트, 프로세스, Docker 등 런타임 상태를 점검합니다.", rich_help_panel="서버 점검")
+@app.command("server-audit", hidden=True)
 def server_audit(
     path: Optional[Path] = typer.Option(None, "--path", "-p", help="server-audit 결과를 저장할 기준 폴더입니다. 생략하면 홈 디렉터리를 사용합니다."),
     upload: bool = typer.Option(False, "--upload", help="점검 결과를 생성한 뒤 백엔드/S3에 업로드합니다."),
@@ -361,6 +362,7 @@ def upload(
 
 @app.command("apply", help="AI가 제안한 수정안을 미리 보고 로컬 파일에 적용합니다.", rich_help_panel="수정 적용")
 def apply_fix(
+    scan_id_arg: Optional[int] = typer.Argument(None, help="적용할 백엔드 scanId입니다. 예: ssafer apply 49"),
     path: Path = typer.Option(Path("."), "--path", "-p", help="수정안을 적용할 프로젝트 루트입니다."),
     analysis_result: Optional[Path] = typer.Option(None, "--analysis-result", help="patch payload가 들어있는 analysis_result.json 경로입니다."),
     scan_id: Optional[int] = typer.Option(None, "--scan-id", help="해당 백엔드 scanId의 analysis_result.json을 내려받아 적용합니다."),
@@ -376,29 +378,29 @@ def apply_fix(
         PatchCandidate,
         PatchError,
         apply_patch_candidates,
-        find_default_analysis_result,
         load_patch_candidates_from_file,
     )
 
     try:
         project_root = path.resolve()
-        remote_options = sum(1 for enabled in (analysis_result is not None, scan_id is not None, latest) if enabled)
+        effective_scan_id = scan_id_arg if scan_id_arg is not None else scan_id
+        remote_options = sum(1 for enabled in (analysis_result is not None, effective_scan_id is not None, latest) if enabled)
         if remote_options > 1:
-            raise PatchError("Use only one of --analysis-result, --scan-id, or --latest.")
-        if latest:
+            raise PatchError("Use only one of scanId argument, --analysis-result, --scan-id, or --latest.")
+        if latest or (analysis_result is None and effective_scan_id is None):
             scan_id = _latest_done_scan_id_or_exit(project_root, project_id=project_id, api_url=api_url)
             analysis_path = _download_analysis_result_or_exit(project_root, scan_id=scan_id, api_url=api_url)
-        elif scan_id is not None:
-            analysis_path = _download_analysis_result_or_exit(project_root, scan_id=scan_id, api_url=api_url)
+        elif effective_scan_id is not None:
+            analysis_path = _download_analysis_result_or_exit(project_root, scan_id=effective_scan_id, api_url=api_url)
         else:
-            analysis_path = analysis_result or find_default_analysis_result(project_root)
+            analysis_path = analysis_result
         if analysis_path is None:
             raise PatchError(
                 "analysis_result.json을 찾지 못했습니다. --analysis-result로 경로를 지정하거나 "
                 "--scan-id/--latest로 백엔드 분석 결과를 내려받으세요."
             )
         console.print(f"[dim]Analysis result: {analysis_path}[/dim]")
-        if analysis_result is None and scan_id is None and not latest and not yes:
+        if analysis_result is not None and effective_scan_id is None and not latest and not yes:
             console.print(
                 "[yellow]로컬 analysis_result.json을 사용합니다. "
                 "현재 프로젝트의 분석 결과가 맞는지 확인해 주세요.[/yellow]"
@@ -555,7 +557,7 @@ def agent_init(
     console.print("[dim]ssafer agent를 실행하면 웹 요청을 받을 수 있습니다.[/dim]")
 
 
-@app.command("project-create", help="웹/Agent 연동에 사용할 SSAfer 프로젝트를 생성합니다.", rich_help_panel="계정/상태")
+@app.command("project-create", hidden=True)
 def project_create(
     name: Optional[str] = typer.Option(None, "--name", help="생성할 프로젝트 이름입니다. 생략하면 현재 폴더명을 기본값으로 사용합니다."),
     description: Optional[str] = typer.Option(None, "--description", help="프로젝트 설명입니다."),
@@ -1055,12 +1057,12 @@ def login(
         guest_access_token = auth_data.get("guestAccessToken")
         if guest_access_token:
             continue_url = _guest_continue_url(effective_endpoint, str(guest_access_token))
-            display_url = continue_url if show_url else _mask_guest_continue_url(continue_url)
-            console.print(f"웹에서 이어 보기: {display_url}")
             if show_url:
+                console.print(f"웹에서 이어 보기: [link={escape(continue_url)}]{escape(continue_url)}[/link]")
                 console.print("[yellow]URL에 게스트 토큰이 포함되어 있습니다. 다른 사람에게 공유하지 마세요.[/yellow]")
             else:
-                console.print("[dim]토큰이 포함된 실제 URL은 보안상 숨겼습니다. 원문이 필요하면 --show-url을 붙여 다시 실행하세요.[/dim]")
+                console.print("[dim]웹에서 이어 보기 URL은 토큰이 포함되어 있어 기본 출력에서는 숨깁니다.[/dim]")
+                console.print("[dim]원문 URL이 필요하면 [bold]ssafer guest --show-url[/bold]을 실행하세요.[/dim]")
         return
 
     email = typer.prompt("이메일")
@@ -1094,6 +1096,15 @@ def _prompt_start_agent_after_login() -> None:
         _start_agent(path=Path("."), refresh_token=True)
         return
     console.print("[dim]Agent는 시작하지 않았습니다. 나중에 연결하려면 [bold]ssafer agent[/bold]를 실행하세요.[/dim]")
+
+
+@app.command("guest", help="이메일 없이 게스트 토큰을 발급받아 CLI를 바로 사용합니다.", rich_help_panel="계정/상태")
+def guest(
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="게스트 토큰을 발급받을 SSAfer 백엔드 API URL입니다."),
+    show_url: bool = typer.Option(False, "--show-url", help="웹에서 이어보기 URL의 토큰 원문을 출력합니다."),
+) -> None:
+    """게스트 모드로 CLI를 시작합니다."""
+    login(endpoint=endpoint, logout=False, guest=True, guest_token=None, show_url=show_url)
 
 
 @app.command(help="이메일 인증부터 회원가입까지 터미널에서 한 번에 진행합니다.", rich_help_panel="계정/상태")
@@ -2021,6 +2032,116 @@ def _upload_server_audit_or_exit(path: Path, api_url: str | None, on_step=None) 
     except RuntimeError as exc:
         console.print(f"[red]업로드 실패:[/red] {exc}")
     raise typer.Exit(code=1)
+
+
+@app.command("guest-login", hidden=True)
+def guest_login(
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="게스트 토큰을 발급받을 SSAfer 백엔드 API URL입니다."),
+    show_url: bool = typer.Option(False, "--show-url", help="웹에서 이어보기 URL의 토큰 원문을 출력합니다."),
+) -> None:
+    """Backward-compatible alias for ssafer guest."""
+    guest(endpoint=endpoint, show_url=show_url)
+
+
+@app.command("scan", hidden=True)
+def scan(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="스캔할 프로젝트 루트입니다."),
+    upload: bool = typer.Option(False, "--upload", help="스캔 후 결과를 웹으로 업로드합니다."),
+    save_raw: bool = typer.Option(False, "--save-raw", help="마스킹 전 effective compose 설정도 로컬에 저장합니다."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="업로드에 사용할 SSAfer 백엔드 API URL입니다."),
+    env: Optional[str] = typer.Option(None, "--env", "-e", help="환경 (local/production). 생략 시 자동 감지합니다."),
+) -> None:
+    """Short alias for ssafer run."""
+    run(path=path, upload=upload, save_raw=save_raw, api_url=api_url, env=env)
+
+
+@app.command("fix", hidden=True)
+def fix(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="수정안을 적용할 프로젝트 루트입니다."),
+    scan_id: Optional[int] = typer.Option(None, "--scan-id", help="해당 백엔드 scanId의 analysis_result.json을 내려받아 적용합니다."),
+    latest: bool = typer.Option(False, "--latest", help="선택한 프로젝트의 최신 DONE 스캔 결과를 내려받아 적용합니다."),
+    project_id: Optional[int] = typer.Option(None, "--project-id", help="--latest에서 사용할 프로젝트 ID입니다."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="파일을 바꾸지 않고 적용 가능 여부만 확인합니다."),
+) -> None:
+    """Short alias for the common ssafer apply flow."""
+    apply_fix(
+        scan_id_arg=None,
+        path=path,
+        analysis_result=None,
+        scan_id=scan_id,
+        latest=latest,
+        project_id=project_id,
+        api_url=None,
+        patch_id=None,
+        dry_run=dry_run,
+        yes=False,
+    )
+
+
+@app.command("server", help="현재 서버 런타임 보안 상태를 점검합니다.", rich_help_panel="서버 점검")
+def server(
+    path: Optional[Path] = typer.Option(None, "--path", "-p", help="server-audit 결과를 저장할 기준 폴더입니다."),
+    upload: bool = typer.Option(False, "--upload", help="점검 결과를 생성한 뒤 백엔드/S3에 업로드합니다."),
+    api_url: Optional[str] = typer.Option(None, "--api-url", help="업로드에 사용할 SSAfer 백엔드 API URL입니다."),
+    details: bool = typer.Option(False, "--details", "-d", help="findings, warnings, artifacts 상세 내용을 함께 출력합니다."),
+    include_os_packages: bool = typer.Option(False, "--include-os-packages", help="OS 패키지 취약점까지 점검합니다."),
+    allow_sudo: bool = typer.Option(False, "--allow-sudo", help="권한이 필요한 서버 점검을 사용자 확인 없이 sudo로 재시도합니다."),
+) -> None:
+    """Short alias for the common ssafer server-audit flow."""
+    server_audit(
+        path=path,
+        upload=upload,
+        api_url=api_url,
+        checks=None,
+        details=details,
+        include_os_packages=include_os_packages,
+        allow_sudo_option=allow_sudo,
+    )
+
+
+@app.command("tools", help="로컬/서버 스캔에 필요한 도구를 설치합니다.", rich_help_panel="기본")
+def tools() -> None:
+    """Short alias for ssafer install-tools."""
+    install_tools()
+
+
+@app.command("last", hidden=True)
+def last(
+    path: Path = typer.Option(Path("."), "--path", "-p", help=".ssafer/results가 있는 프로젝트 루트입니다."),
+    details: bool = typer.Option(False, "--details", "-d", help="스캔 대상, 산출물 경로, finding 상세를 함께 출력합니다."),
+) -> None:
+    """Short alias for ssafer report."""
+    report(path=path, details=details)
+
+
+def _sort_help_commands() -> None:
+    preferred_order = [
+        "version",
+        "status",
+        "signup",
+        "login",
+        "logout",
+        "guest",
+        "withdraw",
+        "tools",
+        "server-audit",
+        "server",
+        "run",
+        "upload",
+        "report",
+        "apply",
+        "agent",
+    ]
+    order = {name: index for index, name in enumerate(preferred_order)}
+
+    def sort_key(command: typer.models.CommandInfo) -> tuple[int, str]:
+        name = command.name or getattr(command.callback, "__name__", "")
+        return (order.get(name, len(order)), name)
+
+    app.registered_commands.sort(key=sort_key)
+
+
+_sort_help_commands()
 
 
 if __name__ == "__main__":
