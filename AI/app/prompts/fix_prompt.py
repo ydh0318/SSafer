@@ -22,14 +22,9 @@ FIX_PROMPT = ChatPromptTemplate.from_messages(
                 "- operation은 finding.patchContext.operation 값을 그대로 쓰세요.\n"
                 "- operation이 replace면 oldText는 patchContext.oldText를 그대로 사용하고 AI가 다시 쓰지 마세요.\n"
                 "- operation이 append면 oldText를 만들지 마세요.\n"
-                "- filePath는 finding.filePath를 우선 사용하세요.\n"
-                "- finding.filePath가 없고 targetFiles가 있으면 oldText가 정확히 한 번만 매칭되는 파일 하나가 있을 때만 그 파일을 filePath로 사용하세요.\n"
-                "- targetFiles 후보가 여러 개이거나 oldText를 확정할 수 없으면 patches를 생략하세요.\n"
-                "- expectedFileHash는 patchContext.expectedFileHash를 그대로 사용하세요.\n"
-                "- patchId는 PATCH-{{findingId}} 형식을 쓰세요. 예: PATCH-FND-0003.\n"
                 "- Dockerfile이나 docker-compose YAML을 다루는 경우 newText는 적용 후 문법이 깨지지 않아야 합니다.\n"
                 "- oldText나 newText에 ***MASKED***, [MASKED], <MASKED> 같은 마스킹 값을 넣지 마세요.\n"
-                "- 각 patch는 patchId, findingId, operation, filePath, oldText, newText, expectedFileHash를 포함하세요.\n"
+                "- 각 patch는 operation, oldText, newText만 포함하세요. filePath, expectedFileHash, patchId, findingId는 출력하지 마세요. 코드가 자동으로 채웁니다.\n"
             ),
         ),
         (
@@ -47,13 +42,9 @@ FIX_PROMPT = ChatPromptTemplate.from_messages(
                 '  "cautions": ["주의사항 1"],\n'
                 '  "patches": [\n'
                 "    {{\n"
-                '      "patchId": "PATCH-FND-0001",\n'
-                '      "findingId": "FND-0001",\n'
                 '      "operation": "replace",\n'
-                '      "filePath": "Dockerfile",\n'
                 '      "oldText": "USER root",\n'
-                '      "newText": "USER appuser",\n'
-                '      "expectedFileHash": "sha256:..."\n'
+                '      "newText": "USER appuser"\n'
                 "    }}\n"
                 "  ]\n"
                 "}}\n\n"
