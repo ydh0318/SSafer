@@ -243,8 +243,8 @@ def _handle_scan_request_task(
     if not api_url:
         return _failed_task(task, "SCAN_REQUEST handling requires api_url.")
 
-    scan_type = (_payload_string(task.payload, "scanType", "scan_type") or "PROJECT_SCAN").upper()
-    if scan_type not in {"PROJECT_SCAN", "LOCAL_SCAN"}:
+    scan_type = (_payload_string(task.payload, "scanType", "scan_type") or "PROJECT_FILE").upper()
+    if scan_type not in {"PROJECT_FILE", "PROJECT_SCAN", "LOCAL_SCAN"}:
         return _failed_task(task, f"Unsupported SCAN_REQUEST scanType: {scan_type}")
 
     try:
@@ -407,8 +407,15 @@ async def _watch_agent_session(
             return
 
         on_event("watching", {"mode": "websocket"})
+        heartbeat_interval = max(0.1, interval_seconds)
         while True:
-            message = await websocket.recv()
+            try:
+                message = await asyncio.wait_for(websocket.recv(), timeout=heartbeat_interval)
+            except asyncio.TimeoutError:
+                ping = _ping_message(agent_id)
+                on_event("ping", ping)
+                await websocket.send(json.dumps(ping))
+                continue
             tasks = _tasks_from_ws_message(message)
             if tasks is None:
                 on_event("task_available", message)

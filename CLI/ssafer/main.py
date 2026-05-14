@@ -122,6 +122,7 @@ def status() -> None:
         CONFIG_PATH,
         describe_token_source,
         get_project_agent_status,
+        load_auth_mode,
         load_agent_config,
         load_endpoint,
         load_token,
@@ -130,6 +131,7 @@ def status() -> None:
 
     token = load_token()
     token_source = describe_token_source()
+    auth_mode = load_auth_mode()
     endpoint = load_endpoint()
     agent_config = load_agent_config(Path("."))
     agent_config_path = project_agent_config_path(Path("."))
@@ -151,7 +153,19 @@ def status() -> None:
     table.add_column("설명", overflow="fold")
     table.add_row("로그인", "[green]됨[/green]" if token else "[red]안 됨[/red]", "저장된 access token 기준")
     table.add_row("토큰 출처", token_source, "환경변수 토큰이 저장된 로그인 토큰보다 우선됩니다")
-    table.add_row("계정 방식", "회원/게스트", "게스트로 쓰려면 ssafer login --guest를 실행하세요.")
+    if not token:
+        account_mode = "-"
+        account_mode_detail = "로그인되어 있지 않습니다."
+    elif auth_mode == "member":
+        account_mode = "회원"
+        account_mode_detail = "회원 계정 토큰으로 로그인되어 있습니다."
+    elif auth_mode == "guest":
+        account_mode = "게스트"
+        account_mode_detail = "게스트 토큰으로 로그인되어 있습니다."
+    elif token:
+        account_mode = "알 수 없음"
+        account_mode_detail = "기존 토큰에는 계정 방식 정보가 없습니다. 다시 로그인하면 표시됩니다."
+    table.add_row("계정 방식", account_mode, account_mode_detail)
     table.add_row("Endpoint", endpoint, "현재 사용할 백엔드 API")
     if _has_saved_agent_config(agent_config):
         detail = (
@@ -1038,6 +1052,7 @@ def login(
             raise typer.Exit(code=1) from exc
         console.print("[green]웹 게스트 토큰을 CLI에 저장했습니다.[/green]")
         console.print("[dim]이제 ssafer upload, ssafer agent 같은 명령에서 같은 게스트 세션을 사용합니다.[/dim]")
+        _prompt_start_agent_after_login()
         return
     if guest:
         try:
@@ -1063,6 +1078,7 @@ def login(
             else:
                 console.print("[dim]웹에서 이어 보기 URL은 토큰이 포함되어 있어 기본 출력에서는 숨깁니다.[/dim]")
                 console.print("[dim]원문 URL이 필요하면 [bold]ssafer guest --show-url[/bold]을 실행하세요.[/dim]")
+        _prompt_start_agent_after_login()
         return
 
     email = typer.prompt("이메일")

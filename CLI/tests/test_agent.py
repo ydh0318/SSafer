@@ -364,6 +364,7 @@ def test_handle_agent_task_runs_scan_request_and_uploads_result(monkeypatch, tmp
         finding_id=None,
         payload={
             "rawUploadUrl": "https://s3.example.com/raw",
+            "scanType": "PROJECT_FILE",
             "targetPath": ".",
             "saveRaw": True,
         },
@@ -896,3 +897,64 @@ def test_watch_agent_session_fetches_on_connect_and_task_available(monkeypatch, 
     ]
     assert [event[0] for event in events].count("checking_tasks") == 2
     assert "task_available" in [event[0] for event in events]
+
+
+def test_watch_agent_session_sends_heartbeat_ping(monkeypatch, tmp_path: Path):
+    events = []
+    sent_messages = []
+
+    class FakeWebSocket:
+        def __init__(self):
+            self.connected = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def send(self, message):
+            sent_messages.append(message)
+            if '"type": "PING"' in message:
+                raise RuntimeError("stop")
+
+        async def recv(self):
+            if not self.connected:
+                self.connected = True
+                return '{"type":"CONNECTED"}'
+            await asyncio.sleep(0.2)
+            return '{"type":"IGNORED"}'
+
+    def fake_connect(*args, **kwargs):
+        return FakeWebSocket()
+
+    monkeypatch.setattr(agent, "fetch_pending_agent_tasks", lambda *args, **kwargs: [])
+
+    async def run_session():
+        await agent._watch_agent_session(
+            websockets=SimpleNamespace(connect=fake_connect),
+            ws_url="wss://example.com/ws/v1/internal/agents/connect",
+            headers={"Authorization": "Bearer agent-token"},
+            api_url="https://api.example.com",
+            agent_id=7,
+            project_id=3,
+            agent_token="agent-token",
+            project_root=tmp_path,
+            interval_seconds=0.01,
+            once=False,
+            dry_run=False,
+            on_event=lambda event_type, payload: events.append((event_type, payload)),
+        )
+
+    import asyncio
+
+    try:
+        asyncio.run(run_session())
+    except RuntimeError as exc:
+        assert str(exc) == "stop"
+    else:
+        raise AssertionError("fake websocket should stop after heartbeat")
+
+    assert any('"type": "CONNECT"' in message for message in sent_messages)
+    assert any('"type": "PING"' in message for message in sent_messages)
+    assert "ping" in [event[0] for event in events]

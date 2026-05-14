@@ -63,6 +63,14 @@ def describe_token_source(token_env_key: str | None = None) -> str:
     return "none"
 
 
+def load_auth_mode() -> str | None:
+    """Return the saved auth mode, if known."""
+    config = _load_config()
+    upload_config = config.get("upload", {})
+    auth_mode = upload_config.get("authMode")
+    return str(auth_mode).strip().lower() if auth_mode else None
+
+
 def login_with_credentials(endpoint: str, email: str, password: str) -> dict[str, Any]:
     """Authenticate with the SSAfer backend and return token response data."""
     base_url = normalize_api_url(endpoint)

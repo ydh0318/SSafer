@@ -848,7 +848,7 @@ def test_login_command_guest_saves_guest_token(monkeypatch, tmp_path):
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"], input="n\n")
 
     assert result.exit_code == 0
     assert load_token() == "guest-token"
@@ -867,7 +867,7 @@ def test_guest_login_command_saves_guest_token(monkeypatch, tmp_path):
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["guest-login", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(app, ["guest-login", "--endpoint", "https://api.example.com"], input="n\n")
 
     assert result.exit_code == 0
     assert load_token() == "guest-token"
@@ -886,7 +886,7 @@ def test_guest_command_saves_guest_token(monkeypatch, tmp_path):
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["guest", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(app, ["guest", "--endpoint", "https://api.example.com"], input="n\n")
 
     assert result.exit_code == 0
     assert load_token() == "guest-token"
@@ -901,6 +901,7 @@ def test_login_command_guest_token_saves_web_guest_token(monkeypatch, tmp_path):
     result = CliRunner().invoke(
         app,
         ["login", "--guest-token", "web-guest-token", "--endpoint", "https://api.example.com"],
+        input="n\n",
     )
 
     assert result.exit_code == 0
@@ -918,7 +919,11 @@ def test_login_command_guest_prints_web_continue_url(monkeypatch, tmp_path):
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["login", "--guest", "--show-url", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(
+        app,
+        ["login", "--guest", "--show-url", "--endpoint", "https://api.example.com"],
+        input="n\n",
+    )
 
     assert result.exit_code == 0
     assert "https://api.example.com/guest/continue?token=guest+token%2Fwith+space" in result.output
@@ -933,12 +938,59 @@ def test_login_command_guest_masks_web_continue_url_by_default(monkeypatch, tmp_
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"], input="n\n")
 
     assert result.exit_code == 0
     assert "show-url" in result.output
     assert "https://api.example.com/guest/continue?token=" not in result.output
     assert "secret-token" not in result.output
+
+
+def test_login_command_guest_prompts_agent_start(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    started: dict[str, object] = {}
+
+    def fake_guest(endpoint: str, device_id: str | None = None) -> dict[str, str]:
+        return {"guestAccessToken": "guest-token", "expiresAt": "2026-05-12T00:00:00Z"}
+
+    def fake_start_agent(*, path: Path, refresh_token: bool) -> None:
+        started["path"] = path
+        started["refresh_token"] = refresh_token
+
+    monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
+    monkeypatch.setattr(main_module, "_start_agent", fake_start_agent)
+
+    result = CliRunner().invoke(
+        app,
+        ["login", "--guest", "--endpoint", "https://api.example.com"],
+        input="y\n",
+    )
+
+    assert result.exit_code == 0
+    assert started == {"path": Path("."), "refresh_token": True}
+
+
+def test_login_command_guest_token_prompts_agent_start(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    started: dict[str, object] = {}
+
+    def fake_start_agent(*, path: Path, refresh_token: bool) -> None:
+        started["path"] = path
+        started["refresh_token"] = refresh_token
+
+    monkeypatch.setattr(main_module, "_start_agent", fake_start_agent)
+
+    result = CliRunner().invoke(
+        app,
+        ["login", "--guest-token", "web-guest-token", "--endpoint", "https://api.example.com"],
+        input="y\n",
+    )
+
+    assert result.exit_code == 0
+    assert load_token() == "web-guest-token"
+    assert started == {"path": Path("."), "refresh_token": True}
 
 
 def test_login_command_rejects_guest_and_guest_token(monkeypatch, tmp_path):
