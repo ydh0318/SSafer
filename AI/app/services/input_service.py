@@ -43,13 +43,9 @@ def format_finding_for_fix_llm(finding: dict[str, Any]) -> str:
         operation_text = operation if isinstance(operation, str) and operation else "N/A"
         old_text = patch_context.get("oldText")
         old_text_block = old_text if isinstance(old_text, str) and old_text else "N/A"
-        expected_file_hash_status = (
-            "available" if patch_context.get("expectedFileHash") else "missing"
-        )
     else:
         operation_text = "N/A"
         old_text_block = "N/A"
-        expected_file_hash_status = "N/A"
 
     guidance_lines: list[str] = []
     if scan_type == "SERVER_AUDIT":
@@ -68,7 +64,6 @@ def format_finding_for_fix_llm(finding: dict[str, Any]) -> str:
             f"patchContext.operation: {operation_text}",
             "patchContext.oldText:",
             old_text_block,
-            f"patchContext.expectedFileHash: {expected_file_hash_status}",
         ]
     )
 
