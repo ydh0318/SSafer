@@ -26,6 +26,7 @@ import type {
   HistoryScanListResponseData,
   ScanCompareFindingData,
   ScanCompareResponseData,
+  ScanMode,
 } from '../../types/scan';
 
 const HISTORY_PAGE_SIZE = 10;
@@ -93,6 +94,9 @@ function HistoryPage() {
     Boolean(refreshToken) || user?.role === 'USER' || user?.role === 'ADMIN' || hasStoredMemberSession();
   const canAccessHistory = isAuthenticated && hasMemberSession && !isGuestSession;
 
+  const [filterScanMode, setFilterScanMode] = useState<ScanMode | ''>('');
+  const [filterStatus, setFilterStatus] = useState<'DONE' | 'FAILED' | ''>('');
+
   const [historyData, setHistoryData] = useState<HistoryScanListResponseData>(emptyHistoryData);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -110,12 +114,17 @@ function HistoryPage() {
   );
   const hasHistoryItems = useMemo(() => historyData.items.length > 0, [historyData.items.length]);
 
-  const loadHistory = async () => {
+  const loadHistory = async (params?: { scanMode?: ScanMode | ''; status?: 'DONE' | 'FAILED' | '' }) => {
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
-      const data = await getHistoryScans({ page: 0, size: HISTORY_PAGE_SIZE });
+      const data = await getHistoryScans({
+        page: 0,
+        size: HISTORY_PAGE_SIZE,
+        ...(params?.scanMode && { scanMode: params.scanMode }),
+        ...(params?.status && { status: params.status }),
+      });
       setHistoryData(data);
       return data;
     } catch (error) {
@@ -211,13 +220,19 @@ function HistoryPage() {
     setCompareErrorMessage(null);
   }, [selectedBaseScanId, selectedTargetScanId]);
 
+  const handleFilterChange = (scanMode: ScanMode | '', status: 'DONE' | 'FAILED' | '') => {
+    setFilterScanMode(scanMode);
+    setFilterStatus(status);
+    void loadHistory({ scanMode, status });
+  };
+
   const handleRefresh = async () => {
     if (!canAccessHistory) {
       return;
     }
 
     setNoticeMessage(null);
-    await loadHistory();
+    await loadHistory({ scanMode: filterScanMode, status: filterStatus });
   };
 
   useScanEventSubscription(
@@ -488,7 +503,59 @@ function HistoryPage() {
             ) : null}
           </div>
 
-          <div className="border border-black/5 bg-white p-8 shadow-sm">
+          <div className="border border-black/5 bg-white px-8 py-6 shadow-sm">
+            <div className="mb-6 flex flex-wrap items-center gap-6">
+              {/* 스캔 방식 필터 */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold tracking-[0.24em] text-neutral-400">스캔 방식</p>
+                <div className="flex gap-1.5">
+                  {([
+                    { value: '' as const, label: '전체' },
+                    { value: 'UPLOAD' as const, label: '파일 업로드' },
+                    { value: 'AGENT' as const, label: 'Agent · CLI' },
+                  ] satisfies { value: ScanMode | ''; label: string }[]).map((opt) => (
+                    <button
+                      className={`px-3 py-1.5 text-xs font-bold transition ${
+                        filterScanMode === opt.value
+                          ? 'bg-[#111111] text-white'
+                          : 'border border-neutral-200 bg-white text-neutral-500 hover:border-neutral-400 hover:text-black'
+                      }`}
+                      key={opt.value || 'all-mode'}
+                      onClick={() => handleFilterChange(opt.value, filterStatus)}
+                      type="button"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 결과 필터 */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold tracking-[0.24em] text-neutral-400">결과</p>
+                <div className="flex gap-1.5">
+                  {([
+                    { value: '' as const, label: '전체' },
+                    { value: 'DONE' as const, label: '완료된 스캔' },
+                    { value: 'FAILED' as const, label: '실패한 스캔' },
+                  ] satisfies { value: 'DONE' | 'FAILED' | ''; label: string }[]).map((opt) => (
+                    <button
+                      className={`px-3 py-1.5 text-xs font-bold transition ${
+                        filterStatus === opt.value
+                          ? 'bg-[#111111] text-white'
+                          : 'border border-neutral-200 bg-white text-neutral-500 hover:border-neutral-400 hover:text-black'
+                      }`}
+                      key={opt.value || 'all-status'}
+                      onClick={() => handleFilterChange(filterScanMode, opt.value)}
+                      type="button"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {isLoading ? (
               <div className="text-sm leading-7 text-neutral-600">히스토리를 불러오는 중입니다...</div>
             ) : !hasHistoryItems ? (

@@ -220,20 +220,51 @@ class GmsProvider(LLMProvider):
             ) from exc
 
         api_key = self._get_api_key()
+        capabilities = self._get_openai_model_capabilities(self.model)
 
         model_kwargs: dict[str, Any] = {
             "model": self.model,
             "api_key": api_key,
             "base_url": self.base_url,
-            "temperature": self.temperature,
             "timeout": self.timeout_seconds,
         }
+        if capabilities["supports_custom_temperature"]:
+            model_kwargs["temperature"] = self.temperature
         if response_format == "json" and self.force_json_response_format:
             model_kwargs["response_format"] = {"type": "json_object"}
         if max_tokens is not None:
-            model_kwargs["max_tokens"] = max_tokens
+            param_name = capabilities["max_tokens_param"]
+            if param_name == "max_tokens":
+                model_kwargs["max_tokens"] = max_tokens
+            else:
+                model_kwargs["extra_body"] = {param_name: max_tokens}
 
         return ChatOpenAI(**model_kwargs)
+
+    @staticmethod
+    def _get_openai_model_capabilities(model: str) -> dict[str, Any]:
+        name = model.lower()
+        is_reasoning_model = (
+            name.startswith("gpt-5")
+            or name.startswith("o1")
+            or name.startswith("o3")
+            or name.startswith("o4")
+        )
+        if is_reasoning_model:
+            return {
+                "max_tokens_param": "max_completion_tokens",
+                "supports_custom_temperature": False,
+            }
+        return {
+            "max_tokens_param": "max_tokens",
+            "supports_custom_temperature": True,
+        }
+
+    def _uses_completion_tokens_param(self) -> bool:
+        return (
+            self._get_openai_model_capabilities(self.model)["max_tokens_param"]
+            == "max_completion_tokens"
+        )
 
     def _get_api_key(self) -> str:
         import os
