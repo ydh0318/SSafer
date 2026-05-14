@@ -117,6 +117,7 @@ class WorkerProcessorTest(unittest.TestCase):
         processor.process(build_message())
 
         self.assertEqual(fastapi_client.requests[0].task_id, 123)
+        self.assertEqual(fastapi_client.requests[0].scan_type, "PROJECT_FILE")
         self.assertEqual(
             fastapi_client.requests[0].analysis_result_path,
             "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",

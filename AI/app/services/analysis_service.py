@@ -65,6 +65,7 @@ def build_analysis_log_fields(request: AnalysisRequest) -> dict[str, Any]:
         "taskId": request.task_id,
         "agentId": request.agent_id,
         "projectId": request.project_id,
+        "scanType": request.scan_type,
     }
 
 
@@ -147,19 +148,22 @@ def analyze_scan_result(request: AnalysisRequest) -> AnalysisResponse:
                 raw_result_path=request.raw_result_path,
                 analysis_result_path=request.analysis_result_s3_path
                 or request.analysis_result_path,
+                scan_type=request.scan_type,
                 log_fields=log_fields,
             )
         elif request.scan_result is None:
             result = run_analysis_pipeline(
                 scan_result_path=request.scan_result_path,
                 output_path=request.analysis_result_path,
+                scan_type=request.scan_type,
                 log_fields=log_fields,
             )
         else:
             result = run_analysis_pipeline_from_scan_result(
-                scan_result=request.scan_result.model_dump(by_alias=True),
+                scan_result=request.scan_result,
                 scan_result_path=request.scan_result_path,
                 output_path=request.analysis_result_path,
+                scan_type=request.scan_type,
                 log_fields=log_fields,
             )
     except Exception:
@@ -213,11 +217,15 @@ def run_s3_analysis_pipeline(
     raw_result_path: str,
     analysis_result_path: str,
     *,
+    scan_type: str | None = None,
     log_fields: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     download_started_ms = monotonic_ms()
     try:
-        scan_result = parse_scan_result(download_scan_result_json_data(raw_result_path))
+        scan_result = parse_scan_result(
+            download_scan_result_json_data(raw_result_path),
+            scan_type_hint=scan_type,
+        )
         log_analysis_step(
             "FastAPI S3 raw result downloaded.",
             stage="S3_DOWNLOAD",
@@ -262,6 +270,7 @@ def run_s3_analysis_pipeline(
         scan_result=scan_result,
         scan_result_path=raw_result_path,
         output_path=analysis_result_path,
+        scan_type=scan_type,
         upload_to_s3=True,
         log_fields=log_fields,
     )
@@ -275,6 +284,7 @@ def analyze_finding(
     finding_total: int | None = None,
 ) -> dict[str, Any]:
     finding_id = finding["id"]
+    scan_type = finding.get("scanType")
 
     finding_started_ms = monotonic_ms()
     log_with_fields(
@@ -356,6 +366,9 @@ def analyze_finding(
     fix_started_ms = monotonic_ms()
     try:
         fix = generate_finding_fix(finding)
+        if scan_type == "SERVER_AUDIT":
+            fix.pop("patch", None)
+            fix.pop("patches", None)
         log_analysis_step(
             "FastAPI finding fix completed.",
             stage="FIX",
@@ -458,6 +471,10 @@ def prepare_analysis_pipeline_context(
     validate_scan_result_required_fields(scan_result)
     raw_findings = extract_findings(scan_result)
     valid_findings, invalid_findings = split_valid_invalid_findings(raw_findings)
+    scan_type = scan_result.get("scanType")
+    if isinstance(scan_type, str) and scan_type:
+        for finding in valid_findings:
+            finding["scanType"] = scan_type
 
     return AnalysisPipelineContext(
         scan_result=scan_result,
@@ -471,11 +488,15 @@ def run_analysis_pipeline(
     scan_result_path: str = "data/scan_result.json",
     output_path: str = DEFAULT_ANALYSIS_RESULT_PATH,
     *,
+    scan_type: str | None = None,
     log_fields: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     load_started_ms = monotonic_ms()
     try:
-        scan_result = load_scan_result(scan_result_path)
+        scan_result = parse_scan_result(
+            load_scan_result(scan_result_path),
+            scan_type_hint=scan_type,
+        )
         log_analysis_step(
             "FastAPI local scan result loaded.",
             stage="LOAD_INPUT",
@@ -512,12 +533,41 @@ def run_analysis_pipeline_from_scan_result(
     scan_result_path: str,
     output_path: str,
     *,
+    scan_type: str | None = None,
     upload_to_s3: bool = False,
     log_fields: dict[str, Any] | None = None,
 ) -> dict[str, object]:
+    parse_started_ms = monotonic_ms()
+    try:
+        normalized_scan_result = parse_scan_result(
+            scan_result,
+            scan_type_hint=scan_type,
+        )
+        log_analysis_step(
+            "FastAPI scan result normalized.",
+            stage="NORMALIZE_INPUT",
+            started_ms=parse_started_ms,
+            log_fields=log_fields,
+            normalizedScanType=normalized_scan_result.get("scanType"),
+        )
+    except Exception as exc:
+        log_analysis_step(
+            "FastAPI scan result normalization failed.",
+            stage="NORMALIZE_INPUT",
+            started_ms=parse_started_ms,
+            level=logging.ERROR,
+            log_fields=log_fields,
+        )
+        return build_failed_analysis_result(
+            stage="input",
+            scan_result_path=scan_result_path,
+            analysis_result_path=output_path,
+            message=str(exc),
+        )
+
     prepare_started_ms = monotonic_ms()
     try:
-        context = prepare_analysis_pipeline_context(scan_result)
+        context = prepare_analysis_pipeline_context(normalized_scan_result)
         log_analysis_step(
             "FastAPI scan result prepared.",
             stage="PREPARE_INPUT",

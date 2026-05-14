@@ -169,7 +169,7 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
                 )
             )
 
-    def test_validate_fix_schema_accepts_append_patch_without_old_text(self):
+    def test_validate_fix_schema_accepts_append_patch(self):
         patch = build_patch(
             operation="append",
             newText="\nHEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost/ || exit 1",
@@ -177,10 +177,6 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
         patch.pop("oldText")
 
         validate_fix_schema(build_fix(patches=[patch]))
-
-    def test_validate_fix_schema_rejects_append_patch_with_old_text(self):
-        with self.assertRaisesRegex(ValueError, "fix.patches\\[0\\].oldText"):
-            validate_fix_schema(build_fix(patches=[build_patch(operation="append")]))
 
     def test_validate_fix_schema_rejects_invalid_patch_metadata(self):
         with self.assertRaisesRegex(ValueError, "fix.patches\\[0\\].expectedFileHash"):
@@ -335,19 +331,17 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
             "replace",
         )
 
-    def test_normalize_analysis_result_patches_accepts_safe_dockerfile_append(self):
+    def test_normalize_analysis_result_patches_accepts_append_operation_without_old_text(self):
         finding = build_finding(
             patchContext={
                 "operation": "append",
                 "expectedFileHash": "sha256:fresh",
             },
         )
-        append_patch = build_patch(
-            operation="append",
-            newText="\nHEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost/ || exit 1",
+        analysis_result = build_analysis_result_with_patch(
+            build_patch(operation="append")
         )
-        append_patch.pop("oldText")
-        analysis_result = build_analysis_result_with_patch(append_patch)
+        analysis_result["results"][0]["fix"]["patches"][0].pop("oldText", None)
 
         normalize_analysis_result_patches(
             findings=[finding],
@@ -358,31 +352,6 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
         patch = analysis_result["results"][0]["fix"]["patches"][0]
         self.assertEqual(patch["operation"], "append")
         self.assertNotIn("oldText", patch)
-        self.assertEqual(patch["expectedFileHash"], "sha256:fresh")
-
-    def test_normalize_analysis_result_patches_rejects_compose_append(self):
-        finding = build_finding(
-            file="docker-compose.yml",
-            filePath="docker-compose.yml",
-            patchContext={
-                "expectedFileHash": "sha256:fresh",
-            },
-        )
-        append_patch = build_patch(
-            filePath="docker-compose.yml",
-            operation="append",
-            newText="\nservices: {}",
-        )
-        append_patch.pop("oldText")
-        analysis_result = build_analysis_result_with_patch(append_patch)
-
-        normalize_analysis_result_patches(
-            findings=[finding],
-            scan_result={"sourceFileHashes": {"docker-compose.yml": "sha256:fresh"}},
-            analysis_result=analysis_result,
-        )
-
-        self.assertNotIn("patches", analysis_result["results"][0]["fix"])
 
     def test_normalize_analysis_result_patches_removes_patch_when_file_path_conflicts(self):
         analysis_result = build_analysis_result_with_patch(
@@ -444,6 +413,48 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
         )
 
         self.assertNotIn("patches", analysis_result["results"][0]["fix"])
+
+    def test_normalize_analysis_result_patches_selects_unique_target_file(self):
+        finding = build_finding(
+            filePath=None,
+            targetFiles=["a.yml", "b.yml"],
+            patchContext={
+                "operation": "replace",
+                "oldText": "ports:\n      - \"5432:5432\"",
+                "expectedFileHash": "sha256:a",
+            },
+        )
+        finding.pop("filePath")
+        analysis_result = build_analysis_result_with_patch(
+            build_patch(
+                filePath="a.yml",
+                oldText="placeholder",
+                expectedFileHash="sha256:placeholder",
+            )
+        )
+
+        normalize_analysis_result_patches(
+            findings=[finding],
+            scan_result={
+                "sourceFileHashes": {"a.yml": "sha256:a", "b.yml": "sha256:b"},
+                "artifacts": [
+                    {
+                        "target": "a.yml",
+                        "content": "services:\n  db:\n    ports:\n      - \"5432:5432\"\n",
+                    },
+                    {
+                        "target": "b.yml",
+                        "content": "services:\n  cache:\n    image: redis\n",
+                    },
+                ],
+            },
+            analysis_result=analysis_result,
+        )
+
+        patch = analysis_result["results"][0]["fix"]["patches"][0]
+        self.assertEqual(patch["filePath"], "a.yml")
+        self.assertEqual(patch["oldText"], "ports:\n      - \"5432:5432\"")
+        self.assertEqual(patch["expectedFileHash"], "sha256:a")
 
 
 if __name__ == "__main__":

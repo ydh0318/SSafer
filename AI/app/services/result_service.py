@@ -69,6 +69,7 @@ REQUIRED_FIX_STRING_FIELDS = (
 ALLOWED_FIX_PRIORITIES = ("critical", "high", "medium", "low")
 REQUIRED_FIX_PATCH_FIELDS = (
     "patchId",
+    "findingId",
     "filePath",
     "operation",
     "newText",
@@ -76,6 +77,7 @@ REQUIRED_FIX_PATCH_FIELDS = (
 )
 REQUIRED_FIX_PATCH_STRING_FIELDS = (
     "patchId",
+    "findingId",
     "filePath",
     "operation",
     "newText",
@@ -172,6 +174,10 @@ def build_structured_analysis_result(
         result["filePath"] = finding["filePath"]
     if finding.get("targetFiles"):
         result["targetFiles"] = finding["targetFiles"]
+    if finding.get("target"):
+        result["target"] = finding["target"]
+    if finding.get("evidence"):
+        result["evidence"] = finding["evidence"]
     return result
 
 
@@ -300,7 +306,7 @@ def build_analysis_result_from_results(
     scan_result: dict[str, Any],
     structured_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    return {
+    analysis_result = {
         "schemaVersion": ANALYSIS_RESULT_SCHEMA_VERSION,
         "scanId": scan_result.get("scanId"),
         "source": scan_result.get("source"),
@@ -309,6 +315,9 @@ def build_analysis_result_from_results(
         "resultCount": len(structured_results),
         "results": structured_results,
     }
+    if scan_result.get("auditId"):
+        analysis_result["auditId"] = scan_result.get("auditId")
+    return analysis_result
 
 
 def normalize_analysis_result_patches(
@@ -324,7 +333,6 @@ def normalize_analysis_result_patches(
     }
     source_hashes = scan_result.get("sourceFileHashes") or {}
     content_by_target = _artifact_text_content_by_target(scan_result)
-
     for result in analysis_result.get("results") or []:
         if not isinstance(result, dict):
             continue
@@ -332,12 +340,12 @@ def normalize_analysis_result_patches(
         fix = result.get("fix")
         if finding is None or not isinstance(fix, dict):
             continue
-        patches = fix.get("patches")
-        if not isinstance(patches, list):
+        patch_candidates = fix.get("patches")
+        if not patch_candidates:
             continue
 
         normalized_patches: list[dict[str, Any]] = []
-        for patch in patches:
+        for patch in patch_candidates:
             normalized_patch = normalize_fix_patch_for_finding(
                 patch=patch,
                 finding=finding,
@@ -347,10 +355,29 @@ def normalize_analysis_result_patches(
             if normalized_patch is not None:
                 normalized_patches.append(normalized_patch)
 
+        normalized_patches = _dedupe_patches(normalized_patches)
+
         if normalized_patches:
             fix["patches"] = normalized_patches
         else:
             fix.pop("patches", None)
+
+
+def _dedupe_patches(patches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen_keys: set[tuple[str, str, str, str]] = set()
+    for patch in patches:
+        key = (
+            str(patch.get("patchId") or ""),
+            str(patch.get("findingId") or ""),
+            str(patch.get("filePath") or ""),
+            str(patch.get("operation") or ""),
+        )
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped.append(patch)
+    return deduped
 
 
 def normalize_fix_patch_for_finding(
@@ -389,17 +416,18 @@ def normalize_fix_patch_for_finding(
     file_path = _patch_context_file_path(
         finding=finding,
         patch_file_path=normalized_patch.get("filePath"),
+        old_text=patch_context.get("oldText"),
+        content_by_target=content_by_target,
     )
     if file_path is None:
         return None
 
-    if source_hashes:
-        source_file_hash = source_hashes.get(file_path)
-        if source_file_hash is not None and source_file_hash != expected_file_hash:
-            return None
+    source_file_hash = source_hashes.get(file_path)
+    if source_file_hash is not None and source_file_hash != expected_file_hash:
+        return None
 
+    old_text = patch_context.get("oldText")
     if operation == "replace":
-        old_text = patch_context.get("oldText")
         if not isinstance(old_text, str) or not old_text:
             return None
         target_content = content_by_target.get(file_path)
@@ -407,10 +435,7 @@ def normalize_fix_patch_for_finding(
             return None
         normalized_patch["oldText"] = old_text
     else:
-        if "oldText" in normalized_patch:
-            return None
-        if not _is_safe_append_target(file_path):
-            return None
+        normalized_patch.pop("oldText", None)
 
     finding_id = finding.get("id")
     if isinstance(finding_id, str) and finding_id.strip():
@@ -427,22 +452,44 @@ def _patch_context_file_path(
     *,
     finding: dict[str, Any],
     patch_file_path: Any,
+    old_text: Any,
+    content_by_target: dict[str, str],
 ) -> str | None:
     finding_file_path = finding.get("filePath")
     if isinstance(finding_file_path, str) and finding_file_path.strip():
-        if isinstance(patch_file_path, str) and patch_file_path.strip() and patch_file_path != finding_file_path:
+        if (
+            isinstance(patch_file_path, str)
+            and patch_file_path.strip()
+            and patch_file_path != finding_file_path
+        ):
             return None
         return finding_file_path
 
-    return None
+    target_files = finding.get("targetFiles")
+    if (
+        not isinstance(old_text, str)
+        or not old_text
+        or not isinstance(target_files, list)
+        or not target_files
+    ):
+        return None
 
+    matched_targets: list[str] = []
+    for target in target_files:
+        if not isinstance(target, str) or not target.strip():
+            continue
+        if isinstance(patch_file_path, str) and patch_file_path.strip() and patch_file_path != target:
+            continue
+        target_content = content_by_target.get(target)
+        if target_content is None:
+            continue
+        if target_content.count(old_text) == 1:
+            matched_targets.append(target)
 
-def _is_safe_append_target(file_path: str) -> bool:
-    path_name = PurePosixPath(file_path).name.lower()
-    if path_name == "dockerfile" or path_name.endswith(".dockerfile"):
-        return True
-    return False
+    if len(matched_targets) != 1:
+        return None
 
+    return matched_targets[0]
 
 def _artifact_text_content_by_target(scan_result: dict[str, Any]) -> dict[str, str]:
     content_by_target: dict[str, str] = {}
@@ -700,7 +747,9 @@ def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
             path=path,
         )
     elif "oldText" in patch:
-        raise ValueError(f"{path}.oldText must be omitted for append patches.")
+        value = patch["oldText"]
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"{path}.oldText must be a non-empty string when provided.")
 
     expected_file_hash = patch.get("expectedFileHash")
     if expected_file_hash is not None and not expected_file_hash.startswith("sha256:"):

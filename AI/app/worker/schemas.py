@@ -41,6 +41,7 @@ class FastApiAnalyzeRequest(BaseModel):
     agent_id: int = Field(alias="agentId")
     project_id: int = Field(alias="projectId")
     scan_id: int = Field(alias="scanId")
+    scan_type: Literal["PROJECT_FILE", "SERVER_AUDIT"] = Field(alias="scanType")
     raw_result_path: str = Field(alias="rawResultPath")
     analysis_result_path: str = Field(alias="analysisResultPath")
 

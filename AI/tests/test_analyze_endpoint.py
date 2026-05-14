@@ -17,6 +17,7 @@ class AnalyzeEndpointTest(unittest.TestCase):
             agentId=10,
             projectId=2,
             scanId=5,
+            scanType="PROJECT_FILE",
             rawResultPath="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
             analysisResultPath=(
                 "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
@@ -31,6 +32,7 @@ class AnalyzeEndpointTest(unittest.TestCase):
             request.raw_result_path,
             "s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
         )
+        self.assertEqual(request.scan_type, "PROJECT_FILE")
         self.assertEqual(
             request.analysis_result_s3_path,
             "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json",
@@ -99,6 +101,7 @@ class AnalyzeEndpointTest(unittest.TestCase):
             captured_args["scan_result_path"] = scan_result_path
             captured_args["output_path"] = output_path
             captured_args["log_fields"] = kwargs.get("log_fields")
+            captured_args["scan_type"] = kwargs.get("scan_type")
             return {
                 "status": "completed",
                 "scan_result_path": scan_result_path,
@@ -148,11 +151,13 @@ class AnalyzeEndpointTest(unittest.TestCase):
             {
                 "scan_result_path": "data/custom_scan_result.json",
                 "output_path": "data/custom_analysis_result.json",
+                "scan_type": None,
                 "log_fields": {
                     "scanId": None,
                     "taskId": None,
                     "agentId": None,
                     "projectId": None,
+                    "scanType": None,
                 },
             },
         )
@@ -170,6 +175,7 @@ class AnalyzeEndpointTest(unittest.TestCase):
             captured_args["scan_result_path"] = scan_result_path
             captured_args["output_path"] = output_path
             captured_args["log_fields"] = kwargs.get("log_fields")
+            captured_args["scan_type"] = kwargs.get("scan_type")
             return {
                 "status": "completed",
                 "scan_result_path": scan_result_path,
@@ -212,6 +218,7 @@ class AnalyzeEndpointTest(unittest.TestCase):
             captured_args["output_path"],
             "data/custom_analysis_result.json",
         )
+        self.assertIsNone(captured_args["scan_type"])
         self.assertEqual(captured_args["scan_result"]["schemaVersion"], "0.1")
         self.assertEqual(
             captured_args["scan_result"]["scanId"],

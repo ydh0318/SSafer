@@ -109,10 +109,14 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
             "recommendedActions는 2~5개의 문자열 배열, cautions는 0~3개의 문자열 배열입니다.",
             "주의할 점이 떠오르지 않으면 cautions를 빈 배열 []로 두세요.",
             "자연어는 한국어 중심으로 작성하세요.",
+            "source가 server-audit 이거나 Scan Type이 SERVER_AUDIT 이면 patches를 만들지 말고 운영 조치와 확인 명령 중심으로 작성하세요.",
             "patches는 안전할 때만 포함하고, 불확실하면 생략하세요.",
-            "patch operation은 replace 또는 append만 허용하며, finding.patchContext.operation 값을 그대로 쓰세요.",
-            "replace는 oldText를 patchContext.oldText 그대로 사용하고, append는 oldText를 생략하세요.",
-            "append는 Dockerfile에만 사용하고 docker-compose YAML에는 쓰지 마세요.",
+            "patches는 finding.patchContext가 있을 때만 생성하세요.",
+            "patch operation은 finding.patchContext.operation 값을 그대로 쓰세요.",
+            "operation이 replace면 oldText는 patchContext.oldText를 그대로 사용하고 AI가 재작성하지 마세요.",
+            "operation이 append면 oldText를 새로 만들지 마세요.",
+            "filePath는 finding.filePath를 우선 사용하고, filePath가 없으면 targetFiles 중 oldText가 정확히 한 번만 매칭되는 파일 하나가 있을 때만 선택하세요.",
+            "targetFiles 후보가 여러 개이거나 oldText를 확정할 수 없으면 patches를 생략하세요.",
         ]
     )
 
