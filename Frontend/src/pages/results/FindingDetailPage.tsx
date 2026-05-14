@@ -270,7 +270,7 @@ function FindingDetailPage() {
                   <span className="font-mono text-xs text-neutral-500">{finding.ruleId || finding.ruleCode}</span>
                   <span className="border border-neutral-300 px-2 py-0.5 text-xs">{finding.source || finding.sourceType}</span>
                   <span className="bg-neutral-100 px-2 py-0.5 text-xs">{finding.category}</span>
-                  {scanBasic?.scanMode ? <ScanModeBadge scanMode={scanBasic.scanMode} /> : null}
+                  {scanBasic?.scanMode ? <ScanModeBadge scanMode={scanBasic.scanMode} source={scanBasic.source} /> : null}
                   <PatchAvailabilityBadge hasPatches={hasPatches} />
                 </div>
                 <span className="border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-600">

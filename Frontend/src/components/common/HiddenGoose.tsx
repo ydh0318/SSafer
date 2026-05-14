@@ -7,21 +7,47 @@ const SIZE = 56;
 
 type Mode = 'patrolling' | 'dragging' | 'returning';
 
+// 컴포넌트 외부에 정의 — 렌더링마다 <style> 재삽입되는 렉 방지
+const PATROL_STYLE = `
+  @keyframes goose-patrol {
+    0%   { transform: translate(calc(100vw - ${SIZE}px), calc(100vh - ${SIZE}px)) rotate(0deg) scaleX(-1); }
+    30%  { transform: translate(0px, calc(100vh - ${SIZE}px)) rotate(0deg) scaleX(-1); }
+    32%  { transform: translate(0px, calc(100vh - ${SIZE}px)) rotate(90deg) scaleX(-1); }
+    48%  { transform: translate(0px, 0px) rotate(90deg) scaleX(-1); }
+    50%  { transform: translate(0px, 0px) rotate(180deg) scaleX(-1); }
+    80%  { transform: translate(calc(100vw - ${SIZE}px), 0px) rotate(180deg) scaleX(-1); }
+    82%  { transform: translate(calc(100vw - ${SIZE}px), 0px) rotate(270deg) scaleX(-1); }
+    98%  { transform: translate(calc(100vw - ${SIZE}px), calc(100vh - ${SIZE}px)) rotate(270deg) scaleX(-1); }
+    100% { transform: translate(calc(100vw - ${SIZE}px), calc(100vh - ${SIZE}px)) rotate(360deg) scaleX(-1); }
+  }
+  .goose-patrol {
+    animation: goose-patrol ${PATROL_MS}ms linear infinite;
+  }
+`;
+
 export default function HiddenGoose() {
   const [showModal, setShowModal] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [mode, setMode] = useState<Mode>('patrolling');
-  const [delta, setDelta] = useState({ x: 0, y: 0 });
 
   const outerRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef({ startX: 0, startY: 0, moved: false, cosTheta: 1, sinTheta: 0 });
+  const innerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef({
+    startX: 0,
+    startY: 0,
+    moved: false,
+    dragStarted: false, // handleMouseDown이 실제로 드래그 모드를 시작했는지 추적
+    cosTheta: 1,
+    sinTheta: 0,
+  });
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (mode !== 'patrolling') return;
-    // e.preventDefault() 호출 금지 — 호출하면 이후 click 이벤트가 발생하지 않음
+    if (mode !== 'patrolling') {
+      // 순찰 중이 아닐 때 클릭 → 드래그 시작 아님을 표시
+      dragRef.current.dragStarted = false;
+      return;
+    }
 
-    // 현재 애니메이션의 회전 행렬을 읽어 좌표계 역변환에 사용
-    // 외부 div는 rotate(θ) scaleX(-1) → matrix 값: a=-cos(θ), b=-sin(θ)
     let cosTheta = 1;
     let sinTheta = 0;
     if (outerRef.current) {
@@ -34,8 +60,7 @@ export default function HiddenGoose() {
       }
     }
 
-    dragRef.current = { startX: e.clientX, startY: e.clientY, moved: false, cosTheta, sinTheta };
-    setDelta({ x: 0, y: 0 });
+    dragRef.current = { startX: e.clientX, startY: e.clientY, moved: false, dragStarted: true, cosTheta, sinTheta };
     setMode('dragging');
   };
 
@@ -46,20 +71,36 @@ export default function HiddenGoose() {
       const mouseDX = e.clientX - dragRef.current.startX;
       const mouseDY = e.clientY - dragRef.current.startY;
       const { cosTheta, sinTheta } = dragRef.current;
-      // 화면 좌표 delta → 외부 div 로컬 좌표 delta 역변환
-      dragRef.current.moved = true;
-      setDelta({
-        x: -cosTheta * mouseDX - sinTheta * mouseDY,
-        y: -sinTheta * mouseDX + cosTheta * mouseDY,
-      });
+
+      // 3px 이상 이동했을 때만 드래그로 간주 (미세한 흔들림 클릭 오판 방지)
+      if (Math.abs(mouseDX) > 3 || Math.abs(mouseDY) > 3) {
+        dragRef.current.moved = true;
+      }
+
+      const dx = -cosTheta * mouseDX - sinTheta * mouseDY;
+      const dy = -sinTheta * mouseDX + cosTheta * mouseDY;
+
+      // setState 대신 직접 DOM 조작 → 마우스 이동마다 리렌더링 없음
+      if (innerRef.current) {
+        innerRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+        innerRef.current.style.transition = 'none';
+      }
     };
 
     const onUp = () => {
-      // 실제 이동이 있었을 때만 spring 복귀
-      // 이동 없이 mouseup이면 transitionend가 발생하지 않아 영구 고착되므로 바로 복귀
       if (dragRef.current.moved) {
+        // 실제 드래그 → spring 복귀 애니메이션
+        if (innerRef.current) {
+          innerRef.current.style.transform = 'translate(0px, 0px)';
+          innerRef.current.style.transition = 'transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        }
         setMode('returning');
       } else {
+        // 이동 없는 클릭 → 즉시 복귀
+        if (innerRef.current) {
+          innerRef.current.style.transform = '';
+          innerRef.current.style.transition = '';
+        }
         setMode('patrolling');
       }
     };
@@ -73,33 +114,27 @@ export default function HiddenGoose() {
   }, [mode]);
 
   const handleTransitionEnd = () => {
-    if (mode === 'returning') setMode('patrolling');
+    if (mode === 'returning') {
+      // 복귀 완료 → moved 리셋하여 다음 클릭이 막히지 않도록
+      dragRef.current.moved = false;
+      if (innerRef.current) {
+        innerRef.current.style.transform = '';
+        innerRef.current.style.transition = '';
+      }
+      setMode('patrolling');
+    }
   };
 
-  const handleClick = (e: React.MouseEvent) => {
-    if (dragRef.current.moved) {
-      e.preventDefault();
+  const handleClick = () => {
+    // dragStarted=true(이번 클릭이 드래그 시작) AND moved=true(실제 이동)일 때만 차단
+    if (dragRef.current.dragStarted && dragRef.current.moved) {
       return;
     }
+    dragRef.current.dragStarted = false;
     setShowModal(true);
   };
 
-  // 외부 div 애니메이션: hover 중이거나 드래그/복귀 중에는 일시정지
   const animPaused = hovered || mode !== 'patrolling';
-
-  // 내부 div transform: 외부 div와 다른 요소라 애니메이션 transform과 충돌 없음
-  let innerStyle: React.CSSProperties = {};
-  if (mode === 'dragging') {
-    innerStyle = {
-      transform: `translate(${delta.x}px, ${delta.y}px)`,
-      transition: 'none',
-    };
-  } else if (mode === 'returning') {
-    innerStyle = {
-      transform: 'translate(0px, 0px)',
-      transition: 'transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1)',
-    };
-  }
 
   const mood =
     mode === 'dragging' ? 'eating'
@@ -109,24 +144,8 @@ export default function HiddenGoose() {
 
   return (
     <>
-      <style>{`
-        @keyframes goose-patrol {
-          0%   { transform: translate(calc(100vw - ${SIZE}px), calc(100vh - ${SIZE}px)) rotate(0deg) scaleX(-1); }
-          30%  { transform: translate(0px, calc(100vh - ${SIZE}px)) rotate(0deg) scaleX(-1); }
-          32%  { transform: translate(0px, calc(100vh - ${SIZE}px)) rotate(90deg) scaleX(-1); }
-          48%  { transform: translate(0px, 0px) rotate(90deg) scaleX(-1); }
-          50%  { transform: translate(0px, 0px) rotate(180deg) scaleX(-1); }
-          80%  { transform: translate(calc(100vw - ${SIZE}px), 0px) rotate(180deg) scaleX(-1); }
-          82%  { transform: translate(calc(100vw - ${SIZE}px), 0px) rotate(270deg) scaleX(-1); }
-          98%  { transform: translate(calc(100vw - ${SIZE}px), calc(100vh - ${SIZE}px)) rotate(270deg) scaleX(-1); }
-          100% { transform: translate(calc(100vw - ${SIZE}px), calc(100vh - ${SIZE}px)) rotate(360deg) scaleX(-1); }
-        }
-        .goose-patrol {
-          animation: goose-patrol ${PATROL_MS}ms linear infinite;
-        }
-      `}</style>
+      <style>{PATROL_STYLE}</style>
 
-      {/* 외부 div: 순찰 경로 애니메이션만 담당. transform 인라인 없음 */}
       <div
         ref={outerRef}
         className="fixed top-0 left-0 z-[150] goose-patrol"
@@ -136,20 +155,19 @@ export default function HiddenGoose() {
           animationPlayState: animPaused ? 'paused' : 'running',
         }}
       >
-        {/* 내부 div: 드래그 오프셋만 담당. 애니메이션 없음 → transform 충돌 없음 */}
         <div
+          ref={innerRef}
           className="w-full h-full flex items-center justify-center drop-shadow-lg"
           style={{
             cursor: mode === 'dragging' ? 'grabbing' : 'grab',
             userSelect: 'none',
-            ...innerStyle,
           }}
           onMouseDown={handleMouseDown}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           onClick={handleClick}
           onTransitionEnd={handleTransitionEnd}
-          title="SSAfer 비밀 명령어"
+          title="SSAFER 비밀 명령어"
         >
           <PixelGoose mood={mood} size={SIZE} />
         </div>

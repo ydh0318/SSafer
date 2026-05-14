@@ -1,4 +1,4 @@
-import type { AgentStatus, AgentTaskStatus, ScanMode, ScanStatus, ScanType } from '../../../types/scan';
+import type { AgentStatus, AgentTaskStatus, ScanMode, ScanRequestSource, ScanStatus, ScanType } from '../../../types/scan';
 
 const scanStatusLabelMap: Record<ScanStatus, string> = {
   REQUESTED: '요청됨',
@@ -131,28 +131,20 @@ export function getTaskStatusClassName(status: AgentTaskStatus) {
   }
 }
 
-export function getScanModeLabel(scanMode: ScanMode) {
+export function getScanModeLabel(scanMode: ScanMode, source?: ScanRequestSource | null) {
   if (scanMode === 'AGENT') {
-    return '로컬 Agent 스캔';
+    return source === 'CLI' ? 'CLI 스캔' : '로컬 Agent 스캔';
   }
-
-  if (scanMode === 'CLI') {
-    return 'CLI 스캔';
-  }
-
   return '파일 업로드 스캔';
 }
 
-export function getScanModeClassName(scanMode: ScanMode) {
-  switch (scanMode) {
-    case 'AGENT':
-      return 'border-violet-200 bg-violet-50 text-violet-800';
-    case 'CLI':
-      return 'border-cyan-200 bg-cyan-50 text-cyan-800';
-    case 'UPLOAD':
-    default:
-      return 'border-orange-200 bg-orange-50 text-orange-800';
+export function getScanModeClassName(scanMode: ScanMode, source?: ScanRequestSource | null) {
+  if (scanMode === 'AGENT') {
+    return source === 'CLI'
+      ? 'border-cyan-200 bg-cyan-50 text-cyan-800'
+      : 'border-violet-200 bg-violet-50 text-violet-800';
   }
+  return 'border-orange-200 bg-orange-50 text-orange-800';
 }
 
 export function getScanSourceLabel(source?: string | null) {

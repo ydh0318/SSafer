@@ -1,6 +1,6 @@
 import type { RiskLevel, WorkStatus } from '../mocks/ssaferMockData';
 
-export type ScanMode = 'UPLOAD' | 'AGENT';
+export type { ScanMode } from './scan';
 
 export interface CreateProjectRequest {
   name: string;

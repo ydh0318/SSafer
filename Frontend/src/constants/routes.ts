@@ -15,4 +15,5 @@ export const ROUTES = {
   guide: '/guide',
   settings: '/settings',
   typingGame: '/typing-game',
+  guestContinue: '/guest/continue',
 } as const;
