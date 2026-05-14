@@ -137,7 +137,7 @@ class FixServiceTest(unittest.TestCase):
             "patches": [
                 {
                     **PATCH_FIX["patches"][0],
-                    "operation": "append",
+                    "requiresApproval": False,
                 }
             ],
         }
@@ -162,7 +162,7 @@ class FixServiceTest(unittest.TestCase):
         retry_prompt = invoke.call_args_list[1].args[1]["finding_input"]
         self.assertIn("검증 오류:", retry_prompt)
         self.assertIn("Fix Chain output failed schema validation", retry_prompt)
-        self.assertIn("patch operation은 replace 또는 append", retry_prompt)
+        self.assertIn("operation이 append면 oldText를 새로 만들지 마세요", retry_prompt)
 
 
 if __name__ == "__main__":

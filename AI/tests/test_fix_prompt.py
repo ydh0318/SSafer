@@ -13,13 +13,15 @@ class FixPromptTest(unittest.TestCase):
         self.assertIn('"operation": "replace"', rendered_prompt)
         self.assertIn('"filePath": "Dockerfile"', rendered_prompt)
         self.assertIn("patchContext.oldText", rendered_prompt)
-        self.assertIn("append:", rendered_prompt)
+        self.assertIn("operation이 append면 oldText를 만들지 마세요", rendered_prompt)
+        self.assertIn("targetFiles", rendered_prompt)
         self.assertIn("PATCH-{findingId}", rendered_prompt)
         self.assertIn("패치 조건을 만족하지 못하면", rendered_prompt)
         self.assertIn("한국어 중심", rendered_prompt)
         self.assertIn("***MASKED***", rendered_prompt)
+        self.assertIn("server-audit", rendered_prompt)
 
-    def test_fix_retry_prompt_includes_patches_safety_rules(self):
+    def test_fix_retry_prompt_includes_patch_safety_rules(self):
         retry_prompt = build_fix_retry_prompt(
             finding_input="Finding ID: FND-0001",
             error_message="patches field failed validation",
@@ -27,9 +29,10 @@ class FixPromptTest(unittest.TestCase):
 
         self.assertIn("patches field failed validation", retry_prompt)
         self.assertIn("patchContext.oldText", retry_prompt)
-        self.assertIn("patch operation은 replace 또는 append", retry_prompt)
-        self.assertIn("docker-compose YAML", retry_prompt)
+        self.assertIn("operation이 append면 oldText를 새로 만들지 마세요", retry_prompt)
+        self.assertIn("targetFiles 후보", retry_prompt)
         self.assertIn("한국어 중심", retry_prompt)
+        self.assertIn("server-audit", retry_prompt)
 
 
 if __name__ == "__main__":

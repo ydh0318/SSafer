@@ -88,6 +88,7 @@ class ScanTaskProcessor:
                     agentId=message.agent_id,
                     projectId=message.project_id,
                     scanId=message.scan_id,
+                    scanType=message.scan_type,
                     rawResultPath=message.raw_result_path,
                     analysisResultPath=analysis_result_path,
                 )
@@ -105,7 +106,12 @@ class ScanTaskProcessor:
                     prefix="FastAPI analysis failed",
                 ),
             )
-            self._log_failed(message, UNKNOWN_ERROR_CODE, elapsed_ms(started_ms))
+            self._log_failed(
+                message,
+                UNKNOWN_ERROR_CODE,
+                elapsed_ms(started_ms),
+                failure_stage="analysis",
+            )
             return
 
         if response.succeeded:
@@ -126,7 +132,12 @@ class ScanTaskProcessor:
             stage=response.stage,
             failure_reason=self._build_failure_reason(response),
         )
-        self._log_failed(message, error_code, elapsed_ms(started_ms))
+        self._log_failed(
+            message,
+            error_code,
+            elapsed_ms(started_ms),
+            failure_stage=response.stage,
+        )
 
     def _send_running_callback(
         self,
@@ -221,6 +232,7 @@ class ScanTaskProcessor:
         message: ScanRequestMessage,
         error_code: str,
         duration_ms: int,
+        failure_stage: str | None = None,
     ) -> None:
         log_with_fields(
             logger,
@@ -234,5 +246,6 @@ class ScanTaskProcessor:
             stage="TASK_FAILED",
             status=SPRING_ANALYSIS_FAILED_STATUS,
             errorCode=error_code,
+            failureStage=failure_stage,
             durationMs=duration_ms,
         )

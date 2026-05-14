@@ -52,6 +52,43 @@ class ScanResultDtoTest(unittest.TestCase):
         parsed = parse_scan_result(scan_result)
 
         self.assertEqual(parsed["source"], "web-upload")
+        self.assertEqual(parsed["scanType"], "PROJECT_FILE")
+
+    def test_parse_scan_result_accepts_cli_partial_success_status(self):
+        scan_result = build_scan_result()
+        scan_result["analysisStatus"] = "PARTIAL_SUCCESS"
+
+        parsed = parse_scan_result(scan_result)
+
+        self.assertEqual(parsed["analysisStatus"], "PARTIAL_SUCCESS")
+
+    def test_parse_scan_result_normalizes_server_audit_shape(self):
+        parsed = parse_scan_result(
+            {
+                "schemaVersion": "0.1",
+                "auditId": "a36ae6b4-0eaf-44a1-bd24-1ce17c6a59cd",
+                "source": "server-audit",
+                "generatedAt": "2026-04-27T00:26:05Z",
+                "findings": [
+                    {
+                        "id": "SRV-0001",
+                        "ruleId": "OPEN_PORT",
+                        "source": "server-audit",
+                        "severity": "HIGH",
+                        "target": "port:5432",
+                        "title": "DB 포트가 외부에 열려 있음",
+                        "evidence": "0.0.0.0:5432 LISTEN",
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(parsed["scanType"], "SERVER_AUDIT")
+        self.assertEqual(parsed["scanId"], parsed["auditId"])
+        self.assertEqual(parsed["scannedAt"], parsed["generatedAt"])
+        self.assertEqual(parsed["analysisStatus"], "SUCCESS")
+        self.assertEqual(parsed["findings"][0]["file"], "port:5432")
+        self.assertEqual(parsed["findings"][0]["maskedEvidence"], "0.0.0.0:5432 LISTEN")
 
     def test_split_valid_invalid_findings_accepts_patch_context(self):
         parsed = parse_scan_result(

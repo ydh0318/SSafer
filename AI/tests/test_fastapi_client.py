@@ -62,6 +62,7 @@ class FastApiClientTest(unittest.TestCase):
                 agentId=10,
                 projectId=2,
                 scanId=5,
+                scanType="PROJECT_FILE",
                 rawResultPath="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
                 analysisResultPath=(
                     "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
@@ -79,6 +80,7 @@ class FastApiClientTest(unittest.TestCase):
                 "agentId": 10,
                 "projectId": 2,
                 "scanId": 5,
+                "scanType": "PROJECT_FILE",
                 "rawResultPath": (
                     "s3://ssafer-scan-storage-dev/raw/5/scan_result.json"
                 ),
@@ -99,6 +101,7 @@ class FastApiClientTest(unittest.TestCase):
                 agentId=10,
                 projectId=2,
                 scanId=5,
+                scanType="PROJECT_FILE",
                 rawResultPath="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
                 analysisResultPath=(
                     "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"

@@ -26,7 +26,7 @@ REQUIRED_STRING_SCAN_RESULT_FIELDS = (
 )
 
 SUPPORTED_SCAN_RESULT_SCHEMA_VERSIONS = ("0.1",)
-ALLOWED_ANALYSIS_STATUSES = ("SUCCESS", "PARTIAL", "FAILED")
+ALLOWED_ANALYSIS_STATUSES = ("SUCCESS", "PARTIAL", "PARTIAL_SUCCESS", "FAILED")
 REQUIRED_FINDING_FIELDS = (
     "id",
     "ruleId",
@@ -70,13 +70,73 @@ def load_scan_result(scan_result_path: str) -> dict[str, Any]:
     return parse_scan_result(data)
 
 
-def parse_scan_result(scan_result: dict[str, Any]) -> dict[str, Any]:
+def infer_scan_type(
+    scan_result: dict[str, Any],
+    scan_type_hint: str | None = None,
+) -> str:
+    source = scan_result.get("source")
+    if source == "server-audit" or scan_result.get("auditId") is not None:
+        return "SERVER_AUDIT"
+    if scan_type_hint in ("PROJECT_FILE", "SERVER_AUDIT"):
+        return scan_type_hint
+    return "PROJECT_FILE"
+
+
+def _normalize_server_audit_finding(finding: Any) -> Any:
+    if not isinstance(finding, dict):
+        return finding
+
+    normalized = dict(finding)
+    target = normalized.get("target")
+    if isinstance(target, str) and target.strip():
+        normalized.setdefault("file", target)
+    normalized.setdefault("line", None)
+
+    evidence = normalized.get("evidence")
+    if isinstance(evidence, str) and evidence.strip():
+        normalized.setdefault("maskedEvidence", evidence)
+    return normalized
+
+
+def normalize_scan_result(
+    scan_result: dict[str, Any],
+    scan_type_hint: str | None = None,
+) -> dict[str, Any]:
+    scan_type = infer_scan_type(scan_result, scan_type_hint)
+    normalized = dict(scan_result)
+    normalized["scanType"] = scan_type
+
+    if scan_type != "SERVER_AUDIT":
+        return normalized
+
+    findings = normalized.get("findings")
+    if isinstance(findings, list):
+        normalized["findings"] = [
+            _normalize_server_audit_finding(finding) for finding in findings
+        ]
+
+    if not normalized.get("scanId"):
+        normalized["scanId"] = normalized.get("auditId")
+    if not normalized.get("scannedAt"):
+        normalized["scannedAt"] = normalized.get("generatedAt")
+    if not normalized.get("analysisStatus"):
+        normalized["analysisStatus"] = "SUCCESS"
+    return normalized
+
+
+def parse_scan_result(
+    scan_result: dict[str, Any],
+    scan_type_hint: str | None = None,
+) -> dict[str, Any]:
     try:
         parsed = ScanResult.model_validate(scan_result)
     except ValidationError as exc:
         raise ValueError(f"Invalid scan_result.json: {exc}") from exc
 
-    return parsed.model_dump(by_alias=True)
+    return normalize_scan_result(
+        parsed.model_dump(by_alias=True),
+        scan_type_hint=scan_type_hint,
+    )
 
 
 def parse_finding(finding: dict[str, Any], index: int) -> dict[str, Any]:

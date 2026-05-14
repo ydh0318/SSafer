@@ -1,20 +1,21 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from app.schemas.scan_result import ScanResult
-
 
 class AnalysisRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     scan_result_path: str = "data/scan_result.json"
     analysis_result_path: str = "data/analysis_result.json"
-    scan_result: ScanResult | None = None
+    scan_result: dict[str, Any] | None = None
     task_id: int | None = Field(default=None, alias="taskId")
     agent_id: int | None = Field(default=None, alias="agentId")
     project_id: int | None = Field(default=None, alias="projectId")
     scan_id: int | None = Field(default=None, alias="scanId")
+    scan_type: Literal["PROJECT_FILE", "SERVER_AUDIT"] | None = Field(
+        default=None,
+        alias="scanType",
+    )
     raw_result_path: str | None = Field(default=None, alias="rawResultPath")
     analysis_result_s3_path: str | None = Field(
         default=None,
