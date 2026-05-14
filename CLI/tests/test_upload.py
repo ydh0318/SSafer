@@ -296,7 +296,7 @@ def test_upload_last_server_audit_uses_server_audit_scan_type(tmp_path: Path, mo
             "http://backend.test/api/v1/scans",
             {
                 "projectName": tmp_path.name,
-                "source": "SERVER_AUDIT",
+                "source": "CLI",
                 "scanName": "SSAfer server audit " + tmp_path.name + " audit-test",
                 "targetPath": str(tmp_path),
                 "includeLogs": False,

@@ -150,7 +150,7 @@ def upload_last_server_audit(
         api_url=api_url,
         token=token,
         scan_type="SERVER_AUDIT",
-        source="SERVER_AUDIT",
+        source="CLI",
         name=_server_audit_name(audit, project_root),
         on_step=on_step,
     )
