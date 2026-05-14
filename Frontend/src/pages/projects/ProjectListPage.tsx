@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, FolderPlus, Lock, Plus, Server, Terminal, Trash2, Upload, X } from 'lucide-react';
+import { ArrowRight, Clock, FolderPlus, Lock, Plus, ScanSearch, Server, Terminal, Trash2, Upload, Wrench, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,7 +8,6 @@ import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import { useToast } from '../../features/feedback/useToast';
 import { createProject, getProjects } from '../../features/projects/api/projects';
-import CliGuideBox from '../../features/scans/components/CliGuideBox';
 import ProjectCreateForm from '../../features/projects/components/ProjectCreateForm';
 import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
 import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
@@ -752,15 +751,72 @@ function ProjectListPage() {
           <div className="min-h-[360px] bg-white p-10">
             <p className="font-mono text-[11px] tracking-[0.24em] text-neutral-400">{selectedMode}</p>
             <h2 className="mt-4 text-3xl font-black tracking-tight">
-              {selectedMode === 'CLI' ? 'CLI 명령어로 스캔을 시작합니다' : 'Agent가 연결된 환경에서 스캔을 시작합니다'}
+              {selectedMode === 'CLI' ? '터미널에서 스캔하고 결과를 올립니다' : 'Agent가 연결된 환경에서 스캔을 시작합니다'}
             </h2>
-            <p className="mt-4 max-w-xl text-sm leading-7 text-neutral-600">
-              {selectedMode === 'CLI'
-                ? 'CLI 흐름은 실제 개발 환경이나 CI에서 반복 실행하기 좋습니다. 현재 화면에서는 스캔 요청만 등록하고, 상세 화면에서 진행 상태를 확인할 수 있습니다.'
-                : 'Agent 흐름은 연결된 로컬 환경을 기준으로 실행됩니다. 프로젝트에 Agent가 준비되어 있어야 사용할 수 있습니다.'}
+            <p className="mt-2 max-w-xl text-sm leading-7 text-neutral-500">
+              원하는 동작을 바로 눌러 시작하세요.
             </p>
-            <div className="mt-8">
-              <CliGuideBox mode={selectedMode === 'AGENT' ? 'AGENT' : 'CLI_UPLOAD'} />
+
+            <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {/* 스캔 */}
+              <button
+                className="flex flex-col gap-3 border border-neutral-200 p-6 text-left transition hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={isStartingScan || !selectedProject}
+                onClick={() => void handleStartScan()}
+                type="button"
+              >
+                <div className="flex h-10 w-10 items-center justify-center bg-black">
+                  <ScanSearch className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="font-black">스캔</p>
+                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                    {selectedMode === 'AGENT' ? '연결된 Agent가 서버를 직접 점검합니다.' : '스캔 요청을 서버에 등록합니다.'}
+                  </p>
+                </div>
+              </button>
+
+              {/* 업로드 */}
+              <button
+                className="flex flex-col gap-3 border border-neutral-200 p-6 text-left transition hover:border-black hover:bg-neutral-50"
+                onClick={() => setSelectedMode('UPLOAD')}
+                type="button"
+              >
+                <div className="flex h-10 w-10 items-center justify-center bg-neutral-100">
+                  <Upload className="h-5 w-5 text-black" />
+                </div>
+                <div>
+                  <p className="font-black">업로드</p>
+                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">설정 파일을 직접 올려 스캔합니다.</p>
+                </div>
+              </button>
+
+              {/* 수정 */}
+              <button
+                className="flex flex-col gap-3 border border-neutral-200 p-6 text-left transition hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!selectedProjectId || !latestCompletedScans[selectedProjectId]}
+                onClick={() => {
+                  const latest = selectedProjectId ? latestCompletedScans[selectedProjectId] : null;
+                  if (latest) {
+                    navigate(ROUTES.resultDetail.replace(':scanId', String(latest.scan.scanId)));
+                  } else if (selectedProject) {
+                    navigate(ROUTES.projectDetail.replace(':projectId', String(selectedProject.id)));
+                  }
+                }}
+                type="button"
+              >
+                <div className="flex h-10 w-10 items-center justify-center bg-neutral-100">
+                  <Wrench className="h-5 w-5 text-black" />
+                </div>
+                <div>
+                  <p className="font-black">수정</p>
+                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                    {selectedProjectId && latestCompletedScans[selectedProjectId]
+                      ? '최근 스캔 결과에서 패치를 확인하고 적용합니다.'
+                      : '완료된 스캔이 없습니다. 먼저 스캔을 실행해 주세요.'}
+                  </p>
+                </div>
+              </button>
             </div>
           </div>
         )}
