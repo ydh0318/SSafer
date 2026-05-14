@@ -794,14 +794,12 @@ function ProjectListPage() {
               {/* 수정 */}
               <button
                 className="flex flex-col gap-3 border border-neutral-200 p-6 text-left transition hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!selectedProjectId || !latestCompletedScans[selectedProjectId]}
+                disabled={!selectedProject || !(selectedProjectId && latestCompletedScans[selectedProjectId])}
                 onClick={() => {
-                  const latest = selectedProjectId ? latestCompletedScans[selectedProjectId] : null;
-                  if (latest) {
-                    navigate(ROUTES.resultDetail.replace(':scanId', String(latest.scan.scanId)));
-                  } else if (selectedProject) {
-                    navigate(ROUTES.projectDetail.replace(':projectId', String(selectedProject.id)));
-                  }
+                  if (!selectedProjectId) return;
+                  const latest = latestCompletedScans[selectedProjectId];
+                  if (!latest?.scan?.scanId) return;
+                  navigate(ROUTES.resultDetail.replace(':scanId', String(latest.scan.scanId)));
                 }}
                 type="button"
               >
@@ -811,7 +809,7 @@ function ProjectListPage() {
                 <div>
                   <p className="font-black">수정</p>
                   <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                    {selectedProjectId && latestCompletedScans[selectedProjectId]
+                    {selectedProject && selectedProjectId && latestCompletedScans[selectedProjectId]
                       ? '최근 스캔 결과에서 패치를 확인하고 적용합니다.'
                       : '완료된 스캔이 없습니다. 먼저 스캔을 실행해 주세요.'}
                   </p>
