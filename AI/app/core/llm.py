@@ -1,4 +1,6 @@
+import logging
 import socket
+import threading
 import time
 from typing import Any
 
@@ -6,11 +8,18 @@ import httpx
 from langchain_ollama import ChatOllama
 
 from app.core.config import (
+    MAX_LLM_CONCURRENCY,
     OLLAMA_MAX_RETRIES,
     OLLAMA_RETRY_BACKOFF_SECONDS,
     OLLAMA_TIMEOUT_SECONDS,
 )
 from app.core.llm_provider import get_llm_provider
+
+logger = logging.getLogger(__name__)
+
+_llm_semaphore = threading.Semaphore(MAX_LLM_CONCURRENCY)
+_llm_active_lock = threading.Lock()
+_llm_active_calls = 0
 
 
 class LLMCallError(RuntimeError):
@@ -60,7 +69,37 @@ def invoke_llm_with_retry(
 
     for attempt in range(total_attempts):
         try:
-            return runnable.invoke(input_data)
+            logger.debug(
+                "Waiting for LLM semaphore. max_concurrency=%d attempt=%d/%d",
+                MAX_LLM_CONCURRENCY,
+                attempt + 1,
+                total_attempts,
+            )
+            _llm_semaphore.acquire()
+            try:
+                global _llm_active_calls
+                with _llm_active_lock:
+                    _llm_active_calls += 1
+                    active_calls = _llm_active_calls
+                logger.info(
+                    "LLM call started. active=%d max_concurrency=%d attempt=%d/%d",
+                    active_calls,
+                    MAX_LLM_CONCURRENCY,
+                    attempt + 1,
+                    total_attempts,
+                )
+                result = runnable.invoke(input_data)
+            finally:
+                with _llm_active_lock:
+                    _llm_active_calls -= 1
+                    active_calls = _llm_active_calls
+                _llm_semaphore.release()
+                logger.info(
+                    "LLM call finished. active=%d max_concurrency=%d",
+                    active_calls,
+                    MAX_LLM_CONCURRENCY,
+                )
+            return result
         except Exception as exc:
             last_error = exc
             if attempt < max_retries and backoff_seconds > 0:

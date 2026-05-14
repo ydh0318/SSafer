@@ -41,6 +41,13 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.1}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GMS_API_KEY: ${GMS_API_KEY}
+      # Previous GMS Claude base URL:
+      # GMS_BASE_URL: ${GMS_BASE_URL:-https://gms.ssafy.io/gmsapi/api.anthropic.com}
+      GMS_BASE_URL: ${GMS_BASE_URL:-https://gms.ssafy.io/gmsapi/api.openai.com/v1}
+      # Previous GMS Claude default:
+      # GMS_MODEL: ${GMS_MODEL:-claude-haiku-4-5-20251001}
+      GMS_MODEL: ${GMS_MODEL:-gpt-5-mini}
       REDIS_HOST: redis-llm
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_LLM_PASSWORD}
@@ -52,6 +59,8 @@ services:
       AWS_REGION: ${AWS_REGION}
       AWS_S3_BUCKET: ${AWS_S3_BUCKET}
       HASDATA_API_KEY: ${HASDATA_API_KEY}
+      MAX_LLM_CONCURRENCY: ${MAX_LLM_CONCURRENCY:-10}
+      MAX_FINDING_CONCURRENCY: ${MAX_FINDING_CONCURRENCY:-5}
     ports:
       - "8000:8000"
     networks:

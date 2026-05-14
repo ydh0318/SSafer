@@ -10,6 +10,13 @@ def _get_int_env(key: str, default: int) -> int:
     return int(value)
 
 
+def _get_positive_int_env(key: str, default: int) -> int:
+    value = _get_int_env(key, default)
+    if value < 1:
+        raise ValueError(f"{key} must be greater than or equal to 1.")
+    return value
+
+
 def _get_float_env(key: str, default: float) -> float:
     value = os.getenv(key)
     if value is None or not value.strip():
@@ -39,11 +46,18 @@ ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest")
 ANTHROPIC_TEMPERATURE = _get_float_env("ANTHROPIC_TEMPERATURE", 0.1)
 ANTHROPIC_TIMEOUT_SECONDS = _get_float_env("ANTHROPIC_TIMEOUT_SECONDS", 600.0)
 GMS_API_KEY = os.getenv("GMS_API_KEY")
+# Previous GMS Claude base URL:
+# GMS_BASE_URL = os.getenv(
+#     "GMS_BASE_URL",
+#     "https://gms.ssafy.io/gmsapi/api.anthropic.com",
+# )
 GMS_BASE_URL = os.getenv(
     "GMS_BASE_URL",
-    "https://gms.ssafy.io/gmsapi/api.anthropic.com",
+    "https://gms.ssafy.io/gmsapi/api.openai.com/v1",
 )
-GMS_MODEL = os.getenv("GMS_MODEL", "claude-haiku-4-5-20251001")
+# Previous GMS Claude default:
+# GMS_MODEL = os.getenv("GMS_MODEL", "claude-haiku-4-5-20251001")
+GMS_MODEL = os.getenv("GMS_MODEL", "gpt-5-mini")
 GMS_TEMPERATURE = _get_float_env("GMS_TEMPERATURE", 0.1)
 GMS_TIMEOUT_SECONDS = _get_float_env("GMS_TIMEOUT_SECONDS", 600.0)
 GMS_FORCE_JSON_RESPONSE_FORMAT = _get_bool_env(
@@ -52,6 +66,8 @@ GMS_FORCE_JSON_RESPONSE_FORMAT = _get_bool_env(
 )
 LLM_EXPLAIN_MAX_TOKENS = _get_int_env("LLM_EXPLAIN_MAX_TOKENS", 900)
 LLM_FIX_MAX_TOKENS = _get_int_env("LLM_FIX_MAX_TOKENS", 800)
+MAX_LLM_CONCURRENCY = _get_positive_int_env("MAX_LLM_CONCURRENCY", 10)
+MAX_FINDING_CONCURRENCY = _get_positive_int_env("MAX_FINDING_CONCURRENCY", 5)
 S3_MAX_RETRIES = _get_int_env("S3_MAX_RETRIES", 2)
 S3_RETRY_BACKOFF_SECONDS = _get_float_env("S3_RETRY_BACKOFF_SECONDS", 1.0)
 

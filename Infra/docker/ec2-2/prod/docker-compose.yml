@@ -44,8 +44,12 @@ services:
       ANTHROPIC_TEMPERATURE: ${ANTHROPIC_TEMPERATURE:-0.1}
       ANTHROPIC_TIMEOUT_SECONDS: ${ANTHROPIC_TIMEOUT_SECONDS:-600}
       GMS_API_KEY: ${GMS_API_KEY}
-      GMS_BASE_URL: ${GMS_BASE_URL:-https://gms.ssafy.io/gmsapi/api.anthropic.com}
-      GMS_MODEL: ${GMS_MODEL:-claude-haiku-4-5-20251001}
+      # Previous GMS Claude base URL:
+      # GMS_BASE_URL: ${GMS_BASE_URL:-https://gms.ssafy.io/gmsapi/api.anthropic.com}
+      GMS_BASE_URL: ${GMS_BASE_URL:-https://gms.ssafy.io/gmsapi/api.openai.com/v1}
+      # Previous GMS Claude default:
+      # GMS_MODEL: ${GMS_MODEL:-claude-haiku-4-5-20251001}
+      GMS_MODEL: ${GMS_MODEL:-gpt-5-mini}
       GMS_TEMPERATURE: ${GMS_TEMPERATURE:-0.1}
       GMS_TIMEOUT_SECONDS: ${GMS_TIMEOUT_SECONDS:-600}
       GMS_FORCE_JSON_RESPONSE_FORMAT: ${GMS_FORCE_JSON_RESPONSE_FORMAT:-false}
@@ -57,6 +61,8 @@ services:
       APP_ANALYSIS_RESULT_S3_BUCKET: ${APP_ANALYSIS_RESULT_S3_BUCKET}
       LLM_FIX_MAX_TOKENS: ${LLM_FIX_MAX_TOKENS:-1500}
       LLM_EXPLAIN_MAX_TOKENS: ${LLM_EXPLAIN_MAX_TOKENS:-900}
+      MAX_LLM_CONCURRENCY: ${MAX_LLM_CONCURRENCY:-10}
+      MAX_FINDING_CONCURRENCY: ${MAX_FINDING_CONCURRENCY:-5}
     ports:
       - "${FASTAPI_HOST_BIND_IP:-0.0.0.0}:${FASTAPI_HOST_PORT:-8000}:8000"
     networks:
@@ -79,7 +85,8 @@ services:
     image: ${FASTAPI_IMAGE}
     container_name: ${WORKER_CONTAINER_NAME:-ssafer-ai-worker}
     restart: ${RESTART_POLICY:-always}
-    command: ["python", "-m", "app.worker.consumer"]
+    command: ["python", "-m", "app.worker.async_consumer"]
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-1830s}
     environment:
       RABBITMQ_HOST: ${RABBITMQ_HOST}
       RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
@@ -92,6 +99,8 @@ services:
       SPRING_API_SECRET: ${SPRING_API_SECRET}
       APP_ANALYSIS_RESULT_S3_BUCKET: ${APP_ANALYSIS_RESULT_S3_BUCKET}
       WORKER_HTTP_TIMEOUT_SECONDS: ${WORKER_HTTP_TIMEOUT_SECONDS:-1800}
+      WORKER_MAX_CONCURRENCY: ${WORKER_MAX_CONCURRENCY:-5}
+      WORKER_SHUTDOWN_TIMEOUT_SECONDS: ${WORKER_SHUTDOWN_TIMEOUT_SECONDS:-1800}
     networks:
       - ec2-internal
     depends_on:
