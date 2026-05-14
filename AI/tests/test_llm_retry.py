@@ -102,6 +102,22 @@ class LLMRetryTest(unittest.TestCase):
         with self.assertRaises(LLMConfigurationError):
             get_llm_provider("unknown")
 
+    def test_gms_reasoning_model_capabilities(self):
+        for model in ("gpt-5-mini", "GPT-5", "o1-mini", "o3", "o4-mini"):
+            with self.subTest(model=model):
+                capabilities = GmsProvider._get_openai_model_capabilities(model)
+                self.assertEqual(
+                    capabilities["max_tokens_param"], "max_completion_tokens"
+                )
+                self.assertFalse(capabilities["supports_custom_temperature"])
+
+    def test_gms_legacy_openai_model_capabilities(self):
+        for model in ("gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"):
+            with self.subTest(model=model):
+                capabilities = GmsProvider._get_openai_model_capabilities(model)
+                self.assertEqual(capabilities["max_tokens_param"], "max_tokens")
+                self.assertTrue(capabilities["supports_custom_temperature"])
+
 
 if __name__ == "__main__":
     unittest.main()
