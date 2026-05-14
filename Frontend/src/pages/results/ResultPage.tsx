@@ -301,7 +301,7 @@ function ResultPage() {
               {scanBasic ? <ScanStatusBadge status={scanBasic.status} /> : null}
               {scanBasic ? <ScanTypeBadge scanType={scanBasic.scanType} /> : null}
               {currentProjectId ? <span>projectId #{currentProjectId}</span> : null}
-              {scanBasic ? <ScanModeBadge scanMode={scanBasic.scanMode} /> : null}
+              {scanBasic ? <ScanModeBadge scanMode={scanBasic.scanMode} source={scanBasic.source} /> : null}
             </div>
             <p className="text-neutral-600">
               {scanBasic?.completedAt

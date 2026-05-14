@@ -9,7 +9,7 @@ import ScanStatusBadge from './ScanStatusBadge';
 import ScanTypeBadge from './ScanTypeBadge';
 
 const scanStatuses: Array<ScanStatus> = ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED', 'DONE', 'FAILED', 'CANCELED'];
-const scanModes: Array<ScanMode> = ['AGENT', 'UPLOAD', 'CLI'];
+const scanModes: Array<ScanMode> = ['AGENT', 'UPLOAD'];
 
 type ProjectScanListProps = {
   projectId: string;
@@ -125,7 +125,7 @@ function ProjectScanList({
                       <ScanStatusBadge status={scan.status} />
                       <ScanTypeBadge scanType={scan.scanType} />
                       <span className="inline-flex rounded-full border border-neutral-200 bg-[#f5f5f5] px-2.5 py-1 text-xs font-bold text-neutral-700">
-                        {getScanModeLabel(scan.scanMode)}
+                        {getScanModeLabel(scan.scanMode, scan.source)}
                       </span>
                       <span className="inline-flex rounded-full bg-black px-2.5 py-1 text-xs font-bold text-white">
                         스캔 #{scan.scanId}

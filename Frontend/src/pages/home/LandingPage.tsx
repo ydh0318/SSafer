@@ -176,7 +176,7 @@ function LandingPage() {
       <SiteHeader showSessionBar={false} />
 
       <main className="site-shell-main min-w-0 flex-1 bg-[#FAFAF7]">
-        <section className="border-b border-black/5">
+        <section>
           <div className="mx-auto max-w-[1160px] px-5 pb-14 pt-8 md:px-7 md:pb-16 md:pt-11">
             <div className="text-[10px] font-mono tracking-[0.42em] text-neutral-400">MEET SSAFER</div>
 

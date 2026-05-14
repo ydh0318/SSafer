@@ -510,7 +510,7 @@ function HistoryPage() {
                             <ScanStatusBadge status={item.status} />
                             <ScanTypeBadge scanType={item.scanType} />
                             <span className="inline-flex rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-xs font-bold text-neutral-700">
-                              {getScanModeLabel(item.scanMode)}
+                              {getScanModeLabel(item.scanMode, item.source)}
                             </span>
                             <span className="inline-flex rounded-full bg-black px-2.5 py-1 text-xs font-bold text-white">
                               스캔 #{item.scanId}

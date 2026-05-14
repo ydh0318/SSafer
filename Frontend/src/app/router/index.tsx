@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import AppLayout from '../../components/layout/AppLayout';
 import { ROUTES } from '../../constants/routes';
 import EntryPage from '../../pages/auth/EntryPage';
+import GuestContinuePage from '../../pages/auth/GuestContinuePage';
 import WelcomePage from '../../pages/auth/WelcomePage';
 import OAuthCallbackPage from '../../pages/auth/OAuthCallbackPage';
 import DashboardPage from '../../pages/dashboard/DashboardPage';
@@ -31,6 +32,7 @@ function AppRouter() {
         <Route element={<TypingGamePage />} path={ROUTES.typingGame} />
         <Route element={<OAuthCallbackPage provider="GOOGLE" />} path={ROUTES.oauthGoogleCallback} />
         <Route element={<OAuthCallbackPage provider="GITHUB" />} path={ROUTES.oauthGithubCallback} />
+        <Route element={<GuestContinuePage />} path={ROUTES.guestContinue} />
 
         <Route element={<PublicOnlyRoute />}>
           <Route element={<EntryPage />} path={ROUTES.login} />

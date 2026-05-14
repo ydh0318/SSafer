@@ -1,8 +1,8 @@
-export type ScanRequestSource = 'CLI';
+export type ScanRequestSource = 'CLI' | 'AGENT';
 
 export type ScanType = 'PROJECT_FILE' | 'SERVER_AUDIT';
 
-export type ScanMode = 'UPLOAD' | 'CLI' | 'AGENT';
+export type ScanMode = 'UPLOAD' | 'AGENT';
 
 export type ScanStatus =
   | 'REQUESTED'
@@ -81,6 +81,7 @@ export interface ProjectScanListItemData {
   scanType?: ScanType;
   status: ScanStatus;
   scanMode: ScanMode;
+  source?: ScanRequestSource | null;
   requestedAt: string;
   completedAt: string | null;
 }
@@ -122,6 +123,7 @@ export interface ScanBasicData {
   projectId: number;
   scanType?: ScanType;
   scanMode: ScanMode;
+  source?: ScanRequestSource | null;
   status: ScanStatus;
   progressStep: string | null;
   failureReason: string | null;
@@ -277,6 +279,7 @@ export interface HistoryScanListItemData {
   scanType?: ScanType;
   status: ScanStatus;
   scanMode: ScanMode;
+  source?: ScanRequestSource | null;
   totalFindingCount: number;
   criticalCount: number;
   highCount: number;
