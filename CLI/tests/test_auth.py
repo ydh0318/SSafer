@@ -810,6 +810,62 @@ def test_login_command_guest_saves_guest_token(monkeypatch, tmp_path):
     assert "게스트 로그인 완료" in result.output
 
 
+def test_login_command_guest_token_saves_web_guest_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+
+    result = CliRunner().invoke(
+        app,
+        ["login", "--guest-token", "web-guest-token", "--endpoint", "https://api.example.com"],
+    )
+
+    assert result.exit_code == 0
+    assert load_token() == "web-guest-token"
+    assert load_endpoint() == "https://api.example.com"
+    assert "CLI" in result.output
+
+
+def test_login_command_guest_prints_web_continue_url(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+
+    def fake_guest(endpoint: str, device_id: str | None = None) -> dict[str, str]:
+        return {"guestAccessToken": "guest token/with space", "expiresAt": "2026-05-12T00:00:00Z"}
+
+    monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
+
+    result = CliRunner().invoke(app, ["login", "--guest", "--show-url", "--endpoint", "https://api.example.com"])
+
+    assert result.exit_code == 0
+    assert "https://api.example.com/guest/continue?token=guest+token%2Fwith+space" in result.output
+
+
+def test_login_command_guest_masks_web_continue_url_by_default(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+
+    def fake_guest(endpoint: str, device_id: str | None = None) -> dict[str, str]:
+        return {"guestAccessToken": "secret-token", "expiresAt": "2026-05-12T00:00:00Z"}
+
+    monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
+
+    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"])
+
+    assert result.exit_code == 0
+    assert "https://api.example.com/guest/continue?token=***MASKED***" in result.output
+    assert "secret-token" not in result.output
+
+
+def test_login_command_rejects_guest_and_guest_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+
+    result = CliRunner().invoke(app, ["login", "--guest", "--guest-token", "token"])
+
+    assert result.exit_code == 1
+    assert "guest-token" in result.output
+
+
 def test_start_agent_refresh_selects_project_instead_of_reusing_saved_project(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
