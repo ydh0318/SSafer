@@ -53,7 +53,7 @@ export default function GuestContinuePage() {
         },
       });
 
-      navigate(ROUTES.welcome, { replace: true });
+      navigate(ROUTES.dashboard, { replace: true });
     } catch {
       setErrorMessage('유효하지 않은 토큰입니다. CLI에서 발급한 게스트 토큰을 확인해 주세요.');
     }

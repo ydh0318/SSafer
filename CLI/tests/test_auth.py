@@ -120,11 +120,25 @@ def test_help_shows_user_facing_commands_only():
     assert "로컬 Agent" in result.output
     assert "status" in result.output
     assert "login" in result.output
+    assert "guest" in result.output
+    assert "guest-login" not in result.output
     assert "signup" in result.output
     assert "run" in result.output
     assert "upload" in result.output
     assert "apply" in result.output
+    assert "server" in result.output
+    assert "tools" in result.output
+    assert "project-create" not in result.output
+    assert "install-tools" not in result.output
+    assert "server-audit" not in result.output
+    assert "│ scan" not in result.output
+    assert "│ fix" not in result.output
+    assert "│ last" not in result.output
     assert "agent" in result.output
+    assert result.output.index("signup") < result.output.index("login")
+    assert result.output.index("login") < result.output.index("logout")
+    assert result.output.index("logout") < result.output.index("guest")
+    assert result.output.index("guest") < result.output.index("withdraw")
     assert "agent-watch" not in result.output
     assert "agent-init" not in result.output
     assert "send-email-code" not in result.output
@@ -432,6 +446,38 @@ def test_save_and_load_agent_config(monkeypatch, tmp_path):
         "endpoint": "https://api.example.com",
     }
     assert load_agent_config(tmp_path / "other") == {}
+
+
+def test_save_agent_config_falls_back_to_home_when_project_config_is_unwritable(monkeypatch, tmp_path):
+    config_path = tmp_path / "home" / "config.yml"
+    project_root = tmp_path / "project"
+    blocked_parent = tmp_path / "blocked"
+    blocked_path = blocked_parent / "agent.yml"
+    original_mkdir = Path.mkdir
+
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(auth_module, "project_agent_config_path", lambda _project_root=None: blocked_path)
+
+    def fake_mkdir(self: Path, *args: Any, **kwargs: Any) -> None:
+        if self == blocked_parent:
+            raise PermissionError("blocked")
+        original_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", fake_mkdir)
+
+    save_agent_config(
+        {"agentId": 3, "projectId": 10, "agentToken": "raw-agent-token"},
+        endpoint="https://api.example.com",
+        project_root=project_root,
+    )
+
+    assert load_agent_config(project_root) == {
+        "agentId": 3,
+        "projectId": 10,
+        "agentToken": "raw-agent-token",
+        "endpoint": "https://api.example.com",
+    }
+    assert not blocked_path.exists()
 
 
 def test_login_with_credentials_posts_to_backend_auth_login(monkeypatch):
@@ -810,6 +856,44 @@ def test_login_command_guest_saves_guest_token(monkeypatch, tmp_path):
     assert "게스트 로그인 완료" in result.output
 
 
+def test_guest_login_command_saves_guest_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+
+    def fake_guest(endpoint: str, device_id: str | None = None) -> dict[str, str]:
+        assert endpoint == "https://api.example.com"
+        assert device_id is None
+        return {"guestAccessToken": "guest-token", "expiresAt": "2026-05-12T00:00:00Z"}
+
+    monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
+
+    result = CliRunner().invoke(app, ["guest-login", "--endpoint", "https://api.example.com"])
+
+    assert result.exit_code == 0
+    assert load_token() == "guest-token"
+    assert load_endpoint() == "https://api.example.com"
+    assert "show-url" in result.output
+
+
+def test_guest_command_saves_guest_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+
+    def fake_guest(endpoint: str, device_id: str | None = None) -> dict[str, str]:
+        assert endpoint == "https://api.example.com"
+        assert device_id is None
+        return {"guestAccessToken": "guest-token", "expiresAt": "2026-05-12T00:00:00Z"}
+
+    monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
+
+    result = CliRunner().invoke(app, ["guest", "--endpoint", "https://api.example.com"])
+
+    assert result.exit_code == 0
+    assert load_token() == "guest-token"
+    assert load_endpoint() == "https://api.example.com"
+    assert "show-url" in result.output
+
+
 def test_login_command_guest_token_saves_web_guest_token(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
@@ -852,7 +936,8 @@ def test_login_command_guest_masks_web_continue_url_by_default(monkeypatch, tmp_
     result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"])
 
     assert result.exit_code == 0
-    assert "https://api.example.com/guest/continue?token=***MASKED***" in result.output
+    assert "show-url" in result.output
+    assert "https://api.example.com/guest/continue?token=" not in result.output
     assert "secret-token" not in result.output
 
 
