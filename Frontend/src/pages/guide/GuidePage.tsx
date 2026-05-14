@@ -1,4 +1,4 @@
-import { ArrowRight, Copy, Terminal } from 'lucide-react';
+import { ArrowRight, Check, Copy, Eye, EyeOff, Terminal } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -7,6 +7,7 @@ import FeatureInfoCard from '../../components/common/FeatureInfoCard';
 import PixelGoose from '../../components/common/PixelGoose';
 import SiteHeader from '../../components/layout/SiteHeader';
 import { ROUTES } from '../../constants/routes';
+import { useAuthStore } from '../../store/authStore';
 
 const guideSections = [
   {
@@ -29,6 +30,20 @@ const guideSections = [
 function GuidePage() {
   const [active, setActive] = useState(0);
   const current = useMemo(() => guideSections[active] ?? guideSections[0], [active]);
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const refreshToken = useAuthStore((state) => state.refreshToken);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const isGuest = isAuthenticated && !refreshToken;
+
+  const handleCopyCommand = async () => {
+    if (!accessToken) return;
+    await navigator.clipboard.writeText(`ssafer login --guest-token ${accessToken}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="site-shell-with-nav theme-guide-page min-h-screen bg-[#FAFAF7] text-black">
@@ -54,21 +69,63 @@ function GuidePage() {
           />
 
           <div className="mt-8 grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-            <aside className="theme-dark-soft-card border border-black/5 bg-white">
-              {guideSections.map((section, index) => (
-                <button
-                  className={`flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-4 text-left last:border-b-0 ${
-                    active === index ? 'bg-[#111111] text-white' : 'hover:bg-[#F5F5F5]'
-                  }`}
-                  key={section.title}
-                  onClick={() => setActive(index)}
-                  type="button"
-                >
-                  <span className={`w-6 font-mono text-xs ${active === index ? 'text-[#D4FC64]' : 'text-neutral-400'}`}>0{index + 1}</span>
-                  <span className="flex-1 text-sm font-bold">{section.title}</span>
-                  <span className="text-[10px] font-bold tracking-[0.24em] text-neutral-400">{section.category}</span>
-                </button>
-              ))}
+            <aside className="theme-dark-soft-card flex flex-col border border-black/5 bg-white">
+              {/* 섹션 탭 */}
+              <div>
+                {guideSections.map((section, index) => (
+                  <button
+                    className={`flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-4 text-left last:border-b-0 ${
+                      active === index ? 'bg-[#111111] text-white' : 'hover:bg-[#F5F5F5]'
+                    }`}
+                    key={section.title}
+                    onClick={() => setActive(index)}
+                    type="button"
+                  >
+                    <span className={`w-6 font-mono text-xs ${active === index ? 'text-[#D4FC64]' : 'text-neutral-400'}`}>0{index + 1}</span>
+                    <span className="flex-1 text-sm font-bold">{section.title}</span>
+                    <span className="text-[10px] font-bold tracking-[0.24em] text-neutral-400">{section.category}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* TIP + NEXT STEP */}
+              <div className="border-t border-neutral-100 p-3 space-y-2">
+                {/* TIP */}
+                <div className="border-l-2 border-[#D4FC64] bg-[#F6FDE8] px-4 py-3.5">
+                  <span className="font-mono text-[9px] font-black tracking-[0.28em] text-[#7AAD00]">TIP</span>
+                  <div className="mt-2 flex items-center gap-2">
+                    <PixelGoose mood="happy" size={20} />
+                    <span className="text-xs font-bold">SSAFER가 먼저 챙겨볼 포인트</span>
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-neutral-500">
+                    {active === 0
+                      ? 'CLI는 가장 빠르게 시작하기 좋은 방식입니다. 설치 후 바로 프로젝트에 결과를 연결할 수 있습니다.'
+                      : active === 1
+                        ? 'Agent는 서버 연결 상태를 기준으로 동작합니다. 먼저 ONLINE 상태인지 확인해 주세요.'
+                        : '패치 승인 흐름에서는 diff 확인, 승인, 적용 결과 확인을 순서대로 따라가면 됩니다.'}
+                  </p>
+                </div>
+
+                {/* NEXT STEP */}
+                <div className="bg-[#111111] px-4 py-4">
+                  <span className="font-mono text-[9px] font-black tracking-[0.28em] text-[#D4FC64]">NEXT STEP</span>
+                  <p className="mt-2 text-xs font-bold leading-relaxed text-neutral-300">
+                    {active === 0
+                      ? 'CLI 설치 후 로그인하고 프로젝트를 선택해 첫 스캔을 올려보세요.'
+                      : active === 1
+                        ? 'Agent가 ONLINE 상태가 되면 바로 서버 점검 흐름을 시작할 수 있습니다.'
+                        : '패치 승인 화면에서 diff를 먼저 확인하고 적용 여부를 결정해 보세요.'}
+                  </p>
+                  <Link
+                    className="mt-3 inline-flex items-center gap-2 bg-[#D4FC64] px-4 py-2 text-xs font-black text-black transition hover:bg-[#c8f050]"
+                    to={ROUTES.login}
+                  >
+                    <Terminal className="h-3.5 w-3.5" />
+                    시작하기
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
             </aside>
 
             <article className="theme-dark-soft-card border border-black/5 bg-white p-8 md:p-10">
@@ -211,39 +268,50 @@ function GuidePage() {
                   </>
                 ) : null}
 
-                <FeatureInfoCard
-                  description={
-                    active === 0
-                      ? 'CLI는 가장 빠르게 시작하기 좋은 방식입니다. 설치 후 바로 프로젝트에 결과를 연결할 수 있습니다.'
-                      : active === 1
-                        ? 'Agent는 서버 연결 상태를 기준으로 동작합니다. 먼저 ONLINE 상태인지 확인해 주세요.'
-                        : '패치 승인 흐름에서는 diff 확인, 승인, 적용 결과 확인을 순서대로 따라가면 됩니다.'
-                  }
-                  eyebrow="TIP"
-                  title={
-                    <div className="flex items-center gap-3">
-                      <PixelGoose mood="happy" size={32} />
-                      <span className="text-sm font-bold">SSAFER가 먼저 챙겨볼 포인트</span>
-                    </div>
-                  }
-                  tone="accent"
-                />
+                {isGuest && (
+                  <div className="rounded-2xl border border-neutral-700 bg-[#1E1E1E] p-5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">CLI 연동</p>
+                    <p className="mt-1 text-base font-bold text-white">이 게스트 세션을 CLI에서 이어서 사용하기</p>
 
-                <section className="bg-[#111111] p-5 text-white">
-                  <p className="text-xs font-bold uppercase tracking-[0.32em] text-[#D4FC64]">NEXT STEP</p>
-                  <h4 className="mt-2 text-lg font-bold">
-                    {active === 0
-                      ? 'CLI 설치 후 로그인하고 프로젝트를 선택해 첫 스캔을 올려보세요.'
-                      : active === 1
-                        ? 'Agent가 ONLINE 상태가 되면 바로 서버 점검 흐름을 시작할 수 있습니다.'
-                        : '패치 승인 화면에서 diff를 먼저 확인하고 적용 여부를 결정해 보세요.'}
-                  </h4>
-                  <Link className="theme-accent-card mt-4 inline-flex items-center gap-2 bg-[#D4FC64] px-4 py-2 text-sm font-bold !text-black" to={ROUTES.login}>
-                    <Terminal className="h-4 w-4" />
-                    시작하기
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </section>
+                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-neutral-700 bg-[#2A2A2A] px-4 py-3">
+                      <code className="flex-1 overflow-x-auto whitespace-nowrap font-mono text-sm text-[#D4FC64]">
+                        ssafer login --guest-token{' '}
+                        <span className="text-neutral-300">
+                          {tokenVisible
+                            ? accessToken
+                            : `${accessToken?.slice(0, 12) ?? ''}${'•'.repeat(20)}`}
+                        </span>
+                      </code>
+
+                      <button
+                        className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-700 hover:text-neutral-300"
+                        onClick={() => setTokenVisible((v) => !v)}
+                        title={tokenVisible ? '토큰 숨기기' : '토큰 표시'}
+                        type="button"
+                      >
+                        {tokenVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+
+                      <button
+                        className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-700 hover:text-neutral-300"
+                        onClick={() => void handleCopyCommand()}
+                        title="명령어 복사"
+                        type="button"
+                      >
+                        {copied ? (
+                          <Check className="h-4 w-4 text-[#D4FC64]" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+
+                    <p className="mt-2 text-xs text-neutral-600">
+                      토큰은 타인과 공유하지 마세요. 게스트 세션이 만료되면 CLI 연결도 함께 종료됩니다.
+                    </p>
+                  </div>
+                )}
+
               </div>
             </article>
           </div>

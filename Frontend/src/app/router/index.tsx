@@ -26,7 +26,8 @@ function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<LandingPage />} path={ROUTES.root} />
+        <Route element={<WelcomePage />} path={ROUTES.root} />
+        <Route element={<LandingPage />} path={ROUTES.landing} />
         <Route element={<WelcomePage />} path={ROUTES.welcome} />
         <Route element={<GuidePage />} path={ROUTES.guide} />
         <Route element={<TypingGamePage />} path={ROUTES.typingGame} />
