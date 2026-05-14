@@ -17,6 +17,13 @@ def _get_int_env(env: Mapping[str, str], key: str, default: int) -> int:
     return int(value)
 
 
+def _get_positive_int_env(env: Mapping[str, str], key: str, default: int) -> int:
+    value = _get_int_env(env, key, default)
+    if value < 1:
+        raise ValueError(f"{key} must be greater than or equal to 1.")
+    return value
+
+
 @dataclass(frozen=True)
 class WorkerSettings:
     rabbitmq_host: str
@@ -31,6 +38,8 @@ class WorkerSettings:
     analysis_result_bucket: str | None
     analysis_result_prefix: str
     http_timeout_seconds: int
+    max_concurrency: int
+    shutdown_timeout_seconds: int
 
 
 def load_worker_settings(env: Mapping[str, str] | None = None) -> WorkerSettings:
@@ -56,4 +65,8 @@ def load_worker_settings(env: Mapping[str, str] | None = None) -> WorkerSettings
             _get_optional_env(env, "WORKER_ANALYSIS_RESULT_PREFIX") or "analysis"
         ),
         http_timeout_seconds=_get_int_env(env, "WORKER_HTTP_TIMEOUT_SECONDS", 120),
+        max_concurrency=_get_positive_int_env(env, "WORKER_MAX_CONCURRENCY", 5),
+        shutdown_timeout_seconds=_get_positive_int_env(
+            env, "WORKER_SHUTDOWN_TIMEOUT_SECONDS", 1800
+        ),
     )

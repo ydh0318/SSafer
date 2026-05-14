@@ -6,3 +6,4 @@ langchain-anthropic
 langchain-openai
 boto3
 pika
+aio-pika
