@@ -9,6 +9,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 
 import httpx
 import typer
@@ -1005,6 +1006,8 @@ def _format_patch_diff(old_text: str | None, new_text: str, *, operation: str = 
 
 @app.command(help="계정을 연결하고 업로드/Agent 실행에 필요한 토큰을 저장합니다.", rich_help_panel="계정/상태")
 def login(
+    show_url: bool = typer.Option(False, "--show-url", help="게스트 웹 이어보기 URL의 토큰 원문을 출력합니다."),
+    guest_token: Optional[str] = typer.Option(None, "--guest-token", help="웹에서 발급받은 게스트 토큰을 CLI에 저장합니다."),
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="로그인할 SSAfer 백엔드 API URL입니다."),
     logout: bool = typer.Option(False, "--logout", help="저장된 로그인 토큰을 삭제합니다. 가능하면 ssafer logout 사용을 권장합니다."),
     guest: bool = typer.Option(False, "--guest", help="이메일 없이 게스트 토큰을 발급받아 CLI를 사용합니다."),
@@ -1018,6 +1021,22 @@ def login(
         return
 
     effective_endpoint = endpoint or load_endpoint()
+    if guest and guest_token:
+        console.print("[red]--guest와 --guest-token은 함께 사용할 수 없습니다.[/red]")
+        raise typer.Exit(code=1)
+    if guest_token:
+        token = guest_token.strip()
+        if not token:
+            console.print("[red]게스트 토큰이 비어 있습니다.[/red]")
+            raise typer.Exit(code=1)
+        try:
+            save_auth_tokens({"guestAccessToken": token}, effective_endpoint)
+        except ValueError as exc:
+            console.print(f"[red]게스트 토큰 저장 실패:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+        console.print("[green]웹 게스트 토큰을 CLI에 저장했습니다.[/green]")
+        console.print("[dim]이제 ssafer upload, ssafer agent 같은 명령에서 같은 게스트 세션을 사용합니다.[/dim]")
+        return
     if guest:
         try:
             auth_data = enter_guest_mode(effective_endpoint)
@@ -1033,6 +1052,15 @@ def login(
             raise typer.Exit(code=1) from exc
         console.print("[green]게스트 로그인 완료. 토큰은 ~/.ssafer/config.yml에 저장됩니다.[/green]")
         console.print("[dim]게스트 토큰은 현재 CLI에서 만든 게스트 프로젝트/스캔에만 사용할 수 있습니다.[/dim]")
+        guest_access_token = auth_data.get("guestAccessToken")
+        if guest_access_token:
+            continue_url = _guest_continue_url(effective_endpoint, str(guest_access_token))
+            display_url = continue_url if show_url else _mask_guest_continue_url(continue_url)
+            console.print(f"웹에서 이어 보기: {display_url}")
+            if show_url:
+                console.print("[yellow]URL에 게스트 토큰이 포함되어 있습니다. 다른 사람에게 공유하지 마세요.[/yellow]")
+            else:
+                console.print("[dim]토큰이 포함된 실제 URL은 보안상 숨겼습니다. 원문이 필요하면 --show-url을 붙여 다시 실행하세요.[/dim]")
         return
 
     email = typer.prompt("이메일")
@@ -1927,6 +1955,14 @@ def _web_url(api_url: object, path: str) -> str:
 
     base_url = normalize_api_url(str(api_url or DEFAULT_API_URL))
     return f"{base_url}{path}"
+
+
+def _guest_continue_url(api_url: object, guest_token: str) -> str:
+    return f"{_web_url(api_url, '/guest/continue')}?{urlencode({'token': guest_token})}"
+
+
+def _mask_guest_continue_url(url: str) -> str:
+    return re.sub(r"([?&]token=)[^&]+", r"\1***MASKED***", url)
 
 
 def _upload_or_exit(path: Path, api_url: str | None, on_step=None) -> dict:
