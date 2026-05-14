@@ -748,7 +748,7 @@ def _run_agent_watch(
     agent_config: Optional[dict] = None,
 ) -> None:
     from ssafer.core.agent import AgentTaskResult, watch_agent
-    from ssafer.core.auth import load_agent_config, load_endpoint
+    from ssafer.core.auth import load_agent_config, load_endpoint, load_token
 
     project_root = path.resolve()
     config = agent_config if agent_config is not None else load_agent_config(project_root)
@@ -756,6 +756,7 @@ def _run_agent_watch(
     effective_agent_id = agent_id or _load_int_config_or_env(config, "agentId", "SSAFER_AGENT_ID", "agent ID")
     effective_project_id = project_id or _load_int_config_or_env(config, "projectId", "SSAFER_PROJECT_ID", "project ID")
     effective_agent_token = agent_token or os.getenv("SSAFER_AGENT_TOKEN") or config.get("agentToken")
+    effective_upload_token = load_token()
     if not effective_agent_token:
         console.print("[red]Agent 토큰이 없습니다. ssafer agent로 설정하거나 --agent-token을 지정하세요.[/red]")
         raise typer.Exit(code=1)
@@ -884,6 +885,7 @@ def _run_agent_watch(
                 agent_id=effective_agent_id,
                 project_id=effective_project_id,
                 agent_token=effective_agent_token,
+                upload_token=effective_upload_token,
                 project_root=project_root,
                 interval_seconds=interval,
                 once=once,
