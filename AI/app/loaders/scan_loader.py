@@ -105,6 +105,7 @@ def normalize_scan_result(
     scan_type = infer_scan_type(scan_result, scan_type_hint)
     normalized = dict(scan_result)
     normalized["scanType"] = scan_type
+    _normalize_scan_result_paths(normalized)
 
     if scan_type != "SERVER_AUDIT":
         return normalized
@@ -122,6 +123,24 @@ def normalize_scan_result(
     if not normalized.get("analysisStatus"):
         normalized["analysisStatus"] = "SUCCESS"
     return normalized
+
+
+def _normalize_scan_result_paths(scan_result: dict[str, Any]) -> None:
+    source_hashes = scan_result.get("sourceFileHashes")
+    if isinstance(source_hashes, dict):
+        scan_result["sourceFileHashes"] = {
+            (key.replace("\\", "/") if isinstance(key, str) else key): value
+            for key, value in source_hashes.items()
+        }
+
+    artifacts = scan_result.get("artifacts")
+    if isinstance(artifacts, list):
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                continue
+            target = artifact.get("target")
+            if isinstance(target, str) and "\\" in target:
+                artifact["target"] = target.replace("\\", "/")
 
 
 def parse_scan_result(
@@ -145,7 +164,22 @@ def parse_finding(finding: dict[str, Any], index: int) -> dict[str, Any]:
     except ValidationError as exc:
         raise ValueError(f"findings[{index}] invalid: {exc}") from exc
 
-    return parsed.model_dump(by_alias=True)
+    return _normalize_finding_paths(parsed.model_dump(by_alias=True))
+
+
+def _normalize_finding_paths(finding: dict[str, Any]) -> dict[str, Any]:
+    file_path = finding.get("filePath")
+    if isinstance(file_path, str) and "\\" in file_path:
+        finding["filePath"] = file_path.replace("\\", "/")
+
+    target_files = finding.get("targetFiles")
+    if isinstance(target_files, list):
+        finding["targetFiles"] = [
+            value.replace("\\", "/") if isinstance(value, str) else value
+            for value in target_files
+        ]
+
+    return finding
 
 
 def _is_iso8601_datetime(value: str) -> bool:

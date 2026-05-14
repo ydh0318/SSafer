@@ -1,5 +1,6 @@
 export const ROUTES = {
   root: '/',
+  landing: '/landing',
   welcome: '/welcome',
   login: '/login',
   oauthGoogleCallback: '/oauth/google/callback',

@@ -640,7 +640,11 @@ def validate_analysis_result_item(result: Any, index: int) -> None:
     validate_fix_schema(result["fix"], f"{result_path}.fix")
 
 
-def validate_fix_schema(fix: Any, path: str = "fix") -> None:
+def validate_fix_schema(
+    fix: Any,
+    path: str = "fix",
+    strict_patch_metadata: bool = True,
+) -> None:
     if not isinstance(fix, dict):
         raise ValueError(f"{path} must be an object.")
 
@@ -685,20 +689,36 @@ def validate_fix_schema(fix: Any, path: str = "fix") -> None:
                 )
 
     if "patches" in fix:
-        validate_fix_patches_schema(fix["patches"], f"{path}.patches")
+        validate_fix_patches_schema(
+            fix["patches"],
+            f"{path}.patches",
+            strict_patch_metadata=strict_patch_metadata,
+        )
 
 
-def validate_fix_patches_schema(patches: Any, path: str = "fix.patches") -> None:
+def validate_fix_patches_schema(
+    patches: Any,
+    path: str = "fix.patches",
+    strict_patch_metadata: bool = True,
+) -> None:
     if not isinstance(patches, list):
         raise ValueError(f"{path} must be an array.")
     if not patches:
         raise ValueError(f"{path} must contain at least 1 item.")
 
     for index, patch in enumerate(patches):
-        validate_fix_patch_schema(patch, f"{path}[{index}]")
+        validate_fix_patch_schema(
+            patch,
+            f"{path}[{index}]",
+            strict_patch_metadata=strict_patch_metadata,
+        )
 
 
-def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
+def validate_fix_patch_schema(
+    patch: Any,
+    path: str = "fix.patches[]",
+    strict_patch_metadata: bool = True,
+) -> None:
     if not isinstance(patch, dict):
         raise ValueError(f"{path} must be an object.")
     if "filePath" not in patch and "targetFile" in patch:
@@ -706,20 +726,26 @@ def validate_fix_patch_schema(patch: Any, path: str = "fix.patches[]") -> None:
     else:
         patch.pop("targetFile", None)
 
-    missing_fields = [
-        field for field in REQUIRED_FIX_PATCH_FIELDS if field not in patch
-    ]
+    if strict_patch_metadata:
+        required_fields = REQUIRED_FIX_PATCH_FIELDS
+        required_string_fields = REQUIRED_FIX_PATCH_STRING_FIELDS
+    else:
+        required_fields = ("operation", "newText")
+        required_string_fields = ("operation", "newText")
+
+    missing_fields = [field for field in required_fields if field not in patch]
     if missing_fields:
         raise ValueError(
             f"{path} missing required fields: {', '.join(missing_fields)}"
         )
 
-    for field in REQUIRED_FIX_PATCH_STRING_FIELDS:
+    for field in required_string_fields:
         value = patch[field]
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{path}.{field} must be a non-empty string.")
 
-    validate_patch_target_file(patch["filePath"], f"{path}.filePath")
+    if "filePath" in patch:
+        validate_patch_target_file(patch["filePath"], f"{path}.filePath")
     validate_patch_text_safety(patch["newText"], f"{path}.newText")
 
     operation = patch["operation"]

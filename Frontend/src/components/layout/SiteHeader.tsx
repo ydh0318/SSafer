@@ -102,7 +102,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
           className="shrink-0"
           textClassName="hidden lg:block"
           titleClassName="text-lg font-black tracking-tight text-black"
-          to={ROUTES.root}
+          to={ROUTES.landing}
         />
 
         <nav className="site-header-nav flex min-w-0 items-center justify-end gap-1.5 text-sm sm:gap-2 lg:gap-3">

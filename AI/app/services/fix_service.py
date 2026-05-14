@@ -87,7 +87,7 @@ def parse_fix_response(response: str) -> dict[str, Any]:
             )
 
     try:
-        validate_fix_schema(parsed, "Fix Chain output")
+        validate_fix_schema(parsed, "Fix Chain output", strict_patch_metadata=False)
     except ValueError as exc:
         raise ValueError(
             f"Fix Chain output failed schema validation: {exc}"
@@ -115,8 +115,7 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
             "patch operation은 finding.patchContext.operation 값을 그대로 쓰세요.",
             "operation이 replace면 oldText는 patchContext.oldText를 그대로 사용하고 AI가 재작성하지 마세요.",
             "operation이 append면 oldText를 새로 만들지 마세요.",
-            "filePath는 finding.filePath를 우선 사용하고, filePath가 없으면 targetFiles 중 oldText가 정확히 한 번만 매칭되는 파일 하나가 있을 때만 선택하세요.",
-            "targetFiles 후보가 여러 개이거나 oldText를 확정할 수 없으면 patches를 생략하세요.",
+            "각 patch는 operation, oldText, newText만 포함하세요. filePath, expectedFileHash, patchId, findingId는 출력하지 마세요.",
         ]
     )
 
