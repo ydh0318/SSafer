@@ -4,12 +4,15 @@ import { Link } from 'react-router-dom';
 import SectionPanel from '../../../components/common/SectionPanel';
 import { ROUTES } from '../../../constants/routes';
 import type { ProjectScanListItemData, ProjectScanListQuery, ScanMode, ScanStatus } from '../../../types/scan';
-import { canDeleteScanHistory, formatCompactDateTime, getDeleteBlockedReason, getScanModeLabel } from '../utils/scanPresentation';
+import { canDeleteScanHistory, formatCompactDateTime, getDeleteBlockedReason, getScanModeLabel, getScanStatusLabel } from '../utils/scanPresentation';
 import ScanStatusBadge from './ScanStatusBadge';
 import ScanTypeBadge from './ScanTypeBadge';
 
 const scanStatuses: Array<ScanStatus> = ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED', 'DONE', 'FAILED', 'CANCELED'];
-const scanModes: Array<ScanMode> = ['AGENT', 'UPLOAD'];
+const scanModes: Array<{ value: ScanMode; label: string }> = [
+  { value: 'AGENT', label: 'Agent / CLI 스캔' },
+  { value: 'UPLOAD', label: '파일 업로드 스캔' },
+];
 
 type ProjectScanListProps = {
   projectId: string;
@@ -69,7 +72,7 @@ function ProjectScanList({
             <option value="">전체 상태</option>
             {scanStatuses.map((status) => (
               <option key={status} value={status}>
-                {status}
+                {getScanStatusLabel(status)}
               </option>
             ))}
           </select>
@@ -91,9 +94,9 @@ function ProjectScanList({
             value={filters.scanMode ?? ''}
           >
             <option value="">전체 방식</option>
-            {scanModes.map((scanMode) => (
-              <option key={scanMode} value={scanMode}>
-                {scanMode}
+            {scanModes.map((mode) => (
+              <option key={mode.value} value={mode.value}>
+                {mode.label}
               </option>
             ))}
           </select>
