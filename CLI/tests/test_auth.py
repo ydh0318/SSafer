@@ -18,6 +18,7 @@ from ssafer.core.auth import (
     create_project,
     describe_token_source,
     enter_guest_mode,
+    find_agent_config_path,
     get_project_agent_status,
     issue_project_agent_token,
     list_projects,
@@ -445,7 +446,10 @@ def test_save_and_load_agent_config(monkeypatch, tmp_path):
         "agentToken": "raw-agent-token",
         "endpoint": "https://api.example.com",
     }
-    assert load_agent_config(tmp_path / "other") == {}
+    nested = tmp_path / "other"
+    nested.mkdir()
+    assert load_agent_config(nested)["agentId"] == 3
+    assert find_agent_config_path(nested) == tmp_path / ".ssafer" / "agent.yml"
 
 
 def test_save_agent_config_falls_back_to_home_when_project_config_is_unwritable(monkeypatch, tmp_path):
@@ -837,6 +841,60 @@ def test_login_command_can_start_agent_after_login(monkeypatch, tmp_path):
     assert started == {"path": Path("."), "refresh_token": True}
 
 
+def test_login_command_clears_project_agent_config(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.chdir(tmp_path)
+    save_auth_tokens({"accessToken": "x.eyJzdWIiOiJ1c2VyOjEifQ.x"}, "https://api.example.com")
+    save_agent_config(
+        {"agentId": 1, "projectId": 10, "agentToken": "old-agent-token"},
+        "https://api.example.com",
+        tmp_path,
+    )
+
+    def fake_login(endpoint: str, email: str, password: str) -> dict[str, str]:
+        return {"accessToken": "x.eyJzdWIiOiJ1c2VyOjIifQ.x", "refreshToken": "new-refresh-token"}
+
+    monkeypatch.setattr(auth_module, "login_with_credentials", fake_login)
+
+    result = CliRunner().invoke(
+        app,
+        ["login", "--endpoint", "https://api.example.com"],
+        input="user@example.com\nsecret-password\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert load_token() == "x.eyJzdWIiOiJ1c2VyOjIifQ.x"
+    assert load_agent_config(tmp_path) == {}
+
+
+def test_login_command_preserves_project_agent_config_for_same_account(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    monkeypatch.chdir(tmp_path)
+    save_auth_tokens({"accessToken": "x.eyJzdWIiOiJ1c2VyOjEifQ.x"}, "https://api.example.com")
+    save_agent_config(
+        {"agentId": 1, "projectId": 10, "agentToken": "old-agent-token"},
+        "https://api.example.com",
+        tmp_path,
+    )
+
+    def fake_login(endpoint: str, email: str, password: str) -> dict[str, str]:
+        return {"accessToken": "x.eyJzdWIiOiJ1c2VyOjEifQ.x", "refreshToken": "new-refresh-token"}
+
+    monkeypatch.setattr(auth_module, "login_with_credentials", fake_login)
+
+    result = CliRunner().invoke(
+        app,
+        ["login", "--endpoint", "https://api.example.com"],
+        input="user@example.com\nsecret-password\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert load_token() == "x.eyJzdWIiOiJ1c2VyOjEifQ.x"
+    assert load_agent_config(tmp_path)["agentId"] == 1
+
+
 def test_login_command_guest_saves_guest_token(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
@@ -848,7 +906,7 @@ def test_login_command_guest_saves_guest_token(monkeypatch, tmp_path):
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"], input="n\n")
 
     assert result.exit_code == 0
     assert load_token() == "guest-token"
@@ -867,7 +925,7 @@ def test_guest_login_command_saves_guest_token(monkeypatch, tmp_path):
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["guest-login", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(app, ["guest-login", "--endpoint", "https://api.example.com"], input="n\n")
 
     assert result.exit_code == 0
     assert load_token() == "guest-token"
@@ -886,12 +944,35 @@ def test_guest_command_saves_guest_token(monkeypatch, tmp_path):
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["guest", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(app, ["guest", "--endpoint", "https://api.example.com"], input="n\n")
 
     assert result.exit_code == 0
     assert load_token() == "guest-token"
     assert load_endpoint() == "https://api.example.com"
     assert "show-url" in result.output
+
+
+def test_guest_command_show_url_reuses_saved_guest_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    save_auth_tokens({"guestAccessToken": "saved guest/token"}, "https://api.example.com")
+
+    def fail_guest(endpoint: str, device_id: str | None = None) -> dict[str, str]:
+        raise AssertionError("guest command should reuse saved guest token")
+
+    monkeypatch.setattr(auth_module, "enter_guest_mode", fail_guest)
+    monkeypatch.setattr(
+        main_module,
+        "_prompt_start_agent_after_login",
+        lambda: (_ for _ in ()).throw(AssertionError("guest --show-url should not prompt agent start")),
+    )
+
+    result = CliRunner().invoke(app, ["guest", "--show-url"])
+
+    assert result.exit_code == 0
+    assert load_token() == "saved guest/token"
+    assert "https://api.example.com/guest/continue?token=saved+guest%2Ftoken" in result.output
+    assert "Local Agent" not in result.output
 
 
 def test_login_command_guest_token_saves_web_guest_token(monkeypatch, tmp_path):
@@ -901,6 +982,7 @@ def test_login_command_guest_token_saves_web_guest_token(monkeypatch, tmp_path):
     result = CliRunner().invoke(
         app,
         ["login", "--guest-token", "web-guest-token", "--endpoint", "https://api.example.com"],
+        input="n\n",
     )
 
     assert result.exit_code == 0
@@ -918,7 +1000,11 @@ def test_login_command_guest_prints_web_continue_url(monkeypatch, tmp_path):
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["login", "--guest", "--show-url", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(
+        app,
+        ["login", "--guest", "--show-url", "--endpoint", "https://api.example.com"],
+        input="n\n",
+    )
 
     assert result.exit_code == 0
     assert "https://api.example.com/guest/continue?token=guest+token%2Fwith+space" in result.output
@@ -933,12 +1019,59 @@ def test_login_command_guest_masks_web_continue_url_by_default(monkeypatch, tmp_
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
 
-    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"])
+    result = CliRunner().invoke(app, ["login", "--guest", "--endpoint", "https://api.example.com"], input="n\n")
 
     assert result.exit_code == 0
     assert "show-url" in result.output
     assert "https://api.example.com/guest/continue?token=" not in result.output
     assert "secret-token" not in result.output
+
+
+def test_login_command_guest_prompts_agent_start(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    started: dict[str, object] = {}
+
+    def fake_guest(endpoint: str, device_id: str | None = None) -> dict[str, str]:
+        return {"guestAccessToken": "guest-token", "expiresAt": "2026-05-12T00:00:00Z"}
+
+    def fake_start_agent(*, path: Path, refresh_token: bool) -> None:
+        started["path"] = path
+        started["refresh_token"] = refresh_token
+
+    monkeypatch.setattr(auth_module, "enter_guest_mode", fake_guest)
+    monkeypatch.setattr(main_module, "_start_agent", fake_start_agent)
+
+    result = CliRunner().invoke(
+        app,
+        ["login", "--guest", "--endpoint", "https://api.example.com"],
+        input="y\n",
+    )
+
+    assert result.exit_code == 0
+    assert started == {"path": Path("."), "refresh_token": True}
+
+
+def test_login_command_guest_token_prompts_agent_start(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+    started: dict[str, object] = {}
+
+    def fake_start_agent(*, path: Path, refresh_token: bool) -> None:
+        started["path"] = path
+        started["refresh_token"] = refresh_token
+
+    monkeypatch.setattr(main_module, "_start_agent", fake_start_agent)
+
+    result = CliRunner().invoke(
+        app,
+        ["login", "--guest-token", "web-guest-token", "--endpoint", "https://api.example.com"],
+        input="y\n",
+    )
+
+    assert result.exit_code == 0
+    assert load_token() == "web-guest-token"
+    assert started == {"path": Path("."), "refresh_token": True}
 
 
 def test_login_command_rejects_guest_and_guest_token(monkeypatch, tmp_path):
@@ -995,6 +1128,22 @@ def test_start_agent_refresh_selects_project_instead_of_reusing_saved_project(mo
     assert issued["project_id"] == 8
     assert issued["project_root"] == tmp_path.resolve()
     assert issued["agent_config"] == {"agentId": 8, "projectId": 8, "agentToken": "new-agent-token"}
+
+
+def test_agent_command_accepts_verbose(monkeypatch, tmp_path):
+    started: dict[str, object] = {}
+
+    def fake_start_agent(*, path: Path, refresh_token: bool = False, verbose: bool = False) -> None:
+        started["path"] = path
+        started["refresh_token"] = refresh_token
+        started["verbose"] = verbose
+
+    monkeypatch.setattr(main_module, "_start_agent", fake_start_agent)
+
+    result = CliRunner().invoke(app, ["agent", "--path", str(tmp_path), "--verbose"])
+
+    assert result.exit_code == 0
+    assert started == {"path": tmp_path, "refresh_token": False, "verbose": True}
 
 
 def test_select_agent_project_id_stops_when_no_projects_and_user_declines_create(monkeypatch):

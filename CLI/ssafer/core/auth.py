@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
 import hashlib
 from pathlib import Path
@@ -61,6 +63,25 @@ def describe_token_source(token_env_key: str | None = None) -> str:
     if upload_config.get("token"):
         return "config:upload.token"
     return "none"
+
+
+def load_auth_mode() -> str | None:
+    """Return the saved auth mode, if known."""
+    config = _load_config()
+    upload_config = config.get("upload", {})
+    auth_mode = upload_config.get("authMode")
+    return str(auth_mode).strip().lower() if auth_mode else None
+
+
+def load_auth_identity() -> tuple[str | None, str | None]:
+    """Return saved auth mode and token subject, if known."""
+    config = _load_config()
+    upload_config = config.get("upload", {})
+    auth_mode = upload_config.get("authMode")
+    auth_subject = upload_config.get("authSubject")
+    mode = str(auth_mode).strip().lower() if auth_mode else None
+    subject = str(auth_subject).strip() if auth_subject else None
+    return mode, subject
 
 
 def login_with_credentials(endpoint: str, email: str, password: str) -> dict[str, Any]:
@@ -253,6 +274,11 @@ def save_auth_tokens(auth_data: dict[str, Any], endpoint: str | None = None) -> 
     else:
         upload_config["authMode"] = "member"
         upload_config.pop("guestAccessTokenExpiresAt", None)
+    auth_subject = _jwt_subject(str(access_token))
+    if auth_subject:
+        upload_config["authSubject"] = auth_subject
+    else:
+        upload_config.pop("authSubject", None)
     upload_config.pop("token", None)
     if endpoint:
         upload_config["endpoint"] = normalize_api_url(endpoint)
@@ -263,6 +289,12 @@ def project_agent_config_path(project_root: Path | None = None) -> Path:
     return (project_root or Path(".")).resolve() / ".ssafer" / PROJECT_AGENT_CONFIG_NAME
 
 
+def _candidate_project_roots(project_root: Path | None = None) -> list[Path]:
+    root = (project_root or Path(".")).resolve()
+    candidates = [root, *root.parents]
+    return [candidate for candidate in candidates if candidate != candidate.parent]
+
+
 def _fallback_project_agent_config_path(project_root: Path | None = None) -> Path:
     project_key = str((project_root or Path(".")).resolve())
     project_hash = hashlib.sha256(project_key.encode("utf-8")).hexdigest()[:16]
@@ -270,9 +302,18 @@ def _fallback_project_agent_config_path(project_root: Path | None = None) -> Pat
 
 
 def _project_agent_config_paths(project_root: Path | None = None) -> list[Path]:
-    local_path = project_agent_config_path(project_root)
-    fallback_path = _fallback_project_agent_config_path(project_root)
-    return [local_path] if local_path == fallback_path else [local_path, fallback_path]
+    paths: list[Path] = []
+    for root in _candidate_project_roots(project_root):
+        local_path = project_agent_config_path(root)
+        fallback_path = _fallback_project_agent_config_path(root)
+        paths.append(local_path)
+        if local_path != fallback_path:
+            paths.append(fallback_path)
+    unique_paths: list[Path] = []
+    for path in paths:
+        if path not in unique_paths:
+            unique_paths.append(path)
+    return unique_paths
 
 
 def save_agent_config(agent_data: dict[str, Any], endpoint: str | None = None, project_root: Path | None = None) -> None:
@@ -302,17 +343,23 @@ def save_agent_config(agent_data: dict[str, Any], endpoint: str | None = None, p
 
 
 def load_agent_config(project_root: Path | None = None) -> dict[str, Any]:
+    path = find_agent_config_path(project_root)
+    if path is None:
+        return {}
+    try:
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    agent_config = loaded if isinstance(loaded, dict) else {}
+    return agent_config if isinstance(agent_config, dict) else {}
+
+
+def find_agent_config_path(project_root: Path | None = None) -> Path | None:
     for path in _project_agent_config_paths(project_root):
         if not path.exists():
             continue
-        try:
-            loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError):
-            continue
-        agent_config = loaded if isinstance(loaded, dict) else {}
-        if isinstance(agent_config, dict):
-            return agent_config
-    return {}
+        return path
+    return None
 
 
 def clear_agent_config(project_root: Path | None = None) -> None:
@@ -341,6 +388,9 @@ def clear_token() -> None:
         config["upload"].pop("accessTokenExpiresAt", None)
         config["upload"].pop("refreshToken", None)
         config["upload"].pop("refreshTokenExpiresAt", None)
+        config["upload"].pop("authMode", None)
+        config["upload"].pop("authSubject", None)
+        config["upload"].pop("guestAccessTokenExpiresAt", None)
         if not config["upload"]:
             del config["upload"]
     if not config:
@@ -379,6 +429,21 @@ def _post_preserving_redirects(
             return response
         current_url = str(response.url.join(location))
     return response
+
+
+def _jwt_subject(token: str) -> str | None:
+    parts = token.split(".")
+    if len(parts) < 2:
+        return None
+    payload = parts[1]
+    padding = "=" * (-len(payload) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode((payload + padding).encode("ascii"))
+        claims = json.loads(decoded.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    subject = claims.get("sub")
+    return str(subject) if subject else None
 
 
 def _load_config() -> dict[str, Any]:

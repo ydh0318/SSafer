@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic as _monotonic
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
@@ -14,6 +15,8 @@ from ssafer.core.auth import normalize_api_url
 from ssafer.core.patches import PatchApplyResult, PatchError, apply_patch_candidates, extract_patch_candidates
 from ssafer.core.result_store import run_scan
 from ssafer.core.upload import upload_scan_result_to_registered_scan
+
+AGENT_FALLBACK_POLL_INTERVAL_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -161,6 +164,7 @@ def handle_agent_task(
     dry_run: bool = False,
     api_url: str | None = None,
     agent_token: str | None = None,
+    upload_token: str | None = None,
 ) -> AgentTaskResult:
     if task.task_type == "SCAN_REQUEST":
         return _handle_scan_request_task(
@@ -169,6 +173,7 @@ def handle_agent_task(
             dry_run=dry_run,
             api_url=api_url,
             agent_token=agent_token,
+            upload_token=upload_token,
         )
 
     if task.task_type != "PATCH_APPLY":
@@ -225,6 +230,7 @@ def _handle_scan_request_task(
     dry_run: bool,
     api_url: str | None,
     agent_token: str | None,
+    upload_token: str | None,
 ) -> AgentTaskResult:
     if task.scan_id is None:
         return _failed_task(task, "SCAN_REQUEST task is missing scanId.")
@@ -243,8 +249,8 @@ def _handle_scan_request_task(
     if not api_url:
         return _failed_task(task, "SCAN_REQUEST handling requires api_url.")
 
-    scan_type = (_payload_string(task.payload, "scanType", "scan_type") or "PROJECT_SCAN").upper()
-    if scan_type not in {"PROJECT_SCAN", "LOCAL_SCAN"}:
+    scan_type = (_payload_string(task.payload, "scanType", "scan_type") or "PROJECT_FILE").upper()
+    if scan_type not in {"PROJECT_FILE", "PROJECT_SCAN", "LOCAL_SCAN"}:
         return _failed_task(task, f"Unsupported SCAN_REQUEST scanType: {scan_type}")
 
     try:
@@ -261,6 +267,11 @@ def _handle_scan_request_task(
             message=f"SCAN_REQUEST validated for {target_root}.",
             patch_results=[],
         )
+    if not upload_token:
+        return _failed_task(
+            task,
+            "SCAN_REQUEST upload callback requires a saved login or guest token. Run ssafer login first.",
+        )
 
     try:
         scan = run_scan(target_root, save_raw=save_raw)
@@ -268,7 +279,7 @@ def _handle_scan_request_task(
             target_root,
             scan,
             api_url=api_url,
-            token=agent_token,
+            token=upload_token,
             scan_id=task.scan_id,
             raw_upload_url=raw_upload_url,
         )
@@ -329,6 +340,7 @@ async def watch_agent(
     interval_seconds: float,
     once: bool,
     dry_run: bool,
+    upload_token: str | None = None,
     reconnect: bool = True,
     max_retries: int | None = None,
     reconnect_max_delay_seconds: float = 30.0,
@@ -352,6 +364,7 @@ async def watch_agent(
                 agent_id=agent_id,
                 project_id=project_id,
                 agent_token=agent_token,
+                upload_token=upload_token,
                 project_root=project_root,
                 interval_seconds=interval_seconds,
                 once=once,
@@ -388,6 +401,7 @@ async def _watch_agent_session(
     interval_seconds: float,
     once: bool,
     dry_run: bool,
+    upload_token: str | None = None,
     on_event,
 ) -> None:
     async with _connect_websocket(websockets, ws_url, headers) as websocket:
@@ -399,6 +413,7 @@ async def _watch_agent_session(
             api_url=api_url,
             agent_id=agent_id,
             agent_token=agent_token,
+            upload_token=upload_token,
             project_root=project_root,
             dry_run=dry_run,
             on_event=on_event,
@@ -407,8 +422,28 @@ async def _watch_agent_session(
             return
 
         on_event("watching", {"mode": "websocket"})
+        heartbeat_interval = max(0.1, interval_seconds)
+        last_task_check = _monotonic()
         while True:
-            message = await websocket.recv()
+            try:
+                message = await asyncio.wait_for(websocket.recv(), timeout=heartbeat_interval)
+            except asyncio.TimeoutError:
+                ping = _ping_message(agent_id)
+                on_event("ping", ping)
+                await websocket.send(json.dumps(ping))
+                now = _monotonic()
+                if now - last_task_check >= AGENT_FALLBACK_POLL_INTERVAL_SECONDS:
+                    _process_agent_tasks(
+                        api_url=api_url,
+                        agent_id=agent_id,
+                        agent_token=agent_token,
+                        upload_token=upload_token,
+                        project_root=project_root,
+                        dry_run=dry_run,
+                        on_event=on_event,
+                    )
+                    last_task_check = now
+                continue
             tasks = _tasks_from_ws_message(message)
             if tasks is None:
                 on_event("task_available", message)
@@ -416,10 +451,12 @@ async def _watch_agent_session(
                     api_url=api_url,
                     agent_id=agent_id,
                     agent_token=agent_token,
+                    upload_token=upload_token,
                     project_root=project_root,
                     dry_run=dry_run,
                     on_event=on_event,
                 )
+                last_task_check = _monotonic()
                 continue
             if tasks:
                 on_event("tasks_found", tasks)
@@ -427,11 +464,13 @@ async def _watch_agent_session(
                     api_url=api_url,
                     agent_id=agent_id,
                     agent_token=agent_token,
+                    upload_token=upload_token,
                     project_root=project_root,
                     dry_run=dry_run,
                     on_event=on_event,
                     tasks=tasks,
                 )
+                last_task_check = _monotonic()
 
 
 def _process_agent_tasks(
@@ -442,6 +481,7 @@ def _process_agent_tasks(
     project_root: Path,
     dry_run: bool,
     on_event,
+    upload_token: str | None = None,
     tasks: list[AgentTask] | None = None,
 ) -> None:
     if tasks is None:
@@ -456,6 +496,7 @@ def _process_agent_tasks(
                 dry_run=dry_run,
                 api_url=api_url,
                 agent_token=agent_token,
+                upload_token=upload_token,
             )
         except Exception as exc:  # noqa: BLE001 - keep the long-running agent alive per task.
             result = AgentTaskResult(
