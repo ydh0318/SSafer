@@ -213,20 +213,18 @@ class GmsProvider(LLMProvider):
         max_tokens: int | None = None,
     ) -> Any:
         try:
-            from langchain.chat_models import init_chat_model
+            from langchain_openai import ChatOpenAI
         except ImportError as exc:
             raise LLMConfigurationError(
-                "langchain must be installed to use GmsProvider."
+                "langchain-openai must be installed to use GMS OpenAI models."
             ) from exc
 
-        import os
-
         api_key = self._get_api_key()
-        os.environ["OPENAI_API_KEY"] = api_key
-        os.environ["OPENAI_API_BASE"] = self.base_url
-        os.environ["OPENAI_BASE_URL"] = self.base_url
 
         model_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "api_key": api_key,
+            "base_url": self.base_url,
             "temperature": self.temperature,
             "timeout": self.timeout_seconds,
         }
@@ -235,11 +233,7 @@ class GmsProvider(LLMProvider):
         if max_tokens is not None:
             model_kwargs["max_tokens"] = max_tokens
 
-        return init_chat_model(
-            self.model,
-            model_provider="openai",
-            **model_kwargs,
-        )
+        return ChatOpenAI(**model_kwargs)
 
     def _get_api_key(self) -> str:
         import os

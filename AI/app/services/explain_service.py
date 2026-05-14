@@ -53,6 +53,10 @@ def _normalize_json_response(response: str) -> str:
 
 def parse_explain_response(response: str) -> dict[str, Any]:
     normalized = _normalize_json_response(response)
+    if not normalized:
+        raise ValueError(
+            "Explain Chain output is empty. The LLM returned no content."
+        )
 
     try:
         parsed = json.loads(normalized)
@@ -63,7 +67,9 @@ def parse_explain_response(response: str) -> dict[str, Any]:
                 "explanation": _legacy_explanation_sections(normalized),
                 "impact": normalized,
             }
-        raise ValueError("Explain Chain output must be a valid JSON object.")
+        raise ValueError(
+            "Explain Chain output must be a valid JSON object."
+        )
 
     if not isinstance(parsed, dict):
         raise ValueError("Explain Chain output must be a JSON object.")
@@ -150,7 +156,14 @@ def generate_finding_explanation(finding: dict[str, Any]) -> dict[str, Any]:
             continue
         try:
             return parse_explain_response(explanation)
-        except ValueError:
+        except ValueError as exc:
+            logger.warning(
+                "Explain Chain parse failed. findingId=%s attempt=%d error=%s raw_explanation=%r",
+                finding_id,
+                attempt + 1,
+                exc,
+                explanation,
+            )
             if attempt == MAX_EXPLAIN_RETRIES:
                 raise
             continue

@@ -1,3 +1,4 @@
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 import logging
 from typing import Any
@@ -453,16 +454,61 @@ def analyze_findings(
     *,
     log_fields: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    from app.core.config import MAX_FINDING_CONCURRENCY
+
     finding_total = len(findings)
-    return [
-        analyze_finding(
+
+    if finding_total <= 1:
+        return [
+            analyze_finding(
+                finding,
+                log_fields=log_fields,
+                finding_index=index,
+                finding_total=finding_total,
+            )
+            for index, finding in enumerate(findings, start=1)
+        ]
+
+    indexed_results: dict[int, dict[str, Any]] = {}
+    max_workers = min(MAX_FINDING_CONCURRENCY, finding_total)
+    pending: dict[Future[dict[str, Any]], int] = {}
+    next_index = 1
+
+    def submit_next(executor: ThreadPoolExecutor) -> None:
+        nonlocal next_index
+        finding = findings[next_index - 1]
+        future = executor.submit(
+            analyze_finding,
             finding,
             log_fields=log_fields,
-            finding_index=index,
+            finding_index=next_index,
             finding_total=finding_total,
         )
-        for index, finding in enumerate(findings, start=1)
-    ]
+        pending[future] = next_index
+        next_index += 1
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for _ in range(max_workers):
+            submit_next(executor)
+
+        while pending:
+            done, _ = wait(pending, return_when=FIRST_COMPLETED)
+            completed_count = 0
+            for future in done:
+                index = pending.pop(future)
+                try:
+                    indexed_results[index] = future.result()
+                except Exception:
+                    for pending_future in pending:
+                        pending_future.cancel()
+                    raise
+                completed_count += 1
+
+            for _ in range(completed_count):
+                if next_index <= finding_total:
+                    submit_next(executor)
+
+    return [indexed_results[i] for i in sorted(indexed_results)]
 
 
 def prepare_analysis_pipeline_context(

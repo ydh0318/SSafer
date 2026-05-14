@@ -19,6 +19,8 @@ def build_settings() -> WorkerSettings:
         analysis_result_bucket="ssafer-scan-storage-dev",
         analysis_result_prefix="analysis",
         http_timeout_seconds=120,
+        max_concurrency=5,
+        shutdown_timeout_seconds=1800,
     )
 
 

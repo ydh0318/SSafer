@@ -6,4 +6,7 @@ from app.prompts.explain_prompt import EXPLAIN_PROMPT
 
 
 def create_explain_chain() -> Runnable:
-    return EXPLAIN_PROMPT | get_llm(max_tokens=LLM_EXPLAIN_MAX_TOKENS)
+    return EXPLAIN_PROMPT | get_llm(
+        response_format="json",
+        max_tokens=LLM_EXPLAIN_MAX_TOKENS,
+    )
