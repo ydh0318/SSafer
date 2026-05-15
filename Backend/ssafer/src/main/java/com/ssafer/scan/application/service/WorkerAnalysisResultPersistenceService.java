@@ -462,7 +462,7 @@ public class WorkerAnalysisResultPersistenceService {
     // worker findingId는 스캔별 순번일 수 있어 비교 키로 불안정하므로 내용 기반 fingerprint를 만든다.
     String material = sourceType.name()
         + "|" + readText(result, "ruleId", "UNKNOWN")
-        + "|" + readText(result, "file", readText(result, "filePath", ""))
+        + "|" + readText(result, "filePath", readText(result, "file", ""))
         + "|" + readText(result, "line", "")
         + "|" + readText(result, "title", "")
         + "|" + readText(result, "maskedEvidence", "");
