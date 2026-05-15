@@ -364,6 +364,53 @@ def test_upload_command_prints_progress_before_upload(tmp_path: Path, monkeypatc
     assert "1001" in result.output
 
 
+def test_upload_command_server_uploads_last_server_audit_from_home(tmp_path: Path, monkeypatch):
+    calls = {}
+
+    def fake_upload_server_audit(path, api_url=None, on_step=None):
+        calls["upload"] = {"path": path, "api_url": api_url}
+        return {"scanId": 2001}
+
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.setattr(main_module, "_upload_server_audit_or_exit", fake_upload_server_audit)
+    monkeypatch.setattr(
+        main_module,
+        "_wait_for_uploaded_scan",
+        lambda path, response, api_url=None: {**response, "status": "DONE", "_apiUrl": "https://ssafer.co.kr"},
+    )
+
+    result = CliRunner().invoke(app, ["upload", "--server"])
+
+    assert result.exit_code == 0
+    assert calls["upload"] == {"path": tmp_path.resolve(), "api_url": None}
+    assert "2001" in result.output
+
+
+def test_upload_command_server_respects_explicit_path(tmp_path: Path, monkeypatch):
+    server_root = tmp_path / "server-root"
+    calls = {}
+
+    def fake_upload_server_audit(path, api_url=None, on_step=None):
+        calls["upload"] = {"path": path, "api_url": api_url}
+        return {"scanId": 2002}
+
+    monkeypatch.setattr(main_module, "_upload_server_audit_or_exit", fake_upload_server_audit)
+    monkeypatch.setattr(
+        main_module,
+        "_wait_for_uploaded_scan",
+        lambda path, response, api_url=None: {**response, "status": "DONE", "_apiUrl": "https://api.example.com"},
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["upload", "--server", "--path", str(server_root), "--api-url", "https://api.example.com"],
+    )
+
+    assert result.exit_code == 0
+    assert calls["upload"] == {"path": server_root.resolve(), "api_url": "https://api.example.com"}
+    assert "2002" in result.output
+
+
 def test_wait_for_uploaded_scan_polls_until_done(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(main_module, "_fetch_scan_status", lambda base_url, scan_id, headers: {"scanId": scan_id, "status": "DONE"})
     monkeypatch.setattr(main_module.time, "sleep", lambda seconds: None)

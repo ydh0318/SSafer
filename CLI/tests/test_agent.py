@@ -709,6 +709,38 @@ def test_agent_watch_command_prints_pending_task_count(monkeypatch, tmp_path: Pa
     assert "PATCH_APPLY" in result.output
 
 
+def test_agent_watch_command_summarizes_repeated_pending_task_types(monkeypatch, tmp_path: Path):
+    tasks = [
+        agent.AgentTask(
+            task_id=index,
+            task_type="SCAN_REQUEST",
+            task_status="PENDING",
+            project_id=3,
+            scan_id=index,
+            finding_id=None,
+            payload={"rawUploadUrl": "https://s3.example.com/raw"},
+        )
+        for index in range(1, 4)
+    ]
+
+    async def fake_watch_agent(**kwargs):
+        kwargs["on_event"]("tasks_found", tasks)
+
+    monkeypatch.setenv("SSAFER_AGENT_ID", "7")
+    monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
+    monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
+
+    assert result.exit_code == 0
+    assert "task 3" in result.output
+    assert "SCAN_REQUEST 3" in result.output
+    assert "SCAN_REQUEST, SCAN_REQUEST" not in result.output
+
+
 def test_agent_watch_command_prints_dry_run_and_task_result_table(monkeypatch, tmp_path: Path):
     async def fake_watch_agent(**kwargs):
         kwargs["on_event"](
@@ -736,6 +768,38 @@ def test_agent_watch_command_prints_dry_run_and_task_result_table(monkeypatch, t
     assert "Agent task #10 result" in result.output
     assert "PATCH_APPLY" in result.output
     assert "DRY_RUN" in result.output
+
+
+def test_agent_watch_command_summarizes_scan_request_raw_results_conflict(monkeypatch, tmp_path: Path):
+    async def fake_watch_agent(**kwargs):
+        kwargs["on_event"](
+            "task",
+            agent.AgentTaskResult(
+                task_id=10,
+                task_type="SCAN_REQUEST",
+                status="FAILED",
+                message=(
+                    "SCAN_REQUEST failed: Client error '409 ' for url "
+                    "'https://ssafer.co.kr/api/v1/scans/13/raw-results'\n"
+                    "For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/409"
+                ),
+                patch_results=[],
+            ),
+        )
+
+    monkeypatch.setenv("SSAFER_AGENT_ID", "7")
+    monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
+    monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
+
+    assert result.exit_code == 0
+    assert "scanId=13" in result.output
+    assert "409" in result.output
+    assert "developer.mozilla.org" not in result.output
 
 
 def test_agent_watch_command_passes_reconnect_options(monkeypatch, tmp_path: Path):
