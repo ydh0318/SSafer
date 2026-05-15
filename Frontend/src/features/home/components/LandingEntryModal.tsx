@@ -19,7 +19,7 @@ function LandingEntryModal({
 }: LandingEntryModalProps) {
   return (
     <ModalFrame onClose={onClose}>
-      <div className="overflow-hidden rounded-[2rem] border border-black/10 bg-[#fbfaf4]">
+      <div className="theme-entry-modal overflow-hidden rounded-[2rem] border border-black/10 bg-[#fbfaf4]">
         <div className="border-b border-black/10 bg-[linear-gradient(135deg,#f7f0cf_0%,#fffdf6_50%,#e4f0d4_100%)] px-6 py-8 sm:px-8">
           <p className="text-[11px] font-mono tracking-[0.28em] text-neutral-500">START SSAFER</p>
           <h2 className="mt-3 text-3xl font-black tracking-tight text-[#161616] sm:text-4xl">어떤 방식으로 시작할까요?</h2>

@@ -545,14 +545,12 @@ function ResultPage() {
                           </Link>
                           {!dimmed ? (
                             <Link
-                              className="flex items-center self-stretch border-l border-neutral-100 bg-black px-4 text-xs font-bold text-white transition hover:bg-[#3DDC84] hover:text-black"
+                              className="self-center mr-5 shrink-0 inline-flex items-center gap-1.5 rounded border border-neutral-200 px-3 py-1.5 text-[11px] font-bold text-neutral-600 transition hover:border-neutral-800 hover:bg-neutral-900 hover:text-white"
                               state={{ ...routeState, initialView: 'apply' }}
                               to={findingUrl}
                             >
-                              <span className="flex items-center gap-1">
-                                <Wand2 className="h-3 w-3" />
-                                고치기
-                              </span>
+                              <Wand2 className="h-3 w-3" />
+                              고치기
                             </Link>
                           ) : null}
                         </div>

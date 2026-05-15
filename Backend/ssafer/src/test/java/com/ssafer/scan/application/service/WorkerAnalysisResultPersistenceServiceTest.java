@@ -316,6 +316,51 @@ class WorkerAnalysisResultPersistenceServiceTest {
       }
       """;
 
+  private static final String DISTINCT_TRIVY_FILEPATHS_JSON = """
+      {
+        "schemaVersion": "0.2",
+        "scanId": "trivy-filepath-scan",
+        "source": "cli",
+        "generatedAt": "2026-05-04T01:57:29.596745+00:00",
+        "resultCount": 3,
+        "results": [
+          {
+            "findingId": "FND-1001",
+            "ruleId": "DS-0002",
+            "source": "trivy",
+            "severity": "HIGH",
+            "file": "Dockerfile",
+            "filePath": "app/ai-server/Dockerfile",
+            "line": null,
+            "title": "Image user should not be root",
+            "maskedEvidence": "Last USER command in Dockerfile should not be root"
+          },
+          {
+            "findingId": "FND-1002",
+            "ruleId": "DS-0002",
+            "source": "trivy",
+            "severity": "HIGH",
+            "file": "Dockerfile",
+            "filePath": "app/backend/Dockerfile",
+            "line": null,
+            "title": "Image user should not be root",
+            "maskedEvidence": "Last USER command in Dockerfile should not be root"
+          },
+          {
+            "findingId": "FND-1003",
+            "ruleId": "DS-0002",
+            "source": "trivy",
+            "severity": "HIGH",
+            "file": "Dockerfile",
+            "filePath": "infra/nginx/Dockerfile",
+            "line": null,
+            "title": "Image user should not be root",
+            "maskedEvidence": "Last USER command in Dockerfile should not be root"
+          }
+        ]
+      }
+      """;
+
   @Mock
   private ScanRepository scanRepository;
 
@@ -509,6 +554,46 @@ class WorkerAnalysisResultPersistenceServiceTest {
     assertThat(existingFinding.getRawSnippetJson()).contains("\"impact\"");
     assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SUCCEEDED);
     assertThat(scan.getStatus()).isEqualTo(ScanStatus.DONE);
+  }
+
+  @Test
+  void persistKeepsTrivyFindingsDistinctWhenOnlyFilePathDiffers() {
+    Scan scan = runningScan();
+    AgentTask task = ackedTask(scan);
+    ScanNode savedNode = ScanNode.builder()
+        .id(200L)
+        .scanId(scan.getId())
+        .nodeKey("trivy-filepath-scan")
+        .nodeName("cli")
+        .nodeType("ANALYSIS_RESULT")
+        .metadataJson("{}")
+        .createdAt(LocalDateTime.now())
+        .build();
+
+    when(scanRepository.findByIdForUpdate(scan.getId())).thenReturn(Optional.of(scan));
+    when(agentTaskRepository.findByIdAndScanId(task.getId(), scan.getId())).thenReturn(Optional.of(task));
+    when(analysisResultObjectReader.read(scan.getAnalysisResultPath())).thenReturn(DISTINCT_TRIVY_FILEPATHS_JSON);
+    when(scanNodeRepository.findByScanIdAndNodeKey(scan.getId(), "trivy-filepath-scan"))
+        .thenReturn(Optional.empty());
+    when(scanNodeRepository.save(any(ScanNode.class))).thenReturn(savedNode);
+    when(scanFindingRepository.findAllByScanId(scan.getId())).thenReturn(List.of());
+    when(scanFindingRepository.countByScanId(scan.getId())).thenReturn(3L);
+
+    workerAnalysisResultPersistenceService.persist(event());
+
+    ArgumentCaptor<List<ScanFinding>> findingsCaptor = ArgumentCaptor.forClass(List.class);
+    verify(scanFindingRepository).saveAll(findingsCaptor.capture());
+    assertThat(findingsCaptor.getValue()).hasSize(3);
+    assertThat(findingsCaptor.getValue())
+        .extracting(ScanFinding::getFilePath)
+        .containsExactly(
+            "app/ai-server/Dockerfile",
+            "app/backend/Dockerfile",
+            "infra/nginx/Dockerfile"
+        );
+    assertThat(findingsCaptor.getValue())
+        .extracting(ScanFinding::getFingerprint)
+        .doesNotHaveDuplicates();
   }
 
   @Test
