@@ -126,6 +126,7 @@ def test_help_shows_user_facing_commands_only():
     assert "signup" in result.output
     assert "run" in result.output
     assert "upload" in result.output
+    assert "upload --server" in result.output
     assert "apply" in result.output
     assert "server" in result.output
     assert "tools" in result.output

@@ -72,7 +72,7 @@ def report_agent_task_result(
     task: AgentTask,
     result: AgentTaskResult,
 ) -> dict[str, Any] | None:
-    if task.task_type != "PATCH_APPLY" or result.status == "DRY_RUN":
+    if result.status == "DRY_RUN":
         return None
     if result.status not in {"SUCCESS", "FAILED"}:
         return None
@@ -80,7 +80,8 @@ def report_agent_task_result(
     base_url = normalize_api_url(api_url)
     headers = {"Authorization": f"Bearer {agent_token}"}
     with httpx.Client(timeout=20.0, follow_redirects=True) as client:
-        _report_patch_apply_results(client, base_url, headers, task, result)
+        if task.task_type == "PATCH_APPLY":
+            _report_patch_apply_results(client, base_url, headers, task, result)
 
         endpoint = f"{base_url}/api/v1/internal/agents/{agent_id}/tasks/{task.task_id}/result"
         payload = _build_agent_task_result_payload(result)

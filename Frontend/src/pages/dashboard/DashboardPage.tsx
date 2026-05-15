@@ -51,14 +51,38 @@ const searchableStatuses: ScanStatus[] = ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW
 
 function ScanModeBadge({ scanMode }: { scanMode: ScanMode }) {
   const Icon = scanMode === 'CLI' ? Terminal : scanMode === 'UPLOAD' ? Upload : ScanSearch;
+  const label = scanMode === 'CLI' ? 'CLI' : scanMode === 'UPLOAD' ? 'Upload' : 'Agent';
 
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-neutral-500">
-      <Icon className="h-3.5 w-3.5" />
-      {scanMode}
+    <span className="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-600">
+      <Icon className="h-3 w-3" />
+      {label}
     </span>
   );
 }
+
+function getScanStatusBarClass(status: ScanStatus) {
+  if (status === 'DONE') return 'bg-[#9FCC2E]';
+  if (['RUNNING', 'QUEUED', 'REQUESTED', 'RAW_UPLOADED'].includes(status)) return 'bg-neutral-400';
+  if (status === 'FAILED') return 'bg-rose-400';
+  return 'bg-neutral-200';
+}
+
+function getScanStatusChipClass(status: ScanStatus) {
+  if (status === 'DONE') return 'bg-[#EDFFC0] text-[#4A7A00]';
+  if (status === 'RUNNING' || status === 'RAW_UPLOADED') return 'bg-neutral-200 text-neutral-600';
+  if (status === 'QUEUED' || status === 'REQUESTED') return 'bg-neutral-100 text-neutral-500';
+  if (status === 'FAILED') return 'bg-rose-50 text-rose-600';
+  if (status === 'CANCELED') return 'bg-neutral-100 text-neutral-400';
+  return 'bg-neutral-100 text-neutral-500';
+}
+
+const severityPills = [
+  { key: 'critical' as const, label: 'C', countKey: 'criticalCount' as const, cls: 'border-red-200 bg-red-50 text-red-700', dot: 'bg-red-500' },
+  { key: 'high' as const,     label: 'H', countKey: 'highCount' as const,     cls: 'border-orange-200 bg-orange-50 text-orange-700', dot: 'bg-orange-400' },
+  { key: 'medium' as const,   label: 'M', countKey: 'mediumCount' as const,   cls: 'border-yellow-200 bg-yellow-50 text-yellow-700', dot: 'bg-yellow-400' },
+  { key: 'low' as const,      label: 'L', countKey: 'lowCount' as const,      cls: 'border-blue-200 bg-blue-50 text-blue-600',   dot: 'bg-blue-400' },
+] as const;
 
 function formatRelativeDate(value: string | null) {
   if (!value) {
@@ -411,44 +435,83 @@ function DashboardPage() {
             <div className="px-6 py-16 text-center text-sm text-neutral-500">조건에 맞는 스캔이 없습니다.</div>
           ) : (
             <div>
-              {filteredScans.slice(0, 8).map((scan) => (
-                <button
-                  className="group grid w-full grid-cols-1 gap-3 border-b border-neutral-100 px-6 py-6 text-left transition hover:bg-[#FAFAF7] md:grid-cols-[minmax(0,1fr)_auto_auto]"
-                  key={scan.scanId}
-                  onClick={() => navigateToScan(scan)}
-                  type="button"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-xl font-black">{scan.projectName}</div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-mono text-neutral-400">
-                      <span>#{scan.scanId}</span>
-                      <span>·</span>
-                      <ScanModeBadge scanMode={scan.scanMode} />
-                      <ScanTypeBadge scanType={scan.scanType} />
-                      <span>·</span>
-                      <span>{formatRelativeDate(scan.completedAt || scan.requestedAt)}</span>
+              {filteredScans.slice(0, 8).map((scan) => {
+                const isActive = ['RUNNING', 'QUEUED', 'REQUESTED', 'RAW_UPLOADED'].includes(scan.status);
+                const totalFindings = scan.summary
+                  ? (scan.summary.criticalCount + scan.summary.highCount + scan.summary.mediumCount + scan.summary.lowCount)
+                  : 0;
+
+                return (
+                  <button
+                    className="group relative flex w-full items-stretch gap-0 border-b border-neutral-100 text-left transition hover:bg-[#FAFAF7]"
+                    key={scan.scanId}
+                    onClick={() => navigateToScan(scan)}
+                    type="button"
+                  >
+                    {/* 왼쪽 상태 컬러 바 */}
+                    <div className={`w-1 shrink-0 rounded-tl-sm rounded-bl-sm transition-all ${getScanStatusBarClass(scan.status)}`} />
+
+                    {/* 본문 */}
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-5">
+                      {/* 왼쪽: 이름 + 메타 */}
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-base font-black text-black">{scan.projectName}</span>
+                          {/* 상태 칩 */}
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider ${getScanStatusChipClass(scan.status)} ${isActive ? 'animate-pulse' : ''}`}>
+                            {scan.status}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-mono text-neutral-400">
+                          <span className="text-neutral-300">#{scan.scanId}</span>
+                          <span className="text-neutral-200">·</span>
+                          <ScanModeBadge scanMode={scan.scanMode} />
+                          <ScanTypeBadge scanType={scan.scanType} />
+                          <span className="text-neutral-200">·</span>
+                          <span>{formatRelativeDate(scan.completedAt || scan.requestedAt)}</span>
+                        </div>
+                      </div>
+
+                      {/* 오른쪽: 취약점 배지 또는 진행 상태 */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {scan.status === 'DONE' && scan.summary ? (
+                          totalFindings === 0 ? (
+                            <span className="rounded border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-bold text-neutral-400">
+                              이슈 없음
+                            </span>
+                          ) : (
+                            severityPills.map((pill) => {
+                              const count = scan.summary![pill.countKey];
+                              if (count === 0) return null;
+                              return (
+                                <span
+                                  key={pill.key}
+                                  className={`flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] font-bold ${pill.cls}`}
+                                >
+                                  <span className={`h-1.5 w-1.5 rounded-full ${pill.dot}`} />
+                                  {pill.label} {count}
+                                </span>
+                              );
+                            })
+                          )
+                        ) : scan.status === 'DONE' ? (
+                          <span className="flex items-center gap-1.5 text-xs text-neutral-400">
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            요약 대기
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 rounded border border-neutral-200 bg-neutral-100 px-2.5 py-1 text-[11px] font-bold text-neutral-600">
+                            <RefreshCw className="h-3 w-3 animate-spin" />
+                            분석 중
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 text-[11px] font-mono md:justify-end">
-                    {scan.status === 'DONE' && scan.summary ? (
-                      <>
-                        {scan.summary.criticalCount > 0 ? <span className="font-bold text-[#E63946]">C{scan.summary.criticalCount}</span> : null}
-                        {scan.summary.highCount > 0 ? <span className="font-bold text-[#FF8A33]">H{scan.summary.highCount}</span> : null}
-                        {scan.summary.mediumCount > 0 ? <span className="text-neutral-500">M{scan.summary.mediumCount}</span> : null}
-                        {scan.summary.lowCount > 0 ? <span className="text-neutral-400">L{scan.summary.lowCount}</span> : null}
-                      </>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 text-sm text-neutral-500">
-                        <RefreshCw className={scan.status === 'RUNNING' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
-                        {scan.status === 'DONE' ? '요약 대기 중' : '진행 중'}
-                      </span>
-                    )}
-                  </div>
-
-                  <ChevronRight className="hidden h-5 w-5 self-center text-neutral-300 transition group-hover:text-black md:block" />
-                </button>
-              ))}
+                    <ChevronRight className="hidden h-5 w-5 shrink-0 self-center pr-0 text-neutral-300 transition group-hover:text-black md:mr-4 md:flex" />
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
