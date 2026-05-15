@@ -130,12 +130,12 @@ def generate_finding_explanation(finding: dict[str, Any]) -> dict[str, Any]:
             retry_instructions = [
                 finding_input,
                 "",
-                "이전 응답이 검증에 실패했습니다.",
-                f"금지 문자: {last_disallowed_scripts or '없음'}",
-                "JSON만 다시 출력하세요.",
-                "필수 형식: {\"explanation\":{\"summary\":\"...\",\"whyRisky\":\"...\",\"abuseScenario\":\"...\",\"expectedImpact\":\"...\",\"severityInterpretation\":\"...\"},\"impact\":\"...\"}",
-                "자연어는 한국어 중심으로 짧게 작성하고, 없는 사실은 단정하지 마세요.",
-                "일본어, 중국어, 한자, 태국어, 깨진 문자는 쓰지 마세요.",
+                "The previous response failed validation.",
+                f"Disallowed characters found: {last_disallowed_scripts or 'none'}",
+                "Output only JSON.",
+                'Required format: {"explanation":{"summary":"...","whyRisky":"...","abuseScenario":"...","expectedImpact":"...","severityInterpretation":"..."},"impact":"..."}',
+                "Write natural-language values in Korean, keep them short, and do not assert facts not in the finding.",
+                "Never use Japanese, Chinese, Hanja, Thai, or broken characters.",
             ]
 
             prompt_input = "\n".join(retry_instructions)
@@ -182,3 +182,104 @@ def generate_finding_explanations(findings: list[dict[str, Any]]) -> list[dict[s
         }
         for finding in findings
     ]
+
+
+def compute_batch_max_tokens(
+    finding_count: int,
+    per_finding_tokens: int,
+    cap: int,
+) -> int:
+    return min(int(finding_count * per_finding_tokens * 1.1), cap)
+
+
+def generate_findings_explanation_batch(
+    findings: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    from app.chains.explain_chain import create_batch_explain_chain
+    from app.core.config import (
+        LLM_BATCH_MAX_TOKENS_CAP,
+        LLM_EXPLAIN_MAX_TOKENS,
+        MAX_BATCH_EXPLAIN_RETRIES,
+    )
+    from app.services.input_service import format_findings_for_explanation_llm
+
+    max_tokens = compute_batch_max_tokens(
+        len(findings), LLM_EXPLAIN_MAX_TOKENS, LLM_BATCH_MAX_TOKENS_CAP
+    )
+    chain = create_batch_explain_chain(max_tokens=max_tokens)
+    finding_input = format_findings_for_explanation_llm(findings)
+    expected_ids = {f["id"] for f in findings}
+
+    last_error: Exception | None = None
+    for attempt in range(MAX_BATCH_EXPLAIN_RETRIES + 1):
+        prompt_input = finding_input
+        if attempt > 0:
+            prompt_input = (
+                finding_input
+                + "\n\nThe previous response failed validation. Output only the JSON array."
+            )
+
+        raw = invoke_llm_with_retry(chain, {"finding_input": prompt_input})
+        text = get_llm_response_text(raw)
+        log_llm_usage(
+            logger=logger,
+            stage="BATCH_EXPLAIN",
+            finding_id=None,
+            input_text=prompt_input,
+            response=raw,
+            attempt_count=attempt + 1,
+            max_output_tokens=max_tokens,
+        )
+
+        if contains_disallowed_script(text):
+            last_error = ValueError("Batch explain output contains disallowed characters.")
+            continue
+
+        try:
+            return parse_batch_explain_response(text, expected_ids)
+        except ValueError as exc:
+            last_error = exc
+            logger.warning(
+                "Batch explain parse failed. attempt=%d error=%s",
+                attempt + 1,
+                exc,
+            )
+
+    raise ValueError(f"Batch explain failed after all retries. Last error: {last_error}")
+
+
+def parse_batch_explain_response(
+    response: str,
+    expected_finding_ids: set[str],
+) -> dict[str, dict[str, Any]]:
+    normalized = _normalize_json_response(response)
+    if not normalized:
+        raise ValueError("Batch explain output is empty.")
+
+    parsed = json.loads(normalized)
+    if not isinstance(parsed, list):
+        raise ValueError("Batch explain output must be a JSON array.")
+
+    results: dict[str, dict[str, Any]] = {}
+    for item in parsed:
+        if not isinstance(item, dict):
+            raise ValueError("Each batch explain item must be a JSON object.")
+
+        finding_id = item.get("findingId")
+        if not isinstance(finding_id, str) or finding_id not in expected_finding_ids:
+            raise ValueError(f"Invalid or unexpected findingId: {finding_id}")
+
+        explanation = item.get("explanation")
+        impact = item.get("impact")
+        _validate_explanation_sections(explanation)
+        if not isinstance(impact, str) or not impact.strip():
+            raise ValueError(f"Batch explain for {finding_id}: impact must be a string.")
+        validate_korean_natural_text(impact, f"impact[{finding_id}]")
+
+        results[finding_id] = {"explanation": explanation, "impact": impact}
+
+    missing = expected_finding_ids - set(results.keys())
+    if missing:
+        raise ValueError(f"Batch explain missing findings: {', '.join(sorted(missing))}")
+
+    return results
