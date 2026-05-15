@@ -131,6 +131,43 @@ function ScanRequestForm({
           />
         </label>
 
+        {/* 스캔 유형: AGENT 모드에서만 노출 */}
+        {isAgentMode && (
+          <div className="col-span-full space-y-2">
+            <span className="text-sm font-semibold text-black">스캔 유형</span>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                className={`border p-4 text-left transition ${
+                  (value.scanType ?? 'PROJECT_FILE') === 'PROJECT_FILE'
+                    ? 'border-black bg-black text-white'
+                    : 'border-neutral-300 bg-white text-black hover:border-black'
+                }`}
+                onClick={() => handleFieldChange('scanType', 'PROJECT_FILE')}
+                type="button"
+              >
+                <p className="text-sm font-black">프로젝트 파일 스캔</p>
+                <p className={`mt-1 text-xs leading-relaxed ${(value.scanType ?? 'PROJECT_FILE') === 'PROJECT_FILE' ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                  소스 코드·설정 파일의 취약점을 분석합니다.
+                </p>
+              </button>
+              <button
+                className={`border p-4 text-left transition ${
+                  value.scanType === 'SERVER_AUDIT'
+                    ? 'border-black bg-black text-white'
+                    : 'border-neutral-300 bg-white text-black hover:border-black'
+                }`}
+                onClick={() => handleFieldChange('scanType', 'SERVER_AUDIT')}
+                type="button"
+              >
+                <p className="text-sm font-black">서버 런타임 점검</p>
+                <p className={`mt-1 text-xs leading-relaxed ${value.scanType === 'SERVER_AUDIT' ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                  실행 중인 서버 환경의 보안 상태를 점검합니다.
+                </p>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 대상 경로: AGENT 모드에서만 노출 */}
         {isAgentMode && (
           <label className="block space-y-2">
