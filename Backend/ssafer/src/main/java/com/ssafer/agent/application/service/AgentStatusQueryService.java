@@ -3,6 +3,7 @@ package com.ssafer.agent.application.service;
 import com.ssafer.agent.api.dto.AgentStatusResponseData;
 import com.ssafer.agent.domain.entity.Agent;
 import com.ssafer.agent.domain.entity.AgentTask;
+import com.ssafer.agent.domain.enums.AgentStatus;
 import com.ssafer.agent.domain.enums.AgentTaskStatus;
 import com.ssafer.agent.domain.repository.AgentRepository;
 import com.ssafer.agent.domain.repository.AgentTaskRepository;
@@ -38,7 +39,7 @@ public class AgentStatusQueryService {
     // 프로젝트 존재/권한을 먼저 검증하고 해당 프로젝트의 agent 상태를 조회한다.
     projectAuthorizationService.loadAuthorizedProjectOrThrow(projectId, actor);
 
-    Agent agent = agentRepository.findFirstByProjectId(projectId)
+    Agent agent = agentRepository.findLatestByProjectIdAndStatus(projectId, AgentStatus.ONLINE)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
     AgentTask latestIncompleteTask = agentTaskRepository

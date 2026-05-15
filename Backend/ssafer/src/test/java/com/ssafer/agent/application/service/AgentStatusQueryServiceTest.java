@@ -54,7 +54,7 @@ class AgentStatusQueryServiceTest {
     Agent agent = buildAgent(10L, AgentStatus.ONLINE);
     AgentTask task = buildTask(agent, AgentTaskType.PATCH_APPLY, AgentTaskStatus.RUNNING);
 
-    given(agentRepository.findFirstByProjectId(10L)).willReturn(Optional.of(agent));
+    given(agentRepository.findLatestByProjectIdAndStatus(10L, AgentStatus.ONLINE)).willReturn(Optional.of(agent));
     given(agentTaskRepository.findFirstByAgentIdAndTaskStatusInOrderByQueuedAtDescIdDesc(
         agent.getId(),
         List.of(AgentTaskStatus.PENDING, AgentTaskStatus.SENT, AgentTaskStatus.ACKED, AgentTaskStatus.RUNNING)
@@ -70,9 +70,9 @@ class AgentStatusQueryServiceTest {
   @Test
   void getAgentStatusReturnsNullWhenIncompleteTaskDoesNotExist() {
     AuthenticatedActor actor = AuthenticatedActor.member(1L);
-    Agent agent = buildAgent(10L, AgentStatus.OFFLINE);
+    Agent agent = buildAgent(10L, AgentStatus.ONLINE);
 
-    given(agentRepository.findFirstByProjectId(10L)).willReturn(Optional.of(agent));
+    given(agentRepository.findLatestByProjectIdAndStatus(10L, AgentStatus.ONLINE)).willReturn(Optional.of(agent));
     given(agentTaskRepository.findFirstByAgentIdAndTaskStatusInOrderByQueuedAtDescIdDesc(
         agent.getId(),
         List.of(AgentTaskStatus.PENDING, AgentTaskStatus.SENT, AgentTaskStatus.ACKED, AgentTaskStatus.RUNNING)
@@ -86,7 +86,7 @@ class AgentStatusQueryServiceTest {
   @Test
   void getAgentStatusThrowsNotFoundWhenAgentDoesNotExist() {
     AuthenticatedActor actor = AuthenticatedActor.member(1L);
-    given(agentRepository.findFirstByProjectId(10L)).willReturn(Optional.empty());
+    given(agentRepository.findLatestByProjectIdAndStatus(10L, AgentStatus.ONLINE)).willReturn(Optional.empty());
 
     assertThatThrownBy(() -> agentStatusQueryService.getAgentStatus(10L, actor))
         .isInstanceOf(BusinessException.class)

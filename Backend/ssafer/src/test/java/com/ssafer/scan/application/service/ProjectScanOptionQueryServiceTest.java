@@ -3,9 +3,9 @@ package com.ssafer.scan.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ssafer.agent.domain.entity.Agent;
 import com.ssafer.agent.domain.enums.AgentStatus;
 import com.ssafer.agent.domain.repository.AgentRepository;
 import com.ssafer.global.error.BusinessException;
@@ -16,6 +16,7 @@ import com.ssafer.project.application.service.ProjectAuthorizationService;
 import com.ssafer.project.domain.entity.Project;
 import com.ssafer.project.domain.enums.ScanMode;
 import com.ssafer.scan.api.dto.ProjectScanOptionsResponseData;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -44,7 +45,8 @@ class ProjectScanOptionQueryServiceTest {
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
     when(projectAuthorizationService.loadAuthorizedProjectOrThrow(101L, actor)).thenReturn(project);
-    when(agentRepository.existsByProjectIdAndStatus(101L, AgentStatus.ONLINE)).thenReturn(true);
+    when(agentRepository.findLatestByProjectIdAndStatus(101L, AgentStatus.ONLINE))
+        .thenReturn(Optional.of(createAgent(project)));
 
     ProjectScanOptionsResponseData response = projectScanOptionQueryService.getScanOptions(101L);
 
@@ -62,7 +64,7 @@ class ProjectScanOptionQueryServiceTest {
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
     when(projectAuthorizationService.loadAuthorizedProjectOrThrow(101L, actor)).thenReturn(project);
-    when(agentRepository.existsByProjectIdAndStatus(101L, AgentStatus.ONLINE)).thenReturn(false);
+    when(agentRepository.findLatestByProjectIdAndStatus(101L, AgentStatus.ONLINE)).thenReturn(Optional.empty());
 
     ProjectScanOptionsResponseData response = projectScanOptionQueryService.getScanOptions(101L);
 
@@ -101,21 +103,27 @@ class ProjectScanOptionQueryServiceTest {
   }
 
   @Test
-  void getScanOptionsChecksOnlineAgentOnly() {
+  void getScanOptionsChecksLatestOnlineAgent() {
     AuthenticatedActor actor = AuthenticatedActor.member(1L);
     Project project = createProject(101L, ScanMode.UPLOAD, false);
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
     when(projectAuthorizationService.loadAuthorizedProjectOrThrow(101L, actor)).thenReturn(project);
-    when(agentRepository.existsByProjectIdAndStatus(101L, AgentStatus.ONLINE)).thenReturn(false);
+    when(agentRepository.findLatestByProjectIdAndStatus(101L, AgentStatus.ONLINE)).thenReturn(Optional.empty());
 
     projectScanOptionQueryService.getScanOptions(101L);
 
-    verify(agentRepository).existsByProjectIdAndStatus(101L, AgentStatus.ONLINE);
+    org.mockito.Mockito.verify(agentRepository).findLatestByProjectIdAndStatus(101L, AgentStatus.ONLINE);
   }
 
   private Project createProject(Long projectId, ScanMode defaultScanMode, boolean monitorEnabled) {
     Project project = new Project(1L, null, "test-project", null, defaultScanMode, monitorEnabled);
     ReflectionTestUtils.setField(project, "id", projectId);
     return project;
+  }
+
+  private Agent createAgent(Project project) {
+    Agent agent = new Agent(project, AgentStatus.ONLINE);
+    ReflectionTestUtils.setField(agent, "id", 1L);
+    return agent;
   }
 }
