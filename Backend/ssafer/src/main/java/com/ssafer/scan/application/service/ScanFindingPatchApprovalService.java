@@ -68,10 +68,10 @@ public class ScanFindingPatchApprovalService {
 
     validatePatchApproval(scan, finding);
 
+    Agent agent = loadOnlineProjectAgent(project.getId());
     LocalDateTime approvedAt = LocalDateTime.now();
     finding.approvePatch(actor, approvedAt);
 
-    Agent agent = loadOrCreateProjectAgent(project);
     AgentTask task = agentTaskRepository.save(new AgentTask(
         agent,
         project,
@@ -125,8 +125,13 @@ public class ScanFindingPatchApprovalService {
     }
   }
 
-  private Agent loadOrCreateProjectAgent(Project project) {
-    return agentRepository.findFirstByProjectId(project.getId())
-        .orElseGet(() -> agentRepository.save(new Agent(project, AgentStatus.OFFLINE, true)));
+  private Agent loadOnlineProjectAgent(Long projectId) {
+    return agentRepository.findLatestByProjectIdAndStatus(projectId, AgentStatus.ONLINE)
+        .orElseGet(() -> {
+          if (agentRepository.findFirstByProjectId(projectId).isPresent()) {
+            throw new BusinessException(ErrorCode.AGENT_OFFLINE);
+          }
+          throw new BusinessException(ErrorCode.AGENT_NOT_FOUND);
+        });
   }
 }

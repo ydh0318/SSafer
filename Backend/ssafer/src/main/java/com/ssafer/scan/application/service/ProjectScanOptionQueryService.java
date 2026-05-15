@@ -29,7 +29,7 @@ public class ProjectScanOptionQueryService {
     Project project = projectAuthorizationService.loadAuthorizedProjectOrThrow(projectId, actor);
 
     // AGENT 사용 가능 여부는 Worker가 아닌 Local Agent ONLINE 상태 기준으로만 판단한다.
-    boolean agentAvailable = agentRepository.existsByProjectIdAndStatus(projectId, AgentStatus.ONLINE);
+    boolean agentAvailable = agentRepository.findLatestByProjectIdAndStatus(projectId, AgentStatus.ONLINE).isPresent();
     // 정책: UPLOAD는 항상 가능, AGENT는 실제 ONLINE Agent가 있을 때만 노출한다.
     List<ScanMode> availableScanModes = agentAvailable
         ? List.of(ScanMode.UPLOAD, ScanMode.AGENT)
