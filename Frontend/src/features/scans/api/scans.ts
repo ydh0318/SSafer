@@ -149,6 +149,28 @@ export async function approveFindingPatch(scanId: string | number, findingId: st
 
     return response.data.data;
   } catch (error) {
+    const errorCode = getApiErrorCode(error);
+
+    if (errorCode === 'AGENT_NOT_FOUND') {
+      throw new Error('이 프로젝트에 연결된 Agent가 없습니다. 먼저 Agent를 연결해 주세요.');
+    }
+
+    if (errorCode === 'AGENT_OFFLINE') {
+      throw new Error('Agent가 현재 오프라인 상태입니다. Agent를 실행한 후 다시 시도해 주세요.');
+    }
+
+    if (errorCode === 'FORBIDDEN') {
+      throw new Error('패치 승인 권한이 없습니다.');
+    }
+
+    if (errorCode === 'NOT_FOUND') {
+      throw new Error('취약점 또는 스캔 정보를 찾을 수 없습니다.');
+    }
+
+    if (errorCode === 'CONFLICT' || errorCode === 'SCAN_STATUS_CONFLICT') {
+      throw new Error('이미 승인되었거나 처리 중인 패치입니다.');
+    }
+
     throw new Error(getApiErrorMessage(error, APPROVE_FINDING_PATCH_ERROR));
   }
 }

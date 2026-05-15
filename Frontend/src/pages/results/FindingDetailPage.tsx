@@ -112,6 +112,7 @@ function FindingDetailPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isApprovingPatch, setIsApprovingPatch] = useState(false);
   const [approveErrorMessage, setApproveErrorMessage] = useState<string | null>(null);
+  const [isPollingPatch, setIsPollingPatch] = useState(false);
 
   useEffect(() => {
     if (!scanId || !findingId) {
@@ -170,6 +171,45 @@ function FindingDetailPage() {
   const practiceSnippet = useMemo(() => getPracticeSnippet(finding), [finding]);
   const rawSnippetText = useMemo(() => prettyJsonText(finding?.rawSnippetJson ?? null), [finding?.rawSnippetJson]);
   const hasPatches = Boolean(finding?.fix?.patches?.length);
+
+  useEffect(() => {
+    if (!finding || finding.resolutionStatus !== 'IN_PROGRESS' || !scanId || !findingId) {
+      setIsPollingPatch(false);
+      return;
+    }
+
+    setIsPollingPatch(true);
+    let cancelled = false;
+
+    const poll = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      if (cancelled) {
+        return;
+      }
+
+      try {
+        const [refreshedFinding, refreshedFindingList] = await Promise.all([
+          getScanFindingDetail(scanId, findingId),
+          getScanFindings(scanId, { page: 0, size: 100 }),
+        ]);
+
+        if (!cancelled) {
+          setFinding(refreshedFinding);
+          setRelatedFindings(refreshedFindingList.items);
+        }
+      } catch {
+        // 폴링 실패는 조용히 무시
+      }
+    };
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+      setIsPollingPatch(false);
+    };
+  }, [finding?.resolutionStatus, scanId, findingId]);
 
   const copyText = async (value: string, successMessage: string) => {
     try {
@@ -376,21 +416,29 @@ function FindingDetailPage() {
                       )}
                     </div>
                     <div className="border border-neutral-100 bg-white p-6">
-                      <div className="flex items-center justify-between border-b border-neutral-200 bg-[#E6F9EE] -mx-6 -mt-6 mb-4 px-6 py-4 text-xs font-bold tracking-[0.24em] text-[#0A7C2E]">
-                        <span>코드 가이드</span>
-                        <button
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#0A7C2E] hover:underline"
-                          disabled={!finding.fix?.codeGuidance}
-                          onClick={() => void copyText(finding.fix?.codeGuidance || '', '코드 가이드가 복사되었습니다.')}
-                          type="button"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                          복사
-                        </button>
+                      <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">코드 가이드</div>
+                      <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111]">
+                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-[#FF5F57]" />
+                            <span className="h-2 w-2 rounded-full bg-[#FEBC2E]" />
+                            <span className="h-2 w-2 rounded-full bg-[#28C840]" />
+                            <span className="ml-2 font-mono text-[10px] text-neutral-500">code-guidance</span>
+                          </div>
+                          <button
+                            className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-500 transition hover:text-white disabled:opacity-30"
+                            disabled={!finding.fix?.codeGuidance}
+                            onClick={() => void copyText(finding.fix?.codeGuidance || '', '코드 가이드가 복사되었습니다.')}
+                            type="button"
+                          >
+                            <Copy className="h-3 w-3" />
+                            복사
+                          </button>
+                        </div>
+                        <pre className="overflow-x-auto whitespace-pre-wrap px-5 py-4 font-mono text-sm leading-7 text-neutral-200">
+                          {finding.fix.codeGuidance || '제공된 코드 가이드가 없습니다.'}
+                        </pre>
                       </div>
-                      <pre className="overflow-x-auto whitespace-pre-wrap bg-neutral-900 p-5 font-mono text-sm leading-7 text-neutral-100">
-                        {finding.fix.codeGuidance || '제공된 코드 가이드가 없습니다.'}
-                      </pre>
                     </div>
                     <div className="border border-neutral-100 bg-white p-6">
                       <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">검증 방법</div>
@@ -416,43 +464,56 @@ function FindingDetailPage() {
                       </p>
                     </div>
 
-                    <div className="grid overflow-hidden border border-neutral-200 bg-white xl:grid-cols-2">
+                    <div className="space-y-4">
                       <div>
-                        <div className="flex items-center justify-between border-b border-neutral-200 bg-[#FFE5E5] px-5 py-3 text-xs font-bold tracking-[0.24em] text-[#E63946]">
-                          <span>RAW SNIPPET</span>
-                          <button
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold"
-                            onClick={() => void copyText(rawSnippetText, '원본 코드가 복사되었습니다.')}
-                            type="button"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                            복사
-                          </button>
+                        <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#FF5F57] before:content-['']">원본 코드</div>
+                        <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111]">
+                          <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-[#FF5F57]" />
+                              <span className="h-2 w-2 rounded-full bg-[#FEBC2E]" />
+                              <span className="h-2 w-2 rounded-full bg-[#28C840]" />
+                              <span className="ml-2 font-mono text-[10px] text-neutral-500">raw-snippet</span>
+                            </div>
+                            <button
+                              className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-500 transition hover:text-white"
+                              onClick={() => void copyText(rawSnippetText, '원본 코드가 복사되었습니다.')}
+                              type="button"
+                            >
+                              <Copy className="h-3 w-3" />
+                              복사
+                            </button>
+                          </div>
+                          <pre className="overflow-x-auto whitespace-pre-wrap px-5 py-4 font-mono text-sm leading-7 text-neutral-200">
+                            {rawSnippetText}
+                          </pre>
                         </div>
-                        <pre className="overflow-x-auto bg-neutral-900 p-5 font-mono text-sm leading-7 text-neutral-100">
-                          {rawSnippetText}
-                        </pre>
                       </div>
-                      <div className="border-t border-neutral-200 xl:border-l xl:border-t-0">
-                        <div className="flex items-center justify-between border-b border-neutral-200 bg-[#E6F9EE] px-5 py-3 text-xs font-bold tracking-[0.24em] text-[#0A7C2E]">
-                          <span>RECOMMENDED ACTION</span>
-                          <button
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold"
-                            onClick={() =>
-                              void copyText(
-                                finding.remediationGuide || '수정 가이드가 아직 없습니다.',
-                                '수정 가이드가 복사되었습니다.',
-                              )
-                            }
-                            type="button"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                            복사
-                          </button>
+
+                      <div>
+                        <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">수정 제안</div>
+                        <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111]">
+                          <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-[#FF5F57]" />
+                              <span className="h-2 w-2 rounded-full bg-[#FEBC2E]" />
+                              <span className="h-2 w-2 rounded-full bg-[#28C840]" />
+                              <span className="ml-2 font-mono text-[10px] text-neutral-500">recommended-action</span>
+                            </div>
+                            <button
+                              className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-500 transition hover:text-white disabled:opacity-30"
+                              disabled={!finding.remediationGuide}
+                              onClick={() => void copyText(finding.remediationGuide || '', '수정 가이드가 복사되었습니다.')}
+                              type="button"
+                            >
+                              <Copy className="h-3 w-3" />
+                              복사
+                            </button>
+                          </div>
+                          <pre className="overflow-x-auto whitespace-pre-wrap px-5 py-4 font-mono text-sm leading-7 text-[#D4FC64]">
+                            {finding.remediationGuide || '수정 가이드가 아직 없습니다.'}
+                          </pre>
                         </div>
-                        <pre className="overflow-x-auto whitespace-pre-wrap bg-neutral-900 p-5 font-mono text-sm leading-7 text-neutral-100">
-                          {finding.remediationGuide || '수정 가이드가 아직 없습니다.'}
-                        </pre>
                       </div>
                     </div>
                   </>
@@ -490,9 +551,16 @@ function FindingDetailPage() {
                           {isApprovingPatch ? '적용 요청 중...' : '패치 적용 승인'}
                         </button>
                       ) : (
-                        <span className="bg-[#3DDC84] px-3 py-1.5 text-xs font-bold tracking-[0.2em] text-black">
-                          {finding.resolutionStatus}
-                        </span>
+                        (() => {
+                          const rm = resolutionDisplayMeta[finding.resolutionStatus] ?? resolutionDisplayMeta['OPEN'];
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-bold ${rm.cls}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${rm.dot}`} />
+                              {rm.label}
+                              {isPollingPatch && <span className="ml-1 animate-pulse">…</span>}
+                            </span>
+                          );
+                        })()
                       )}
                     </div>
                     {approveErrorMessage ? <InlineMessage message={approveErrorMessage} tone="error" /> : null}
@@ -550,9 +618,15 @@ function FindingDetailPage() {
                             승인된 패치는 Agent를 통해 실제 서버 파일에 적용됩니다. 적용 전 백업 파일이 자동 생성됩니다.
                           </p>
                         </div>
-                        <span className="bg-[#3DDC84] px-2 py-1 text-[10px] font-bold tracking-[0.24em] text-black">
-                          {finding.resolutionStatus}
-                        </span>
+                        {(() => {
+                          const rm = resolutionDisplayMeta[finding.resolutionStatus] ?? resolutionDisplayMeta['OPEN'];
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-[10px] font-bold ${rm.cls}`}>
+                              <span className={`h-1 w-1 rounded-full ${rm.dot}`} />
+                              {rm.label}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="mt-5 grid gap-3 md:grid-cols-2">
                         <div className="bg-[#F5F5F5] p-4 text-sm text-neutral-700">
@@ -596,48 +670,68 @@ function FindingDetailPage() {
 
           </div>
 
-          <aside className="sticky top-24 h-fit border border-neutral-200 bg-white">
-            <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-              <span className="text-sm font-bold">같은 스캔의 다른 항목</span>
-              <span className="text-xs text-neutral-400">{relatedFindings.length}건</span>
+          <aside className="sticky top-24 h-fit border border-neutral-100 bg-white">
+            {/* 헤더 */}
+            <div className="border-b border-neutral-100 px-4 py-3">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">같은 스캔의 항목</p>
+              <p className="mt-0.5 text-lg font-black text-black">{relatedFindings.length}<span className="ml-1 text-sm font-normal text-neutral-400">건</span></p>
             </div>
-            <div>
+
+            {/* 목록 */}
+            <div className="max-h-[560px] overflow-y-auto">
               {relatedFindings.map((item) => {
                 const active = item.findingId === finding.findingId;
                 const dimmed = item.resolutionStatus === 'RESOLVED' || item.resolutionStatus === 'IGNORED';
+                const rm = resolutionDisplayMeta[item.resolutionStatus] ?? resolutionDisplayMeta['OPEN'];
 
                 return (
                   <Link
-                    className={`block border-b border-neutral-100 p-3 last:border-b-0 hover:bg-[#F5F5F5] ${
-                      active ? 'border-l-2 border-l-black bg-[#F5F5F5]' : ''
-                    } ${dimmed ? 'opacity-50' : ''}`}
+                    className={`group relative flex items-stretch gap-0 border-b border-neutral-100 last:border-b-0 transition-colors ${
+                      active ? 'bg-[#F4FFD9]' : dimmed ? 'bg-neutral-50 hover:bg-neutral-100' : 'hover:bg-[#FAFAF7]'
+                    }`}
                     key={item.findingId}
                     state={routeState}
                     to={ROUTES.resultFindingDetail
                       .replace(':scanId', String(item.scanId))
                       .replace(':findingId', String(item.findingId))}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: severityMeta[item.severity].bg }} />
-                      <span className="font-mono text-[10px] text-neutral-500">#{item.findingId}</span>
-                      {(() => {
-                        const rm = resolutionDisplayMeta[item.resolutionStatus] ?? resolutionDisplayMeta['OPEN'];
-                        return (
-                          <span className={`ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold ${rm.cls}`}>
-                            <span className={`h-1 w-1 rounded-full ${rm.dot}`} />
-                            {rm.label}
-                          </span>
-                        );
-                      })()}
+                    {/* 심각도 컬러 바 */}
+                    <div
+                      className="w-1 shrink-0"
+                      style={{ background: active ? '#9FCC2E' : severityMeta[item.severity].bg }}
+                    />
+
+                    <div className={`min-w-0 flex-1 px-3 py-3 ${dimmed ? 'opacity-50' : ''}`}>
+                      {/* 심각도 배지 + ID + 해결 상태 */}
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+                          style={{ background: severityMeta[item.severity].soft, color: severityMeta[item.severity].bg }}
+                        >
+                          {item.severity}
+                        </span>
+                        <span className="font-mono text-[10px] text-neutral-400">#{item.findingId}</span>
+                        <span className={`ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold ${rm.cls}`}>
+                          <span className={`h-1 w-1 rounded-full ${rm.dot}`} />
+                          {rm.label}
+                        </span>
+                      </div>
+
+                      {/* 제목 */}
+                      <p className={`mt-1.5 line-clamp-2 text-xs font-medium leading-snug ${
+                        active ? 'text-black' : dimmed ? 'text-neutral-400 line-through' : 'text-neutral-700 group-hover:text-black'
+                      }`}>
+                        {item.title}
+                      </p>
                     </div>
-                    <div className={`mt-1 text-sm font-medium ${dimmed ? 'line-through' : ''}`}>{item.title}</div>
                   </Link>
                 );
               })}
             </div>
-            <div className="flex items-center justify-between border-t border-neutral-200 px-3 py-3 text-xs text-neutral-500">
-              <span>scanId #{scanId}</span>
-              <span>총 {relatedFindings.length}건</span>
+
+            {/* 푸터 */}
+            <div className="border-t border-neutral-100 px-4 py-2.5 font-mono text-[10px] text-neutral-400">
+              scan #{scanId}
             </div>
           </aside>
         </div>

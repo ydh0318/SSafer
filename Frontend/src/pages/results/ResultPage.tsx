@@ -1,13 +1,13 @@
-import { AlertCircle, ArrowLeft, CheckCircle2, FileText, GitBranch, RefreshCw, Wand2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, FileText, GitBranch, RefreshCw, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import PageBanner from '../../components/common/PageBanner';
 import PageHero from '../../components/common/PageHero';
-import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
 import { getScanBasic, getScanFindings, getScanSummary } from '../../features/results/api/results';
+import { getProjectDetail } from '../../features/projects/api/projects';
 import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
@@ -76,6 +76,7 @@ function ResultPage() {
   const routeState = (location.state ?? {}) as ResultRouteState;
 
   const [scanBasic, setScanBasic] = useState<ScanBasicData | null>(null);
+  const [projectName, setProjectName] = useState<string | null>(null);
   const [summary, setSummary] = useState<ScanSummaryData | null>(null);
   const [findingsData, setFindingsData] = useState<ScanFindingListResponseData>(emptyFindingList);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -108,6 +109,11 @@ function ResultPage() {
         }
 
         setScanBasic(basicData);
+
+        // 프로젝트명 병렬 로드
+        void getProjectDetail(String(basicData.projectId))
+          .then((p) => { if (isMounted) setProjectName(p.name); })
+          .catch(() => {});
 
         const summaryData = await getScanSummary(scanId);
 
@@ -294,26 +300,45 @@ function ResultPage() {
           </>
         }
         aside={
-          <div className="border border-neutral-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-neutral-500">SCAN SNAPSHOT</p>
-                <h2 className="mt-3 text-2xl font-black tracking-tight">Scan #{scanId}</h2>
+          <div className="border border-neutral-100 bg-white p-6">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">Scan Snapshot</p>
+            <h2 className="mt-3 text-2xl font-black tracking-tight">#{scanId}</h2>
+            <dl className="mt-4 space-y-2 text-sm">
+              {summary && (
+                <div className="flex items-center justify-between border-t border-neutral-100 pt-2">
+                  <dt className="text-neutral-500">총 탐지</dt>
+                  <dd className="font-bold">{summary.totalFindings}건</dd>
+                </div>
+              )}
+              {summary && counts.CRITICAL > 0 && (
+                <div className="flex items-center justify-between border-t border-neutral-100 pt-2">
+                  <dt className="text-neutral-500">Critical</dt>
+                  <dd className="font-bold text-[#E63946]">{counts.CRITICAL}건</dd>
+                </div>
+              )}
+              <div className="flex items-center justify-between border-t border-neutral-100 pt-2">
+                <dt className="text-neutral-500">해결 완료</dt>
+                <dd className="font-bold text-[#4A7A00]">{resolvedCount}건</dd>
               </div>
-              <PixelGoose mood={resolvedCount > 0 ? 'happy' : 'alert'} size={84} />
-            </div>
-            <p className="mt-4 text-sm leading-7 text-neutral-600">
-              결과 화면에서는 위험도별 분포, 탐지 위치, 해결 상태를 한 번에 볼 수 있습니다. 수정이 필요한 항목부터 순서대로 확인해 보세요.
-            </p>
+            </dl>
           </div>
         }
         description={
-          <div className="space-y-2">
+          <div className="space-y-2.5">
+            {currentProjectId && (
+              <Link
+                className="inline-flex items-center gap-1.5 text-sm font-bold text-black transition hover:opacity-70"
+                state={routeState}
+                to={ROUTES.projectDetail.replace(':projectId', String(currentProjectId))}
+              >
+                {projectName ?? `Project #${currentProjectId}`}
+                <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
+              </Link>
+            )}
             <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
-              <span className="font-mono">scanId #{scanId}</span>
+              <span className="font-mono text-neutral-400">scan #{scanId}</span>
               {scanBasic ? <ScanStatusBadge status={scanBasic.status} /> : null}
               {scanBasic ? <ScanTypeBadge scanType={scanBasic.scanType} /> : null}
-              {currentProjectId ? <span>projectId #{currentProjectId}</span> : null}
               {scanBasic ? <ScanModeBadge scanMode={scanBasic.scanMode} source={scanBasic.source} /> : null}
             </div>
             <p className="text-neutral-600">
@@ -339,49 +364,33 @@ function ResultPage() {
 
       {!isInitialLoading && currentScanType === 'PROJECT_FILE' && summary ? (
         <>
+          {/* ── Severity 카드 ── */}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {severityOrder.map((severity) => {
               const meta = severityMeta[severity];
               const count = counts[severity];
               return (
                 <div
-                  className="relative overflow-hidden border border-neutral-200 bg-white p-5"
+                  className="border border-neutral-100 bg-white px-5 py-4"
                   key={severity}
                   style={{ borderLeftColor: meta.bg, borderLeftWidth: '3px' }}
                 >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="flex h-6 w-6 items-center justify-center rounded-full"
-                      style={{ background: meta.soft }}
-                    >
-                      <AlertCircle className="h-3.5 w-3.5" style={{ color: meta.bg }} />
-                    </span>
-                    <span
-                      className="text-[10px] font-bold uppercase tracking-[0.22em]"
-                      style={{ color: meta.bg }}
-                    >
-                      {meta.label}
-                    </span>
-                  </div>
-                  <div className={`mt-3 text-4xl font-black ${count === 0 ? 'text-neutral-200' : 'text-black'}`}>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: meta.bg }}>
+                    {meta.label}
+                  </span>
+                  <div className={`mt-2 text-4xl font-black ${count === 0 ? 'text-neutral-200' : 'text-black'}`}>
                     {count}
                   </div>
-                  {count > 0 && (
-                    <div
-                      className="absolute bottom-0 right-0 h-1 w-full opacity-30"
-                      style={{ background: meta.bg }}
-                    />
-                  )}
                 </div>
               );
             })}
           </div>
 
-          <div className="flex flex-col gap-6 border border-neutral-200 bg-white p-6 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex items-center gap-6">
-              <PixelGoose mood={resolvedRatio > 30 ? 'happy' : 'working'} size={72} />
+          {/* ── Checklist Progress ── */}
+          <div className="border border-neutral-100 bg-white px-6 py-5">
+            <div className="flex flex-wrap items-center justify-between gap-6">
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.28em] text-neutral-500">CHECKLIST PROGRESS</div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">Checklist Progress</p>
                 <div className="mt-2 text-3xl font-black">
                   {resolvedCount}
                   <span className="text-neutral-300"> / {actionableTotal}</span>
@@ -399,80 +408,79 @@ function ResultPage() {
                   })}
                 </div>
               </div>
-            </div>
-            <div className="w-full xl:max-w-[420px]">
-              <div className="mb-2 text-sm text-neutral-500">전체 진행률 {resolvedRatio}%</div>
-              <div className="h-3 bg-neutral-100">
-                <div className="h-full bg-[#3DDC84]" style={{ width: `${resolvedRatio}%` }} />
+              <div className="w-full xl:max-w-sm">
+                <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
+                  <span>진행률</span>
+                  <span className="font-mono font-bold text-black">{resolvedRatio}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-neutral-100">
+                  <div className="h-full rounded-full bg-[#9FCC2E] transition-all duration-500" style={{ width: `${resolvedRatio}%` }} />
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-2 text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-500">severity</span>
-            <button
-              className={`border px-3 py-1.5 text-xs ${
-                severityFilter === 'all' ? 'border-black bg-black text-white' : 'border-neutral-300 bg-white'
-              }`}
-              onClick={() => setSeverityFilter('all')}
-              type="button"
-            >
-              전체
-            </button>
-            {severityOrder.map((severity) => {
-              const active = severityFilter === severity;
-              return (
+          {/* ── 필터 ── */}
+          <div className="border border-neutral-100 bg-white px-5 py-4">
+            <div className="flex flex-col gap-3">
+              {/* Severity */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-24 shrink-0 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">Severity</span>
                 <button
-                  className={`inline-flex items-center gap-1.5 border px-3 py-1.5 text-xs font-bold transition ${
-                    active ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400'
-                  }`}
-                  key={severity}
-                  onClick={() => setSeverityFilter(severity)}
+                  className={`border px-2.5 py-1 text-xs transition ${severityFilter === 'all' ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
+                  onClick={() => setSeverityFilter('all')}
                   type="button"
                 >
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: active ? 'white' : severityMeta[severity].bg }}
-                  />
-                  {severity}
-                  <span className={`font-mono ${active ? 'text-neutral-300' : 'text-neutral-400'}`}>{counts[severity]}</span>
+                  전체
                 </button>
-              );
-            })}
-          </div>
+                {severityOrder.map((severity) => {
+                  const active = severityFilter === severity;
+                  return (
+                    <button
+                      className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-bold transition ${active ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
+                      key={severity}
+                      onClick={() => setSeverityFilter(severity)}
+                      type="button"
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ background: active ? 'white' : severityMeta[severity].bg }} />
+                      {severity}
+                      <span className={`font-mono text-[11px] ${active ? 'text-neutral-300' : 'text-neutral-400'}`}>{counts[severity]}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-2 text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-500">resolution</span>
-            <button
-              className={`border px-3 py-1.5 text-xs ${
-                resolutionFilter === 'all' ? 'border-black bg-black text-white' : 'border-neutral-300 bg-white'
-              }`}
-              onClick={() => setResolutionFilter('all')}
-              type="button"
-            >
-              전체
-            </button>
-            {resolutionValues.map((value) => {
-              const active = resolutionFilter === value;
-              const m = resolutionMeta[value];
-              return (
+              {/* Resolution */}
+              <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3">
+                <span className="w-24 shrink-0 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">Resolution</span>
                 <button
-                  className={`inline-flex items-center gap-1.5 border px-3 py-1.5 text-xs font-bold transition ${
-                    active ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400'
-                  }`}
-                  key={value}
-                  onClick={() => setResolutionFilter(value)}
+                  className={`border px-2.5 py-1 text-xs transition ${resolutionFilter === 'all' ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
+                  onClick={() => setResolutionFilter('all')}
                   type="button"
                 >
-                  <span className={`h-2 w-2 rounded-full ${active ? 'bg-white' : m.dot}`} />
-                  {m.label}
+                  전체
                 </button>
-              );
-            })}
-            <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-              <span>TRIVY {getSourceCount(summary, 'TRIVY')}</span>
-              <span>CUSTOM RULE {getSourceCount(summary, 'CUSTOM_RULE')}</span>
-              <span>AI {getSourceCount(summary, 'AI')}</span>
+                {resolutionValues.map((value) => {
+                  const active = resolutionFilter === value;
+                  const m = resolutionMeta[value];
+                  return (
+                    <button
+                      className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-bold transition ${active ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
+                      key={value}
+                      onClick={() => setResolutionFilter(value)}
+                      type="button"
+                    >
+                      <span className={`h-2 w-2 rounded-full ${active ? 'bg-white' : m.dot}`} />
+                      {m.label}
+                    </button>
+                  );
+                })}
+                <div className="ml-auto flex flex-wrap items-center gap-3 font-mono text-[11px] text-neutral-400">
+                  <span>Trivy {getSourceCount(summary, 'TRIVY')}</span>
+                  <span>Custom {getSourceCount(summary, 'CUSTOM_RULE')}</span>
+                  <span>AI {getSourceCount(summary, 'AI')}</span>
+                </div>
+              </div>
             </div>
           </div>
 
