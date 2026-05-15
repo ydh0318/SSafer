@@ -1,45 +1,44 @@
 from langchain_core.prompts import ChatPromptTemplate
 
 
+_FIX_SYSTEM = (
+    "You are SSAfer's security fix suggestion generator. "
+    "Return only a single JSON object; do not use markdown code blocks. "
+    "Always include: summary, priority, recommendedActions, codeGuidance, verification, cautions. "
+    "priority must be exactly one of: critical, high, medium, low. Do not use urgent, severe, or other values. "
+    "recommendedActions is a string array with 2-5 items. "
+    "cautions is a string array with 0-3 items; use an empty array [] if nothing comes to mind. "
+    "Write all user-facing natural-language fields in Korean. "
+    "Filenames, rule IDs, finding IDs, tech terms, and code snippets may stay in their original form. "
+    "Never use Japanese, Chinese, Hanja, Thai, Spanish, Latin, or broken characters. "
+    "If source is server-audit or Scan Type is SERVER_AUDIT, do not generate patches; focus on operational guidance and verification commands. "
+    "Include patches only when finding.patchContext provides enough context for a safe CLI patch.\n\n"
+    "Patch rules:\n"
+    "- Omit patches if patchContext is missing or the fix is uncertain.\n"
+    "- Use the exact finding.patchContext.operation value for operation.\n"
+    "- If operation is replace, copy patchContext.oldText verbatim into oldText; do not rewrite it.\n"
+    "- If operation is append, do not create an oldText field.\n"
+    "- For Dockerfile or docker-compose YAML, ensure newText does not break syntax after application.\n"
+    "- Never put ***MASKED***, [MASKED], or <MASKED> values in oldText or newText.\n"
+    "- Each patch must contain only operation, oldText, newText. Do not output filePath, expectedFileHash, patchId, or findingId; the code fills them automatically.\n"
+)
+
 FIX_PROMPT = ChatPromptTemplate.from_messages(
     [
-        (
-            "system",
-            (
-                "당신은 SSAfer의 보안 수정 제안 생성기입니다. "
-                "JSON 객체 하나만 반환하고, 마크다운 코드 블록은 쓰지 마세요. "
-                "summary, priority, recommendedActions, codeGuidance, verification, cautions는 항상 포함하세요. "
-                "priority는 반드시 critical, high, medium, low 중 하나를 사용하세요. urgent, severe 같은 다른 값은 쓰지 마세요. "
-                "recommendedActions는 2~5개의 문자열 배열입니다. "
-                "cautions는 0~3개의 문자열 배열이며, 주의할 점이 떠오르지 않으면 빈 배열 []로 두세요. "
-                "사용자에게 보이는 자연어 필드는 한국어 중심으로 작성하세요. "
-                "파일명, 규칙 ID, 탐지 ID, 기술명, 코드 조각은 원문을 유지할 수 있습니다. "
-                "일본어, 중국어, 한자, 태국어, 스페인어, 라틴어, 깨진 문자는 절대 쓰지 마세요. "
-                "source가 server-audit 이거나 Scan Type이 SERVER_AUDIT 이면 patches를 만들지 말고 운영 조치와 확인 명령 중심으로 작성하세요. "
-                "finding.patchContext가 안전한 CLI 패치를 만들 수 있을 때만 patches를 포함하세요.\n\n"
-                "패치 규칙:\n"
-                "- patchContext가 없거나 수정이 불확실하면 patches를 생략하세요.\n"
-                "- operation은 finding.patchContext.operation 값을 그대로 쓰세요.\n"
-                "- operation이 replace면 oldText는 patchContext.oldText를 그대로 사용하고 AI가 다시 쓰지 마세요.\n"
-                "- operation이 append면 oldText를 만들지 마세요.\n"
-                "- Dockerfile이나 docker-compose YAML을 다루는 경우 newText는 적용 후 문법이 깨지지 않아야 합니다.\n"
-                "- oldText나 newText에 ***MASKED***, [MASKED], <MASKED> 같은 마스킹 값을 넣지 마세요.\n"
-                "- 각 patch는 operation, oldText, newText만 포함하세요. filePath, expectedFileHash, patchId, findingId는 출력하지 마세요. 코드가 자동으로 채웁니다.\n"
-            ),
-        ),
+        ("system", _FIX_SYSTEM),
         (
             "human",
             (
-                "아래 finding에 대한 수정 제안 JSON을 생성하세요.\n\n"
+                "Generate a fix suggestion JSON for the finding below.\n\n"
                 "{finding_input}\n\n"
-                "JSON 형식:\n"
+                "JSON format:\n"
                 "{{\n"
-                '  "summary": "짧은 수정 요약",\n'
+                '  "summary": "short fix summary",\n'
                 '  "priority": "high",\n'
-                '  "recommendedActions": ["조치 1", "조치 2"],\n'
-                '  "codeGuidance": "코드나 설정에서 바꿀 내용",\n'
-                '  "verification": "수정 확인 방법",\n'
-                '  "cautions": ["주의사항 1"],\n'
+                '  "recommendedActions": ["action 1", "action 2"],\n'
+                '  "codeGuidance": "what to change in code or config",\n'
+                '  "verification": "how to verify the fix",\n'
+                '  "cautions": ["caution 1"],\n'
                 '  "patches": [\n'
                 "    {{\n"
                 '      "operation": "replace",\n'
@@ -48,7 +47,44 @@ FIX_PROMPT = ChatPromptTemplate.from_messages(
                 "    }}\n"
                 "  ]\n"
                 "}}\n\n"
-                "패치 조건을 만족하지 못하면 patches 키를 통째로 생략하세요."
+                "Write all values in Korean. "
+                "Omit the patches key entirely if patch conditions are not met."
+            ),
+        ),
+    ]
+)
+
+
+BATCH_FIX_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", _FIX_SYSTEM),
+        (
+            "human",
+            (
+                "Generate a fix suggestion JSON array for the findings below.\n\n"
+                "{finding_input}\n\n"
+                "JSON array format:\n"
+                "[\n"
+                "  {{\n"
+                '    "findingId": "copy the Finding ID exactly",\n'
+                '    "summary": "short fix summary",\n'
+                '    "priority": "high",\n'
+                '    "recommendedActions": ["action 1", "action 2"],\n'
+                '    "codeGuidance": "what to change in code or config",\n'
+                '    "verification": "how to verify the fix",\n'
+                '    "cautions": ["caution 1"],\n'
+                '    "patches": [\n'
+                "      {{\n"
+                '        "operation": "replace",\n'
+                '        "oldText": "original text",\n'
+                '        "newText": "fixed text"\n'
+                "      }}\n"
+                "    ]\n"
+                "  }}\n"
+                "]\n\n"
+                "Create one object per finding. Use the Finding ID from the input as the findingId value.\n"
+                "Write all values in Korean. "
+                "Omit the patches key for any finding whose patch conditions are not met."
             ),
         ),
     ]

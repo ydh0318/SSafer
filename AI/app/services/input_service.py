@@ -74,3 +74,21 @@ def format_finding_for_llm(finding: dict[str, Any]) -> str:
 
 def format_findings_for_llm(findings: list[dict[str, Any]]) -> list[str]:
     return [format_finding_for_llm(finding) for finding in findings]
+
+
+def format_findings_for_explanation_llm(findings: list[dict[str, Any]]) -> str:
+    sections = []
+    for i, finding in enumerate(findings, start=1):
+        header = f"--- Finding {i} (ID: {finding['id']}) ---"
+        body = format_finding_for_explanation_llm(finding)
+        sections.append(f"{header}\n{body}")
+    return "\n\n".join(sections)
+
+
+def format_findings_for_fix_llm(findings: list[dict[str, Any]]) -> str:
+    sections = []
+    for i, finding in enumerate(findings, start=1):
+        header = f"--- Finding {i} (ID: {finding['id']}) ---"
+        body = format_finding_for_fix_llm(finding)
+        sections.append(f"{header}\n{body}")
+    return "\n\n".join(sections)
