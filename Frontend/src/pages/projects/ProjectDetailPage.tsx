@@ -1,12 +1,9 @@
-import { Activity, ArrowRight, Bot, FolderOpen, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Loader2, ShieldAlert, Trash2, Wifi, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import MetricCard from '../../components/common/MetricCard';
 import PageBanner from '../../components/common/PageBanner';
-import PageHero from '../../components/common/PageHero';
 import PixelGoose from '../../components/common/PixelGoose';
-import SectionPanel from '../../components/common/SectionPanel';
 import { ROUTES } from '../../constants/routes';
 import { getProjectAgentStatus } from '../../features/agents/api/agents';
 import AgentStatusCard from '../../features/agents/components/AgentStatusCard';
@@ -454,156 +451,236 @@ function ProjectDetailPage() {
     );
   }
 
+  const agentIsOnline = agentStatus?.status === 'ONLINE';
+
+  const gooseMood = activeScans.length > 0 ? 'working' : completedScans.length > 0 ? 'happy' : 'idle';
+
   return (
-    <section className="space-y-8">
-      <PageHero
-        actions={
-          <>
+    <section className="space-y-6">
+
+      {/* ── 히어로 ── */}
+      <div className="relative overflow-hidden border border-neutral-200 bg-white">
+        {/* 라임 강조 줄 */}
+        <div className="h-1 w-full bg-[#D4FC64]" />
+
+        <div className="px-8 pt-7 pb-0">
+          {/* 상단 내비 */}
+          <div className="flex items-center justify-between">
             <Link
-              className="border border-neutral-300 px-5 py-3 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+              className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.24em] text-neutral-400 transition hover:text-black uppercase"
               to={ROUTES.projects}
             >
-              프로젝트 목록
+              <ArrowRight className="h-3 w-3 rotate-180" />
+              Projects
             </Link>
-            {projectDetail ? (
-              <button
-                className="inline-flex items-center gap-2 border border-rose-200 px-5 py-3 text-sm font-bold text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
-                onClick={() => openDeleteModal({ id: projectId, name: projectDetail.name })}
-                type="button"
-              >
-                <Trash2 className="h-4 w-4" />
-                프로젝트 삭제
-              </button>
-            ) : null}
-            {lastCreatedScan ? (
-              <Link
-                className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
-                state={{ projectId }}
-                to={ROUTES.scanDetail.replace(':scanId', String(lastCreatedScan.scanId))}
-              >
-                최근 스캔 보기
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            ) : null}
-          </>
-        }
-        aside={
-          <div className="border border-neutral-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-neutral-500">PROJECT STATUS</p>
-                <h2 className="mt-3 text-2xl font-black tracking-tight text-black">
-                  {isProjectLoading ? '프로젝트 정보를 불러오는 중입니다.' : projectDetail?.name ?? '프로젝트 정보를 찾을 수 없습니다.'}
-                </h2>
-              </div>
-              <PixelGoose mood={activeScans.length > 0 ? 'working' : completedScans.length > 0 ? 'happy' : 'idle'} size={88} />
-            </div>
-            <p className="mt-4 text-sm leading-7 text-neutral-600">
-              {projectDetail?.description ?? '프로젝트 설명이 아직 없습니다.'}
-            </p>
+            <span className="font-mono text-[10px] text-neutral-300">PROJECT DETAIL</span>
           </div>
-        }
-        description="프로젝트 단위로 스캔 요청, Agent 상태, 업로드 흐름, 스캔 기록까지 한 화면에서 관리할 수 있습니다."
-        eyebrow="PROJECT DETAIL"
-        title={
-          <>
-            스캔을 시작하고,
-            <br />
-            결과 확인까지 한 번에 보는 프로젝트 화면입니다.
-          </>
-        }
-      />
 
-      {projectError ? <PageBanner message={projectError} tone="error" /> : null}
+          {/* 프로젝트 이름 + 거위 */}
+          <div className="mt-5 flex items-end justify-between gap-4">
+            <div className="min-w-0 pb-7">
+              {/* 상태 칩 */}
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[10px] font-bold tracking-wider ${
+                  isAgentLoading
+                    ? 'border-neutral-200 bg-neutral-100 text-neutral-400'
+                    : agentIsOnline
+                    ? 'border-[#B8E830] bg-[#F0FFD0] text-[#4A7A00]'
+                    : 'border-neutral-200 bg-neutral-100 text-neutral-500'
+                }`}>
+                  {isAgentLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : agentIsOnline ? (
+                    <Wifi className="h-3 w-3" />
+                  ) : (
+                    <WifiOff className="h-3 w-3" />
+                  )}
+                  {isAgentLoading ? 'AGENT ...' : agentIsOnline ? 'AGENT ONLINE' : 'AGENT OFFLINE'}
+                </span>
+                {activeScans.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-mono text-[10px] font-bold tracking-wider text-sky-600">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    SCANNING {activeScans.length}
+                  </span>
+                )}
+              </div>
 
-      {lastCreatedScan ? (
-        <div className="hidden border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-          스캔 #{lastCreatedScan.scanId} 생성이 완료되었습니다. 상세 화면에서 진행 상태를 바로 확인할 수 있습니다.
-        </div>
-      ) : null}
+              {/* 프로젝트명 */}
+              <h1 className="text-4xl font-black leading-tight tracking-tight text-black md:text-5xl lg:text-6xl">
+                {isProjectLoading ? (
+                  <span className="text-neutral-300">불러오는 중...</span>
+                ) : (
+                  projectDetail?.name ?? '프로젝트'
+                )}
+              </h1>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard helper="진행 중이거나 분석 대기 중인 스캔 수입니다." label="진행 중 스캔" tone="sky" value={activeScans.length} />
-        <MetricCard helper="결과를 확인할 수 있는 완료 스캔 수입니다." label="완료 스캔" tone="green" value={completedScans.length} />
-        <MetricCard helper="실패했거나 취소된 스캔 수입니다." label="실패/취소" tone="red" value={failedScans.length} />
-      </div>
+              {/* 설명 */}
+              {projectDetail?.description && (
+                <p className="mt-2 max-w-xl text-sm leading-relaxed text-neutral-500">
+                  {projectDetail.description}
+                </p>
+              )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-        <div className="grid gap-4">
-          <article className="border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="inline-flex bg-black p-3 text-white">
-              <FolderOpen className="h-5 w-5" />
+              {/* 액션 버튼 */}
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button
+                  className="inline-flex items-center gap-2 bg-black px-5 py-2.5 text-sm font-black text-white transition hover:bg-neutral-800"
+                  onClick={() => document.getElementById('scan-request-section')?.scrollIntoView({ behavior: 'smooth' })}
+                  type="button"
+                >
+                  스캔 시작하기
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+                {lastCreatedScan && (
+                  <Link
+                    className="inline-flex items-center gap-2 border border-neutral-200 px-5 py-2.5 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+                    state={{ projectId }}
+                    to={ROUTES.scanDetail.replace(':scanId', String(lastCreatedScan.scanId))}
+                  >
+                    최근 스캔 보기
+                  </Link>
+                )}
+                {projectDetail && (
+                  <button
+                    className="inline-flex items-center gap-1.5 border border-neutral-200 px-5 py-2.5 text-sm font-bold text-neutral-400 transition hover:border-rose-300 hover:text-rose-500"
+                    onClick={() => openDeleteModal({ id: projectId, name: projectDetail.name })}
+                    type="button"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    삭제
+                  </button>
+                )}
+              </div>
             </div>
-            <h3 className="mt-4 text-xl font-black tracking-tight text-black">프로젝트 기본 정보</h3>
-            <dl className="mt-4 space-y-3 text-sm text-neutral-600">
-              <div className="flex items-start justify-between gap-4 border-t border-neutral-100 pt-3">
-                <dt className="font-semibold text-neutral-500">기본 스캔 방식</dt>
-                <dd className="text-right font-bold text-black">
-                  {projectDetail ? getScanModeLabel(projectDetail.defaultScanMode) : '-'}
-                </dd>
-              </div>
-              <div className="flex items-start justify-between gap-4 border-t border-neutral-100 pt-3">
-                <dt className="font-semibold text-neutral-500">모니터링 상태</dt>
-                <dd className="text-right font-bold text-black">
-                  {projectDetail ? formatBooleanLabel(projectDetail.monitorEnabled) : '-'}
-                </dd>
-              </div>
-              <div className="flex items-start justify-between gap-4 border-t border-neutral-100 pt-3">
-                <dt className="font-semibold text-neutral-500">전체 스캔 수</dt>
-                <dd className="text-right font-bold text-black">{scans.length}</dd>
-              </div>
-            </dl>
-          </article>
 
-          <article className="border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="inline-flex bg-black p-3 text-white">
-              <Activity className="h-5 w-5" />
+            {/* 거위 */}
+            <div className="shrink-0 self-end translate-y-1">
+              <PixelGoose mood={gooseMood} size={110} />
             </div>
-            <h3 className="mt-4 text-xl font-black tracking-tight text-black">운영 메모</h3>
-            <p className="mt-3 text-sm leading-7 text-neutral-600">
-              {projectDetail?.description?.trim()
-                ? projectDetail.description
-                : '이 화면은 프로젝트 상세, Agent 상태, 스캔 목록, 새 스캔 요청 API를 한 번에 확인하는 운영 화면입니다.'}
-            </p>
-          </article>
+          </div>
 
-          <article className="border border-neutral-200 bg-black p-5 text-white shadow-sm">
-            <div className="flex items-start justify-between gap-4">
+          {/* 하단 스탯 바 */}
+          <div className="grid grid-cols-3 border-t border-neutral-100">
+            {/* 진행 중 */}
+            <div className={`flex items-center gap-3 border-r border-neutral-100 px-5 py-4 transition-colors ${activeScans.length > 0 ? 'bg-sky-50' : ''}`}>
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${activeScans.length > 0 ? 'bg-sky-100 text-sky-500' : 'bg-neutral-100 text-neutral-300'}`}>
+                <Loader2 className={`h-4 w-4 ${activeScans.length > 0 ? 'animate-spin' : ''}`} />
+              </div>
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#3ddc84]">WORKFLOW</p>
-                <h3 className="mt-3 text-xl font-black tracking-tight">스캔 요청부터 결과 확인까지 이어지는 흐름을 한 곳에서 볼 수 있습니다.</h3>
-                <p className="mt-3 text-sm leading-7 text-neutral-300">
-                  같은 프로젝트 안에서 스캔 요청과 상태 확인을 반복하면 결과를 더 일관된 기준으로 관리할 수 있습니다.
+                <p className="font-mono text-[9px] font-bold tracking-[0.2em] text-neutral-400 uppercase">진행 중</p>
+                <p className={`text-xl font-black leading-tight ${activeScans.length > 0 ? 'text-sky-600' : 'text-neutral-200'}`}>
+                  {activeScans.length}
                 </p>
               </div>
-              <PixelGoose mood="working" size={72} />
             </div>
-          </article>
-        </div>
 
-        <div className="grid gap-4">
-          <article className="border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="inline-flex bg-black p-3 text-white">
-              <ShieldCheck className="h-5 w-5" />
+            {/* 완료 */}
+            <div className={`flex items-center gap-3 border-r border-neutral-100 px-5 py-4 transition-colors ${completedScans.length > 0 ? 'bg-[#F4FFD9]' : ''}`}>
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${completedScans.length > 0 ? 'bg-[#E2F9A0] text-[#5A8A00]' : 'bg-neutral-100 text-neutral-300'}`}>
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="font-mono text-[9px] font-bold tracking-[0.2em] text-neutral-400 uppercase">완료</p>
+                <p className={`text-xl font-black leading-tight ${completedScans.length > 0 ? 'text-[#4A7A00]' : 'text-neutral-200'}`}>
+                  {completedScans.length}
+                </p>
+              </div>
             </div>
-            <h3 className="mt-4 text-xl font-black tracking-tight text-black">업로드 파일 가이드</h3>
-            <p className="mt-3 text-sm leading-7 text-neutral-600">
-              업로드 방식은 설정 파일을 기준으로 동작하며, 허용 파일 형식과 용량 제한은 스캔 시작 전에 바로 검증됩니다.
-            </p>
-          </article>
 
-          <article className="border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="inline-flex bg-black p-3 text-white">
-              <Bot className="h-5 w-5" />
+            {/* 실패/취소 */}
+            <div className={`flex items-center gap-3 px-5 py-4 transition-colors ${failedScans.length > 0 ? 'bg-rose-50' : ''}`}>
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${failedScans.length > 0 ? 'bg-rose-100 text-rose-500' : 'bg-neutral-100 text-neutral-300'}`}>
+                <ShieldAlert className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="font-mono text-[9px] font-bold tracking-[0.2em] text-neutral-400 uppercase">실패/취소</p>
+                <p className={`text-xl font-black leading-tight ${failedScans.length > 0 ? 'text-rose-600' : 'text-neutral-200'}`}>
+                  {failedScans.length}
+                </p>
+              </div>
             </div>
-            <h3 className="mt-4 text-xl font-black tracking-tight text-black">Agent 연결 상태</h3>
-            <p className="mt-3 text-sm leading-7 text-neutral-600">
-              Agent가 연결된 프로젝트라면 서버 정보 수집 기반으로 다음 스캔까지 이어서 진행할 수 있습니다.
-            </p>
-          </article>
+          </div>
         </div>
       </div>
 
+      {projectError && <PageBanner message={projectError} tone="error" />}
+
+      {/* ── 메인: 스캔 요청 + 프로젝트 정보 ── */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+
+        {/* 새 스캔 요청 (주요 액션) */}
+        <div id="scan-request-section" className="border border-neutral-200 bg-white">
+          <div className="border-b border-neutral-100 px-6 py-4">
+            <p className="font-mono text-[10px] font-bold tracking-[0.28em] text-neutral-400 uppercase">New Scan</p>
+            <h2 className="mt-1 text-lg font-black text-black">새 스캔 요청</h2>
+            <p className="mt-0.5 text-xs text-neutral-500">Agent, 파일 업로드 방식 중 하나를 골라 스캔을 시작합니다.</p>
+          </div>
+          <div className="px-6 py-5">
+            <ScanRequestForm
+              agentAvailable={Boolean(scanOptions?.availableScanModes.includes('AGENT'))}
+              agentStatus={agentStatus}
+              isAgentLoading={isAgentLoading}
+              errorMessage={scanRequestError}
+              isSubmitting={isScanRequestSubmitting}
+              onChange={setScanRequestForm}
+              onFileChange={setSelectedUploadFiles}
+              onMethodChange={setScanRequestMethod}
+              onSubmit={() => void handleSubmitScanRequest()}
+              scanRequestMethod={scanRequestMethod}
+              selectedFiles={selectedUploadFiles}
+              value={scanRequestForm}
+            />
+          </div>
+        </div>
+
+        {/* 프로젝트 정보 사이드바 */}
+        <div className="flex flex-col gap-4">
+          <div className="border border-neutral-200 bg-white px-5 py-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="font-mono text-[10px] font-bold tracking-[0.28em] text-neutral-400 uppercase">Project Info</p>
+              <PixelGoose mood={activeScans.length > 0 ? 'working' : completedScans.length > 0 ? 'happy' : 'idle'} size={32} />
+            </div>
+            <dl className="space-y-3 text-sm">
+              <div className="flex items-center justify-between border-t border-neutral-100 pt-3">
+                <dt className="text-neutral-500">기본 스캔 방식</dt>
+                <dd className="font-bold text-black">{projectDetail ? getScanModeLabel(projectDetail.defaultScanMode) : '-'}</dd>
+              </div>
+              <div className="flex items-center justify-between border-t border-neutral-100 pt-3">
+                <dt className="text-neutral-500">모니터링</dt>
+                <dd className="font-bold text-black">{projectDetail ? formatBooleanLabel(projectDetail.monitorEnabled) : '-'}</dd>
+              </div>
+              <div className="flex items-center justify-between border-t border-neutral-100 pt-3">
+                <dt className="text-neutral-500">전체 스캔</dt>
+                <dd className="font-bold text-black">{scans.length}회</dd>
+              </div>
+            </dl>
+          </div>
+
+          {/* 완료 스캔 바로가기 */}
+          {completedScans.length > 0 && (
+            <div className="border border-neutral-200 bg-white px-5 py-5">
+              <p className="font-mono text-[10px] font-bold tracking-[0.28em] text-neutral-400 uppercase mb-3">최근 완료 스캔</p>
+              <div className="space-y-2">
+                {completedScans.slice(0, 3).map((scan) => (
+                  <Link
+                    key={scan.scanId}
+                    to={ROUTES.resultDetail.replace(':scanId', String(scan.scanId))}
+                    state={{ projectId }}
+                    className="flex items-center justify-between rounded border border-neutral-100 px-3 py-2 text-sm transition hover:border-black hover:bg-neutral-50"
+                  >
+                    <span className="font-mono text-xs text-neutral-500">#{scan.scanId}</span>
+                    <span className="flex items-center gap-1 text-xs font-bold text-emerald-600">
+                      결과 보기 <ArrowRight className="h-3 w-3" />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 스캔 이력 ── */}
       <ProjectScanList
         deletingScanIds={deletingScanIds}
         errorMessage={scanListError}
@@ -616,6 +693,7 @@ function ProjectDetailPage() {
         scans={scans}
       />
 
+      {/* ── Agent 상세 ── */}
       <AgentStatusCard
         agentStatus={agentStatus}
         errorMessage={agentError}
@@ -638,43 +716,6 @@ function ProjectDetailPage() {
           document.getElementById('scan-request-section')?.scrollIntoView({ behavior: 'smooth' });
         }}
       />
-
-      <article className="border border-neutral-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-4">
-          <div className="bg-black p-3 text-white">
-            <Activity className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-xl font-black tracking-tight text-black">운영 메모</h3>
-            <p className="mt-3 text-sm leading-7 text-neutral-600">
-              이 화면은 프로젝트 상세, Agent 상태, 스캔 목록, 새 스캔 요청 API를 한 번에 확인하는 운영 화면입니다.
-            </p>
-          </div>
-        </div>
-      </article>
-
-      <div id="scan-request-section">
-        <SectionPanel
-          description="Agent, CLI, 업로드 방식 중 하나를 골라 새 스캔을 시작할 수 있습니다."
-          eyebrow="NEW SCAN"
-          title="새 스캔 요청"
-        >
-        <ScanRequestForm
-          agentAvailable={Boolean(scanOptions?.availableScanModes.includes('AGENT'))}
-          agentStatus={agentStatus}
-          isAgentLoading={isAgentLoading}
-          errorMessage={scanRequestError}
-          isSubmitting={isScanRequestSubmitting}
-          onChange={setScanRequestForm}
-          onFileChange={setSelectedUploadFiles}
-          onMethodChange={setScanRequestMethod}
-          onSubmit={() => void handleSubmitScanRequest()}
-          scanRequestMethod={scanRequestMethod}
-          selectedFiles={selectedUploadFiles}
-          value={scanRequestForm}
-        />
-        </SectionPanel>
-      </div>
 
       {isDeleteModalOpen && targetProject ? (
         <ProjectDeleteModal

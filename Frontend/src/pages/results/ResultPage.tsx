@@ -12,7 +12,6 @@ import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
 import { formatDateTime, getSafeScanType } from '../../features/scans/utils/scanPresentation';
-import { buildMockServerAuditResult } from '../../mocks/serverAudit';
 import type {
   FindingResolutionStatus,
   FindingSeverity,
@@ -37,6 +36,13 @@ const severityMeta: Record<FindingSeverity, { bg: string; fg: string; soft: stri
 
 const severityOrder: FindingSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 const resolutionValues = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'IGNORED'] as const;
+
+const resolutionMeta: Record<typeof resolutionValues[number], { label: string; cls: string; dot: string }> = {
+  OPEN:        { label: '미해결',   cls: 'bg-neutral-100 text-neutral-600',                        dot: 'bg-neutral-400' },
+  IN_PROGRESS: { label: '처리 중',  cls: 'border border-amber-200 bg-amber-50 text-amber-700',     dot: 'bg-amber-400'   },
+  RESOLVED:    { label: '해결 완료', cls: 'bg-[#EDFFC0] text-[#4A7A00]',                           dot: 'bg-[#9FCC2E]'   },
+  IGNORED:     { label: '무시됨',   cls: 'bg-neutral-100 text-neutral-400',                        dot: 'bg-neutral-300' },
+};
 
 const emptyFindingList: ScanFindingListResponseData = {
   items: [],
@@ -72,7 +78,6 @@ function ResultPage() {
   const [scanBasic, setScanBasic] = useState<ScanBasicData | null>(null);
   const [summary, setSummary] = useState<ScanSummaryData | null>(null);
   const [findingsData, setFindingsData] = useState<ScanFindingListResponseData>(emptyFindingList);
-  const [serverAuditResult, setServerAuditResult] = useState<ServerAuditResultViewModel | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isFindingsLoading, setIsFindingsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -104,12 +109,6 @@ function ResultPage() {
 
         setScanBasic(basicData);
 
-        if (getSafeScanType(basicData.scanType) === 'SERVER_AUDIT') {
-          setSummary(null);
-          setServerAuditResult(buildMockServerAuditResult(basicData));
-          return;
-        }
-
         const summaryData = await getScanSummary(scanId);
 
         if (!isMounted) {
@@ -117,7 +116,6 @@ function ResultPage() {
         }
 
         setSummary(summaryData);
-        setServerAuditResult(null);
       } catch (error) {
         if (!isMounted) {
           return;
@@ -150,15 +148,6 @@ function ResultPage() {
       setErrorMessage(null);
 
       try {
-        if (getSafeScanType(scanBasic?.scanType) === 'SERVER_AUDIT') {
-          if (!isMounted) {
-            return;
-          }
-
-          setFindingsData(emptyFindingList);
-          return;
-        }
-
         const data = await getScanFindings(scanId, {
           severity: severityFilter === 'all' ? undefined : severityFilter,
           resolutionStatus: resolutionFilter === 'all' ? undefined : resolutionFilter,
@@ -211,6 +200,38 @@ function ResultPage() {
   const currentProjectId = scanBasic?.projectId ?? routeProjectId;
   const currentScanType = getSafeScanType(scanBasic?.scanType);
 
+  const serverAuditViewModel = useMemo<ServerAuditResultViewModel | null>(() => {
+    if (currentScanType !== 'SERVER_AUDIT' || !scanBasic) {
+      return null;
+    }
+    return {
+      scanId: scanBasic.scanId,
+      projectId: scanBasic.projectId,
+      scanType: 'SERVER_AUDIT',
+      status: scanBasic.status,
+      targetLabel: 'Agent 서버',
+      hostLabel: '',
+      generatedAt: scanBasic.completedAt ?? scanBasic.requestedAt,
+      findings: findingsData.items.map((f) => ({
+        findingId: f.findingId,
+        title: f.title,
+        severity: f.severity,
+        category: f.category,
+        target: f.filePath ?? f.resourceName ?? '-',
+        summary: f.title,
+        evidence: null,
+        observedAt: f.createdAt,
+        recommendation: '',
+        relatedWarnings: [],
+        relatedArtifacts: [],
+        actions: [],
+      })),
+      warnings: [],
+      artifacts: [],
+      actions: [],
+    };
+  }, [currentScanType, scanBasic, findingsData.items]);
+
   const groupedFindings = useMemo(() => {
     return severityOrder
       .map((severity) => ({
@@ -252,16 +273,8 @@ function ResultPage() {
 
                 void getScanBasic(scanId).then((basicData) => {
                   setScanBasic(basicData);
-
-                  if (getSafeScanType(basicData.scanType) === 'SERVER_AUDIT') {
-                    setSummary(null);
-                    setServerAuditResult(buildMockServerAuditResult(basicData));
-                    return;
-                  }
-
                   void getScanSummary(scanId).then((summaryData) => {
                     setSummary(summaryData);
-                    setServerAuditResult(null);
                   });
                 });
               }}
@@ -320,22 +333,48 @@ function ResultPage() {
         <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">스캔 결과를 불러오는 중입니다.</div>
       ) : null}
 
-      {!isInitialLoading && currentScanType === 'SERVER_AUDIT' && scanBasic && serverAuditResult ? (
-        <ServerAuditResultView result={serverAuditResult} routeState={routeState} />
+      {!isInitialLoading && currentScanType === 'SERVER_AUDIT' && serverAuditViewModel ? (
+        <ServerAuditResultView result={serverAuditViewModel} routeState={routeState} />
       ) : null}
 
       {!isInitialLoading && currentScanType === 'PROJECT_FILE' && summary ? (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            {severityOrder.map((severity) => (
-              <div className="border border-neutral-200 bg-white p-5" key={severity}>
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  {severityMeta[severity].label}
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {severityOrder.map((severity) => {
+              const meta = severityMeta[severity];
+              const count = counts[severity];
+              return (
+                <div
+                  className="relative overflow-hidden border border-neutral-200 bg-white p-5"
+                  key={severity}
+                  style={{ borderLeftColor: meta.bg, borderLeftWidth: '3px' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="flex h-6 w-6 items-center justify-center rounded-full"
+                      style={{ background: meta.soft }}
+                    >
+                      <AlertCircle className="h-3.5 w-3.5" style={{ color: meta.bg }} />
+                    </span>
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-[0.22em]"
+                      style={{ color: meta.bg }}
+                    >
+                      {meta.label}
+                    </span>
+                  </div>
+                  <div className={`mt-3 text-4xl font-black ${count === 0 ? 'text-neutral-200' : 'text-black'}`}>
+                    {count}
+                  </div>
+                  {count > 0 && (
+                    <div
+                      className="absolute bottom-0 right-0 h-1 w-full opacity-30"
+                      style={{ background: meta.bg }}
+                    />
+                  )}
                 </div>
-                <div className="mt-4 text-4xl font-black">{counts[severity]}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex flex-col gap-6 border border-neutral-200 bg-white p-6 xl:flex-row xl:items-center xl:justify-between">
@@ -347,12 +386,17 @@ function ResultPage() {
                   {resolvedCount}
                   <span className="text-neutral-300"> / {actionableTotal}</span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-3 font-mono text-xs text-neutral-500">
-                  {resolutionValues.map((value) => (
-                    <span key={value}>
-                      {value} {getResolutionCount(summary, value)}
-                    </span>
-                  ))}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {resolutionValues.map((value) => {
+                    const m = resolutionMeta[value];
+                    const cnt = getResolutionCount(summary, value);
+                    return (
+                      <span key={value} className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-bold ${m.cls}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
+                        {m.label} {cnt}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -375,18 +419,26 @@ function ResultPage() {
             >
               전체
             </button>
-            {severityOrder.map((severity) => (
-              <button
-                className={`border px-3 py-1.5 text-xs ${
-                  severityFilter === severity ? 'border-black bg-black text-white' : 'border-neutral-300 bg-white'
-                }`}
-                key={severity}
-                onClick={() => setSeverityFilter(severity)}
-                type="button"
-              >
-                {severity} {counts[severity]}
-              </button>
-            ))}
+            {severityOrder.map((severity) => {
+              const active = severityFilter === severity;
+              return (
+                <button
+                  className={`inline-flex items-center gap-1.5 border px-3 py-1.5 text-xs font-bold transition ${
+                    active ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400'
+                  }`}
+                  key={severity}
+                  onClick={() => setSeverityFilter(severity)}
+                  type="button"
+                >
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: active ? 'white' : severityMeta[severity].bg }}
+                  />
+                  {severity}
+                  <span className={`font-mono ${active ? 'text-neutral-300' : 'text-neutral-400'}`}>{counts[severity]}</span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -400,18 +452,23 @@ function ResultPage() {
             >
               전체
             </button>
-            {resolutionValues.map((value) => (
-              <button
-                className={`border px-3 py-1.5 text-xs ${
-                  resolutionFilter === value ? 'border-black bg-black text-white' : 'border-neutral-300 bg-white'
-                }`}
-                key={value}
-                onClick={() => setResolutionFilter(value)}
-                type="button"
-              >
-                {value}
-              </button>
-            ))}
+            {resolutionValues.map((value) => {
+              const active = resolutionFilter === value;
+              const m = resolutionMeta[value];
+              return (
+                <button
+                  className={`inline-flex items-center gap-1.5 border px-3 py-1.5 text-xs font-bold transition ${
+                    active ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400'
+                  }`}
+                  key={value}
+                  onClick={() => setResolutionFilter(value)}
+                  type="button"
+                >
+                  <span className={`h-2 w-2 rounded-full ${active ? 'bg-white' : m.dot}`} />
+                  {m.label}
+                </button>
+              );
+            })}
             <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-neutral-500">
               <span>TRIVY {getSourceCount(summary, 'TRIVY')}</span>
               <span>CUSTOM RULE {getSourceCount(summary, 'CUSTOM_RULE')}</span>
@@ -464,8 +521,9 @@ function ResultPage() {
                             <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.category}</span>
                             <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.sourceType}</span>
                             <span className="font-mono text-[10px] text-neutral-600">{finding.ruleCode}</span>
-                            <span className="ml-auto text-[10px] font-bold tracking-[0.2em] text-neutral-500">
-                              {finding.resolutionStatus}
+                            <span className={`ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold ${resolutionMeta[finding.resolutionStatus].cls}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${resolutionMeta[finding.resolutionStatus].dot}`} />
+                              {resolutionMeta[finding.resolutionStatus].label}
                             </span>
                           </div>
                           <h3 className={`mt-3 text-base font-bold ${dimmed ? 'line-through' : ''}`}>{finding.title}</h3>

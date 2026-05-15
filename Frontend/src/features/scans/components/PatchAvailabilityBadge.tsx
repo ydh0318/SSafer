@@ -1,15 +1,14 @@
 import { CheckCircle, FileText } from 'lucide-react';
 
+import type { ScanMode } from '../../../types/scan';
+
 type PatchAvailabilityBadgeProps = {
   hasPatches: boolean;
+  scanMode?: ScanMode | null;
 };
 
-/**
- * finding.fix.patches 유무에 따라 "자동 수정 가능" 또는 "가이드만 제공" 배지를 렌더링합니다.
- * CLI 스캔과 웹 업로드 스캔의 결과 차이를 사용자에게 명확히 안내하는 용도로 사용합니다.
- */
-function PatchAvailabilityBadge({ hasPatches }: PatchAvailabilityBadgeProps) {
-  if (hasPatches) {
+function PatchAvailabilityBadge({ hasPatches, scanMode }: PatchAvailabilityBadgeProps) {
+  if (hasPatches && scanMode === 'AGENT') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800">
         <CheckCircle className="h-3.5 w-3.5" />

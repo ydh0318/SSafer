@@ -30,17 +30,17 @@ function TypingBox({ snippet, rewardLabel = '+10 XP', onComplete }: TypingBoxPro
 
   return (
     <div
-      className="overflow-hidden rounded-[28px] border border-neutral-700 bg-[#2d2f34] shadow-[0_18px_50px_rgba(17,17,17,0.24)]"
+      className="overflow-hidden rounded-lg border border-neutral-700 bg-[#2d2f34]"
       onClick={() => textareaRef.current?.focus()}
     >
-      <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <div className="text-4xl font-black tracking-tight text-[#e8c84f]">
-          {input.length}/{snippet.length}
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+        <div className="font-mono text-sm font-bold text-[#e8c84f]">
+          {input.length}<span className="text-neutral-600">/{snippet.length}</span>
         </div>
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">
-          <span>{mistakeCount > 0 ? `mistakes ${mistakeCount}` : 'clean run'}</span>
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-neutral-500">
+          <span>{mistakeCount > 0 ? `mistakes ${mistakeCount}` : 'clean'}</span>
           {done ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#d9f66f] px-3 py-1 text-black">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#d9f66f] px-2.5 py-0.5 text-black">
               <Check className="h-3 w-3" />
               {rewardLabel}
             </span>
@@ -48,8 +48,8 @@ function TypingBox({ snippet, rewardLabel = '+10 XP', onComplete }: TypingBoxPro
         </div>
       </div>
 
-      <div className="relative min-h-[220px] bg-[#2d2f34] px-6 py-7 sm:min-h-[260px] sm:px-8">
-        <div className="pointer-events-none whitespace-pre-wrap break-words font-mono text-[1.75rem] leading-[1.9] tracking-[0.01em] text-neutral-500 sm:text-[2.2rem]">
+      <div className="relative min-h-[80px] bg-[#2d2f34] px-4 py-4">
+        <div className="pointer-events-none whitespace-pre-wrap break-words font-mono text-sm leading-7 tracking-[0.01em] text-neutral-500">
           {snippet.split('').map((char, index) => {
             let className = 'text-neutral-500';
 
@@ -57,14 +57,14 @@ function TypingBox({ snippet, rewardLabel = '+10 XP', onComplete }: TypingBoxPro
               className =
                 input[index] === char
                   ? 'text-[#f5f5f5]'
-                  : 'rounded-[6px] bg-[#6c232b]/50 text-[#ff6b6b]';
+                  : 'rounded bg-[#6c232b]/50 text-[#ff6b6b]';
             } else if (index === input.length) {
-              className = 'border-l-4 border-[#e8c84f] pl-0.5 text-[#8d9199]';
+              className = 'border-l-2 border-[#e8c84f] pl-0.5 text-[#8d9199]';
             }
 
             return (
               <span className={className} key={`${char}-${index}`}>
-                {char === ' ' ? '\u00A0' : char}
+                {char === ' ' ? ' ' : char}
               </span>
             );
           })}
@@ -85,18 +85,15 @@ function TypingBox({ snippet, rewardLabel = '+10 XP', onComplete }: TypingBoxPro
         />
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-white/10 px-6 py-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-neutral-300">
+      <div className="flex items-center justify-between border-t border-white/10 px-4 py-2.5 text-xs text-neutral-500">
+        <span>
           {mistakeCount > 0 ? (
-            <span className="font-medium text-[#ff7b7b]">오타가 빨간색으로 표시됩니다. 천천히 정확하게 입력해보세요.</span>
+            <span className="text-[#ff7b7b]">오타 {mistakeCount}개 — 천천히 정확하게</span>
           ) : (
-            <span>지금 입력 중인 위치는 노란 커서로 표시됩니다.</span>
+            <span>노란 커서 위치에 이어서 입력하세요</span>
           )}
-        </div>
-        <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">
-          <span>correct {correctCount}</span>
-          <span>mistakes {Math.max(mistakeCount, 0)}</span>
-        </div>
+        </span>
+        <span className="font-mono">correct {correctCount}</span>
       </div>
     </div>
   );

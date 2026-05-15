@@ -834,11 +834,23 @@ function ProjectListPage() {
           </div>
           <button
             className="inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-6 py-4 text-sm font-black text-black transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isStartingScan || !selectedProject}
+            disabled={
+              isStartingScan ||
+              !selectedProject ||
+              (selectedMode === 'UPLOAD' && selectedUploadFiles.length === 0)
+            }
             onClick={() => void handleStartScan()}
             type="button"
           >
-            {isStartingScan ? '스캔 요청 중...' : selectedMode === 'UPLOAD' ? '파일 업로드 후 스캔 시작' : '스캔 요청 보내기'}
+            {isStartingScan
+              ? '스캔 요청 중...'
+              : !selectedProject
+              ? '프로젝트를 먼저 선택해 주세요'
+              : selectedMode === 'UPLOAD' && selectedUploadFiles.length === 0
+              ? '파일을 선택해 주세요'
+              : selectedMode === 'UPLOAD'
+              ? `파일 ${selectedUploadFiles.length}개로 스캔 시작`
+              : '스캔 요청 보내기'}
             {isStartingScan ? <Clock className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
           </button>
         </aside>

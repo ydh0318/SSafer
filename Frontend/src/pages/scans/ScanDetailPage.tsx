@@ -164,38 +164,38 @@ function ScanDetailPage() {
   const backTo = routeState.projectId ? ROUTES.projectDetail.replace(':projectId', routeState.projectId) : ROUTES.projects;
 
   return (
-    <section className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <section className="space-y-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-6">
         <Link
           className="inline-flex items-center gap-2 text-sm font-bold text-neutral-500 transition hover:text-black"
           to={backTo}
         >
           <ArrowLeft className="h-4 w-4" />
-          프로젝트 화면으로 돌아가기
+          프로젝트로 돌아가기
         </Link>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
-            className="inline-flex items-center gap-2 bg-[#D4FC64] px-5 py-3 text-sm font-bold text-black transition hover:brightness-95"
+            className="inline-flex items-center gap-1.5 border border-neutral-200 px-4 py-2 text-xs font-bold text-neutral-600 transition hover:border-black hover:text-black"
             to={ROUTES.typingGame}
           >
-            <Gamepad2 className="h-4 w-4" />
-            기다리면서 보안 타이핑하기
+            <Gamepad2 className="h-3.5 w-3.5" />
+            기다리는 동안 보안 타이핑
           </Link>
 
           {canOpenResult ? (
             <Link
-              className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
+              className="inline-flex items-center gap-1.5 bg-[#D4FC64] px-4 py-2 text-xs font-bold text-black transition hover:brightness-95"
               state={routeState}
               to={ROUTES.resultDetail.replace(':scanId', scanId)}
             >
               결과 보기
-              <FileSearch className="h-4 w-4" />
+              <FileSearch className="h-3.5 w-3.5" />
             </Link>
           ) : (
-            <span className="inline-flex items-center gap-2 bg-neutral-200 px-5 py-3 text-sm font-bold text-neutral-500">
+            <span className="inline-flex items-center gap-1.5 bg-neutral-100 px-4 py-2 text-xs font-bold text-neutral-400">
               결과 준비 중
-              <FileSearch className="h-4 w-4" />
+              <FileSearch className="h-3.5 w-3.5" />
             </span>
           )}
         </div>
