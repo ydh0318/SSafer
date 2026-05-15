@@ -240,6 +240,65 @@ def test_report_agent_task_result_reports_task_failure(monkeypatch):
     ]
 
 
+def test_report_agent_task_result_reports_scan_request_result(monkeypatch):
+    requests = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": {"taskId": 11, "taskStatus": "FAILED"}}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def post(self, url, headers, json):
+            requests.append((url, headers, json, self.kwargs))
+            return FakeResponse()
+
+    monkeypatch.setattr(agent.httpx, "Client", FakeClient)
+    task = agent.AgentTask(
+        task_id=11,
+        task_type="SCAN_REQUEST",
+        task_status="SENT",
+        project_id=1,
+        scan_id=22,
+        finding_id=None,
+        payload={"rawUploadUrl": "https://s3.example.com/raw"},
+    )
+    result = agent.AgentTaskResult(
+        task_id=11,
+        task_type="SCAN_REQUEST",
+        status="FAILED",
+        message="SCAN_REQUEST failed: backend returned 409.",
+        patch_results=[],
+    )
+
+    report = agent.report_agent_task_result("https://api.example.com", 7, "agent-token", task, result)
+
+    assert report == {"data": {"taskId": 11, "taskStatus": "FAILED"}}
+    assert requests == [
+        (
+            "https://api.example.com/api/v1/internal/agents/7/tasks/11/result",
+            {"Authorization": "Bearer agent-token"},
+            {
+                "taskStatus": "FAILED",
+                "resultMessage": "SCAN_REQUEST failed: backend returned 409.",
+                "patchResults": [],
+            },
+            {"timeout": 20.0, "follow_redirects": True},
+        )
+    ]
+
+
 def test_handle_agent_task_applies_patch_payload(tmp_path: Path):
     target = tmp_path / "Dockerfile"
     target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")

@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import urlencode
 
 import httpx
@@ -267,7 +267,11 @@ def server_audit(
     with console.status("[cyan]Collecting server runtime data...[/cyan]", spinner="dots"):
         result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
     output_root = path.resolve() if path is not None else Path.home()
-    output_path = save_server_audit_result(output_root, result)
+    output_root, output_path = _save_server_audit_result_with_fallback(
+        output_root,
+        result,
+        save_server_audit_result,
+    )
 
     table = Table(title="서버 점검 결과")
     table.add_column("항목")
@@ -293,6 +297,24 @@ def server_audit(
         response = _wait_for_uploaded_scan(output_root, response=response, api_url=api_url)
         _print_upload_response(response)
     console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
+
+
+def _save_server_audit_result_with_fallback(
+    output_root: Path,
+    result: object,
+    save_result: Callable[[Path, object], Path],
+) -> tuple[Path, Path]:
+    try:
+        return output_root, save_result(output_root, result)
+    except PermissionError:
+        fallback_root = Path.home().resolve()
+        if output_root.resolve() == fallback_root:
+            raise
+        console.print(
+            "[yellow]현재 경로에 server-audit 결과를 저장할 권한이 없어 "
+            f"홈 디렉터리에 저장합니다: {fallback_root}[/yellow]"
+        )
+        return fallback_root, save_result(fallback_root, result)
 
 
 def _can_prompt_for_sudo() -> bool:
