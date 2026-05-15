@@ -496,7 +496,7 @@ def _analyze_findings_batch(
     *,
     log_fields: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    finding_ids = [f["id"] for f in findings]
+    finding_total = len(findings)
 
     explain_started_ms = monotonic_ms()
     try:
@@ -506,24 +506,18 @@ def _analyze_findings_batch(
             stage="BATCH_EXPLAIN",
             started_ms=explain_started_ms,
             log_fields=log_fields,
-            findingCount=len(findings),
+            findingCount=finding_total,
         )
     except (LLMTimeoutError, LLMCallError, ValueError) as exc:
         log_analysis_step(
-            "Batch explain failed.",
-            stage="BATCH_EXPLAIN",
+            "Batch explain failed, falling back to per-finding.",
+            stage="BATCH_EXPLAIN_FALLBACK",
             started_ms=explain_started_ms,
-            level=logging.ERROR,
+            level=logging.WARNING,
             log_fields=log_fields,
-            findingCount=len(findings),
-            errorCode="LLM_CALL_FAILED",
+            findingCount=finding_total,
         )
-        raise FindingAnalysisError(
-            finding_id=finding_ids[0],
-            stage="explain",
-            message=str(exc),
-            error_code="LLM_CALL_FAILED",
-        ) from exc
+        return _analyze_findings_sequential(findings, log_fields=log_fields)
 
     fix_started_ms = monotonic_ms()
     try:
@@ -533,24 +527,18 @@ def _analyze_findings_batch(
             stage="BATCH_FIX",
             started_ms=fix_started_ms,
             log_fields=log_fields,
-            findingCount=len(findings),
+            findingCount=finding_total,
         )
     except (LLMTimeoutError, LLMCallError, ValueError) as exc:
         log_analysis_step(
-            "Batch fix failed.",
-            stage="BATCH_FIX",
+            "Batch fix failed, falling back to per-finding.",
+            stage="BATCH_FIX_FALLBACK",
             started_ms=fix_started_ms,
-            level=logging.ERROR,
+            level=logging.WARNING,
             log_fields=log_fields,
-            findingCount=len(findings),
-            errorCode="LLM_CALL_FAILED",
+            findingCount=finding_total,
         )
-        raise FindingAnalysisError(
-            finding_id=finding_ids[0],
-            stage="fix",
-            message=str(exc),
-            error_code="LLM_CALL_FAILED",
-        ) from exc
+        return _analyze_findings_sequential(findings, log_fields=log_fields)
 
     results = []
     for finding in findings:
@@ -569,6 +557,23 @@ def _analyze_findings_batch(
             )
         )
     return results
+
+
+def _analyze_findings_sequential(
+    findings: list[dict[str, Any]],
+    *,
+    log_fields: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    finding_total = len(findings)
+    return [
+        analyze_finding(
+            finding,
+            log_fields=log_fields,
+            finding_index=index,
+            finding_total=finding_total,
+        )
+        for index, finding in enumerate(findings, start=1)
+    ]
 
 
 def prepare_analysis_pipeline_context(
