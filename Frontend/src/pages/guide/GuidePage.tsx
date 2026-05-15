@@ -186,12 +186,23 @@ function Section1() {
         ]} />
       </Step>
       <Step num="02" label="Agent 실행" desc="웹에서 보내는 스캔·패치 요청을 현재 서버에서 즉시 처리하도록 Agent를 시작합니다." isLast>
-        <Terminal_ lines={[{ cmd: 'ssafer agent' }]} />
-        <div className="mt-3">
+        <Terminal_ lines={[
+          { comment: '점검할 디렉토리를 --path 로 지정 (기본값: 현재 디렉토리)', cmd: 'ssafer agent --path /opt/app' },
+          { comment: '현재 디렉토리를 루트로 사용하는 경우', cmd: 'ssafer agent' },
+        ]} />
+        <div className="mt-3 space-y-2">
           <Note>
             <strong>Agent가 ONLINE 상태일 때만</strong> 웹에서 스캔을 시작할 수 있습니다.
             웹 버튼을 누르면 Agent가 스캔과 업로드를 <strong>한 번에 처리</strong>하므로 별도로{' '}
             <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer upload</code>를 실행할 필요가 없습니다.
+          </Note>
+          <Note>
+            웹에서 입력하는 <strong>대상 경로</strong>는{' '}
+            <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">--path</code>로 지정한 디렉토리 기준입니다.
+            예를 들어 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">--path /opt/app</code>으로 실행했다면
+            대상 경로에 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">.</code> 또는{' '}
+            <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">backend</code>처럼
+            해당 루트 <strong>내부 경로</strong>를 입력해야 합니다.
           </Note>
         </div>
       </Step>
