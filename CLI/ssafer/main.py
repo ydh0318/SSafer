@@ -7,8 +7,9 @@ import re
 import sys
 import threading
 import time
+from collections import Counter
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import urlencode
 
 import httpx
@@ -267,7 +268,11 @@ def server_audit(
     with console.status("[cyan]Collecting server runtime data...[/cyan]", spinner="dots"):
         result = run_server_audit(checks=selected_checks, include_os_packages=include_os_packages, allow_sudo=allow_sudo)
     output_root = path.resolve() if path is not None else Path.home()
-    output_path = save_server_audit_result(output_root, result)
+    output_root, output_path = _save_server_audit_result_with_fallback(
+        output_root,
+        result,
+        save_server_audit_result,
+    )
 
     table = Table(title="서버 점검 결과")
     table.add_column("항목")
@@ -293,6 +298,24 @@ def server_audit(
         response = _wait_for_uploaded_scan(output_root, response=response, api_url=api_url)
         _print_upload_response(response)
     console.print(f"[green]서버 점검 결과 저장:[/green] {output_path}")
+
+
+def _save_server_audit_result_with_fallback(
+    output_root: Path,
+    result: object,
+    save_result: Callable[[Path, object], Path],
+) -> tuple[Path, Path]:
+    try:
+        return output_root, save_result(output_root, result)
+    except PermissionError:
+        fallback_root = Path.home().resolve()
+        if output_root.resolve() == fallback_root:
+            raise
+        console.print(
+            "[yellow]현재 경로에 server-audit 결과를 저장할 권한이 없어 "
+            f"홈 디렉터리에 저장합니다: {fallback_root}[/yellow]"
+        )
+        return fallback_root, save_result(fallback_root, result)
 
 
 def _can_prompt_for_sudo() -> bool:
@@ -357,20 +380,32 @@ def run(
         _print_upload_response(response)
 
 
-@app.command(help="최근 로컬 스캔 결과를 웹 대시보드로 업로드합니다.", rich_help_panel="로컬 점검")
+@app.command(help="최근 로컬 스캔 결과를 업로드합니다. 서버 점검 결과는 ssafer upload --server로 업로드합니다.", rich_help_panel="로컬 점검")
 def upload(
-    path: Path = typer.Option(Path("."), "--path", "-p", help=".ssafer/results가 있는 프로젝트 루트입니다."),
+    path: Optional[Path] = typer.Option(None, "--path", "-p", help=".ssafer/results가 있는 프로젝트 루트입니다."),
     api_url: Optional[str] = typer.Option(None, "--api-url", help="업로드에 사용할 SSAfer 백엔드 API URL입니다."),
+    server: bool = typer.Option(False, "--server", help="최근 server-audit 결과를 새로 점검하지 않고 업로드합니다."),
 ) -> None:
-    """최근 로컬 스캔 결과 JSON을 백엔드/S3에 업로드합니다."""
-    console.print("[cyan]스캔 결과를 업로드합니다...[/cyan]")
+    """최근 로컬 스캔 결과 또는 서버 점검 결과를 백엔드/S3에 업로드합니다."""
+    upload_root = path.resolve() if path is not None else (Path.home().resolve() if server else Path(".").resolve())
+    if server:
+        console.print("[cyan]최근 서버 점검 결과를 업로드합니다...[/cyan]")
+    else:
+        console.print("[cyan]스캔 결과를 업로드합니다...[/cyan]")
     with console.status("[cyan]업로드 준비 중...[/cyan]", spinner="dots") as status:
-        response = _upload_or_exit(
-            path.resolve(),
-            api_url=api_url,
-            on_step=lambda message: status.update(f"[cyan]{message}[/cyan]"),
-        )
-    response = _wait_for_uploaded_scan(path.resolve(), response=response, api_url=api_url)
+        if server:
+            response = _upload_server_audit_or_exit(
+                upload_root,
+                api_url=api_url,
+                on_step=lambda message: status.update(f"[cyan]{message}[/cyan]"),
+            )
+        else:
+            response = _upload_or_exit(
+                upload_root,
+                api_url=api_url,
+                on_step=lambda message: status.update(f"[cyan]{message}[/cyan]"),
+            )
+    response = _wait_for_uploaded_scan(upload_root, response=response, api_url=api_url)
     _print_upload_response(response)
 
 
@@ -807,7 +842,7 @@ def _run_agent_watch(
                 elif verbose:
                     console.print("[dim]처리할 pending task가 없습니다. Agent가 계속 대기합니다.[/dim]")
                 return
-            task_types = ", ".join(str(getattr(task, "task_type", "UNKNOWN")) for task in tasks)
+            task_types = _format_agent_task_summary(tasks)
             console.print(f"[cyan]처리할 task {len(tasks)}개를 찾았습니다.[/cyan] {task_types}")
             return
         if event_type == "watching":
@@ -935,7 +970,7 @@ def _print_agent_task_result(result: "AgentTaskResult") -> None:
     table.add_column("Message", overflow="fold")
 
     if not result.patch_results:
-        table.add_row(result.task_type, "-", result.status, "-", result.message)
+        table.add_row(result.task_type, "-", result.status, "-", _format_agent_task_message(result))
     else:
         for patch_result in result.patch_results:
             table.add_row(
@@ -946,6 +981,31 @@ def _print_agent_task_result(result: "AgentTaskResult") -> None:
                 patch_result.message,
             )
     console.print(table)
+
+
+def _format_agent_task_summary(tasks: list[object]) -> str:
+    counts = Counter(str(getattr(task, "task_type", "UNKNOWN")) for task in tasks)
+    return ", ".join(f"{task_type} {count}개" for task_type, count in sorted(counts.items()))
+
+
+def _format_agent_task_message(result: "AgentTaskResult") -> str:
+    message = result.message
+    if result.task_type != "SCAN_REQUEST":
+        return message
+
+    match = re.search(r"Client error '(\d{3}) '\s+for url\s+'([^']+)'", message)
+    if not match:
+        return message
+
+    status_code, url = match.groups()
+    scan_id_match = re.search(r"/api/v1/scans/(\d+)/raw-results", url)
+    scan_id = scan_id_match.group(1) if scan_id_match else "-"
+    if status_code == "409" and "/raw-results" in url:
+        return (
+            f"scanId={scan_id} 결과 업로드 완료 보고가 거절되었습니다(409). "
+            "이미 완료/실패된 스캔이거나 오래된 agent task일 수 있습니다."
+        )
+    return f"SCAN_REQUEST HTTP {status_code} 오류: {url}"
 
 
 def _select_patch_candidates(

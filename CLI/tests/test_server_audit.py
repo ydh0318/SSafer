@@ -314,6 +314,36 @@ def test_server_audit_command_saves_result(tmp_path: Path, monkeypatch):
     assert (tmp_path / ".ssafer" / "server-audit" / "last_audit.txt").exists()
 
 
+def test_server_audit_command_falls_back_to_home_when_output_is_unwritable(tmp_path: Path, monkeypatch):
+    from ssafer.server import audit as audit_module
+
+    blocked_root = tmp_path / "blocked"
+    home_root = tmp_path / "home"
+    blocked_root.mkdir()
+    original_save = audit_module.save_server_audit_result
+
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home_root))
+    monkeypatch.setattr(
+        audit_module,
+        "run_command",
+        lambda command: CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:5432 0.0.0.0:*"),
+    )
+
+    def fake_save(root: Path, result):
+        if root == blocked_root.resolve():
+            raise PermissionError("blocked")
+        return original_save(root, result)
+
+    monkeypatch.setattr(audit_module, "save_server_audit_result", fake_save)
+
+    result = CliRunner().invoke(app, ["server-audit", "--path", str(blocked_root), "--checks", "ports"])
+
+    assert result.exit_code == 0
+    assert "홈 디렉터리에 저장합니다" in result.output
+    assert not (blocked_root / ".ssafer" / "server-audit" / "last_audit.txt").exists()
+    assert (home_root / ".ssafer" / "server-audit" / "last_audit.txt").exists()
+
+
 def test_server_audit_command_prints_long_running_os_package_notice(tmp_path: Path, monkeypatch):
     from ssafer.server import audit as audit_module
 
@@ -430,6 +460,63 @@ def test_server_audit_command_uploads_saved_result(tmp_path: Path, monkeypatch):
 
 
 # ── parse_ufw_rules ────────────────────────────────────────────────────────
+
+def test_server_audit_command_upload_uses_fallback_output_root(tmp_path: Path, monkeypatch):
+    from ssafer.server import audit as audit_module
+    import ssafer.main as main_module
+
+    blocked_root = tmp_path / "blocked"
+    home_root = tmp_path / "home"
+    blocked_root.mkdir()
+    original_save = audit_module.save_server_audit_result
+
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home_root))
+    monkeypatch.setattr(
+        audit_module,
+        "run_command",
+        lambda command: CommandResult(command, 0, "tcp LISTEN 0 4096 0.0.0.0:5432 0.0.0.0:*"),
+    )
+
+    def fake_save(root: Path, result):
+        if root == blocked_root.resolve():
+            raise PermissionError("blocked")
+        return original_save(root, result)
+
+    captured: dict[str, object] = {}
+
+    def fake_upload(path: Path, api_url: str | None = None, on_step=None):
+        captured["path"] = path
+        captured["api_url"] = api_url
+        return {"scanId": 777}
+
+    monkeypatch.setattr(audit_module, "save_server_audit_result", fake_save)
+    monkeypatch.setattr(main_module, "_upload_server_audit_or_exit", fake_upload)
+    monkeypatch.setattr(
+        main_module,
+        "_wait_for_uploaded_scan",
+        lambda path, response, api_url=None: {**response, "status": "DONE", "_apiUrl": "https://api.example.com"},
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "server-audit",
+            "--path",
+            str(blocked_root),
+            "--checks",
+            "ports",
+            "--upload",
+            "--api-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured == {
+        "path": home_root.resolve(),
+        "api_url": "https://api.example.com",
+    }
+
 
 def test_parse_ufw_allow_and_deny():
     output = """\
