@@ -39,6 +39,7 @@ export interface CreateScanResponseData {
 
 export interface AgentScanRequestPayload {
   targetPath: string;
+  scanType?: ScanType;
   scanName?: string;
   includeLogs?: boolean;
 }

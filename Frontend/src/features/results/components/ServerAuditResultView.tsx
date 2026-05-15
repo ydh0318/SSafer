@@ -80,6 +80,12 @@ function ServerAuditResultView({ result, routeState }: ServerAuditResultViewProp
                 <h3 className="mt-3 text-lg font-black text-black">{finding.title}</h3>
                 <p className="mt-2 text-sm leading-7 text-neutral-600">{finding.summary}</p>
                 <p className="mt-2 text-xs font-mono text-neutral-500">{finding.evidence ?? '증적 요약 정보 없음'}</p>
+                {finding.recommendation ? (
+                  <p className="mt-2 rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs leading-6 text-neutral-700">
+                    <span className="mr-1.5 font-bold uppercase tracking-[0.16em] text-neutral-400">권고</span>
+                    {finding.recommendation}
+                  </p>
+                ) : null}
               </div>
               <span className="inline-flex items-center gap-2 bg-black px-3 py-2 text-xs font-bold text-white transition group-hover:bg-[#D4FC64] group-hover:text-black">
                 상세 보기
@@ -88,6 +94,13 @@ function ServerAuditResultView({ result, routeState }: ServerAuditResultViewProp
           ))}
         </div>
       </SectionPanel>
+
+      {result.actions.length === 0 && result.warnings.length === 0 && result.artifacts.length === 0 && (
+        <div className="rounded border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm text-neutral-500">
+          <span className="mr-2 font-bold uppercase tracking-[0.16em]">참고</span>
+          Warnings · Artifacts · AI Actions 항목은 백엔드 server-audit 전용 API가 지원되면 표시됩니다. 현재 버전에서는 해당 데이터를 제공하지 않습니다.
+        </div>
+      )}
 
       {(result.actions.length > 0 || result.warnings.length > 0 || result.artifacts.length > 0) && (
         <div className="grid gap-6 xl:grid-cols-2">
