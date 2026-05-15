@@ -1,4 +1,3 @@
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 import logging
 from typing import Any
@@ -15,8 +14,11 @@ from app.core.llm import LLMCallError, LLMTimeoutError
 from app.core.logging_utils import elapsed_ms, log_with_fields, monotonic_ms
 from app.schemas.analysis import AnalysisRequest, AnalysisResponse
 
-from app.services.explain_service import generate_finding_explanation
-from app.services.fix_service import generate_finding_fix
+from app.services.explain_service import (
+    generate_finding_explanation,
+    generate_findings_explanation_batch,
+)
+from app.services.fix_service import generate_finding_fix, generate_findings_fix_batch
 from app.services.result_service import (
     DEFAULT_ANALYSIS_RESULT_PATH,
     build_analysis_result_from_results,
@@ -454,8 +456,6 @@ def analyze_findings(
     *,
     log_fields: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    from app.core.config import MAX_FINDING_CONCURRENCY
-
     finding_total = len(findings)
 
     if finding_total <= 1:
@@ -469,46 +469,111 @@ def analyze_findings(
             for index, finding in enumerate(findings, start=1)
         ]
 
-    indexed_results: dict[int, dict[str, Any]] = {}
-    max_workers = min(MAX_FINDING_CONCURRENCY, finding_total)
-    pending: dict[Future[dict[str, Any]], int] = {}
-    next_index = 1
+    from app.core.config import MAX_FINDINGS_PER_BATCH
 
-    def submit_next(executor: ThreadPoolExecutor) -> None:
-        nonlocal next_index
-        finding = findings[next_index - 1]
-        future = executor.submit(
-            analyze_finding,
+    batches = _chunk_findings(findings, MAX_FINDINGS_PER_BATCH)
+    all_results: list[dict[str, Any]] = []
+    for batch in batches:
+        batch_results = _analyze_findings_batch(batch, log_fields=log_fields)
+        all_results.extend(batch_results)
+    return all_results
+
+
+def _chunk_findings(
+    findings: list[dict[str, Any]],
+    max_per_batch: int,
+) -> list[list[dict[str, Any]]]:
+    if max_per_batch <= 0 or len(findings) <= max_per_batch:
+        return [findings]
+    return [
+        findings[i : i + max_per_batch]
+        for i in range(0, len(findings), max_per_batch)
+    ]
+
+
+def _analyze_findings_batch(
+    findings: list[dict[str, Any]],
+    *,
+    log_fields: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    finding_total = len(findings)
+
+    explain_started_ms = monotonic_ms()
+    try:
+        explanations_by_id = generate_findings_explanation_batch(findings)
+        log_analysis_step(
+            "Batch explain completed.",
+            stage="BATCH_EXPLAIN",
+            started_ms=explain_started_ms,
+            log_fields=log_fields,
+            findingCount=finding_total,
+        )
+    except (LLMTimeoutError, LLMCallError, ValueError) as exc:
+        log_analysis_step(
+            "Batch explain failed, falling back to per-finding.",
+            stage="BATCH_EXPLAIN_FALLBACK",
+            started_ms=explain_started_ms,
+            level=logging.WARNING,
+            log_fields=log_fields,
+            findingCount=finding_total,
+        )
+        return _analyze_findings_sequential(findings, log_fields=log_fields)
+
+    fix_started_ms = monotonic_ms()
+    try:
+        fixes_by_id = generate_findings_fix_batch(findings)
+        log_analysis_step(
+            "Batch fix completed.",
+            stage="BATCH_FIX",
+            started_ms=fix_started_ms,
+            log_fields=log_fields,
+            findingCount=finding_total,
+        )
+    except (LLMTimeoutError, LLMCallError, ValueError) as exc:
+        log_analysis_step(
+            "Batch fix failed, falling back to per-finding.",
+            stage="BATCH_FIX_FALLBACK",
+            started_ms=fix_started_ms,
+            level=logging.WARNING,
+            log_fields=log_fields,
+            findingCount=finding_total,
+        )
+        return _analyze_findings_sequential(findings, log_fields=log_fields)
+
+    results = []
+    for finding in findings:
+        fid = finding["id"]
+        scan_type = finding.get("scanType")
+        explanation = explanations_by_id[fid]
+        fix = fixes_by_id[fid]
+        if scan_type == "SERVER_AUDIT":
+            fix.pop("patch", None)
+            fix.pop("patches", None)
+        results.append(
+            build_structured_analysis_result(
+                finding=finding,
+                explanation=explanation,
+                fix=fix,
+            )
+        )
+    return results
+
+
+def _analyze_findings_sequential(
+    findings: list[dict[str, Any]],
+    *,
+    log_fields: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    finding_total = len(findings)
+    return [
+        analyze_finding(
             finding,
             log_fields=log_fields,
-            finding_index=next_index,
+            finding_index=index,
             finding_total=finding_total,
         )
-        pending[future] = next_index
-        next_index += 1
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for _ in range(max_workers):
-            submit_next(executor)
-
-        while pending:
-            done, _ = wait(pending, return_when=FIRST_COMPLETED)
-            completed_count = 0
-            for future in done:
-                index = pending.pop(future)
-                try:
-                    indexed_results[index] = future.result()
-                except Exception:
-                    for pending_future in pending:
-                        pending_future.cancel()
-                    raise
-                completed_count += 1
-
-            for _ in range(completed_count):
-                if next_index <= finding_total:
-                    submit_next(executor)
-
-    return [indexed_results[i] for i in sorted(indexed_results)]
+        for index, finding in enumerate(findings, start=1)
+    ]
 
 
 def prepare_analysis_pipeline_context(

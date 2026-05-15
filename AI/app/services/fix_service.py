@@ -38,6 +38,53 @@ def _normalize_json_response(response: str) -> str:
     return normalized
 
 
+def _validate_fix_dict(parsed: dict[str, Any], label: str = "Fix Chain output") -> None:
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{label} must be a JSON object.")
+
+    missing_fields = [field for field in REQUIRED_FIX_FIELDS if field not in parsed]
+    if missing_fields:
+        raise ValueError(
+            f"{label} missing required fields: {', '.join(missing_fields)}"
+        )
+
+    for field in ("summary", "codeGuidance", "verification"):
+        value = parsed[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{label} field '{field}' must be a string.")
+
+    priority = parsed["priority"]
+    if not isinstance(priority, str) or priority not in ALLOWED_FIX_PRIORITIES:
+        raise ValueError(
+            f"{label} field 'priority' must be one of: "
+            f"{', '.join(ALLOWED_FIX_PRIORITIES)}."
+        )
+
+    recommended_actions = parsed["recommendedActions"]
+    if not isinstance(recommended_actions, list) or not 2 <= len(recommended_actions) <= 5:
+        raise ValueError(
+            f"{label} field 'recommendedActions' must contain 2 to 5 items."
+        )
+
+    cautions = parsed["cautions"]
+    if not isinstance(cautions, list) or len(cautions) > 3:
+        raise ValueError(f"{label} field 'cautions' must contain 0 to 3 items.")
+
+    for field, values in (
+        ("recommendedActions", recommended_actions),
+        ("cautions", cautions),
+    ):
+        if not all(isinstance(value, str) and value.strip() for value in values):
+            raise ValueError(
+                f"{label} field '{field}' must contain non-empty strings."
+            )
+
+    try:
+        validate_fix_schema(parsed, label, strict_patch_metadata=False)
+    except ValueError as exc:
+        raise ValueError(f"{label} failed schema validation: {exc}") from exc
+
+
 def parse_fix_response(response: str) -> dict[str, Any]:
     normalized = _normalize_json_response(response)
 
@@ -46,53 +93,7 @@ def parse_fix_response(response: str) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise ValueError("Fix Chain output must be a valid JSON object.") from exc
 
-    if not isinstance(parsed, dict):
-        raise ValueError("Fix Chain output must be a JSON object.")
-
-    missing_fields = [field for field in REQUIRED_FIX_FIELDS if field not in parsed]
-    if missing_fields:
-        raise ValueError(
-            f"Fix Chain output missing required fields: {', '.join(missing_fields)}"
-        )
-
-    for field in ("summary", "codeGuidance", "verification"):
-        value = parsed[field]
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"Fix Chain output field '{field}' must be a string.")
-
-    priority = parsed["priority"]
-    if not isinstance(priority, str) or priority not in ALLOWED_FIX_PRIORITIES:
-        raise ValueError(
-            "Fix Chain output field 'priority' must be one of: "
-            f"{', '.join(ALLOWED_FIX_PRIORITIES)}."
-        )
-
-    recommended_actions = parsed["recommendedActions"]
-    if not isinstance(recommended_actions, list) or not 2 <= len(recommended_actions) <= 5:
-        raise ValueError(
-            "Fix Chain output field 'recommendedActions' must contain 2 to 5 items."
-        )
-
-    cautions = parsed["cautions"]
-    if not isinstance(cautions, list) or len(cautions) > 3:
-        raise ValueError("Fix Chain output field 'cautions' must contain 0 to 3 items.")
-
-    for field, values in (
-        ("recommendedActions", recommended_actions),
-        ("cautions", cautions),
-    ):
-        if not all(isinstance(value, str) and value.strip() for value in values):
-            raise ValueError(
-                f"Fix Chain output field '{field}' must contain non-empty strings."
-            )
-
-    try:
-        validate_fix_schema(parsed, "Fix Chain output", strict_patch_metadata=False)
-    except ValueError as exc:
-        raise ValueError(
-            f"Fix Chain output failed schema validation: {exc}"
-        ) from exc
-
+    _validate_fix_dict(parsed)
     return parsed
 
 
@@ -101,21 +102,20 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
         [
             finding_input,
             "",
-            "이전 수정 JSON이 검증에 실패했으므로 다시 작성하세요.",
-            f"검증 오류: {error_message}",
-            "JSON 객체만 다시 출력하세요.",
-            "필수 필드: summary, priority, recommendedActions, codeGuidance, verification, cautions.",
-            "priority는 critical, high, medium, low 중 하나입니다.",
-            "recommendedActions는 2~5개의 문자열 배열, cautions는 0~3개의 문자열 배열입니다.",
-            "주의할 점이 떠오르지 않으면 cautions를 빈 배열 []로 두세요.",
-            "자연어는 한국어 중심으로 작성하세요.",
-            "source가 server-audit 이거나 Scan Type이 SERVER_AUDIT 이면 patches를 만들지 말고 운영 조치와 확인 명령 중심으로 작성하세요.",
-            "patches는 안전할 때만 포함하고, 불확실하면 생략하세요.",
-            "patches는 finding.patchContext가 있을 때만 생성하세요.",
-            "patch operation은 finding.patchContext.operation 값을 그대로 쓰세요.",
-            "operation이 replace면 oldText는 patchContext.oldText를 그대로 사용하고 AI가 재작성하지 마세요.",
-            "operation이 append면 oldText를 새로 만들지 마세요.",
-            "각 patch는 operation, oldText, newText만 포함하세요. filePath, expectedFileHash, patchId, findingId는 출력하지 마세요.",
+            "The previous fix JSON failed validation. Please regenerate.",
+            f"Validation error: {error_message}",
+            "Output only a JSON object.",
+            "Required fields: summary, priority, recommendedActions, codeGuidance, verification, cautions.",
+            "priority must be one of: critical, high, medium, low.",
+            "recommendedActions: string array with 2-5 items. cautions: string array with 0-3 items.",
+            "Use empty array [] for cautions if nothing comes to mind.",
+            "Write all natural-language values in Korean.",
+            "If source is server-audit or Scan Type is SERVER_AUDIT, do not generate patches; focus on operational guidance.",
+            "Include patches only when safe and patchContext is available.",
+            "Use finding.patchContext.operation exactly for operation.",
+            "If operation is replace, copy patchContext.oldText verbatim; do not rewrite.",
+            "If operation is append, do not create oldText.",
+            "Each patch must contain only operation, oldText, newText. Do not output filePath, expectedFileHash, patchId, or findingId.",
         ]
     )
 
@@ -177,3 +177,92 @@ def generate_finding_fixes(findings: list[dict[str, Any]]) -> list[dict[str, Any
         }
         for finding in findings
     ]
+
+
+def generate_findings_fix_batch(
+    findings: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    from app.chains.fix_chain import create_batch_fix_chain
+    from app.core.config import (
+        LLM_BATCH_MAX_TOKENS_CAP,
+        LLM_FIX_MAX_TOKENS,
+        MAX_BATCH_FIX_RETRIES,
+    )
+    from app.services.explain_service import compute_batch_max_tokens
+    from app.services.input_service import format_findings_for_fix_llm
+
+    max_tokens = compute_batch_max_tokens(
+        len(findings), LLM_FIX_MAX_TOKENS, LLM_BATCH_MAX_TOKENS_CAP
+    )
+    chain = create_batch_fix_chain(max_tokens=max_tokens)
+    finding_input = format_findings_for_fix_llm(findings)
+    expected_ids = {f["id"] for f in findings}
+
+    last_error: Exception | None = None
+    for attempt in range(MAX_BATCH_FIX_RETRIES + 1):
+        prompt_input = finding_input
+        if attempt > 0 and last_error is not None:
+            prompt_input = (
+                finding_input
+                + f"\n\nThe previous response failed validation. Error: {last_error}\n"
+                "Output only the JSON array."
+            )
+
+        raw = invoke_llm_with_retry(chain, {"finding_input": prompt_input})
+        text = get_llm_response_text(raw)
+        log_llm_usage(
+            logger=logger,
+            stage="BATCH_FIX",
+            finding_id=None,
+            input_text=prompt_input,
+            response=raw,
+            attempt_count=attempt + 1,
+            max_output_tokens=max_tokens,
+        )
+
+        if contains_disallowed_script(text):
+            last_error = ValueError("Batch fix output contains disallowed characters.")
+            continue
+
+        try:
+            return parse_batch_fix_response(text, expected_ids)
+        except ValueError as exc:
+            last_error = exc
+            logger.warning(
+                "Batch fix parse failed. attempt=%d error=%s",
+                attempt + 1,
+                exc,
+            )
+
+    raise ValueError(f"Batch fix failed after all retries. Last error: {last_error}")
+
+
+def parse_batch_fix_response(
+    response: str,
+    expected_finding_ids: set[str],
+) -> dict[str, dict[str, Any]]:
+    normalized = _normalize_json_response(response)
+    if not normalized:
+        raise ValueError("Batch fix output is empty.")
+
+    parsed = json.loads(normalized)
+    if not isinstance(parsed, list):
+        raise ValueError("Batch fix output must be a JSON array.")
+
+    results: dict[str, dict[str, Any]] = {}
+    for item in parsed:
+        if not isinstance(item, dict):
+            raise ValueError("Each batch fix item must be a JSON object.")
+
+        finding_id = item.pop("findingId", None)
+        if not isinstance(finding_id, str) or finding_id not in expected_finding_ids:
+            raise ValueError(f"Invalid or unexpected findingId: {finding_id}")
+
+        _validate_fix_dict(item, label=f"Batch fix[{finding_id}]")
+        results[finding_id] = item
+
+    missing = expected_finding_ids - set(results.keys())
+    if missing:
+        raise ValueError(f"Batch fix missing findings: {', '.join(sorted(missing))}")
+
+    return results
