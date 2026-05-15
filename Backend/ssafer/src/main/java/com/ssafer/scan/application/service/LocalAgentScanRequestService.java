@@ -101,6 +101,7 @@ public class LocalAgentScanRequestService {
     String normalizedTargetPath = request.targetPath().trim();
     Boolean includeLogs = Boolean.TRUE.equals(request.includeLogs());
     String scanName = normalizeBlank(request.scanName());
+    ScanType scanType = resolveScanType(request.scanType());
 
     // 사용자가 요청한 점검 이력은 먼저 REQUESTED 상태의 scan으로 남긴다.
     // 실제 실행 시작/완료 상태는 이후 Local Agent의 raw result 업로드와 worker callback 흐름에서 갱신된다.
@@ -110,9 +111,9 @@ public class LocalAgentScanRequestService {
         .requestActorType(actor.isMember() ? RequestActorType.USER : RequestActorType.GUEST)
         .agentId(agent.getId())
         .scanMode(ScanMode.AGENT)
-        .scanType(ScanType.PROJECT_FILE)
+        .scanType(scanType)
         .status(ScanStatus.REQUESTED)
-        .targetSnapshotJson(buildTargetSnapshotJson(normalizedTargetPath, scanName, includeLogs))
+        .targetSnapshotJson(buildTargetSnapshotJson(normalizedTargetPath, scanName, scanType, includeLogs))
         .requestedAt(now)
         .lastUpdatedAt(now)
         .build());
@@ -157,15 +158,19 @@ public class LocalAgentScanRequestService {
         });
   }
 
-  private String buildTargetSnapshotJson(String targetPath, String scanName, Boolean includeLogs) {
+  private String buildTargetSnapshotJson(String targetPath, String scanName, ScanType scanType, Boolean includeLogs) {
     // scan 자체에는 요청 당시의 입력값을 snapshot으로 남겨 이후 이력 조회와 디버깅에 사용한다.
     Map<String, Object> snapshot = new LinkedHashMap<>();
     snapshot.put("source", ScanRequestSource.AGENT.name());
-    snapshot.put("scanType", ScanType.PROJECT_FILE.name());
+    snapshot.put("scanType", scanType.name());
     snapshot.put("scanName", scanName);
     snapshot.put("targetPath", targetPath);
     snapshot.put("includeLogs", includeLogs);
     return writeJson(snapshot);
+  }
+
+  private ScanType resolveScanType(ScanType scanType) {
+    return scanType == null ? ScanType.PROJECT_FILE : scanType;
   }
 
   private String buildTaskPayloadJson(
