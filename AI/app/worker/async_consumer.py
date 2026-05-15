@@ -40,10 +40,12 @@ async def process_message(
 
         try:
             logger.info(
-                "Processing scan task taskId=%s scanId=%s rawResultPath=%s",
+                "Processing scan task taskId=%s scanId=%s rawResultPath=%s deliveryTag=%s redelivered=%s",
                 scan_msg.task_id,
                 scan_msg.scan_id,
                 scan_msg.raw_result_path,
+                message.delivery_tag,
+                message.redelivered,
             )
             await asyncio.to_thread(processor.process, scan_msg)
         except Exception as exc:
