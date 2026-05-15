@@ -88,8 +88,55 @@ html.theme-dark .theme-accent-card svg {
 
 html.theme-dark .bg-\[\#3DDC84\],
 html.theme-dark .bg-\[\#FFF9DB\],
-html.theme-dark .bg-\[\#FFE066\] {
+html.theme-dark .bg-\[\#FFE066\],
+html.theme-dark .bg-\[\#EDFFC0\],
+html.theme-dark .bg-\[\#F4FFD9\],
+html.theme-dark .bg-\[\#E2F9A0\] {
   color: #111111 !important;
+}
+
+/* ── Status/semantic badge colored text: restore in dark mode ── */
+/* The blanket html.theme-dark span/p { color: inherit } (specificity [0,1,2])
+   overrides Tailwind color classes ([0,1,0]). These rules at [0,2,1] beat it. */
+html.theme-dark .text-emerald-700 { color: #047857 !important; }
+html.theme-dark .text-emerald-800 { color: #065f46 !important; }
+html.theme-dark .text-rose-700    { color: #be123c !important; }
+html.theme-dark .text-rose-600    { color: #e11d48 !important; }
+html.theme-dark .text-cyan-700    { color: #0e7490 !important; }
+html.theme-dark .text-cyan-800    { color: #155e75 !important; }
+html.theme-dark .text-violet-700  { color: #6d28d9 !important; }
+html.theme-dark .text-violet-800  { color: #5b21b6 !important; }
+html.theme-dark .text-amber-700   { color: #b45309 !important; }
+html.theme-dark .text-amber-800   { color: #92400e !important; }
+html.theme-dark .text-sky-800     { color: #075985 !important; }
+html.theme-dark .text-sky-600     { color: #0284c7 !important; }
+html.theme-dark .text-sky-500     { color: #0ea5e9 !important; }
+html.theme-dark .text-slate-700   { color: #334155 !important; }
+html.theme-dark .text-red-700     { color: #b91c1c !important; }
+html.theme-dark .text-orange-700  { color: #c2410c !important; }
+html.theme-dark .text-orange-800  { color: #9a3412 !important; }
+html.theme-dark .text-yellow-700  { color: #a16207 !important; }
+html.theme-dark .text-blue-600    { color: #2563eb !important; }
+html.theme-dark .text-\[\#4A7A00\] { color: #4a7a00 !important; }
+html.theme-dark .text-\[\#5A8A00\] { color: #5a8a00 !important; }
+html.theme-dark .text-\[\#D4FC64\] { color: #d4fc64 !important; }
+html.theme-dark .text-\[\#9FCC2E\] { color: #9fcc2e !important; }
+
+/* ── Entry modal: preserve light-mode appearance ── */
+html.theme-dark .theme-entry-modal {
+  color: #161616 !important;
+}
+html.theme-dark .theme-entry-modal p,
+html.theme-dark .theme-entry-modal span,
+html.theme-dark .theme-entry-modal div,
+html.theme-dark .theme-entry-modal h2 {
+  color: inherit !important;
+}
+html.theme-dark .theme-entry-modal .bg-white {
+  background: #ffffff !important;
+}
+html.theme-dark .theme-entry-modal .bg-\[\#161616\] {
+  color: #ffffff !important;
 }
 
 html.theme-dark .theme-guide-tip {
@@ -167,6 +214,11 @@ html.theme-dark .bg-black {
 
 html.theme-dark .text-black {
   color: #f9fafb !important;
+}
+
+/* D4FC64 lime accent: must appear AFTER text-black to win the cascade */
+html.theme-dark .bg-\[\#D4FC64\] {
+  color: #111111 !important;
 }
 
 html.theme-dark .theme-accent-card,

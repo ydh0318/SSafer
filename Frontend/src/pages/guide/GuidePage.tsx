@@ -286,7 +286,7 @@ function GuidePage() {
   const sectionContent = [<Section0 />, <Section1 />, <Section2 />, <Section3 />];
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] text-black">
+    <div className="theme-guide-page min-h-screen bg-[#F7F7F5] text-black">
       <SiteHeader showSessionBar={false} />
 
       <main className="mx-auto max-w-7xl px-6 py-12">
@@ -340,7 +340,7 @@ function GuidePage() {
             </nav>
 
             {/* TIP 카드 */}
-            <div className="rounded-xl border border-[#D4FC64]/60 bg-[#F6FDE8] p-4">
+            <div className="theme-guide-tip rounded-xl border border-[#D4FC64]/60 bg-[#F6FDE8] p-4">
               <div className="flex items-center gap-2 mb-2">
                 <PixelGoose mood="happy" size={18} />
                 <span className="font-mono text-[9px] font-black tracking-[0.26em] text-[#7AAD00]">TIP</span>
