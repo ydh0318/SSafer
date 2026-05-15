@@ -498,7 +498,7 @@ function ProjectDetailPage() {
                   {isAgentLoading ? 'AGENT ...' : agentIsOnline ? 'AGENT ONLINE' : 'AGENT OFFLINE'}
                 </span>
                 {activeScans.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-mono text-[10px] font-bold tracking-wider text-sky-600">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 bg-neutral-100 px-3 py-1 font-mono text-[10px] font-bold tracking-wider text-neutral-600">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     SCANNING {activeScans.length}
                   </span>
@@ -617,7 +617,7 @@ function ProjectDetailPage() {
           </div>
           <div className="px-6 py-5">
             <ScanRequestForm
-              agentAvailable={Boolean(scanOptions?.availableScanModes.includes('AGENT'))}
+              agentAvailable={scanOptions === null ? true : scanOptions.availableScanModes.includes('AGENT')}
               agentStatus={agentStatus}
               isAgentLoading={isAgentLoading}
               errorMessage={scanRequestError}
@@ -702,7 +702,7 @@ function ProjectDetailPage() {
         onRequestApply={() => {
           const latestDoneScan = scans.find((s) => s.status === 'DONE');
           if (latestDoneScan) {
-            navigate(ROUTES.scanDetail.replace(':scanId', String(latestDoneScan.scanId)), { state: { projectId } });
+            navigate(ROUTES.resultDetail.replace(':scanId', String(latestDoneScan.scanId)), { state: { projectId } });
           } else {
             toast.warning('적용 가능한 완료된 스캔이 없습니다. 먼저 스캔을 실행해 주세요.', { durationMs: 3000 });
           }

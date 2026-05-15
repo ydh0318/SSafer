@@ -22,6 +22,11 @@ function canUseSessionStorage() {
 }
 
 function getOrigin() {
+  const envBase = import.meta.env.VITE_OAUTH_REDIRECT_BASE_URL?.trim();
+  if (envBase) {
+    return envBase.replace(/\/$/, '');
+  }
+
   if (typeof window === 'undefined') {
     return '';
   }
