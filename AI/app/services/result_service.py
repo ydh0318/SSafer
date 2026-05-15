@@ -80,7 +80,6 @@ REQUIRED_FIX_PATCH_STRING_FIELDS = (
     "findingId",
     "filePath",
     "operation",
-    "newText",
     "expectedFileHash",
 )
 REPLACE_FIX_PATCH_FIELDS = (
@@ -731,7 +730,7 @@ def validate_fix_patch_schema(
         required_string_fields = REQUIRED_FIX_PATCH_STRING_FIELDS
     else:
         required_fields = ("operation", "newText")
-        required_string_fields = ("operation", "newText")
+        required_string_fields = ("operation",)
 
     missing_fields = [field for field in required_fields if field not in patch]
     if missing_fields:
@@ -743,6 +742,9 @@ def validate_fix_patch_schema(
         value = patch[field]
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{path}.{field} must be a non-empty string.")
+
+    if not isinstance(patch["newText"], str):
+        raise ValueError(f"{path}.newText must be a string.")
 
     if "filePath" in patch:
         validate_patch_target_file(patch["filePath"], f"{path}.filePath")
