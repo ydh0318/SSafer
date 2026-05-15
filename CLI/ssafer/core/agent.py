@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic as _monotonic
@@ -15,6 +15,7 @@ from ssafer.core.auth import normalize_api_url
 from ssafer.core.patches import PatchApplyResult, PatchError, apply_patch_candidates, extract_patch_candidates
 from ssafer.core.result_store import run_scan
 from ssafer.core.upload import upload_scan_result_to_registered_scan
+from ssafer.server.audit import run_server_audit
 
 AGENT_FALLBACK_POLL_INTERVAL_SECONDS = 30.0
 
@@ -181,21 +182,23 @@ def _handle_scan_request_task(
         return _failed_task(task, "SCAN_REQUEST handling requires api_url.")
 
     scan_type = (_payload_string(task.payload, "scanType", "scan_type") or "PROJECT_FILE").upper()
-    if scan_type not in {"PROJECT_FILE", "PROJECT_SCAN", "LOCAL_SCAN"}:
+    if scan_type not in {"PROJECT_FILE", "PROJECT_SCAN", "LOCAL_SCAN", "SERVER_AUDIT"}:
         return _failed_task(task, f"Unsupported SCAN_REQUEST scanType: {scan_type}")
 
-    try:
-        target_root = _resolve_scan_root(project_root, task.payload)
-    except ValueError as exc:
-        return _failed_task(task, str(exc))
+    target_root: Path | None = None
+    if scan_type != "SERVER_AUDIT":
+        try:
+            target_root = _resolve_scan_root(project_root, task.payload)
+        except ValueError as exc:
+            return _failed_task(task, str(exc))
 
-    save_raw = bool(task.payload.get("saveRaw") or task.payload.get("save_raw"))
     if dry_run:
+        target_label = "server runtime" if scan_type == "SERVER_AUDIT" else str(target_root)
         return AgentTaskResult(
             task_id=task.task_id,
             task_type=task.task_type,
             status="DRY_RUN",
-            message=f"SCAN_REQUEST validated for {target_root}.",
+            message=f"SCAN_REQUEST validated for {target_label}.",
             patch_results=[],
         )
     if not upload_token:
@@ -205,9 +208,16 @@ def _handle_scan_request_task(
         )
 
     try:
-        scan = run_scan(target_root, save_raw=save_raw)
+        if scan_type == "SERVER_AUDIT":
+            scan = _run_server_audit_for_task(task.payload)
+            upload_root = project_root
+        else:
+            assert target_root is not None
+            save_raw = bool(task.payload.get("saveRaw") or task.payload.get("save_raw"))
+            scan = run_scan(target_root, save_raw=save_raw)
+            upload_root = target_root
         upload_scan_result_to_registered_scan(
-            target_root,
+            upload_root,
             scan,
             api_url=api_url,
             token=upload_token,
@@ -221,7 +231,7 @@ def _handle_scan_request_task(
         task_id=task.task_id,
         task_type=task.task_type,
         status="SUCCESS",
-        message=f"Scan completed and uploaded for scanId={task.scan_id}.",
+        message=f"{scan_type} completed and uploaded for scanId={task.scan_id}.",
         patch_results=[],
     )
 
@@ -242,6 +252,38 @@ def _payload_string(payload: dict[str, Any], *keys: str) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _payload_bool(payload: dict[str, Any], *keys: str, default: bool = False) -> bool:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return default
+
+
+def _payload_checks(payload: dict[str, Any]) -> list[str] | None:
+    value = payload.get("checks") or payload.get("serverChecks") or payload.get("server_checks")
+    if isinstance(value, list):
+        checks = [str(item).strip() for item in value if str(item).strip()]
+        return checks or None
+    if isinstance(value, str) and value.strip():
+        checks = [item.strip() for item in value.split(",") if item.strip()]
+        return checks or None
+    return None
+
+
+def _run_server_audit_for_task(payload: dict[str, Any]) -> dict[str, Any]:
+    result = run_server_audit(
+        checks=_payload_checks(payload),
+        include_os_packages=_payload_bool(payload, "includeOsPackages", "include_os_packages"),
+        allow_sudo=_payload_bool(payload, "allowSudo", "allow_sudo"),
+    )
+    scan = asdict(result)
+    scan["scanType"] = "SERVER_AUDIT"
+    return scan
 
 
 def _resolve_scan_root(agent_root: Path, payload: dict[str, Any]) -> Path:

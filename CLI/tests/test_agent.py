@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from ssafer.core import agent
 from ssafer.main import app
+from ssafer.server.audit import ServerAuditResult
 
 
 def test_build_agent_ws_url_uses_ws_path():
@@ -418,6 +419,70 @@ def test_handle_agent_task_runs_scan_request_and_uploads_result(monkeypatch, tmp
         "scan_id": 2,
         "raw_upload_url": "https://s3.example.com/raw",
     }
+
+
+def test_handle_agent_task_runs_server_audit_request_and_uploads_result(monkeypatch, tmp_path: Path):
+    calls = {}
+
+    def fake_run_server_audit(*, checks=None, include_os_packages=False, allow_sudo=False):
+        calls["server_audit"] = {
+            "checks": checks,
+            "include_os_packages": include_os_packages,
+            "allow_sudo": allow_sudo,
+        }
+        return ServerAuditResult()
+
+    def fake_upload_scan_result_to_registered_scan(project_root, scan, *, api_url, token, scan_id, raw_upload_url):
+        calls["upload"] = {
+            "project_root": project_root,
+            "scan": scan,
+            "api_url": api_url,
+            "token": token,
+            "scan_id": scan_id,
+            "raw_upload_url": raw_upload_url,
+        }
+        return {"scanId": scan_id, "status": "RAW_UPLOADED"}
+
+    monkeypatch.setattr(agent, "run_server_audit", fake_run_server_audit)
+    monkeypatch.setattr(agent, "upload_scan_result_to_registered_scan", fake_upload_scan_result_to_registered_scan)
+
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="SCAN_REQUEST",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=None,
+        payload={
+            "rawUploadUrl": "https://s3.example.com/raw",
+            "scanType": "SERVER_AUDIT",
+            "checks": ["ports", "docker"],
+            "includeOsPackages": True,
+            "allowSudo": "true",
+        },
+    )
+
+    result = agent.handle_agent_task(
+        tmp_path,
+        task,
+        api_url="https://api.example.com",
+        agent_token="agent-token",
+        upload_token="access-token",
+    )
+
+    assert result.status == "SUCCESS"
+    assert calls["server_audit"] == {
+        "checks": ["ports", "docker"],
+        "include_os_packages": True,
+        "allow_sudo": True,
+    }
+    assert calls["upload"]["project_root"] == tmp_path
+    assert calls["upload"]["scan"]["source"] == "server-audit"
+    assert calls["upload"]["scan"]["scanType"] == "SERVER_AUDIT"
+    assert calls["upload"]["api_url"] == "https://api.example.com"
+    assert calls["upload"]["token"] == "access-token"
+    assert calls["upload"]["scan_id"] == 2
+    assert calls["upload"]["raw_upload_url"] == "https://s3.example.com/raw"
 
 
 def test_handle_agent_task_rejects_scan_request_without_upload_token(monkeypatch, tmp_path: Path):

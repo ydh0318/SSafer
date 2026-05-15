@@ -2032,6 +2032,7 @@ def _wait_for_uploaded_scan(
     api_url: str | None,
     timeout_seconds: int = 300,
     interval_seconds: int = 3,
+    max_status_failures: int = 5,
 ) -> dict:
     scan_id = response.get("scanId")
     if scan_id is None:
@@ -2051,10 +2052,46 @@ def _wait_for_uploaded_scan(
     deadline = time.monotonic() + timeout_seconds
     latest = dict(response)
     latest["_apiUrl"] = base_url
+    status_failures = 0
 
     with console.status("[cyan]AI 분석 완료를 기다리는 중...[/cyan]", spinner="dots") as status:
         while time.monotonic() < deadline:
-            status_data = _fetch_scan_status(base_url, scan_id, headers)
+            try:
+                status_data = _fetch_scan_status(base_url, scan_id, headers)
+                status_failures = 0
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                if status_code in {401, 403}:
+                    console.print(f"[red]AI 분석 상태 조회 실패:[/red] {_format_http_error(exc)}")
+                    console.print(f"[dim]웹에서 계속 확인하세요: {progress_url}[/dim]")
+                    raise typer.Exit(code=1) from exc
+                if status_code not in {408, 429, 500, 502, 503, 504}:
+                    console.print(f"[red]AI 분석 상태 조회 실패:[/red] {_format_http_error(exc)}")
+                    console.print(f"[dim]웹에서 계속 확인하세요: {progress_url}[/dim]")
+                    raise typer.Exit(code=1) from exc
+                status_failures += 1
+                if status_failures >= max_status_failures:
+                    console.print(f"[yellow]AI 분석 상태 조회가 일시적으로 실패했습니다.[/yellow] {_format_http_error(exc)}")
+                    console.print(f"[dim]웹에서 계속 확인하세요: {progress_url}[/dim]")
+                    return latest
+                status.update(
+                    f"[yellow]AI 분석 상태 조회 재시도 중... "
+                    f"{status_code} ({status_failures}/{max_status_failures})[/yellow]"
+                )
+                time.sleep(interval_seconds)
+                continue
+            except httpx.HTTPError as exc:
+                status_failures += 1
+                if status_failures >= max_status_failures:
+                    console.print(f"[yellow]AI 분석 상태 조회가 일시적으로 실패했습니다.[/yellow] {_format_http_transport_error(exc)}")
+                    console.print(f"[dim]웹에서 계속 확인하세요: {progress_url}[/dim]")
+                    return latest
+                status.update(
+                    f"[yellow]AI 분석 상태 조회 재시도 중... "
+                    f"네트워크 오류 ({status_failures}/{max_status_failures})[/yellow]"
+                )
+                time.sleep(interval_seconds)
+                continue
             latest.update(status_data)
             latest.setdefault("scanId", scan_id)
             latest["_apiUrl"] = base_url
