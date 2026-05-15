@@ -1,20 +1,21 @@
 # SSAfer CLI
 
-SSAfer CLI는 로컬 프로젝트와 운영 서버를 점검하고, 결과를 SSAfer 백엔드와 웹 화면에 연결하기 위한 도구입니다.
+SSAfer CLI는 프로젝트 설정 파일과 서버 런타임 상태를 점검하고, 결과를 SSAfer 웹 대시보드와 연결하는 터미널 도구입니다.
 
-현재 CLI는 크게 세 가지 흐름을 지원합니다.
+현재 CLI에서 할 수 있는 일은 크게 네 가지입니다.
 
-- 로컬 프로젝트 점검: `.env`, Dockerfile, Docker Compose 파일을 찾아 custom rule과 Trivy 결과를 scan JSON으로 저장
-- 서버 런타임 점검: EC2 같은 서버 내부에서 포트, 프로세스, Docker, SSH, firewall, nginx, OS package 상태 점검
-- 백엔드 연동: scan JSON을 S3 presigned URL로 업로드하고 백엔드에 raw 결과 업로드 완료를 알림
-
-> 참고: 웹의 "파일 업로드" 스캔은 CLI 결과 JSON 업로드가 아닙니다. 웹 업로드는 `.env`, Dockerfile, compose 파일을 백엔드 서버에 올리고 백엔드가 직접 검사하는 흐름입니다.
+- 로컬 프로젝트 점검: `.env`, Dockerfile, Docker Compose 파일을 분석해 scan JSON 생성
+- 서버 점검: EC2 같은 서버 내부에서 포트, 프로세스, Docker, SSH, firewall, nginx, OS package 상태 확인
+- 업로드: 로컬 scan JSON 또는 server-audit JSON을 백엔드/S3로 업로드
+- Local Agent: 웹에서 보낸 스캔/수정 요청을 현재 PC 또는 서버에서 처리
 
 ---
 
 ## 설치
 
-개발/검증 중에는 저장소의 `CLI` 폴더에서 editable install을 사용합니다.
+### 개발 중 설치
+
+저장소를 받은 상태라면 `CLI` 폴더에서 editable install을 사용합니다.
 
 ```powershell
 cd CLI
@@ -22,7 +23,11 @@ python -m pip install -e ".[dev]"
 ssafer version
 ```
 
-EC2 Ubuntu에서는 venv 안에 설치하는 방식을 권장합니다.
+코드를 수정하면 다시 설치하지 않아도 바로 반영됩니다.
+
+### EC2 또는 서버 검증용 설치
+
+Ubuntu 24.04처럼 전역 pip 설치가 막힌 환경에서는 venv를 만든 뒤 설치합니다.
 
 ```bash
 sudo apt install -y python3-venv git
@@ -30,151 +35,128 @@ sudo apt install -y python3-venv git
 python3 -m venv ~/.ssafer-venv
 source ~/.ssafer-venv/bin/activate
 
-cd <repo>/CLI
-pip install -e .
+pip install "git+https://lab.ssafy.com/s14-final/S14P31B105.git@develop#subdirectory=CLI"
 ssafer version
 ```
 
-정식 배포 후 목표 설치 방식은 다음과 같습니다.
+이 설치 명령은 어느 폴더에서 실행해도 됩니다. pip가 임시 디렉터리에 저장소를 받아 설치하기 때문입니다.
+
+다만 venv에 설치했다면 `ssafer` 명령을 실행할 때도 venv가 활성화되어 있어야 합니다.
+
+```bash
+source ~/.ssafer-venv/bin/activate
+ssafer --help
+```
+
+코드가 바뀐 develop 브랜치를 다시 설치하려면 아래처럼 강제 재설치합니다.
+
+```bash
+pip install --upgrade --force-reinstall "git+https://lab.ssafy.com/s14-final/S14P31B105.git@develop#subdirectory=CLI"
+```
+
+### 최종 배포 방식
+
+최종 배포는 PyPI에 `ssafer` 패키지를 올린 뒤 `pipx`로 설치하는 방식을 권장합니다.
 
 ```bash
 pipx install ssafer
-ssafer install-tools
+ssafer version
 ```
+
+업데이트는 아래처럼 합니다.
+
+```bash
+pipx upgrade ssafer
+```
+
+`pipx`는 PyPI 패키지를 사용자 환경의 독립 venv에 설치해 주는 도구입니다. 사용자는 venv를 직접 활성화하지 않아도 `ssafer` 명령을 바로 사용할 수 있습니다.
+
+PyPI는 같은 버전을 다시 업로드할 수 없습니다. 배포할 때는 `CLI/pyproject.toml`의 `version`을 올린 뒤 배포해야 합니다.
 
 ---
 
-## 주요 명령어
+## 자주 쓰는 명령어
 
 | 명령어 | 설명 |
 | --- | --- |
-| `ssafer version` | 설치된 CLI 버전 출력 |
-| `ssafer doctor` | Python, Docker, Compose, Trivy 환경 점검 |
-| `ssafer install-tools` | Trivy 설치 안내 및 Windows winget 설치 시도 |
-| `ssafer login` | 백엔드 로그인 후 토큰 저장. 성공 후 local agent 시작 여부를 묻습니다. |
-| `ssafer logout` | 저장된 로그인 토큰 삭제 |
-| `ssafer run --path <dir>` | 로컬 프로젝트 점검 후 `.ssafer/results`에 scan JSON 저장 |
-| `ssafer run --path <dir> --upload` | 점검 후 바로 최근 scan JSON 업로드 |
-| `ssafer report --path <dir>` | 마지막 scan 결과 요약 출력 |
-| `ssafer report --path <dir> --details` | findings, warnings, artifacts 상세 출력 |
-| `ssafer upload --path <dir>` | 마지막 scan JSON을 백엔드 등록/S3 업로드/raw-results callback 흐름으로 업로드 |
-| `ssafer server-audit` | 현재 서버 런타임 상태 점검 |
-| `ssafer server-audit --include-os-packages` | OS package 취약점 점검까지 포함 |
-| `ssafer server-audit --upload` | 마지막 server-audit JSON을 `scanType=SERVER_AUDIT`로 업로드 |
-| `ssafer apply` | 로컬 `analysis_result.json`의 replace patch를 적용 |
-| `ssafer agent` | agent token이 없으면 발급/저장 후 local agent 상주 시작 |
-| `ssafer agent-init --project-id <id>` | 지정 프로젝트의 agent token 발급/저장 |
-| `ssafer agent-watch` | 저장된 agent 설정 또는 env 값으로 pending task 감시 |
+| `ssafer version` | 현재 설치된 SSAfer CLI 버전을 확인합니다. |
+| `ssafer status` | 로그인, 계정 방식, endpoint, Local Agent 상태를 확인합니다. |
+| `ssafer tools` | Trivy 같은 점검 도구를 설치합니다. |
+| `ssafer signup` | 이메일 인증부터 회원가입까지 터미널에서 진행합니다. |
+| `ssafer login` | 회원 계정으로 로그인하고 업로드/agent용 토큰을 저장합니다. |
+| `ssafer guest` | 이메일 없이 게스트 토큰을 발급받아 CLI를 사용합니다. |
+| `ssafer logout` | 저장된 로그인/agent 정보를 삭제합니다. |
+| `ssafer withdraw` | 현재 로그인한 회원 계정을 탈퇴합니다. |
+| `ssafer run` | 현재 폴더 기준으로 프로젝트 설정 파일을 스캔합니다. |
+| `ssafer run --upload` | 스캔 후 바로 업로드하고 AI 분석 완료까지 기다립니다. |
+| `ssafer report` | 최근 로컬 스캔 결과 요약을 확인합니다. |
+| `ssafer report --details` | 최근 로컬 스캔 결과의 상세 finding을 확인합니다. |
+| `ssafer upload` | 최근 로컬 프로젝트 스캔 결과를 업로드합니다. |
+| `ssafer server` | 현재 서버의 런타임 보안 상태를 점검합니다. |
+| `ssafer server --upload` | 서버 점검을 실행한 뒤 결과를 바로 업로드합니다. |
+| `ssafer upload --server` | 최근 서버 점검 결과를 새로 점검하지 않고 업로드합니다. |
+| `ssafer apply` | 최근 DONE scan의 AI 수정안을 내려받아 적용합니다. |
+| `ssafer apply <scan_id>` | 지정한 scanId의 AI 수정안을 내려받아 적용합니다. |
+| `ssafer agent` | 웹 요청을 현재 PC/서버에서 처리하도록 Local Agent를 실행합니다. |
 
 ---
 
-## 빠른 시작
+## 계정과 게스트 모드
 
-로컬 프로젝트를 점검하고 터미널에서 결과를 확인합니다.
+회원 계정으로 사용하려면 로그인합니다.
 
-```powershell
-ssafer doctor
-ssafer run --path .\my-project
-ssafer report --path .\my-project --details
-```
-
-웹 기록에 남기려면 로그인 후 업로드합니다.
-
-```powershell
+```bash
 ssafer login
-ssafer upload --path .\my-project
 ```
 
-`ssafer login` 성공 후에는 다음 질문이 표시됩니다.
+로그인 후 CLI는 `~/.ssafer/config.yml`에 access token과 endpoint를 저장합니다. 이 토큰은 CLI 업로드와 Local Agent 연결에 사용됩니다. 브라우저 웹 로그인과는 별도입니다.
 
-```text
-Login succeeded. Tokens saved to ~/.ssafer/config.yml.
-Start local agent now? [y/N]:
+게스트로 바로 사용하려면 아래 명령을 사용합니다.
+
+```bash
+ssafer guest
 ```
 
-`y`를 선택하면 `ssafer agent` 흐름으로 이어집니다. 기본값은 `N`입니다.
+토큰이 포함된 웹 연결 URL은 기본 출력에서 숨깁니다. 실제 URL이 필요할 때만 아래 명령을 사용합니다.
+
+```bash
+ssafer guest --show-url
+```
+
+웹에서 받은 게스트 토큰을 CLI에 붙여 쓰는 경우:
+
+```bash
+ssafer login --guest-token <웹에서 받은 토큰>
+```
+
+현재 상태는 언제든 확인할 수 있습니다.
+
+```bash
+ssafer status
+```
 
 ---
 
-## 백엔드 URL과 인증
+## 로컬 프로젝트 스캔
 
-기본 API URL은 CLI 내부 기본값 또는 저장된 설정을 사용합니다. 명령어별로 `--api-url`을 지정할 수도 있습니다.
+프로젝트 루트에서 실행하는 것이 가장 좋습니다.
 
-우선순위:
-
-1. CLI 옵션 `--api-url`
-2. `ssafer.yml`의 `upload.endpoint`
-3. `ssafer login` 또는 `save_token`으로 저장된 endpoint
-4. CLI 기본 endpoint
-
-인증 토큰 우선순위:
-
-1. `ssafer.yml`의 `upload.token_env`에 지정된 환경변수
-2. 기본 환경변수 `SSAFER_TOKEN`
-3. `ssafer login`으로 저장된 access token
-
-로그인, 회원가입, 업로드 등록, raw-results callback 같은 백엔드 POST 요청은 301/302/303/307/308 redirect가 발생해도 POST method를 유지하도록 처리합니다. S3 presigned URL 요청에는 Authorization 헤더를 붙이지 않습니다.
-
----
-
-## 프로젝트 설정 파일
-
-프로젝트 루트에 `ssafer.yml`을 두면 CLI 기본 동작을 프로젝트별로 조정할 수 있습니다.
-
-```yaml
-project_name: S14P31B105
-
-upload:
-  endpoint: https://k14b105.p.ssafy.io
-  token_env: SSAFER_TOKEN
-
-rules:
-  exclude:
-    - COMPOSE_LATEST_TAG
-
-masking:
-  extra_patterns:
-    - name: internal_domain
-      regex: "company-internal\\.com"
-      mask: "[REDACTED]"
+```bash
+ssafer run
 ```
 
-| 항목 | 설명 |
-| --- | --- |
-| `project_name` | scan JSON의 `projectName` 기본값 |
-| `upload.endpoint` | 업로드 기본 백엔드 URL |
-| `upload.token_env` | 업로드 토큰을 읽을 환경변수 이름 |
-| `rules.exclude` | 제외할 custom rule ID 목록 |
-| `masking.extra_patterns` | 추가 마스킹 정규식 |
+다른 위치에서 실행해야 하면 `--path`로 대상 프로젝트 경로를 지정합니다.
 
----
+```bash
+ssafer run --path /path/to/project
+```
 
-## 로컬 프로젝트 점검
-
-`ssafer run`은 지정한 경로 아래에서 다음 파일을 탐색합니다.
-
-- `.env`, `.env.*`
-- `Dockerfile`, `Containerfile`
-- `docker-compose.yml`, `docker-compose.yaml`
-- `docker-compose.*.yml`, `docker-compose.*.yaml`
-- `compose.yml`, `compose.yaml`
-- `compose.*.yml`, `compose.*.yaml`
-
-일반 생성물/캐시 디렉터리는 제외합니다.
-
-- `.git`
-- `node_modules`
-- `dist`
-- `build`
-- `.pytest_tmp`
-- `.pytest_cache`
-
-출력은 프로젝트 루트 아래 `.ssafer`에 저장됩니다.
+스캔 결과는 대상 프로젝트 아래 `.ssafer/results`에 저장됩니다.
 
 ```text
 .ssafer/
   results/
-    {scanId}.json
+    {localScanId}.json
     last_scan.txt
   effective/
     sanitized/
@@ -182,69 +164,101 @@ masking:
   trivy/
 ```
 
----
+`ssafer run`에서 표시되는 로컬 스캔 ID는 CLI 내부 결과 파일 ID입니다. 웹에서 쓰는 백엔드 `scanId`는 업로드 후 별도로 발급됩니다.
 
-## 업로드 흐름
+최근 스캔 요약:
 
-`ssafer upload`는 로컬 scan JSON을 백엔드 API body에 직접 싣지 않습니다. 현재 백엔드 계약에 맞춰 다음 순서로 동작합니다.
+```bash
+ssafer report
+```
 
-1. `POST /api/v1/scans`로 scan row를 등록합니다.
-2. 백엔드 응답에서 `scanId`, `rawResultPath`, `rawUploadUrl`을 받습니다.
-3. `rawUploadUrl`로 scan JSON bytes를 S3에 `PUT` 업로드합니다.
-4. `POST /api/v1/scans/{scanId}/raw-results`로 업로드 완료를 알립니다.
+상세 finding:
 
-업로드 완료 callback payload에는 다음 값이 포함됩니다.
-
-- `tool`
-- `toolVersion`
-- `resultCount`
-- `payloadHash`
-
-`payloadHash`는 실제 업로드한 JSON bytes 기준 SHA-256입니다.
-
-현재 `ssafer upload`가 완료되면 웹 scan 목록에는 기록이 생성됩니다. 다만 AI/Worker가 raw JSON을 분석하고 `analysis-results` callback을 호출해야 최종 `DONE`으로 넘어갑니다.
+```bash
+ssafer report --details
+```
 
 ---
 
-## server-audit
+## 로컬 스캔 업로드
 
-`ssafer server-audit`는 로컬 프로젝트 파일이 아니라 현재 서버 런타임 상태를 점검합니다.
-
-점검 항목:
-
-- ports
-- processes
-- docker
-- ssh
-- firewall
-- nginx
-- os-packages, `--include-os-packages` 지정 시
-
-기본 실행:
+최근 로컬 스캔 결과를 업로드합니다.
 
 ```bash
-ssafer server-audit
+ssafer upload
 ```
 
-OS package 취약점까지 포함:
+스캔과 업로드를 한 번에 실행하려면:
 
 ```bash
-ssafer server-audit --include-os-packages
+ssafer run --upload
 ```
 
-상세 출력:
+업로드 흐름은 다음과 같습니다.
+
+1. `POST /api/v1/scans`로 scan 등록
+2. 백엔드가 `scanId`, `rawUploadUrl`, `rawResultPath` 반환
+3. CLI가 `rawUploadUrl`로 scan JSON을 S3에 PUT
+4. `POST /api/v1/scans/{scanId}/raw-results`로 업로드 완료 보고
+5. AI 분석이 끝날 때까지 상태 조회
+6. 웹 결과 URL 출력
+
+S3 presigned URL에는 Authorization 헤더를 붙이지 않습니다. 백엔드 API 호출에만 로그인 토큰을 사용합니다.
+
+---
+
+## 서버 점검
+
+EC2 또는 서버 내부에서 서버 런타임 상태를 점검하려면 아래 명령을 사용합니다.
 
 ```bash
-ssafer server-audit --details
+ssafer server
 ```
 
-업로드:
+서버 점검은 프로젝트 파일을 보는 것이 아니라 현재 서버의 런타임 상태를 봅니다.
+
+확인 대상:
+
+- 열려 있는 포트
+- 실행 중인 프로세스
+- Docker 컨테이너
+- SSH 설정
+- firewall 상태
+- nginx 설정
+- OS package 취약점
+
+OS package 취약점까지 보려면 시간이 오래 걸릴 수 있으므로 명시적으로 옵션을 붙입니다.
 
 ```bash
-ssafer server-audit --upload
+ssafer server --include-os-packages
 ```
 
-업로드 시 payload에는 일반 project scan과 구분하기 위해 다음 값을 포함합니다.
+서버 점검 결과는 기본적으로 홈 디렉터리 아래에 저장됩니다.
+
+```text
+~/.ssafer/server-audit/{auditId}.json
+~/.ssafer/server-audit/last_audit.txt
+```
+
+현재 위치가 `/var/lib`, Jenkins workspace처럼 쓰기 권한이 애매한 경로여도 결과 저장은 홈 디렉터리로 fallback됩니다.
+
+### 서버 점검 결과 업로드
+
+서버 점검과 업로드를 한 번에 실행:
+
+```bash
+ssafer server --upload
+```
+
+이미 실행한 최근 서버 점검 결과만 업로드:
+
+```bash
+ssafer upload --server
+```
+
+즉, `ssafer server --upload`는 “새로 점검 + 업로드”이고, `ssafer upload --server`는 “최근 서버 점검 결과 업로드만”입니다.
+
+server-audit 업로드는 일반 프로젝트 스캔과 같은 업로드 흐름을 재사용하지만, payload에 아래 값을 포함해 구분합니다.
 
 ```json
 {
@@ -253,180 +267,176 @@ ssafer server-audit --upload
 }
 ```
 
-현재 백엔드가 `scanType=SERVER_AUDIT`와 `source=SERVER_AUDIT`를 허용해야 E2E 업로드가 완료됩니다.
-
 ---
 
-## local agent
+## Local Agent
 
-`ssafer agent`는 사용자의 로컬 프로젝트 폴더에서 백엔드 agent task를 감시하기 위한 명령입니다.
+웹에서 “Agent 스캔” 또는 “수정 적용”을 누르면 브라우저가 직접 로컬 파일이나 서버 명령어를 실행할 수 없습니다. 이때 현재 PC 또는 서버에서 `ssafer agent`가 실행 중이어야 합니다.
 
-처음 실행하면 다음을 수행합니다.
-
-1. 저장된 agent 설정을 확인합니다.
-2. 설정이 없으면 로그인 token으로 프로젝트 목록을 조회합니다.
-3. 사용자가 연결할 프로젝트를 선택합니다.
-4. `POST /api/v1/projects/{projectId}/agent/token`으로 agent token을 발급받습니다.
-5. `~/.ssafer/config.yml`에 `agentId`, `projectId`, `agentToken`, `endpoint`를 저장합니다.
-6. WebSocket 연결 및 pending task 조회를 시작합니다.
-
-```powershell
-ssafer login
+```bash
 ssafer agent
 ```
 
-저장된 agent 설정이 있으면 다음부터는 바로 상주를 시작합니다.
+처음 실행하면 연결할 프로젝트를 선택하거나 생성합니다. 웹에서 해당 프로젝트로 보낸 요청을 이 agent가 처리합니다.
 
-```powershell
+Agent가 처리하는 주요 task:
+
+- `SCAN_REQUEST`: 웹에서 요청한 프로젝트 스캔 실행 및 업로드
+- `PATCH_APPLY`: 웹에서 승인한 수정안을 로컬 파일에 적용하고 결과 보고
+
+로그인 직후에도 CLI가 agent 실행 여부를 물어봅니다.
+
+```text
+지금 Local Agent를 시작할까요? [y/N]:
+```
+
+나중에 켜려면 언제든 아래 명령을 실행하면 됩니다.
+
+```bash
 ssafer agent
 ```
 
-현재 agent가 처리하는 task:
+---
 
-- `PATCH_APPLY`: 구조화된 replace patch payload를 로컬 파일에 적용
+## 수정 적용
 
-아직 처리하지 않는 task:
+AI 분석이 완료된 scan의 수정안을 내려받아 적용합니다.
 
-- `SCAN_REQUEST`: 웹에서 Agent 스캔 요청을 눌렀을 때 로컬에서 자동으로 `ssafer run`과 업로드를 수행하는 흐름
+```bash
+ssafer apply
+```
 
-즉 현재 `ssafer agent`는 patch 적용 기반과 연결/재연결/조회 기반은 있지만, 웹 Agent 스캔 요청을 받아 자동 스캔하는 기능은 다음 작업 범위입니다.
+기본 동작은 현재 프로젝트의 최신 DONE scan을 찾아 적용하는 것입니다.
 
-WebSocket은 `/ws/v1/internal/agents/connect`를 사용합니다. `https://k14b105.p.ssafy.io` endpoint를 사용할 때 agent WebSocket은 `wss://ssafer.co.kr/ws/v1/internal/agents/connect`로 연결하도록 보정합니다.
+특정 scanId를 지정하려면:
+
+```bash
+ssafer apply 123
+```
+
+파일을 실제로 바꾸지 않고 확인만 하려면:
+
+```bash
+ssafer apply --dry-run
+```
+
+적용 전에는 diff preview가 표시됩니다. 적용 시에는 `.ssafer/backups` 아래에 백업 파일을 남깁니다.
+
+자동 수정 payload가 없으면 실패가 아니라 “적용할 수정안 없음”으로 안내합니다. 이 경우 AI가 patch 대신 가이드만 생성한 상태일 수 있습니다.
 
 ---
 
-## apply
+## scan JSON과 patchContext
 
-`ssafer apply`는 AI 분석 결과의 patch payload를 로컬 파일에 적용합니다.
+CLI scan JSON의 finding에는 AI가 자동 수정 payload를 만들 수 있도록 아래 정보가 포함될 수 있습니다.
 
-```powershell
-ssafer apply --path .\my-project --analysis-result .\analysis_result.json
+- `filePath`: 실제 수정 대상 파일
+- `line`: finding이 발견된 줄 번호
+- `targetFiles`: 후보 파일 목록
+- `patchContext.operation`: `replace` 또는 `append`
+- `patchContext.oldText`: replace 기준 원문
+- `patchContext.newTextHint`: append 또는 생성형 수정 힌트
+- `patchContext.expectedFileHash`: 대상 파일 SHA-256 해시
+
+AI/Worker는 이 정보를 기반으로 `analysis_result.json`의 `patches` 배열을 생성합니다.
+
+replace patch 예시:
+
+```json
+{
+  "patchId": "PATCH-FND-0001",
+  "findingId": "FND-0001",
+  "operation": "replace",
+  "filePath": "docker-compose.yml",
+  "oldText": "    ports:\n      - \"5432:5432\"",
+  "newText": "",
+  "expectedFileHash": "sha256:..."
+}
 ```
 
-지원하는 patch operation:
+append patch 예시:
 
-- `replace`
+```json
+{
+  "patchId": "PATCH-FND-0006",
+  "findingId": "FND-0006",
+  "operation": "append",
+  "filePath": "Dockerfile",
+  "oldText": null,
+  "newText": "\nHEALTHCHECK CMD curl -f http://localhost/ || exit 1\n",
+  "expectedFileHash": "sha256:..."
+}
+```
 
-안전 정책:
-
-- `filePath`는 프로젝트 루트 밖으로 나갈 수 없습니다.
-- `oldText`가 대상 파일 안에서 정확히 한 번만 발견될 때만 교체합니다.
-- 적용 전 diff preview를 출력합니다.
-- 적용 전 백업 파일을 `.ssafer/backups` 아래에 저장합니다.
-- `--dry-run`은 파일을 수정하지 않고 적용 가능 여부만 확인합니다.
-- `--patch-id`로 특정 patch만 선택할 수 있습니다.
-
-현재 `ssafer apply`는 로컬 `analysis_result.json`을 기준으로 동작합니다. S3/백엔드의 최신 `analysis_result.json`을 scanId로 받아오는 기능은 아직 없습니다.
+server-audit는 코드 patch 대상이 아니라 운영 조치 제안 중심입니다.
 
 ---
 
-## 웹 스캔 방식과 CLI 관계
+## 설정 파일
 
-웹에는 다음 스캔 방식이 있습니다.
+프로젝트 루트에 `ssafer.yml`을 두면 일부 기본값을 바꿀 수 있습니다.
 
-### 파일 업로드
+```yaml
+project_name: S14P31B105
 
-CLI가 관여하지 않습니다. 사용자가 웹에 `.env`, Dockerfile, compose 파일을 업로드하면 백엔드 서버가 직접 custom rule과 Trivy를 실행합니다.
+upload:
+  endpoint: https://ssafer.co.kr
+  token_env: SSAFER_TOKEN
 
-사용자 PC에는 CLI나 Trivy가 없어도 됩니다. 대신 백엔드 서버에는 Trivy 명령이 설치되어 있어야 합니다.
-
-### CLI
-
-사용자가 직접 로컬에서 실행합니다.
-
-```powershell
-ssafer run
-ssafer upload
+rules:
+  exclude:
+    - COMPOSE_LATEST_TAG
 ```
 
-`ssafer upload`까지 완료해야 웹 scan 목록에 기록이 남습니다.
-
-### Agent
-
-목표 흐름은 다음과 같습니다.
-
-```text
-웹에서 Agent 스캔 시작
-→ 백엔드가 SCAN_REQUEST task 생성
-→ 실행 중인 ssafer agent가 task 수신
-→ 로컬에서 scan 실행
-→ 결과 업로드
-→ 웹에서 진행 상태와 결과 확인
-```
-
-현재 CLI는 `SCAN_REQUEST` 자동 실행부가 아직 없습니다. 따라서 이 흐름은 다음 작업에서 구현해야 합니다.
+| 항목 | 설명 |
+| --- | --- |
+| `project_name` | scan JSON의 프로젝트 이름 기본값 |
+| `upload.endpoint` | 백엔드 API URL |
+| `upload.token_env` | 업로드 토큰을 읽을 환경변수 이름 |
+| `rules.exclude` | 제외할 custom rule ID |
 
 ---
 
-## 보안 정책
+## 빌드와 배포 준비
 
-- `.env` 원문 secret 값은 scan JSON, report, upload payload에 남지 않도록 마스킹합니다.
-- Compose `environment`의 `PASSWORD`, `SECRET`, `TOKEN`, `API_KEY` 계열 값은 마스킹합니다.
-- Trivy secret 결과의 `Secrets[].Match`와 코드 라인 내 secret-like 값은 scan artifact 저장 전에 마스킹합니다.
-- `ssafer upload` 직전에는 최종 scan JSON 전체를 다시 검사하고, 원문 secret 의심값이 있으면 백엔드/S3 요청 전에 차단합니다.
-- HTTP 오류 출력 시 S3 presigned URL은 숨기고 백엔드 API URL만 표시합니다.
+PyPI 배포 전 로컬에서 wheel/sdist를 만들고 검사합니다.
 
----
-
-## 문제 해결
-
-### `No local scan package found.`
-
-`report` 또는 `upload` 전에 먼저 스캔을 실행해야 합니다.
-
-```powershell
-ssafer run --path .\my-project
+```bash
+cd CLI
+python -m pip install --upgrade build twine
+python -m build
+python -m twine check dist/*
 ```
 
-### `trivy.exe was not found; Dockerfile scan skipped.`
-
-Trivy가 없으면 Dockerfile 기반 Trivy scan은 건너뜁니다.
-
-```powershell
-ssafer install-tools
-```
-
-설치 후 새 터미널을 열고 다시 실행합니다.
-
-### `server-audit --include-os-packages`가 오래 걸림
-
-OS package 취약점 점검은 `trivy rootfs /`를 실행하므로 시간이 걸릴 수 있습니다. CLI는 장시간 작업 전에 진행 안내를 출력하고, OS package 점검은 더 긴 timeout을 사용합니다.
-
-### `ssafer agent` WebSocket 연결 실패
-
-다음과 같은 오류가 나면 CLI보다는 인프라 WebSocket proxy 문제일 가능성이 큽니다.
-
-```text
-server rejected WebSocket connection: HTTP 200
-```
-
-`/ws/v1/internal/agents/connect`가 WebSocket upgrade로 백엔드에 전달되어야 합니다.
-
----
-
-## 개발자 참고
+로컬 wheel 설치 검증:
 
 ```powershell
 cd CLI
-pip install -e ".[dev]"
-python -m pytest
+python -m venv .release-test-venv
+.\.release-test-venv\Scripts\activate
+pip install .\dist\ssafer-*.whl
+ssafer version
+ssafer --help
 ```
 
-주요 모듈:
+Linux 서버에서 wheel을 직접 검증하려면:
 
-- `ssafer/main.py`: Typer 명령어 정의
-- `ssafer/core/config.py`: `ssafer.yml` 설정 로더
-- `ssafer/core/result_store.py`: scan 결과 저장
-- `ssafer/core/sanitize.py`: 민감정보 마스킹
-- `ssafer/core/upload.py`: scan/server-audit 업로드 및 redirect-preserving POST 처리
-- `ssafer/core/agent.py`: agent WebSocket 연결, pending task 조회, `PATCH_APPLY` 처리
-- `ssafer/core/patches.py`: replace patch 적용
-- `ssafer/core/trivy.py`: Trivy 실행 및 결과 처리
-- `ssafer/server/audit.py`: server-audit 점검 로직
-- `ssafer/rules/engine.py`: custom rule 실행
-- `ssafer/rules/env_rules.py`: `.env` finding 정책
+```bash
+python3 -m venv ~/.ssafer-venv
+source ~/.ssafer-venv/bin/activate
+pip install --force-reinstall ./ssafer-*.whl
+ssafer version
+ssafer --help
+```
 
-추가 문서:
+PyPI 배포 후 사용자 설치:
 
-- [`docs/cli_commands.md`](docs/cli_commands.md)
-- [`docs/cli_regression_tests.md`](docs/cli_regression_tests.md)
+```bash
+pipx install ssafer
+```
+
+PyPI 배포 후 사용자 업데이트:
+
+```bash
+pipx upgrade ssafer
+```
