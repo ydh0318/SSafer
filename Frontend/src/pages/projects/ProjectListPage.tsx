@@ -24,7 +24,7 @@ import { getScanUploadValidationIssue } from '../../features/scans/utils/uploadV
 import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import { useProjectStore } from '../../store/projectStore';
 import type { CreateProjectFormValues, ProjectSummary } from '../../types/project';
-import type { ProjectScanListItemData, ProjectScanOptionsData } from '../../types/scan';
+import type { ProjectScanListItemData, ProjectScanOptionsData, ScanType } from '../../types/scan';
 
 type ScanModeOption = 'UPLOAD' | 'CLI' | 'AGENT';
 
@@ -118,6 +118,7 @@ function ProjectListPage() {
   const [isLoadingCompletedScans, setIsLoadingCompletedScans] = useState(false);
   const [selectedProjectScanOptions, setSelectedProjectScanOptions] = useState<ProjectScanOptionsData | null>(null);
   const [completedScansRefreshKey, setCompletedScansRefreshKey] = useState(0);
+  const [selectedAgentScanType, setSelectedAgentScanType] = useState<ScanType>('PROJECT_FILE');
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useScanEventSubscription(
@@ -474,6 +475,7 @@ function ProjectListPage() {
       } else if (selectedMode === 'AGENT') {
         scanData = await requestAgentScan(String(selectedProject.id), {
           targetPath: '.',
+          scanType: selectedAgentScanType,
           scanName: `${selectedProject.name} Agent 스캔`,
           includeLogs: false,
         });
@@ -766,6 +768,42 @@ function ProjectListPage() {
             <p className="mt-2 max-w-xl text-sm leading-7 text-neutral-500">
               원하는 동작을 바로 눌러 시작하세요.
             </p>
+
+            {selectedMode === 'AGENT' && (
+              <div className="mt-6">
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">스캔 유형 선택</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    className={`border p-4 text-left transition ${
+                      selectedAgentScanType === 'PROJECT_FILE'
+                        ? 'border-black bg-[#111111] text-white'
+                        : 'border-neutral-200 bg-white text-black hover:border-black hover:bg-neutral-50'
+                    }`}
+                    onClick={() => setSelectedAgentScanType('PROJECT_FILE')}
+                    type="button"
+                  >
+                    <p className="font-black">프로젝트 파일 스캔</p>
+                    <p className={`mt-1 text-xs leading-relaxed ${selectedAgentScanType === 'PROJECT_FILE' ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                      소스 코드·설정 파일의 취약점을 분석합니다.
+                    </p>
+                  </button>
+                  <button
+                    className={`border p-4 text-left transition ${
+                      selectedAgentScanType === 'SERVER_AUDIT'
+                        ? 'border-black bg-[#111111] text-white'
+                        : 'border-neutral-200 bg-white text-black hover:border-black hover:bg-neutral-50'
+                    }`}
+                    onClick={() => setSelectedAgentScanType('SERVER_AUDIT')}
+                    type="button"
+                  >
+                    <p className="font-black">서버 런타임 점검</p>
+                    <p className={`mt-1 text-xs leading-relaxed ${selectedAgentScanType === 'SERVER_AUDIT' ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                      실행 중인 서버 환경의 보안 상태를 점검합니다.
+                    </p>
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
               {/* 스캔 */}

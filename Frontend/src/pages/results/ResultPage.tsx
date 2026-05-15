@@ -6,7 +6,7 @@ import PageBanner from '../../components/common/PageBanner';
 import PageHero from '../../components/common/PageHero';
 import { ROUTES } from '../../constants/routes';
 import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
-import { getScanBasic, getScanFindings, getScanSummary } from '../../features/results/api/results';
+import { getScanBasic, getScanFindingDetail, getScanFindings, getScanSummary } from '../../features/results/api/results';
 import { getProjectDetail } from '../../features/projects/api/projects';
 import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
@@ -16,6 +16,7 @@ import type {
   FindingResolutionStatus,
   FindingSeverity,
   ScanBasicData,
+  ScanFindingDetailData,
   ScanFindingListItemData,
   ScanFindingListResponseData,
   ScanSummaryData,
@@ -85,6 +86,7 @@ function ResultPage() {
   const [severityFilter, setSeverityFilter] = useState<'all' | FindingSeverity>('all');
   const [resolutionFilter, setResolutionFilter] = useState<'all' | FindingResolutionStatus>('all');
   const [page, setPage] = useState(0);
+  const [serverAuditDetails, setServerAuditDetails] = useState<Map<number, ScanFindingDetailData>>(new Map());
 
   useEffect(() => {
     setPage(0);
@@ -154,11 +156,12 @@ function ResultPage() {
       setErrorMessage(null);
 
       try {
+        const isServerAudit = getSafeScanType(scanBasic?.scanType) === 'SERVER_AUDIT';
         const data = await getScanFindings(scanId, {
           severity: severityFilter === 'all' ? undefined : severityFilter,
           resolutionStatus: resolutionFilter === 'all' ? undefined : resolutionFilter,
           page,
-          size: 20,
+          size: isServerAudit ? 100 : 20,
         });
 
         if (!isMounted) {
@@ -186,6 +189,39 @@ function ResultPage() {
       isMounted = false;
     };
   }, [page, resolutionFilter, scanBasic?.scanType, scanId, severityFilter]);
+
+  // SERVER_AUDIT 전용: 각 finding 상세를 병렬 fetch해서 summary/evidence/recommendation 보강
+  useEffect(() => {
+    if (!scanId || getSafeScanType(scanBasic?.scanType) !== 'SERVER_AUDIT' || findingsData.items.length === 0) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchDetails = async () => {
+      const settled = await Promise.allSettled(
+        findingsData.items.map((f) => getScanFindingDetail(scanId, f.findingId)),
+      );
+
+      if (!isMounted) return;
+
+      const map = new Map<number, ScanFindingDetailData>();
+      settled.forEach((result, idx) => {
+        if (result.status === 'fulfilled') {
+          const f = findingsData.items[idx];
+          if (f) map.set(f.findingId, result.value);
+        }
+      });
+
+      setServerAuditDetails(map);
+    };
+
+    void fetchDetails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [scanId, scanBasic?.scanType, findingsData.items]);
 
   const counts = useMemo(
     () => ({
@@ -218,25 +254,29 @@ function ResultPage() {
       targetLabel: 'Agent 서버',
       hostLabel: '',
       generatedAt: scanBasic.completedAt ?? scanBasic.requestedAt,
-      findings: findingsData.items.map((f) => ({
-        findingId: f.findingId,
-        title: f.title,
-        severity: f.severity,
-        category: f.category,
-        target: f.filePath ?? f.resourceName ?? '-',
-        summary: f.title,
-        evidence: null,
-        observedAt: f.createdAt,
-        recommendation: '',
-        relatedWarnings: [],
-        relatedArtifacts: [],
-        actions: [],
-      })),
+      findings: findingsData.items.map((f) => {
+        const detail = serverAuditDetails.get(f.findingId);
+        return {
+          findingId: f.findingId,
+          title: f.title,
+          severity: f.severity,
+          category: f.category,
+          target: f.filePath ?? f.resourceName ?? '-',
+          summary: detail?.explanation?.summary ?? detail?.description ?? f.title,
+          evidence: detail?.maskedEvidence ?? null,
+          observedAt: f.createdAt,
+          recommendation: detail?.fix?.summary ?? (detail?.fix?.recommendedActions?.join(' ') ?? null) ?? detail?.remediationGuide ?? '',
+          relatedWarnings: [],
+          relatedArtifacts: [],
+          actions: [],
+        };
+      }),
+      // warnings/artifacts/actions는 백엔드 server-audit 전용 API 미지원 상태
       warnings: [],
       artifacts: [],
       actions: [],
     };
-  }, [currentScanType, scanBasic, findingsData.items]);
+  }, [currentScanType, scanBasic, findingsData.items, serverAuditDetails]);
 
   const groupedFindings = useMemo(() => {
     return severityOrder
