@@ -140,11 +140,23 @@ function ScanRequestForm({
             <input
               className="w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
               onChange={(event) => handleFieldChange('targetPath', event.target.value)}
-              placeholder="/opt/app"
+              placeholder="."
               type="text"
               value={value.targetPath ?? ''}
             />
-            <p className="text-xs text-neutral-500">Agent가 점검할 서버의 절대 경로를 입력하세요.</p>
+            <div className="space-y-1">
+              <p className="text-xs text-neutral-500">
+                <span className="font-semibold text-black">Agent 실행 루트 기준 경로</span>를 입력하세요.
+              </p>
+              <ul className="space-y-0.5 text-xs text-neutral-400">
+                <li><span className="font-mono text-neutral-600">.</span> — Agent 실행 루트 전체를 점검</li>
+                <li><span className="font-mono text-neutral-600">backend</span> — 루트 하위 backend 디렉토리</li>
+                <li><span className="font-mono text-neutral-600">/opt/app</span> — <span className="text-amber-600 font-medium">절대 경로는 Agent 루트 내부여야 합니다</span></li>
+              </ul>
+              <p className="text-[11px] text-neutral-400">
+                Agent 실행 루트는 <span className="font-mono">ssafer agent --path &lt;경로&gt;</span> 로 지정한 디렉토리입니다.
+              </p>
+            </div>
           </label>
         )}
       </div>

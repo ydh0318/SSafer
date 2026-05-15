@@ -1,4 +1,4 @@
-import { Bot, Clock3, RefreshCw, Radio, Search, Sparkles, UploadCloud, Workflow } from 'lucide-react';
+import { Bot, Clock3, RefreshCw, Radio, ScanSearch, Wand2, Workflow } from 'lucide-react';
 
 import SectionPanel from '../../../components/common/SectionPanel';
 import type { AgentStatusResponseData } from '../../../types/scan';
@@ -10,8 +10,8 @@ type AgentStatusCardProps = {
   errorMessage: string | null;
   onRefresh: () => void;
   onRequestScan?: () => void;
-  onRequestUpload?: () => void;
   onRequestApply?: () => void;
+  patchApplyEnabled?: boolean;
 };
 
 function AgentStatusCard({
@@ -20,8 +20,8 @@ function AgentStatusCard({
   errorMessage,
   onRefresh,
   onRequestScan,
-  onRequestUpload,
   onRequestApply,
+  patchApplyEnabled = false,
 }: AgentStatusCardProps) {
   return (
     <SectionPanel
@@ -35,7 +35,7 @@ function AgentStatusCard({
           상태 새로고침
         </button>
       }
-      description="프로젝트에 연결된 로컬 에이전트의 현재 상태와 마지막 연결 시점을 확인합니다."
+      description="스캔을 실행하면 Agent가 서버를 점검하고 AI가 취약점을 분석해 수정 코드를 제안합니다. 분석이 완료되면 수정 버튼으로 코드를 실제 파일에 적용할 수 있습니다."
       eyebrow="AGENT"
       title="로컬 에이전트 상태"
     >
@@ -90,32 +90,30 @@ function AgentStatusCard({
 
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-neutral-100 pt-4">
           <button
-            className="inline-flex items-center gap-2 bg-black px-4 py-2.5 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 bg-black px-5 py-2.5 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={agentStatus.status !== 'ONLINE'}
             onClick={onRequestScan}
-            title={agentStatus.status !== 'ONLINE' ? '에이전트가 ONLINE 상태일 때만 실행할 수 있습니다.' : ''}
+            title={agentStatus.status !== 'ONLINE' ? '에이전트가 ONLINE 상태일 때만 스캔할 수 있습니다.' : '스캔 후 AI가 취약점을 분석하고 수정 코드를 제안합니다.'}
             type="button"
           >
-            <Search className="h-4 w-4" />
-            에이전트 스캔
+            <ScanSearch className="h-4 w-4" />
+            스캔
           </button>
           <button
-            className="inline-flex items-center gap-2 border border-neutral-300 bg-white px-4 py-2.5 text-sm font-bold text-black transition hover:border-black disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={onRequestUpload}
-            type="button"
-          >
-            <UploadCloud className="h-4 w-4" />
-            결과 업로드
-          </button>
-          <button
-            className="inline-flex items-center gap-2 bg-[#d9f66f] px-4 py-2.5 text-sm font-bold text-black transition hover:bg-[#c5e35b] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={agentStatus.status !== 'ONLINE'}
+            className="inline-flex items-center gap-2 bg-[#D4FC64] px-5 py-2.5 text-sm font-bold text-black transition hover:bg-[#c5e35b] disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!patchApplyEnabled}
             onClick={onRequestApply}
-            title={agentStatus.status !== 'ONLINE' ? '에이전트가 ONLINE 상태일 때만 실행할 수 있습니다.' : ''}
+            title={
+              agentStatus.status !== 'ONLINE'
+                ? '에이전트가 ONLINE 상태일 때만 수정할 수 있습니다.'
+                : !patchApplyEnabled
+                ? 'AI가 분석한 완료된 스캔이 있을 때 수정을 진행할 수 있습니다.'
+                : 'AI가 제안한 코드를 실제 파일에 적용합니다.'
+            }
             type="button"
           >
-            <Sparkles className="h-4 w-4" />
-            패치 적용
+            <Wand2 className="h-4 w-4" />
+            수정
           </button>
         </div>
       </>

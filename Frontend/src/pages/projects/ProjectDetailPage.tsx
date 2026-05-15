@@ -9,6 +9,7 @@ import { getProjectAgentStatus } from '../../features/agents/api/agents';
 import AgentStatusCard from '../../features/agents/components/AgentStatusCard';
 import { useToast } from '../../features/feedback/useToast';
 import { getProjectDetail } from '../../features/projects/api/projects';
+import { getScanSummary } from '../../features/results/api/results';
 import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
 import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
 import {
@@ -69,6 +70,8 @@ function ProjectDetailPage() {
   const [isScanListLoading, setIsScanListLoading] = useState(true);
   const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
 
+  const [latestAgentScanHasFindings, setLatestAgentScanHasFindings] = useState(false);
+
   const [scanRequestForm, setScanRequestForm] = useState<CreateScanRequestPayload>(initialScanRequestForm);
   const [scanRequestMethod, setScanRequestMethod] = useState<ScanRequestMethod>('AGENT');
   const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
@@ -93,6 +96,34 @@ function ProjectDetailPage() {
   const activeScans = scans.filter((scan) => ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED'].includes(scan.status));
   const completedScans = scans.filter((scan) => scan.status === 'DONE');
   const failedScans = scans.filter((scan) => scan.status === 'FAILED' || scan.status === 'CANCELED');
+
+  const latestCompletedAgentScanId =
+    scans.find((scan) => scan.status === 'DONE' && scan.scanMode === 'AGENT')?.scanId ?? null;
+
+  useEffect(() => {
+    if (!latestCompletedAgentScanId) {
+      setLatestAgentScanHasFindings(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    getScanSummary(latestCompletedAgentScanId)
+      .then((summary) => {
+        if (isMounted) {
+          setLatestAgentScanHasFindings(summary.totalFindings > 0);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setLatestAgentScanHasFindings(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [latestCompletedAgentScanId]);
 
   useEffect(() => {
     if (!scanListNotice) {
@@ -698,21 +729,16 @@ function ProjectDetailPage() {
         agentStatus={agentStatus}
         errorMessage={agentError}
         isLoading={isAgentLoading}
+        patchApplyEnabled={agentIsOnline && latestAgentScanHasFindings}
         onRefresh={() => void handleRefreshAgentStatus()}
         onRequestApply={() => {
-          const latestDoneScan = scans.find((s) => s.status === 'DONE');
+          const latestDoneScan = completedScans[0];
           if (latestDoneScan) {
             navigate(ROUTES.resultDetail.replace(':scanId', String(latestDoneScan.scanId)), { state: { projectId } });
-          } else {
-            toast.warning('적용 가능한 완료된 스캔이 없습니다. 먼저 스캔을 실행해 주세요.', { durationMs: 3000 });
           }
         }}
         onRequestScan={() => {
           setScanRequestMethod('AGENT');
-          document.getElementById('scan-request-section')?.scrollIntoView({ behavior: 'smooth' });
-        }}
-        onRequestUpload={() => {
-          setScanRequestMethod('UPLOAD');
           document.getElementById('scan-request-section')?.scrollIntoView({ behavior: 'smooth' });
         }}
       />

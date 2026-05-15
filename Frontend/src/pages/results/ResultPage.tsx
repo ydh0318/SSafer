@@ -508,43 +508,56 @@ function ResultPage() {
                   {group.items.map((finding) => {
                     const dimmed = finding.resolutionStatus === 'RESOLVED' || finding.resolutionStatus === 'IGNORED';
 
-                    return (
-                      <Link
-                        className={`group flex items-start gap-4 border-b border-neutral-100 p-5 last:border-b-0 hover:bg-[#F5F5F5] ${
-                          dimmed ? 'opacity-60' : ''
-                        }`}
-                        key={finding.findingId}
-                        state={routeState}
-                        to={ROUTES.resultFindingDetail
-                          .replace(':scanId', String(finding.scanId))
-                          .replace(':findingId', String(finding.findingId))}
-                      >
-                        <div className="flex shrink-0 items-start pt-1">
-                          <CheckCircle2 className={`h-5 w-5 ${dimmed ? 'text-emerald-500' : 'text-neutral-300'}`} />
+                    {
+                      const findingUrl = ROUTES.resultFindingDetail
+                        .replace(':scanId', String(finding.scanId))
+                        .replace(':findingId', String(finding.findingId));
+                      return (
+                        <div
+                          className={`group flex items-stretch border-b border-neutral-100 last:border-b-0 ${dimmed ? 'opacity-60' : ''}`}
+                          key={finding.findingId}
+                        >
+                          <Link
+                            className="flex flex-1 items-start gap-4 p-5 hover:bg-[#F5F5F5]"
+                            state={routeState}
+                            to={findingUrl}
+                          >
+                            <div className="flex shrink-0 items-start pt-1">
+                              <CheckCircle2 className={`h-5 w-5 ${dimmed ? 'text-emerald-500' : 'text-neutral-300'}`} />
+                            </div>
+                            <div className="w-1 self-stretch" style={{ background: severityMeta[finding.severity].bg }} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-[11px] text-neutral-500">findingId #{finding.findingId}</span>
+                                <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.category}</span>
+                                {finding.sourceType && finding.sourceType !== finding.category ? (
+                                  <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.sourceType}</span>
+                                ) : null}
+                                <span className="font-mono text-[10px] text-neutral-600">{finding.ruleCode}</span>
+                                <span className={`ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold ${resolutionMeta[finding.resolutionStatus].cls}`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${resolutionMeta[finding.resolutionStatus].dot}`} />
+                                  {resolutionMeta[finding.resolutionStatus].label}
+                                </span>
+                              </div>
+                              <h3 className={`mt-3 text-base font-bold ${dimmed ? 'line-through' : ''}`}>{finding.title}</h3>
+                              <div className="mt-2 font-mono text-xs text-neutral-500">{formatFindingLocation(finding)}</div>
+                            </div>
+                          </Link>
+                          {!dimmed ? (
+                            <Link
+                              className="flex items-center self-stretch border-l border-neutral-100 bg-black px-4 text-xs font-bold text-white transition hover:bg-[#3DDC84] hover:text-black"
+                              state={{ ...routeState, initialView: 'apply' }}
+                              to={findingUrl}
+                            >
+                              <span className="flex items-center gap-1">
+                                <Wand2 className="h-3 w-3" />
+                                고치기
+                              </span>
+                            </Link>
+                          ) : null}
                         </div>
-                        <div className="w-1 self-stretch" style={{ background: severityMeta[finding.severity].bg }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono text-[11px] text-neutral-500">findingId #{finding.findingId}</span>
-                            <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.category}</span>
-                            <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.sourceType}</span>
-                            <span className="font-mono text-[10px] text-neutral-600">{finding.ruleCode}</span>
-                            <span className={`ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold ${resolutionMeta[finding.resolutionStatus].cls}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full ${resolutionMeta[finding.resolutionStatus].dot}`} />
-                              {resolutionMeta[finding.resolutionStatus].label}
-                            </span>
-                          </div>
-                          <h3 className={`mt-3 text-base font-bold ${dimmed ? 'line-through' : ''}`}>{finding.title}</h3>
-                          <div className="mt-2 font-mono text-xs text-neutral-500">{formatFindingLocation(finding)}</div>
-                        </div>
-                        {!dimmed ? (
-                          <span className="inline-flex items-center gap-1 bg-black px-3 py-1.5 text-xs font-bold text-white transition group-hover:bg-[#3DDC84] group-hover:text-black">
-                            <Wand2 className="h-3 w-3" />
-                            고치기
-                          </span>
-                        ) : null}
-                      </Link>
-                    );
+                      );
+                    }
                   })}
                 </section>
               ))

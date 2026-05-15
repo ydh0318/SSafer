@@ -22,6 +22,7 @@ import type {
 
 type FindingRouteState = {
   projectId?: string;
+  initialView?: 'explain' | 'fix' | 'apply' | 'references';
 };
 
 const severityMeta: Record<FindingSeverity, { bg: string; fg: string; soft: string }> = {
@@ -104,7 +105,9 @@ function FindingDetailPage() {
   const routeState = (location.state ?? {}) as FindingRouteState;
   const toast = useToast();
 
-  const [view, setView] = useState<'explain' | 'fix' | 'apply' | 'references'>('explain');
+  const [view, setView] = useState<'explain' | 'fix' | 'apply' | 'references'>(
+    routeState.initialView ?? 'explain',
+  );
   const [scanBasic, setScanBasic] = useState<ScanBasicData | null>(null);
   const [finding, setFinding] = useState<ScanFindingDetailData | null>(null);
   const [relatedFindings, setRelatedFindings] = useState<ScanFindingListItemData[]>([]);
@@ -286,7 +289,9 @@ function FindingDetailPage() {
                     <span className="font-mono text-xs text-neutral-400">{finding.ruleId || finding.ruleCode}</span>
                   )}
                   <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{finding.source || finding.sourceType}</span>
-                  <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{finding.category}</span>
+                  {finding.category && finding.category !== (finding.source || finding.sourceType) ? (
+                    <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{finding.category}</span>
+                  ) : null}
                   {scanBasic?.scanMode ? <ScanModeBadge scanMode={scanBasic.scanMode} source={scanBasic.source} /> : null}
                   <PatchAvailabilityBadge hasPatches={hasPatches} scanMode={scanBasic?.scanMode} />
                 </div>
@@ -542,13 +547,13 @@ function FindingDetailPage() {
                       <h3 className="text-xl font-black tracking-tight">자동 적용 가능한 패치</h3>
                       {scanBasic?.scanMode === 'AGENT' && finding.resolutionStatus === 'OPEN' && finding.patchPayloadJson ? (
                         <button
-                          className="inline-flex items-center justify-center gap-2 bg-black px-5 py-2.5 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+                          className="inline-flex items-center justify-center gap-2 bg-[#D4FC64] px-5 py-2.5 text-sm font-bold text-black transition hover:bg-[#c5e35b] disabled:cursor-not-allowed disabled:opacity-40"
                           disabled={isApprovingPatch}
                           onClick={() => { void handleApprovePatch(); }}
                           type="button"
                         >
                           <Send className="h-4 w-4" />
-                          {isApprovingPatch ? '적용 요청 중...' : '패치 적용 승인'}
+                          {isApprovingPatch ? 'Agent에 요청 중...' : 'Agent 코드 수정 요청'}
                         </button>
                       ) : (
                         (() => {
@@ -565,17 +570,24 @@ function FindingDetailPage() {
                     </div>
                     {approveErrorMessage ? <InlineMessage message={approveErrorMessage} tone="error" /> : null}
                     {finding.resolutionStatus === 'OPEN' && finding.patchPayloadJson && (
-                      <p className="text-xs text-neutral-500">
-                        Agent가 연결된 서버에서 아래 변경 사항을 실제 파일에 자동으로 적용합니다. 승인 전 반드시 내용을 확인하세요.
-                      </p>
+                      <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                        <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                        <span>
+                          <span className="font-bold">버튼을 누르면 Agent가 즉시 아래 코드를 실제 파일에 직접 씁니다.</span>{' '}
+                          적용 전 백업이 자동 생성되며, 결과는 아래 이력에서 확인할 수 있습니다. 내용을 먼저 확인하세요.
+                        </span>
+                      </div>
                     )}
                     {finding.fix.patches.map((patch) => (
                       <div className="overflow-hidden border border-neutral-200 bg-white" key={patch.patchId}>
                         <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-100 px-4 py-3">
                           <div className="font-mono text-sm font-bold">{patch.filePath}</div>
-                          <span className="bg-black px-2 py-1 text-[10px] font-bold tracking-[0.1em] text-white">
-                            {patch.operation === 'replace' ? '교체' : '추가'}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-neutral-400">작업 유형</span>
+                            <span className="rounded border border-neutral-300 bg-white px-2 py-0.5 text-[10px] font-bold tracking-[0.1em] text-neutral-700">
+                              {patch.operation === 'replace' ? '코드 교체' : '코드 추가'}
+                            </span>
+                          </div>
                         </div>
                         {patch.operation === 'replace' ? (
                           <div className="grid grid-cols-1 divide-y divide-neutral-200 font-mono text-sm md:grid-cols-2 md:divide-x md:divide-y-0">
