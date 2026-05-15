@@ -45,7 +45,40 @@ public class AgentTaskResultReportService {
     AgentTask task = agentTaskRepository.findByIdAndAgentIdForUpdate(taskId, pathAgentId)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     validateReportableTask(task);
-    validateRequest(request);
+    validateRequest(task, request);
+
+    if (task.getTaskType() == AgentTaskType.SCAN_REQUEST) {
+      return reportScanRequestResult(task, request);
+    }
+    return reportPatchApplyResult(task, request);
+  }
+
+  private AgentTaskResultReportResponseData reportScanRequestResult(
+      AgentTask task,
+      AgentTaskResultReportRequest request
+  ) {
+    Instant now = Instant.now();
+    String resultMessage = resolveTaskResultMessage(request.resultMessage(), request.taskStatus());
+
+    advanceToRunning(task, now);
+    if (request.taskStatus() == AgentTaskStatus.SUCCEEDED) {
+      task.markSucceeded(now);
+    } else {
+      task.markFailed(now, resultMessage);
+    }
+
+    return new AgentTaskResultReportResponseData(
+        task.getId(),
+        task.getTaskStatus(),
+        null,
+        null
+    );
+  }
+
+  private AgentTaskResultReportResponseData reportPatchApplyResult(
+      AgentTask task,
+      AgentTaskResultReportRequest request
+  ) {
 
     // MVP에서는 PATCH_APPLY task 1개가 finding 1개와 연결되어 있어야 한다.
     ScanFinding finding = task.getFinding();
@@ -84,7 +117,8 @@ public class AgentTaskResultReportService {
   }
 
   private void validateReportableTask(AgentTask task) {
-    if (task.getTaskType() != AgentTaskType.PATCH_APPLY) {
+    if (task.getTaskType() != AgentTaskType.PATCH_APPLY
+        && task.getTaskType() != AgentTaskType.SCAN_REQUEST) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
     // 이미 종료된 task는 같은 결과가 다시 들어와도 중복 반영하지 않는다.
@@ -98,13 +132,14 @@ public class AgentTaskResultReportService {
     }
   }
 
-  private void validateRequest(AgentTaskResultReportRequest request) {
+  private void validateRequest(AgentTask task, AgentTaskResultReportRequest request) {
     if (request.taskStatus() != AgentTaskStatus.SUCCEEDED && request.taskStatus() != AgentTaskStatus.FAILED) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
 
     List<PatchResultItem> patchResults = normalizePatchResults(request.patchResults());
-    if (request.taskStatus() == AgentTaskStatus.SUCCEEDED) {
+    if (task.getTaskType() == AgentTaskType.PATCH_APPLY
+        && request.taskStatus() == AgentTaskStatus.SUCCEEDED) {
       // 성공 보고는 실제 적용된 patch 결과가 있어야 하며, 일부 실패는 MVP에서 전체 실패로 처리한다.
       if (patchResults.isEmpty()) {
         throw new BusinessException(ErrorCode.INVALID_PARAMETER);
@@ -145,6 +180,15 @@ public class AgentTaskResultReportService {
         .orElse(taskStatus == AgentTaskStatus.SUCCEEDED
             ? "Patch applied successfully."
             : "Patch apply failed.");
+  }
+
+  private String resolveTaskResultMessage(String resultMessage, AgentTaskStatus taskStatus) {
+    if (resultMessage != null && !resultMessage.isBlank()) {
+      return resultMessage.trim();
+    }
+    return taskStatus == AgentTaskStatus.SUCCEEDED
+        ? "Task completed successfully."
+        : "Task failed.";
   }
 
   private String serializeBackupMetadata(List<PatchResultItem> patchResults) {
