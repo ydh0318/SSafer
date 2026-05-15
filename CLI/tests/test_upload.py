@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import click
 import httpx
 import pytest
 from typer.testing import CliRunner
@@ -425,6 +426,65 @@ def test_wait_for_uploaded_scan_polls_until_done(tmp_path: Path, monkeypatch):
 
     assert result["status"] == "DONE"
     assert result["_apiUrl"] == "https://ssafer.co.kr"
+
+
+def test_wait_for_uploaded_scan_retries_transient_status_error(tmp_path: Path, monkeypatch):
+    request = httpx.Request("GET", "https://ssafer.co.kr/api/v1/scans/1001/status")
+    responses = [
+        httpx.HTTPStatusError(
+            "Server error",
+            request=request,
+            response=httpx.Response(502, json={"code": "BAD_GATEWAY"}, request=request),
+        ),
+        {"scanId": 1001, "status": "DONE"},
+    ]
+
+    def fake_fetch(base_url: str, scan_id: object, headers: dict[str, str]):
+        item = responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(main_module, "_fetch_scan_status", fake_fetch)
+    monkeypatch.setattr(main_module.time, "sleep", lambda seconds: None)
+
+    result = main_module._wait_for_uploaded_scan(
+        tmp_path,
+        response={"scanId": 1001, "status": "QUEUED"},
+        api_url="https://ssafer.co.kr",
+        timeout_seconds=3,
+        interval_seconds=1,
+    )
+
+    assert result["status"] == "DONE"
+    assert responses == []
+
+
+def test_wait_for_uploaded_scan_stops_on_auth_status_error(tmp_path: Path, monkeypatch):
+    request = httpx.Request("GET", "https://ssafer.co.kr/api/v1/scans/1001/status")
+
+    def fake_fetch(base_url: str, scan_id: object, headers: dict[str, str]):
+        raise httpx.HTTPStatusError(
+            "Unauthorized",
+            request=request,
+            response=httpx.Response(
+                401,
+                json={"code": "UNAUTHORIZED", "message": "Authentication is required or token is invalid"},
+                request=request,
+            ),
+        )
+
+    monkeypatch.setattr(main_module, "_fetch_scan_status", fake_fetch)
+    monkeypatch.setattr(main_module.time, "sleep", lambda seconds: None)
+
+    with pytest.raises(click.exceptions.Exit):
+        main_module._wait_for_uploaded_scan(
+            tmp_path,
+            response={"scanId": 1001, "status": "QUEUED"},
+            api_url="https://ssafer.co.kr",
+            timeout_seconds=3,
+            interval_seconds=1,
+        )
 
 
 def test_upload_last_scan_reports_step_progress(tmp_path: Path, monkeypatch):
