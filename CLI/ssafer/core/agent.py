@@ -80,82 +80,12 @@ def report_agent_task_result(
     base_url = normalize_api_url(api_url)
     headers = {"Authorization": f"Bearer {agent_token}"}
     with httpx.Client(timeout=20.0, follow_redirects=True) as client:
-        if task.task_type == "PATCH_APPLY":
-            _report_patch_apply_results(client, base_url, headers, task, result)
-
         endpoint = f"{base_url}/api/v1/internal/agents/{agent_id}/tasks/{task.task_id}/result"
         payload = _build_agent_task_result_payload(result)
         response = client.post(endpoint, headers=headers, json=payload)
         response.raise_for_status()
     data = response.json()
     return data if isinstance(data, dict) else {}
-
-
-def _report_patch_apply_results(
-    client: httpx.Client,
-    base_url: str,
-    headers: dict[str, str],
-    task: AgentTask,
-    result: AgentTaskResult,
-) -> None:
-    for finding_id, payload in _iter_patch_apply_result_reports(task, result):
-        if task.scan_id is None:
-            continue
-        endpoint = f"{base_url}/api/v1/internal/scans/{task.scan_id}/findings/{finding_id}/patch-results"
-        response = client.post(endpoint, headers=headers, json=payload)
-        response.raise_for_status()
-
-
-def _iter_patch_apply_result_reports(
-    task: AgentTask,
-    result: AgentTaskResult,
-) -> list[tuple[str, dict[str, Any]]]:
-    if task.scan_id is None:
-        return []
-    reports: list[tuple[str, dict[str, Any]]] = []
-    for patch_result in result.patch_results:
-        finding_id = patch_result.finding_id or (str(task.finding_id) if task.finding_id is not None else None)
-        if not finding_id:
-            continue
-        reports.append((finding_id, _build_patch_apply_result_payload(task, result, patch_result)))
-    if reports:
-        return reports
-    if task.finding_id is None:
-        return []
-    reports.append((
-        str(task.finding_id),
-        {
-            "patchStatus": "SUCCEEDED" if result.status == "SUCCESS" else "FAILED",
-            "resultMessage": result.message,
-            "backupMetadata": {
-                "taskId": task.task_id,
-                "taskType": task.task_type,
-            },
-        },
-    ))
-    return reports
-
-
-def _build_patch_apply_result_payload(
-    task: AgentTask,
-    task_result: AgentTaskResult,
-    patch_result: PatchApplyResult,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "patchStatus": "SUCCEEDED" if patch_result.status == "SUCCESS" else "FAILED",
-        "resultMessage": patch_result.message or task_result.message,
-        "backupMetadata": {
-            "taskId": task.task_id,
-            "taskType": task.task_type,
-            "patchId": patch_result.patch_id,
-            "filePath": patch_result.file_path,
-        },
-    }
-    if patch_result.backup_path:
-        backup_path = Path(patch_result.backup_path)
-        payload["backupFileName"] = backup_path.name
-        payload["backupFilePath"] = patch_result.backup_path
-    return payload
 
 
 def handle_agent_task(
