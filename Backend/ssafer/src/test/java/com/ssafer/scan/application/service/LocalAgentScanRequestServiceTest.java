@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.ssafer.agent.application.service.AgentTaskAvailableRequestedEvent;
@@ -79,7 +80,7 @@ class LocalAgentScanRequestServiceTest {
     Agent agent = agent(100L, project, AgentStatus.ONLINE);
 
     given(projectAuthorizationService.loadAuthorizedProjectOrThrow(10L, actor)).willReturn(project);
-    given(agentRepository.findFirstByProjectId(10L)).willReturn(Optional.of(agent));
+    given(agentRepository.findLatestByProjectIdAndStatus(10L, AgentStatus.ONLINE)).willReturn(Optional.of(agent));
     given(scanRepository.save(any(Scan.class))).willAnswer(invocation -> {
       Scan scan = invocation.getArgument(0);
       ReflectionTestUtils.setField(scan, "id", 1000L);
@@ -131,7 +132,7 @@ class LocalAgentScanRequestServiceTest {
     Agent agent = agent(100L, project, AgentStatus.ONLINE);
 
     given(projectAuthorizationService.loadAuthorizedProjectOrThrow(10L, actor)).willReturn(project);
-    given(agentRepository.findFirstByProjectId(10L)).willReturn(Optional.of(agent));
+    given(agentRepository.findLatestByProjectIdAndStatus(10L, AgentStatus.ONLINE)).willReturn(Optional.of(agent));
     given(scanRepository.save(any(Scan.class))).willAnswer(invocation -> {
       Scan scan = invocation.getArgument(0);
       ReflectionTestUtils.setField(scan, "id", 1000L);
@@ -161,12 +162,14 @@ class LocalAgentScanRequestServiceTest {
     Project project = project(10L, 1L);
 
     given(projectAuthorizationService.loadAuthorizedProjectOrThrow(10L, actor)).willReturn(project);
+    given(agentRepository.findLatestByProjectIdAndStatus(10L, AgentStatus.ONLINE)).willReturn(Optional.empty());
     given(agentRepository.findFirstByProjectId(10L)).willReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.requestScan(10L, actor, new LocalAgentScanRequest("/opt/app", null, false)))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.AGENT_NOT_FOUND);
+    verify(agentTaskRepository, never()).save(any(AgentTask.class));
   }
 
   @Test
@@ -176,12 +179,14 @@ class LocalAgentScanRequestServiceTest {
     Agent agent = agent(100L, project, AgentStatus.OFFLINE);
 
     given(projectAuthorizationService.loadAuthorizedProjectOrThrow(10L, actor)).willReturn(project);
+    given(agentRepository.findLatestByProjectIdAndStatus(10L, AgentStatus.ONLINE)).willReturn(Optional.empty());
     given(agentRepository.findFirstByProjectId(10L)).willReturn(Optional.of(agent));
 
     assertThatThrownBy(() -> service.requestScan(10L, actor, new LocalAgentScanRequest("/opt/app", null, false)))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.AGENT_OFFLINE);
+    verify(agentTaskRepository, never()).save(any(AgentTask.class));
   }
 
   private Project project(Long projectId, Long userId) {
