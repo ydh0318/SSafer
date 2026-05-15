@@ -10,7 +10,10 @@ import com.ssafer.agent.domain.enums.AgentTaskType;
 import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
+import com.ssafer.scan.application.service.ScanStatusSsePublishRequestedEvent;
+import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
+import com.ssafer.scan.domain.enums.ScanStatus;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -18,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -26,8 +30,11 @@ import tools.jackson.databind.ObjectMapper;
 @RequiredArgsConstructor
 public class AgentTaskResultReportService {
 
+  private static final String SCAN_REQUEST_FAILED_PROGRESS_STEP = "SCAN_REQUEST_FAILED";
+
   private final AgentTaskRepository agentTaskRepository;
   private final ObjectMapper objectMapper;
+  private final ApplicationEventPublisher applicationEventPublisher;
 
   @Transactional
   public AgentTaskResultReportResponseData reportResult(
@@ -65,6 +72,7 @@ public class AgentTaskResultReportService {
       task.markSucceeded(now);
     } else {
       task.markFailed(now, resultMessage);
+      markScanRequestFailed(task.getScan(), resultMessage, now);
     }
 
     return new AgentTaskResultReportResponseData(
@@ -113,6 +121,28 @@ public class AgentTaskResultReportService {
         task.getTaskStatus(),
         finding.getId(),
         finding.getResolutionStatus()
+    );
+  }
+
+  private void markScanRequestFailed(Scan scan, String resultMessage, Instant now) {
+    if (scan == null || scan.getStatus().isTerminal()) {
+      return;
+    }
+    if (!scan.getStatus().canTransitionTo(ScanStatus.FAILED)) {
+      return;
+    }
+
+    LocalDateTime failedAt = LocalDateTime.ofInstant(now, ZoneId.systemDefault());
+    LocalDateTime startedAt = scan.getStartedAt() != null ? scan.getStartedAt() : failedAt;
+    scan.markAnalysisFailed(
+        SCAN_REQUEST_FAILED_PROGRESS_STEP,
+        resultMessage,
+        startedAt,
+        failedAt,
+        failedAt
+    );
+    applicationEventPublisher.publishEvent(
+        new ScanStatusSsePublishRequestedEvent(scan.getId(), ScanStatus.FAILED)
     );
   }
 
