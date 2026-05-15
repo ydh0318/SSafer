@@ -21,6 +21,7 @@ import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.project.domain.entity.Project;
 import com.ssafer.project.domain.enums.ScanMode;
+import com.ssafer.scan.application.service.ScanStatusSsePublishRequestedEvent;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.enums.FindingSourceType;
@@ -34,18 +35,21 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.ObjectMapper;
 
 class AgentTaskResultReportServiceTest {
 
   private AgentTaskRepository agentTaskRepository;
+  private ApplicationEventPublisher applicationEventPublisher;
   private AgentTaskResultReportService service;
 
   @BeforeEach
   void setUp() {
     agentTaskRepository = Mockito.mock(AgentTaskRepository.class);
-    service = new AgentTaskResultReportService(agentTaskRepository, new ObjectMapper());
+    applicationEventPublisher = Mockito.mock(ApplicationEventPublisher.class);
+    service = new AgentTaskResultReportService(agentTaskRepository, new ObjectMapper(), applicationEventPublisher);
   }
 
   @Test
@@ -150,16 +154,65 @@ class AgentTaskResultReportServiceTest {
   }
 
   @Test
-  void reportResultWhenTaskTypeIsNotPatchApplyThrowsInvalidParameter() {
+  void reportResultWhenScanRequestSucceededMarksTaskSucceededWithoutFinding() {
     AgentTask task = createTask(10L, 1L, AgentTaskStatus.SENT, AgentTaskType.SCAN_REQUEST, null);
     when(agentTaskRepository.findByIdAndAgentIdForUpdate(10L, 1L)).thenReturn(Optional.of(task));
-    AgentTaskResultReportRequest request = new AgentTaskResultReportRequest(
-        AgentTaskStatus.FAILED,
-        "failed",
-        List.of()
+
+    AgentTaskResultReportResponseData response = service.reportResult(
+        1L,
+        1L,
+        10L,
+        new AgentTaskResultReportRequest(
+            AgentTaskStatus.SUCCEEDED,
+            "Scan completed and uploaded.",
+            List.of()
+        )
     );
 
-    assertBusinessException(() -> service.reportResult(1L, 1L, 10L, request), ErrorCode.INVALID_PARAMETER);
+    assertThat(response.taskId()).isEqualTo(10L);
+    assertThat(response.taskStatus()).isEqualTo(AgentTaskStatus.SUCCEEDED);
+    assertThat(response.findingId()).isNull();
+    assertThat(response.resolutionStatus()).isNull();
+    assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SUCCEEDED);
+    assertThat(task.getAckedAt()).isNotNull();
+    assertThat(task.getStartedAt()).isNotNull();
+    assertThat(task.getCompletedAt()).isNotNull();
+    assertThat(task.getFailureReason()).isNull();
+    assertThat(task.getScan().getStatus()).isEqualTo(ScanStatus.REQUESTED);
+    verify(applicationEventPublisher, never()).publishEvent(Mockito.any());
+  }
+
+  @Test
+  void reportResultWhenScanRequestFailedMarksTaskAndScanFailedWithoutFinding() {
+    AgentTask task = createTask(10L, 1L, AgentTaskStatus.ACKED, AgentTaskType.SCAN_REQUEST, null);
+    when(agentTaskRepository.findByIdAndAgentIdForUpdate(10L, 1L)).thenReturn(Optional.of(task));
+
+    AgentTaskResultReportResponseData response = service.reportResult(
+        1L,
+        1L,
+        10L,
+        new AgentTaskResultReportRequest(
+            AgentTaskStatus.FAILED,
+            "SCAN_REQUEST failed: raw upload failed",
+            List.of()
+        )
+    );
+
+    assertThat(response.taskId()).isEqualTo(10L);
+    assertThat(response.taskStatus()).isEqualTo(AgentTaskStatus.FAILED);
+    assertThat(response.findingId()).isNull();
+    assertThat(response.resolutionStatus()).isNull();
+    assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.FAILED);
+    assertThat(task.getStartedAt()).isNotNull();
+    assertThat(task.getCompletedAt()).isNotNull();
+    assertThat(task.getFailureReason()).isEqualTo("SCAN_REQUEST failed: raw upload failed");
+    assertThat(task.getScan().getStatus()).isEqualTo(ScanStatus.FAILED);
+    assertThat(task.getScan().getProgressStep()).isEqualTo("SCAN_REQUEST_FAILED");
+    assertThat(task.getScan().getFailureReason()).isEqualTo("SCAN_REQUEST failed: raw upload failed");
+    assertThat(task.getScan().getCompletedAt()).isNotNull();
+    verify(applicationEventPublisher).publishEvent(
+        new ScanStatusSsePublishRequestedEvent(55L, ScanStatus.FAILED)
+    );
   }
 
   @Test
@@ -225,7 +278,7 @@ class AgentTaskResultReportServiceTest {
         .requestedByUserId(1L)
         .requestActorType(RequestActorType.USER)
         .scanMode(com.ssafer.scan.domain.enums.ScanMode.AGENT)
-        .status(ScanStatus.DONE)
+        .status(taskType == AgentTaskType.SCAN_REQUEST ? ScanStatus.REQUESTED : ScanStatus.DONE)
         .requestedAt(LocalDateTime.of(2026, 5, 11, 9, 0))
         .lastUpdatedAt(LocalDateTime.of(2026, 5, 11, 9, 3))
         .build();

@@ -6,6 +6,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface AgentRepository extends JpaRepository<Agent, Long> {
 
@@ -14,6 +16,21 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
   Optional<Agent> findByIdAndProjectId(Long id, Long projectId);
 
   Optional<Agent> findFirstByProjectId(Long projectId);
+
+  @Query("""
+      select agent
+      from Agent agent
+      where agent.project.id = :projectId
+        and agent.status = :status
+      order by
+        case when agent.lastSeenAt is null then 1 else 0 end,
+        agent.lastSeenAt desc,
+        agent.id desc
+      """)
+  Optional<Agent> findLatestByProjectIdAndStatus(
+      @Param("projectId") Long projectId,
+      @Param("status") AgentStatus status
+  );
 
   Optional<Agent> findByAuthTokenHash(String authTokenHash);
 

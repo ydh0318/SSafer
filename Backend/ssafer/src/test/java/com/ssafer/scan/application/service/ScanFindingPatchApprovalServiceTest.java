@@ -3,6 +3,7 @@ package com.ssafer.scan.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,14 +70,15 @@ class ScanFindingPatchApprovalServiceTest {
     ReflectionTestUtils.setField(project, "id", 101L);
     Scan scan = scan(project.getId());
     ScanFinding finding = finding(scan.getId(), ResolutionStatus.OPEN, "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}");
-    Agent agent = new Agent(project, AgentStatus.OFFLINE, true);
+    Agent agent = new Agent(project, AgentStatus.ONLINE);
     ReflectionTestUtils.setField(agent, "id", 501L);
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
     when(scanRepository.findByIdAndDeletedAtIsNull(scan.getId())).thenReturn(Optional.of(scan));
     when(projectAuthorizationService.loadAuthorizedProjectForUpdateOrThrow(project.getId(), actor)).thenReturn(project);
     when(scanFindingRepository.findByIdAndScanIdForUpdate(finding.getId(), scan.getId())).thenReturn(Optional.of(finding));
-    when(agentRepository.findFirstByProjectId(project.getId())).thenReturn(Optional.of(agent));
+    when(agentRepository.findLatestByProjectIdAndStatus(project.getId(), AgentStatus.ONLINE))
+        .thenReturn(Optional.of(agent));
     when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
       AgentTask task = invocation.getArgument(0);
       ReflectionTestUtils.setField(task, "id", 701L);
@@ -103,21 +105,21 @@ class ScanFindingPatchApprovalServiceTest {
   }
 
   @Test
-  void approveForGuestCreatesPlaceholderAgentAndStoresNullApproverId() {
+  void approveForGuestStoresNullApproverId() {
     AuthenticatedActor actor = AuthenticatedActor.guest("guest-owner");
     Project project = new Project(null, "guest-owner", "project", null, ScanMode.AGENT, false);
     ReflectionTestUtils.setField(project, "id", 101L);
     Scan scan = scan(project.getId());
     ScanFinding finding = finding(scan.getId(), ResolutionStatus.OPEN, "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}");
-    Agent placeholderAgent = new Agent(project, AgentStatus.OFFLINE, true);
-    ReflectionTestUtils.setField(placeholderAgent, "id", 502L);
+    Agent agent = new Agent(project, AgentStatus.ONLINE);
+    ReflectionTestUtils.setField(agent, "id", 502L);
 
     when(currentActorProvider.getCurrentActor()).thenReturn(actor);
     when(scanRepository.findByIdAndDeletedAtIsNull(scan.getId())).thenReturn(Optional.of(scan));
     when(projectAuthorizationService.loadAuthorizedProjectForUpdateOrThrow(project.getId(), actor)).thenReturn(project);
     when(scanFindingRepository.findByIdAndScanIdForUpdate(finding.getId(), scan.getId())).thenReturn(Optional.of(finding));
-    when(agentRepository.findFirstByProjectId(project.getId())).thenReturn(Optional.empty());
-    when(agentRepository.save(any(Agent.class))).thenReturn(placeholderAgent);
+    when(agentRepository.findLatestByProjectIdAndStatus(project.getId(), AgentStatus.ONLINE))
+        .thenReturn(Optional.of(agent));
     when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
       AgentTask task = invocation.getArgument(0);
       ReflectionTestUtils.setField(task, "id", 702L);
@@ -127,11 +129,65 @@ class ScanFindingPatchApprovalServiceTest {
 
     ScanFindingPatchApprovalResult result = scanFindingPatchApprovalService.approve(scan.getId(), finding.getId());
 
-    verify(agentRepository).save(any(Agent.class));
+    verify(agentRepository, never()).save(any(Agent.class));
     assertThat(finding.getPatchApprovedActorType()).isEqualTo(RequestActorType.GUEST);
     assertThat(finding.getPatchApprovedByUserId()).isNull();
     assertThat(finding.getPatchApprovedByGuestOwnerKeyHash()).isEqualTo("guest-owner");
     assertThat(result.agentId()).isEqualTo(502L);
+  }
+
+  @Test
+  void approveWhenProjectHasOnlyOfflineAgentThrowsAgentOfflineAndDoesNotCreateTask() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Project project = new Project(1L, null, "project", null, ScanMode.AGENT, false);
+    ReflectionTestUtils.setField(project, "id", 101L);
+    Scan scan = scan(project.getId());
+    ScanFinding finding = finding(scan.getId(), ResolutionStatus.OPEN, "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}");
+    Agent offlineAgent = new Agent(project, AgentStatus.OFFLINE);
+    ReflectionTestUtils.setField(offlineAgent, "id", 501L);
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(scanRepository.findByIdAndDeletedAtIsNull(scan.getId())).thenReturn(Optional.of(scan));
+    when(projectAuthorizationService.loadAuthorizedProjectForUpdateOrThrow(project.getId(), actor)).thenReturn(project);
+    when(scanFindingRepository.findByIdAndScanIdForUpdate(finding.getId(), scan.getId())).thenReturn(Optional.of(finding));
+    when(agentRepository.findLatestByProjectIdAndStatus(project.getId(), AgentStatus.ONLINE))
+        .thenReturn(Optional.empty());
+    when(agentRepository.findFirstByProjectId(project.getId())).thenReturn(Optional.of(offlineAgent));
+
+    assertThatThrownBy(() -> scanFindingPatchApprovalService.approve(scan.getId(), finding.getId()))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.AGENT_OFFLINE);
+
+    verify(agentTaskRepository, never()).save(any(AgentTask.class));
+    assertThat(finding.getResolutionStatus()).isEqualTo(ResolutionStatus.OPEN);
+    assertThat(finding.getPatchApprovedAt()).isNull();
+  }
+
+  @Test
+  void approveWhenProjectHasNoAgentThrowsAgentNotFoundAndDoesNotCreateTask() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    Project project = new Project(1L, null, "project", null, ScanMode.AGENT, false);
+    ReflectionTestUtils.setField(project, "id", 101L);
+    Scan scan = scan(project.getId());
+    ScanFinding finding = finding(scan.getId(), ResolutionStatus.OPEN, "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}");
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(scanRepository.findByIdAndDeletedAtIsNull(scan.getId())).thenReturn(Optional.of(scan));
+    when(projectAuthorizationService.loadAuthorizedProjectForUpdateOrThrow(project.getId(), actor)).thenReturn(project);
+    when(scanFindingRepository.findByIdAndScanIdForUpdate(finding.getId(), scan.getId())).thenReturn(Optional.of(finding));
+    when(agentRepository.findLatestByProjectIdAndStatus(project.getId(), AgentStatus.ONLINE))
+        .thenReturn(Optional.empty());
+    when(agentRepository.findFirstByProjectId(project.getId())).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> scanFindingPatchApprovalService.approve(scan.getId(), finding.getId()))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.AGENT_NOT_FOUND);
+
+    verify(agentTaskRepository, never()).save(any(AgentTask.class));
+    assertThat(finding.getResolutionStatus()).isEqualTo(ResolutionStatus.OPEN);
+    assertThat(finding.getPatchApprovedAt()).isNull();
   }
 
   @Test

@@ -95,12 +95,7 @@ public class LocalAgentScanRequestService {
       LocalAgentScanRequest request
   ) {
     Project project = projectAuthorizationService.loadAuthorizedProjectOrThrow(projectId, actor);
-    Agent agent = agentRepository.findFirstByProjectId(project.getId())
-        .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND));
-    // 이 API는 실시간 점검 요청이므로 실제 연결된 ONLINE agent가 있을 때만 task를 만든다.
-    if (agent.getStatus() != AgentStatus.ONLINE) {
-      throw new BusinessException(ErrorCode.AGENT_OFFLINE);
-    }
+    Agent agent = loadOnlineProjectAgent(project.getId());
 
     LocalDateTime now = LocalDateTime.now();
     String normalizedTargetPath = request.targetPath().trim();
@@ -150,6 +145,16 @@ public class LocalAgentScanRequestService {
         scan.getStatus(),
         task.getTaskStatus()
     );
+  }
+
+  private Agent loadOnlineProjectAgent(Long projectId) {
+    return agentRepository.findLatestByProjectIdAndStatus(projectId, AgentStatus.ONLINE)
+        .orElseGet(() -> {
+          if (agentRepository.findFirstByProjectId(projectId).isPresent()) {
+            throw new BusinessException(ErrorCode.AGENT_OFFLINE);
+          }
+          throw new BusinessException(ErrorCode.AGENT_NOT_FOUND);
+        });
   }
 
   private String buildTargetSnapshotJson(String targetPath, String scanName, Boolean includeLogs) {
