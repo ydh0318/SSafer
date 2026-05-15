@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: ssafer
       POSTGRES_PASSWORD: ssafer
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - ssafer-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -23,8 +23,8 @@ services:
     image: redis:7-alpine
     container_name: ssafer-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
