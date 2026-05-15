@@ -1,4 +1,4 @@
-import { AlertCircle, LoaderCircle, Upload } from 'lucide-react';
+import { AlertCircle, LoaderCircle, Upload, X } from 'lucide-react';
 
 import type { CreateProjectFormValues, ScanMode } from '../../../types/project';
 
@@ -20,12 +20,12 @@ const scanModeOptions: Array<{ value: ScanMode; label: string; helper: string }>
   {
     value: 'AGENT',
     label: '로컬 Agent 스캔',
-    helper: '프로젝트에 연결된 Local Agent를 통해 서버나 실행 환경 기준으로 분석을 시작합니다.',
+    helper: '연결된 Agent를 통해 서버나 실행 환경 기준으로 분석합니다.',
   },
   {
     value: 'UPLOAD',
     label: '파일 업로드 스캔',
-    helper: '.env, Dockerfile, docker-compose.yml 같은 파일을 올려 바로 분석할 수 있습니다.',
+    helper: '.env, Dockerfile, docker-compose.yml 파일을 올려 바로 분석합니다.',
   },
 ];
 
@@ -43,149 +43,173 @@ function ProjectCreateForm({
   submitLabel = '프로젝트 생성',
 }: ProjectCreateFormProps) {
   const setField = <K extends keyof CreateProjectFormValues>(field: K, nextValue: CreateProjectFormValues[K]) => {
-    onChange({
-      ...value,
-      [field]: nextValue,
-    });
+    onChange({ ...value, [field]: nextValue });
   };
 
   const isNameBlank = value.name.trim().length === 0;
 
   return (
-    <div className="border border-neutral-200 bg-[#f8f8f8] p-6">
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-neutral-500">NEW PROJECT</p>
-        <h3 className="mt-3 text-3xl font-black tracking-tight text-black">{title}</h3>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-neutral-600">{description}</p>
+    <div className="w-full bg-white">
+      {/* 헤더 */}
+      <div className="flex items-start justify-between border-b border-neutral-100 px-6 py-5">
+        <div>
+          <p className="font-mono text-[10px] font-bold tracking-[0.28em] text-neutral-400 uppercase">NEW PROJECT</p>
+          <h3 className="mt-1.5 text-xl font-black tracking-tight text-black">{title}</h3>
+          <p className="mt-1 text-sm text-neutral-500 leading-relaxed">{description}</p>
+        </div>
       </div>
 
-      <div className="mt-8 grid gap-5">
-        <label className="grid gap-2">
-          <span className="text-sm font-bold text-black">프로젝트 이름</span>
-          <input
-            className="border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
-            maxLength={255}
-            onChange={(event) => setField('name', event.target.value)}
-            placeholder="예: payment-api"
-            value={value.name}
-          />
-          <span className="text-xs leading-6 text-neutral-500">프로젝트 목록과 스캔 결과에서 함께 표시되는 이름입니다.</span>
-        </label>
+      {/* 2열 레이아웃 */}
+      <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-neutral-100">
 
-        <label className="grid gap-2">
-          <span className="text-sm font-bold text-black">프로젝트 설명</span>
-          <textarea
-            className="min-h-28 border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition focus:border-black"
-            maxLength={1000}
-            onChange={(event) => setField('description', event.target.value)}
-            placeholder="이 프로젝트가 어떤 서비스인지, 어떤 설정 파일을 점검하려는지 간단히 적어 주세요."
-            value={value.description}
-          />
-        </label>
+        {/* 왼쪽: 기본 정보 */}
+        <div className="px-6 py-5 space-y-5">
+          <p className="text-[11px] font-bold tracking-[0.18em] text-neutral-400 uppercase">기본 정보</p>
 
-        <div className="grid gap-3">
-          <span className="text-sm font-bold text-black">기본 스캔 방식</span>
-          <div className="grid gap-3 md:grid-cols-2">
-            {scanModeOptions.map((option) => (
-              <button
-                className={`border px-4 py-4 text-left transition ${
-                  value.defaultScanMode === option.value
-                    ? 'border-black bg-black text-white'
-                    : 'border-neutral-300 bg-white text-black hover:border-black'
-                }`}
-                key={option.value}
-                onClick={() => setField('defaultScanMode', option.value)}
-                type="button"
-              >
-                <p className="text-sm font-black">{option.label}</p>
-                <p
-                  className={`mt-2 text-xs leading-6 ${
-                    value.defaultScanMode === option.value ? 'text-neutral-300' : 'text-neutral-500'
-                  }`}
-                >
-                  {option.helper}
-                </p>
-              </button>
-            ))}
+          {/* 프로젝트 이름 */}
+          <div className="space-y-1.5">
+            <label className="block text-sm font-bold text-black" htmlFor="project-name">
+              이름 <span className="text-rose-400">*</span>
+            </label>
+            <input
+              id="project-name"
+              autoFocus
+              className="w-full border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-black outline-none transition placeholder:text-neutral-400 focus:border-black focus:bg-white"
+              maxLength={255}
+              onChange={(e) => setField('name', e.target.value)}
+              placeholder="예: payment-api"
+              value={value.name}
+            />
           </div>
+
+          {/* 프로젝트 설명 */}
+          <div className="space-y-1.5">
+            <label className="block text-sm font-bold text-black" htmlFor="project-desc">
+              설명
+            </label>
+            <textarea
+              id="project-desc"
+              className="w-full border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-black outline-none transition placeholder:text-neutral-400 focus:border-black focus:bg-white min-h-[88px] resize-none"
+              maxLength={1000}
+              onChange={(e) => setField('description', e.target.value)}
+              placeholder="어떤 서비스인지, 어떤 파일을 점검하려는지 간단히 적어 주세요."
+              value={value.description}
+            />
+          </div>
+
+          {/* 모니터링 */}
+          <label className="flex items-center gap-2.5 cursor-pointer py-2">
+            <input
+              checked={value.monitorEnabled}
+              className="h-4 w-4 border-neutral-300 accent-black"
+              onChange={(e) => setField('monitorEnabled', e.target.checked)}
+              type="checkbox"
+            />
+            <span className="text-sm text-neutral-700">모니터링 및 Agent 상태 표시 사용</span>
+          </label>
         </div>
 
-        <label className="flex items-center gap-3 border border-neutral-200 bg-white px-4 py-3">
-          <input
-            checked={value.monitorEnabled}
-            className="h-4 w-4 rounded border-neutral-300 text-black focus:ring-black"
-            onChange={(event) => setField('monitorEnabled', event.target.checked)}
-            type="checkbox"
-          />
-          <span className="text-sm font-medium text-neutral-700">이 프로젝트에서 모니터링과 Agent 상태 표시를 함께 사용합니다.</span>
-        </label>
+        {/* 오른쪽: 스캔 설정 + 파일 */}
+        <div className="px-6 py-5 space-y-5">
+          <p className="text-[11px] font-bold tracking-[0.18em] text-neutral-400 uppercase">스캔 설정</p>
 
-        <section className="border border-dashed border-neutral-300 bg-white p-5">
-          <div className="flex items-start gap-4">
-            <div className="bg-black p-3 text-white">
-              <Upload className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-black text-black">프로젝트 생성 후 바로 파일 업로드 스캔 시작</p>
-              <p className="mt-2 text-sm leading-7 text-neutral-600">
-                원하면 프로젝트를 만든 직후 바로 설정 파일을 업로드해 첫 스캔까지 이어서 진행할 수 있습니다. 지원 파일은 `.env`,
-                `.env.local`, `.env.*`, `Dockerfile`, `Containerfile`, `docker-compose*.yml/.yaml`, `compose*.yml/.yaml`입니다.
-              </p>
+          {/* 기본 스캔 방식 */}
+          <div className="space-y-2">
+            <p className="text-sm font-bold text-black">기본 스캔 방식</p>
+            <div className="grid gap-2">
+              {scanModeOptions.map((option) => {
+                const isSelected = value.defaultScanMode === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    className={`border px-4 py-3 text-left transition ${
+                      isSelected
+                        ? 'border-black bg-black text-white'
+                        : 'border-neutral-200 bg-neutral-50 text-black hover:border-neutral-400'
+                    }`}
+                    onClick={() => setField('defaultScanMode', option.value)}
+                    type="button"
+                  >
+                    <p className="text-sm font-bold">{option.label}</p>
+                    <p className={`mt-0.5 text-xs leading-relaxed ${isSelected ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                      {option.helper}
+                    </p>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div className="mt-5 grid gap-2">
-            <label className="grid gap-2">
-              <span className="text-sm font-bold text-black">스캔할 파일</span>
+          {/* 파일 업로드 (선택) */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-black">첫 스캔 파일</p>
+              <span className="text-xs text-neutral-400">선택</span>
+            </div>
+            <p className="text-xs text-neutral-500 leading-relaxed">
+              생성 직후 바로 스캔을 시작합니다. .env, Dockerfile, docker-compose*.yml 등을 올려 주세요.
+            </p>
+            <label className="flex cursor-pointer items-center gap-2 border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2.5 text-sm text-neutral-600 transition hover:border-black hover:text-black">
+              <Upload className="h-4 w-4 shrink-0" />
+              파일 선택
               <input
-                className="w-full border border-dashed border-neutral-300 bg-[#fafafa] px-4 py-4 text-sm text-black outline-none transition file:mr-4 file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:border-black"
+                className="sr-only"
                 multiple
-                onChange={(event) => onUploadFilesChange(Array.from(event.target.files ?? []))}
+                onChange={(e) => onUploadFilesChange(Array.from(e.target.files ?? []))}
                 type="file"
               />
             </label>
-            <p className="text-xs leading-6 text-neutral-500">
-              지원 파일: .env, .env.local, .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml, compose*.yml/.yaml
-            </p>
-            {selectedUploadFiles.length > 0 ? (
-              <div className="border border-neutral-200 bg-[#f5f5f5] px-4 py-3 text-sm text-neutral-700">
-                <div className="font-semibold text-black">선택한 파일</div>
-                <ul className="mt-2 space-y-1">
-                  {selectedUploadFiles.map((file) => (
-                    <li className="font-mono" key={`${file.name}-${file.size}-${file.lastModified}`}>
-                      {file.name} ({Math.ceil(file.size / 1024)} KB)
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        </section>
 
-        {errorMessage ? (
-          <div className="flex items-start gap-3 border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-700">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{errorMessage}</span>
+            {selectedUploadFiles.length > 0 && (
+              <div className="space-y-1">
+                {selectedUploadFiles.map((file) => (
+                  <div
+                    key={`${file.name}-${file.size}-${file.lastModified}`}
+                    className="flex items-center justify-between border border-neutral-200 bg-white px-3 py-1.5"
+                  >
+                    <span className="font-mono text-xs text-neutral-700 truncate">{file.name}</span>
+                    <span className="ml-3 shrink-0 text-[11px] text-neutral-400">{Math.ceil(file.size / 1024)} KB</span>
+                  </div>
+                ))}
+                <button
+                  className="flex items-center gap-1 text-xs text-neutral-400 hover:text-rose-500 transition"
+                  onClick={() => onUploadFilesChange([])}
+                  type="button"
+                >
+                  <X className="h-3 w-3" />
+                  모두 지우기
+                </button>
+              </div>
+            )}
           </div>
-        ) : null}
+        </div>
       </div>
 
-      <div className="mt-8 flex flex-wrap gap-3">
+      {/* 에러 */}
+      {errorMessage && (
+        <div className="mx-6 mb-2 flex items-start gap-3 border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {/* 푸터 */}
+      <div className="flex items-center justify-between border-t border-neutral-100 px-6 py-4">
         <button
-          className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
-          disabled={isSubmitting || isNameBlank}
-          onClick={onSubmit}
-          type="button"
-        >
-          {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-          {isSubmitting ? '생성 중...' : submitLabel}
-        </button>
-        <button
-          className="border border-neutral-300 px-5 py-3 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+          className="text-sm text-neutral-500 hover:text-black transition"
           onClick={onCancel}
           type="button"
         >
           취소
+        </button>
+        <button
+          className="inline-flex items-center gap-2 bg-neutral-300 px-5 py-2.5 text-sm font-bold text-neutral-500 transition disabled:cursor-not-allowed disabled:opacity-40 enabled:bg-[#D4FC64] enabled:text-black enabled:hover:brightness-95"
+          disabled={isSubmitting || isNameBlank}
+          onClick={onSubmit}
+          type="button"
+        >
+          {isSubmitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
+          {isSubmitting ? '생성 중...' : submitLabel}
         </button>
       </div>
     </div>
