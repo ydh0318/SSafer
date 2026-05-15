@@ -15,6 +15,7 @@ import {
   createScanRequest,
   getProjectScanOptions,
   getProjectScans,
+  requestAgentScan,
   requestUploadScan,
 } from '../../features/scans/api/scans';
 import { formatCompactDateTime, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
@@ -462,19 +463,28 @@ function ProjectListPage() {
     setScanError(null);
 
     try {
-      const scanData =
-        selectedMode === 'UPLOAD' && selectedUploadFiles.length > 0
-          ? await requestUploadScan({
-              projectName: selectedProject.name,
-              scanName: `${selectedProject.name} 업로드 스캔`,
-              files: selectedUploadFiles,
-            })
-          : await createScanRequest({
-              projectName: selectedProject.name,
-              source: selectedMode === 'AGENT' ? undefined : 'CLI',
-              scanName: `${selectedProject.name} ${selectedMode} 스캔`,
-              includeLogs: false,
-            });
+      let scanData: { scanId: number };
+
+      if (selectedMode === 'UPLOAD' && selectedUploadFiles.length > 0) {
+        scanData = await requestUploadScan({
+          projectName: selectedProject.name,
+          scanName: `${selectedProject.name} 업로드 스캔`,
+          files: selectedUploadFiles,
+        });
+      } else if (selectedMode === 'AGENT') {
+        scanData = await requestAgentScan(String(selectedProject.id), {
+          targetPath: '.',
+          scanName: `${selectedProject.name} Agent 스캔`,
+          includeLogs: false,
+        });
+      } else {
+        scanData = await createScanRequest({
+          projectName: selectedProject.name,
+          source: 'CLI',
+          scanName: `${selectedProject.name} CLI 스캔`,
+          includeLogs: false,
+        });
+      }
 
       navigate(ROUTES.scanDetail.replace(':scanId', String(scanData.scanId)), {
         state: { autoOpenedFromScanRequest: true, projectId: selectedProject.id },
