@@ -38,6 +38,7 @@ import type {
 const initialScanRequestForm: CreateScanRequestPayload = {
   projectName: '',
   source: 'CLI',
+  scanType: 'PROJECT_FILE',
   scanName: '',
   targetPath: '',
   includeLogs: false,
@@ -410,6 +411,7 @@ function ProjectDetailPage() {
         // Local Agent 기반 점검 요청 API
         const data = await requestAgentScan(projectId, {
           targetPath: scanRequestForm.targetPath!.trim(),
+          scanType: scanRequestForm.scanType ?? 'PROJECT_FILE',
           scanName: scanRequestForm.scanName?.trim() || undefined,
           includeLogs: Boolean(scanRequestForm.includeLogs),
         });
@@ -442,6 +444,7 @@ function ProjectDetailPage() {
       setScanRequestForm({
         projectName: projectDetail.name,
         source: 'CLI',
+        scanType: 'PROJECT_FILE',
         scanName: '',
         targetPath: '',
         includeLogs: false,
