@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 from ssafer.core import agent
+from ssafer.core.hashing import hash_file
 from ssafer.main import app
 from ssafer.server.audit import ServerAuditResult
 
@@ -345,6 +346,54 @@ def test_handle_agent_task_returns_failed_when_patch_apply_fails(tmp_path: Path)
     assert result.status == "FAILED"
     assert "oldText was not found" in result.message
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER root\n"
+
+
+def test_handle_agent_task_applies_patch_when_hash_changed_but_old_text_is_unique(tmp_path: Path):
+    target = tmp_path / "docker-compose.yml"
+    target.write_text(
+        "services:\n"
+        "  postgres:\n"
+        "    ports:\n"
+        "      - \"5432:5432\"\n"
+        "  redis:\n"
+        "    ports:\n"
+        "      - \"6379:6379\"\n",
+        encoding="utf-8",
+    )
+    expected_hash = hash_file(target)
+    target.write_text(
+        "services:\n"
+        "  postgres:\n"
+        "  redis:\n"
+        "    ports:\n"
+        "      - \"6379:6379\"\n",
+        encoding="utf-8",
+    )
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="PATCH_APPLY",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=3,
+        payload={
+            "patches": [
+                {
+                    "patchId": "PATCH-2",
+                    "filePath": "docker-compose.yml",
+                    "oldText": "    ports:\n      - \"6379:6379\"",
+                    "newText": "",
+                    "expectedFileHash": expected_hash,
+                }
+            ]
+        },
+    )
+
+    result = agent.handle_agent_task(tmp_path, task)
+
+    assert result.status == "SUCCESS"
+    assert result.patch_results[0].patch_id == "PATCH-2"
+    assert "6379:6379" not in target.read_text(encoding="utf-8")
 
 
 def test_handle_agent_task_fails_scan_request_without_upload_url(tmp_path: Path):
@@ -833,6 +882,10 @@ def test_agent_watch_command_summarizes_scan_request_raw_results_conflict(monkey
     result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
 
     assert result.exit_code == 0
+    assert "Agent scan task #10 result" in result.output
+    assert "Scan ID" in result.output
+    assert "Scan Type" in result.output
+    assert "Patch ID" not in result.output
     assert "scanId=13" in result.output
     assert "409" in result.output
     assert "developer.mozilla.org" not in result.output

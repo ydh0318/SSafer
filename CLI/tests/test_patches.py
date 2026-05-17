@@ -68,6 +68,38 @@ def test_extract_patch_candidates_from_top_level_patches():
     assert candidates[0].file_path == ".env.example"
 
 
+def test_extract_patch_candidates_from_analysis_result_fix_patches():
+    payload = {
+        "results": [
+            {
+                "findingId": "FND-0001",
+                "file": "Dockerfile",
+                "fix": {
+                    "summary": "Use safer Dockerfile settings",
+                    "patches": [
+                        {
+                            "patchId": "PATCH-FND-0001",
+                            "operation": "replace",
+                            "filePath": "Dockerfile",
+                            "oldText": "USER root",
+                            "newText": "USER appuser",
+                            "expectedFileHash": "sha256:abc",
+                        }
+                    ],
+                },
+            }
+        ]
+    }
+
+    candidates = extract_patch_candidates(payload)
+
+    assert len(candidates) == 1
+    assert candidates[0].patch_id == "PATCH-FND-0001"
+    assert candidates[0].finding_id == "FND-0001"
+    assert candidates[0].file_path == "Dockerfile"
+    assert candidates[0].expected_file_hash == "sha256:abc"
+
+
 def test_apply_patch_candidate_replaces_text_and_writes_backup(tmp_path: Path):
     target = tmp_path / "Dockerfile"
     target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
@@ -219,6 +251,89 @@ def test_apply_patch_candidates_filters_by_patch_id(tmp_path: Path):
     assert [result.patch_id for result in results] == ["P2"]
     assert first.read_text(encoding="utf-8") == "old first"
     assert second.read_text(encoding="utf-8") == "new second"
+
+
+def test_apply_patch_candidates_validates_hashes_before_multiple_edits_to_same_file(tmp_path: Path):
+    target = tmp_path / "docker-compose.yml"
+    target.write_text(
+        "services:\n"
+        "  postgres:\n"
+        "    ports:\n"
+        "      - \"5432:5432\"\n"
+        "  redis:\n"
+        "    ports:\n"
+        "      - \"6379:6379\"\n",
+        encoding="utf-8",
+    )
+    expected_hash = hash_file(target)
+    candidates = extract_patch_candidates(
+        {
+            "patches": [
+                {
+                    "patchId": "P1",
+                    "filePath": "docker-compose.yml",
+                    "oldText": "    ports:\n      - \"5432:5432\"",
+                    "newText": "",
+                    "expectedFileHash": expected_hash,
+                },
+                {
+                    "patchId": "P2",
+                    "filePath": "docker-compose.yml",
+                    "oldText": "    ports:\n      - \"6379:6379\"",
+                    "newText": "",
+                    "expectedFileHash": expected_hash,
+                },
+            ]
+        }
+    )
+
+    results = apply_patch_candidates(tmp_path, candidates)
+
+    assert [result.status for result in results] == ["SUCCESS", "SUCCESS"]
+    content = target.read_text(encoding="utf-8")
+    assert "5432:5432" not in content
+    assert "6379:6379" not in content
+
+
+def test_apply_patch_candidate_can_allow_hash_mismatch_when_old_text_is_unique(tmp_path: Path):
+    target = tmp_path / "docker-compose.yml"
+    target.write_text(
+        "services:\n"
+        "  postgres:\n"
+        "    ports:\n"
+        "      - \"5432:5432\"\n"
+        "  redis:\n"
+        "    ports:\n"
+        "      - \"6379:6379\"\n",
+        encoding="utf-8",
+    )
+    expected_hash = hash_file(target)
+    target.write_text(
+        "services:\n"
+        "  postgres:\n"
+        "  redis:\n"
+        "    ports:\n"
+        "      - \"6379:6379\"\n",
+        encoding="utf-8",
+    )
+    candidate = extract_patch_candidates(
+        {
+            "patches": [
+                {
+                    "patchId": "P2",
+                    "filePath": "docker-compose.yml",
+                    "oldText": "    ports:\n      - \"6379:6379\"",
+                    "newText": "",
+                    "expectedFileHash": expected_hash,
+                }
+            ]
+        }
+    )[0]
+
+    result = apply_patch_candidate(tmp_path, candidate, allow_hash_mismatch_if_text_matches=True)
+
+    assert result.status == "SUCCESS"
+    assert "6379:6379" not in target.read_text(encoding="utf-8")
 
 
 def test_apply_command_applies_analysis_result_patch(tmp_path: Path):
@@ -452,6 +567,33 @@ def test_apply_command_accepts_scan_id_argument(monkeypatch, tmp_path: Path):
     }
     assert "scanId=123" in result.output
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
+
+
+def test_apply_command_prints_web_url_when_remote_scan_has_no_patches(monkeypatch, tmp_path: Path):
+    downloaded = tmp_path / ".ssafer" / "analysis" / "scans" / "123" / "analysis_result.json"
+
+    def fake_download(project_root: Path, *, scan_id: int, api_url: str, token: str) -> Path:
+        downloaded.parent.mkdir(parents=True)
+        downloaded.write_text(json.dumps({"patches": []}), encoding="utf-8")
+        return downloaded
+
+    monkeypatch.setenv("SSAFER_TOKEN", "access-token")
+    monkeypatch.setattr("ssafer.core.analysis_result.download_analysis_result_for_scan", fake_download)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "apply",
+            "123",
+            "--path",
+            str(tmp_path),
+            "--api-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "https://api.example.com/scans/123" in result.output
 
 
 def test_apply_command_uses_latest_done_scan(monkeypatch, tmp_path: Path):

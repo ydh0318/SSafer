@@ -93,19 +93,36 @@ def apply_patch_candidate(
     candidate: PatchCandidate,
     *,
     dry_run: bool = False,
+    allow_hash_mismatch_if_text_matches: bool = False,
+) -> PatchApplyResult:
+    return _apply_patch_candidate(
+        project_root,
+        candidate,
+        dry_run=dry_run,
+        verify_hash=True,
+        allow_hash_mismatch_if_text_matches=allow_hash_mismatch_if_text_matches,
+    )
+
+
+def _apply_patch_candidate(
+    project_root: Path,
+    candidate: PatchCandidate,
+    *,
+    dry_run: bool = False,
+    verify_hash: bool = True,
+    allow_hash_mismatch_if_text_matches: bool = False,
 ) -> PatchApplyResult:
     root = project_root.resolve()
     target = _resolve_target_path(root, candidate.file_path)
     if not target.exists() or not target.is_file():
         raise PatchError(f"Target file not found: {candidate.file_path}")
 
-    if candidate.expected_file_hash:
-        actual_hash = hash_file(target)
-        if actual_hash != candidate.expected_file_hash:
-            raise PatchError(
-                f"Target file hash mismatch: {candidate.file_path} "
-                f"(expected {candidate.expected_file_hash}, actual {actual_hash})"
-            )
+    if verify_hash:
+        _validate_expected_hash(
+            target,
+            candidate,
+            allow_hash_mismatch_if_text_matches=allow_hash_mismatch_if_text_matches,
+        )
 
     if candidate.operation == "replace":
         return _apply_replace_patch(root, target, candidate, dry_run=dry_run)
@@ -188,11 +205,25 @@ def apply_patch_candidates(
     *,
     patch_id: str | None = None,
     dry_run: bool = False,
+    allow_hash_mismatch_if_text_matches: bool = False,
 ) -> list[PatchApplyResult]:
     selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
     if patch_id is not None and not selected:
         raise PatchError(f"Patch not found: {patch_id}")
-    return [apply_patch_candidate(project_root, candidate, dry_run=dry_run) for candidate in selected]
+    root = project_root.resolve()
+    for candidate in selected:
+        target = _resolve_target_path(root, candidate.file_path)
+        if not target.exists() or not target.is_file():
+            raise PatchError(f"Target file not found: {candidate.file_path}")
+        _validate_expected_hash(
+            target,
+            candidate,
+            allow_hash_mismatch_if_text_matches=allow_hash_mismatch_if_text_matches,
+        )
+    return [
+        _apply_patch_candidate(project_root, candidate, dry_run=dry_run, verify_hash=False)
+        for candidate in selected
+    ]
 
 
 def _iter_patch_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -213,7 +244,37 @@ def _iter_patch_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
             fix = result.get("fix")
             if isinstance(fix, dict) and isinstance(fix.get("patch"), dict):
                 items.append({**result, "patch": fix["patch"]})
+            if isinstance(fix, dict) and isinstance(fix.get("patches"), list):
+                for patch in fix["patches"]:
+                    if isinstance(patch, dict):
+                        items.append({**result, **patch})
     return items
+
+
+def _validate_expected_hash(
+    target: Path,
+    candidate: PatchCandidate,
+    *,
+    allow_hash_mismatch_if_text_matches: bool = False,
+) -> None:
+    if not candidate.expected_file_hash:
+        return
+    actual_hash = hash_file(target)
+    if actual_hash == candidate.expected_file_hash:
+        return
+    if allow_hash_mismatch_if_text_matches and _old_text_matches_once(target, candidate):
+        return
+    raise PatchError(
+        f"Target file hash mismatch: {candidate.file_path} "
+        f"(expected {candidate.expected_file_hash}, actual {actual_hash})"
+    )
+
+
+def _old_text_matches_once(target: Path, candidate: PatchCandidate) -> bool:
+    if candidate.operation != "replace" or candidate.old_text is None:
+        return False
+    content = target.read_text(encoding="utf-8")
+    return content.count(candidate.old_text) == 1
 
 
 def _build_candidate(item: dict[str, Any], index: int) -> PatchCandidate | None:

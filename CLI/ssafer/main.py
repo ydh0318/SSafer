@@ -433,11 +433,13 @@ def apply_fix(
     try:
         project_root = path.resolve()
         effective_scan_id = scan_id_arg if scan_id_arg is not None else scan_id
+        remote_scan_id = effective_scan_id
         remote_options = sum(1 for enabled in (analysis_result is not None, effective_scan_id is not None, latest) if enabled)
         if remote_options > 1:
             raise PatchError("Use only one of scanId argument, --analysis-result, --scan-id, or --latest.")
         if latest or (analysis_result is None and effective_scan_id is None):
             scan_id = _latest_done_scan_id_or_exit(project_root, project_id=project_id, api_url=api_url)
+            remote_scan_id = scan_id
             analysis_path = _download_analysis_result_or_exit(project_root, scan_id=scan_id, api_url=api_url)
         elif effective_scan_id is not None:
             analysis_path = _download_analysis_result_or_exit(project_root, scan_id=effective_scan_id, api_url=api_url)
@@ -465,6 +467,8 @@ def apply_fix(
                 "[dim]파일은 변경하지 않았습니다. AI가 patch payload를 만들지 않은 결과입니다. "
                 "웹 결과나 analysis_result.json의 권장 조치를 확인해 주세요.[/dim]"
             )
+            if remote_scan_id is not None:
+                console.print(f"[dim]웹 결과: {_apply_web_scan_url(project_root, api_url, remote_scan_id)}[/dim]")
             return
 
         selected = [candidate for candidate in candidates if patch_id is None or candidate.patch_id == patch_id]
@@ -962,6 +966,10 @@ def _load_int_config_or_env(config: dict, key: str, env_name: str, label: str) -
 
 
 def _print_agent_task_result(result: "AgentTaskResult") -> None:
+    if result.task_type == "SCAN_REQUEST":
+        _print_scan_request_task_result(result)
+        return
+
     table = Table(title=f"Agent task #{result.task_id} result")
     table.add_column("Task Type")
     table.add_column("Patch ID")
@@ -981,6 +989,38 @@ def _print_agent_task_result(result: "AgentTaskResult") -> None:
                 patch_result.message,
             )
     console.print(table)
+
+
+def _print_scan_request_task_result(result: "AgentTaskResult") -> None:
+    table = Table(title=f"Agent scan task #{result.task_id} result")
+    table.add_column("Task Type")
+    table.add_column("Scan ID", justify="right")
+    table.add_column("Scan Type")
+    table.add_column("Status")
+    table.add_column("Message", overflow="fold")
+    table.add_row(
+        result.task_type,
+        _format_agent_scan_id(result),
+        result.scan_type or _infer_agent_scan_type(result.message),
+        result.status,
+        _format_agent_task_message(result),
+    )
+    console.print(table)
+
+
+def _format_agent_scan_id(result: "AgentTaskResult") -> str:
+    if result.scan_id is not None:
+        return str(result.scan_id)
+    match = re.search(r"scanId=(\d+)", result.message)
+    if match:
+        return match.group(1)
+    match = re.search(r"/api/v1/scans/(\d+)/", result.message)
+    return match.group(1) if match else "-"
+
+
+def _infer_agent_scan_type(message: str) -> str:
+    match = re.search(r"\b(PROJECT_FILE|PROJECT_SCAN|LOCAL_SCAN|SERVER_AUDIT)\b", message)
+    return match.group(1) if match else "-"
 
 
 def _format_agent_task_summary(tasks: list[object]) -> str:
@@ -2126,6 +2166,15 @@ def _web_url(api_url: object, path: str) -> str:
 
     base_url = normalize_api_url(str(api_url or DEFAULT_API_URL))
     return f"{base_url}{path}"
+
+
+def _apply_web_scan_url(project_root: Path, api_url: str | None, scan_id: int) -> str:
+    from ssafer.core.auth import load_endpoint
+    from ssafer.core.config import load_project_config
+
+    project_config = load_project_config(project_root, [])
+    effective_url = api_url or project_config.upload.endpoint or load_endpoint()
+    return _web_url(effective_url, f"/scans/{scan_id}")
 
 
 def _guest_continue_url(api_url: object, guest_token: str) -> str:
