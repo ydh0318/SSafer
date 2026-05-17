@@ -165,7 +165,7 @@ function Section0() {
             설정 페이지에서 비밀번호를 먼저 설정한 뒤 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer login</code>을 사용하세요.
           </Note>
           <Link
-            to={ROUTES.settings}
+            to={`${ROUTES.settings}?tab=security`}
             className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
           >
             <KeyRound className="h-3 w-3" />
@@ -211,7 +211,7 @@ function Section1() {
             설정 페이지에서 비밀번호를 먼저 설정한 뒤 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer login</code>을 사용하세요.
           </Note>
           <Link
-            to={ROUTES.settings}
+            to={`${ROUTES.settings}?tab=security`}
             className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
           >
             <KeyRound className="h-3 w-3" />

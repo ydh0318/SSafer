@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { AlertTriangle, BellRing, KeyRound, Lock, LogOut, User } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { getApiFieldErrors } from '../../api/error';
 import ModalFrame from '../../components/common/ModalFrame';
@@ -9,10 +10,13 @@ import PixelGoose from '../../components/common/PixelGoose';
 import {
   changeCurrentUserPassword,
   checkNicknameAvailability,
+  completePasswordReset,
   getCurrentUserProfile,
   logoutCurrentUser,
+  sendPasswordResetCode,
   setupCurrentUserPassword,
   updateCurrentUserProfile,
+  verifyPasswordResetCode,
   withdrawCurrentUser,
 } from '../../features/auth/api/member';
 import SocialAccountsPanel from '../../features/auth/components/SocialAccountsPanel';
@@ -21,6 +25,8 @@ import { useAuthStore } from '../../store/authStore';
 import type { AuthUser } from '../../types/auth';
 
 type SettingsTab = 'profile' | 'security' | 'notify' | 'token' | 'danger';
+
+type PasswordResetStep = 'idle' | 'code' | 'verified';
 
 type MessageState = {
   tone: 'success' | 'error' | 'info';
@@ -194,25 +200,42 @@ function getPasswordSetupErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
     const code = error.response?.data?.code;
+    const backendMessage = error.response?.data?.message;
+
+    if (code === 'PASSWORD_SETUP_NOT_ALLOWED' || status === 409) {
+      return '이미 이메일 비밀번호가 설정되어 있거나, 비밀번호 설정이 허용되지 않는 계정입니다. 페이지를 새로고침한 뒤 "비밀번호 변경" 화면에서 시도해 주세요.';
+    }
 
     if (status === 400) {
-      return '비밀번호는 8자 이상 72자 이하로 입력해주세요.';
+      // DTO 검증을 통과한 상태에서의 INVALID_PARAMETER는 보통 형식 위반
+      if (code === 'INVALID_PARAMETER') {
+        return '비밀번호 형식이 올바르지 않습니다. 8자 이상 72자 이하의 영문/숫자/특수문자 조합으로 입력해 주세요.';
+      }
+      return '비밀번호는 8자 이상 72자 이하로 입력해 주세요.';
     }
 
     if (status === 401) {
-      return '로그인이 필요하거나 세션이 만료되었습니다.';
+      return '로그인 세션이 만료되었습니다. 다시 로그인한 뒤 시도해 주세요.';
     }
 
     if (status === 403) {
-      return '회원 계정만 사용할 수 있는 기능입니다.';
+      return '회원 계정만 비밀번호를 설정할 수 있습니다. 게스트 계정에서는 사용할 수 없는 기능입니다.';
     }
 
-    if (code === 'PASSWORD_SETUP_NOT_ALLOWED' || status === 409) {
-      return '이메일 로그인 비밀번호를 설정할 수 없는 상태입니다. 이미 비밀번호가 설정되어 있거나, 연결된 소셜 계정이 없는 경우에 발생합니다.';
+    if (status && status >= 500) {
+      return '서버에서 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+    }
+
+    if (!error.response) {
+      return '네트워크 연결을 확인할 수 없습니다. 인터넷 연결 상태를 확인하고 다시 시도해 주세요.';
+    }
+
+    if (backendMessage) {
+      return `비밀번호 설정 실패: ${backendMessage}`;
     }
   }
 
-  return '비밀번호 설정 중 문제가 발생했습니다.';
+  return '비밀번호 설정 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
 function renderMessage(message: MessageState | null) {
@@ -235,13 +258,27 @@ function renderMessage(message: MessageState | null) {
   );
 }
 
+const VALID_TABS: SettingsTab[] = ['profile', 'security', 'notify', 'token', 'danger'];
+
+function parseTabParam(raw: string | null): SettingsTab {
+  if (raw && (VALID_TABS as string[]).includes(raw)) {
+    return raw as SettingsTab;
+  }
+  return 'profile';
+}
+
 function SettingsPage() {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const setUser = useAuthStore((state) => state.setUser);
   const setTokens = useAuthStore((state) => state.setTokens);
 
-  const [tab, setTab] = useState<SettingsTab>('profile');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = parseTabParam(searchParams.get('tab'));
+
+  const setTab = (next: SettingsTab) => {
+    setSearchParams(next === 'profile' ? {} : { tab: next }, { replace: true });
+  };
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [initialDisplayName, setInitialDisplayName] = useState('');
@@ -258,8 +295,17 @@ function SettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState<MessageState | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isCurrentPasswordRejected, setIsCurrentPasswordRejected] = useState(false);
-  const [hasLocalPassword, setHasLocalPassword] = useState(true);
-  
+  const [hasLocalPassword, setHasLocalPassword] = useState<boolean | null>(null);
+
+  const [resetStep, setResetStep] = useState<PasswordResetStep>('idle');
+  const [resetCode, setResetCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [isSendingResetCode, setIsSendingResetCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [isCompletingReset, setIsCompletingReset] = useState(false);
+
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const toast = useToast();
 
@@ -268,7 +314,7 @@ function SettingsPage() {
     () => displayName.trim() !== initialDisplayName.trim(),
     [displayName, initialDisplayName],
   );
-  const isSetupMode = !hasLocalPassword;
+  const isSetupMode = hasLocalPassword !== true;
   const isCurrentPasswordReady =
     passwordValues.currentPassword.trim().length > 0 && !isCurrentPasswordRejected;
   const areNewPasswordFieldsLocked = !isSetupMode && !isCurrentPasswordReady;
@@ -303,7 +349,7 @@ function SettingsPage() {
         setDisplayName(profile.displayName);
         setInitialDisplayName(profile.displayName);
         setIsDisplayNameConfirmed(true);
-        setHasLocalPassword(profile.hasLocalPassword ?? true);
+        setHasLocalPassword(profile.hasLocalPassword);
         setUser({
           id: user?.id ?? profile.email,
           email: profile.email,
@@ -531,14 +577,14 @@ function SettingsPage() {
 
       setPasswordValues(initialPasswordForm);
       setPasswordErrors({});
-      setPasswordMessage({
-        tone: 'success',
-        text: isSetupMode
-          ? '비밀번호가 설정되었습니다. 이제 이메일/비밀번호 로그인도 사용할 수 있습니다.'
-          : '비밀번호가 변경되었습니다.',
-      });
+      setPasswordMessage(null);
       setIsCurrentPasswordRejected(false);
       setHasLocalPassword(true);
+      toast.success(
+        isSetupMode
+          ? '비밀번호가 설정되었습니다. 이제 이메일/비밀번호 로그인도 사용할 수 있습니다.'
+          : '비밀번호가 변경되었습니다.',
+      );
     } catch (error) {
       const fieldErrors = getApiFieldErrors(error);
 
@@ -571,6 +617,233 @@ function SettingsPage() {
     } finally {
       setIsChangingPassword(false);
     }
+  };
+
+  const handleInitiateReset = async () => {
+    if (!email) {
+      toast.error('이메일 정보를 불러올 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.');
+      return;
+    }
+
+    setIsSendingResetCode(true);
+    // 재발송하는 경우 이전 토큰/코드를 비워둔다
+    setResetToken('');
+    setResetCode('');
+
+    try {
+      await sendPasswordResetCode({ email });
+      setResetStep('code');
+      toast.info(`${email}로 인증 코드를 발송했습니다. 받은편지함(스팸함 포함)을 확인해 주세요.`, {
+        durationMs: 5000,
+      });
+    } catch (error) {
+      console.error('[sendPasswordResetCode] failed:', error);
+
+      let message = '인증 코드 발송에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const code = error.response?.data?.code;
+        const backendMessage = error.response?.data?.message;
+
+        console.error('[sendPasswordResetCode] status:', status, 'code:', code, 'message:', backendMessage);
+
+        if (status === 429 || code === 'TOO_MANY_REQUESTS') {
+          message = '인증 코드 발송 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+        } else if (status === 404) {
+          message = '해당 이메일로 등록된 계정을 찾을 수 없습니다.';
+        } else if (status === 400) {
+          message = '이메일 형식이 올바르지 않습니다.';
+        } else if (status && status >= 500) {
+          message = '메일 서버에서 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+        } else if (!error.response) {
+          message = '네트워크 연결을 확인할 수 없습니다. 인터넷 연결 상태를 확인하고 다시 시도해 주세요.';
+        } else if (backendMessage) {
+          message = `발송 실패: ${backendMessage}`;
+        }
+      }
+
+      toast.error(message);
+    } finally {
+      setIsSendingResetCode(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!resetCode.trim()) {
+      toast.error('메일로 받은 인증 코드를 입력해 주세요.');
+      return;
+    }
+
+    setIsVerifyingCode(true);
+    try {
+      const { resetToken: token } = await verifyPasswordResetCode({ email, code: resetCode.trim() });
+      setResetToken(token);
+      setResetStep('verified');
+      toast.success('인증이 완료되었습니다. 새 비밀번호를 입력해 주세요.');
+    } catch (error) {
+      console.error('[verifyPasswordResetCode] failed:', error);
+
+      let message = '인증에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const code = error.response?.data?.code;
+        const backendMessage = error.response?.data?.message;
+
+        console.error('[verifyPasswordResetCode] status:', status, 'code:', code, 'message:', backendMessage);
+
+        if (code === 'PASSWORD_RESET_CODE_INVALID' || code === 'INVALID_VERIFICATION_CODE') {
+          message = '인증 코드가 일치하지 않습니다. 메일을 다시 확인해 주세요.';
+        } else if (code === 'PASSWORD_RESET_CODE_EXPIRED' || code === 'EXPIRED_VERIFICATION_CODE') {
+          message = '인증 코드가 만료되었습니다. "인증 코드 재발송"을 눌러 새 코드를 받아주세요.';
+        } else if (status === 429) {
+          message = '인증 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+        } else if (status === 404) {
+          message = '발송된 인증 코드를 찾을 수 없습니다. 먼저 "인증 코드 재발송"을 눌러주세요.';
+        } else if (status === 400) {
+          message = '인증 코드 형식이 올바르지 않습니다. 메일에 적힌 숫자 코드를 그대로 입력해 주세요.';
+        } else if (status && status >= 500) {
+          message = '서버에서 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+        } else if (!error.response) {
+          message = '네트워크 연결을 확인할 수 없습니다. 인터넷 연결 상태를 확인하고 다시 시도해 주세요.';
+        } else if (backendMessage) {
+          message = `인증 실패: ${backendMessage}`;
+        }
+      }
+
+      toast.error(message);
+    } finally {
+      setIsVerifyingCode(false);
+    }
+  };
+
+  const handleCompleteReset = async () => {
+    if (!resetToken) {
+      toast.error('인증을 먼저 완료해 주세요.');
+      return;
+    }
+    if (!resetNewPassword || resetNewPassword.length < 8 || resetNewPassword.length > 72) {
+      toast.error('새 비밀번호는 8자 이상 72자 이하로 입력해 주세요.');
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      toast.error('새 비밀번호 확인이 일치하지 않습니다.');
+      return;
+    }
+
+    setIsCompletingReset(true);
+    try {
+      await completePasswordReset({ resetToken, newPassword: resetNewPassword });
+      // 성공 시 폼/토큰을 모두 비우고 idle 상태로 돌려놓는다.
+      setResetStep('idle');
+      setResetCode('');
+      setResetToken('');
+      setResetNewPassword('');
+      setResetConfirmPassword('');
+      setPasswordValues(initialPasswordForm);
+      setPasswordErrors({});
+      setPasswordMessage(null);
+      setHasLocalPassword(true);
+      toast.success('비밀번호가 성공적으로 재설정되었습니다.');
+    } catch (error) {
+      console.error('[completePasswordReset] failed:', error);
+
+      let message = '비밀번호 재설정에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+      let shouldResetToCode = false;
+      let shouldClearPasswords = false;
+
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const code = error.response?.data?.code;
+        const backendMessage = error.response?.data?.message;
+        const fieldErrors = getApiFieldErrors(error);
+
+        console.error('[completePasswordReset] status:', status, 'code:', code, 'message:', backendMessage, 'fieldErrors:', fieldErrors);
+
+        // 토큰 만료/무효 — 코드 발송 단계로 되돌아가야 함
+        if (
+          code === 'PASSWORD_RESET_TOKEN_INVALID' ||
+          code === 'INVALID_RESET_TOKEN' ||
+          code === 'EXPIRED_RESET_TOKEN' ||
+          status === 401
+        ) {
+          message =
+            '인증 세션이 만료되었거나 이미 사용된 인증 코드입니다. "인증 코드 재발송"을 눌러 새 코드를 받아주세요.';
+          shouldResetToCode = true;
+          shouldClearPasswords = true;
+        }
+        // 백엔드가 별도 코드를 내려주면 정확히 매칭
+        else if (code === 'PASSWORD_SAME_AS_OLD' || code === 'SAME_PASSWORD') {
+          message =
+            '새 비밀번호가 기존 비밀번호와 동일합니다. 이전에 사용한 적 없는 다른 비밀번호로 입력해 주세요.';
+          shouldClearPasswords = true;
+        }
+        // OAuth 전용 계정이라 재설정 불가
+        else if (code === 'PASSWORD_RESET_NOT_ALLOWED' || status === 409) {
+          message =
+            '소셜 로그인 전용 계정이라 비밀번호 재설정을 사용할 수 없습니다. 이전 화면에서 NEW PASSWORD를 직접 등록해 주세요.';
+        }
+        // 계정을 찾을 수 없음
+        else if (status === 404) {
+          message =
+            '해당 이메일로 등록된 계정의 비밀번호 정보를 찾을 수 없습니다. 관리자에게 문의해 주세요.';
+        }
+        // 400 INVALID_PARAMETER — 가장 흔한 케이스
+        else if (status === 400) {
+          // 필드 에러가 명확히 내려온 경우 그 메시지를 우선 사용
+          if (fieldErrors.newPassword) {
+            message = fieldErrors.newPassword;
+          }
+          // 그렇지 않으면 백엔드가 같은 비밀번호를 INVALID_PARAMETER로 던지는 케이스가 가장 유력
+          // (DTO 검증은 이미 통과했으므로 길이/형식 문제가 아님)
+          else if (code === 'INVALID_PARAMETER') {
+            message =
+              '새 비밀번호가 기존 비밀번호와 동일하거나 사용할 수 없는 형식입니다. ' +
+              '이전에 사용한 적 없는 새로운 비밀번호로 입력해 주세요. (영문/숫자/특수문자 조합 권장)';
+            shouldClearPasswords = true;
+          } else if (backendMessage) {
+            message = `비밀번호 재설정 실패: ${backendMessage}`;
+          } else {
+            message = '입력값을 다시 확인해 주세요.';
+          }
+        }
+        // 500 등 서버 오류
+        else if (status && status >= 500) {
+          message =
+            '서버에서 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요. 문제가 반복되면 관리자에게 문의해 주세요.';
+        }
+        // 네트워크 오류 (응답 자체가 없는 경우)
+        else if (!error.response) {
+          message =
+            '네트워크 연결을 확인할 수 없습니다. 인터넷 연결 상태를 확인하고 다시 시도해 주세요.';
+        }
+        // 그 외 백엔드 메시지가 있으면 그대로 노출
+        else if (backendMessage) {
+          message = `비밀번호 재설정 실패: ${backendMessage}`;
+        }
+      }
+
+      toast.error(message, { durationMs: 5000 });
+      if (shouldClearPasswords) {
+        setResetNewPassword('');
+        setResetConfirmPassword('');
+      }
+      if (shouldResetToCode) {
+        setResetToken('');
+        setResetStep('code');
+      }
+    } finally {
+      setIsCompletingReset(false);
+    }
+  };
+
+  const handleCancelReset = () => {
+    setResetStep('idle');
+    setResetCode('');
+    setResetToken('');
+    setResetNewPassword('');
+    setResetConfirmPassword('');
   };
 
   const handleLogout = async () => {
@@ -679,95 +952,199 @@ function SettingsPage() {
 
           {tab === 'security' ? (
             <div className="theme-settings-panel space-y-5 border border-neutral-200 bg-white p-8">
-              
-              {/* Account Status Header */}
-              <div className="mb-6 flex items-center justify-between border border-neutral-200 bg-[#fafafa] px-5 py-4">
-                <div className="text-sm text-neutral-800 font-bold">
-                  이메일 로그인 비밀번호:{' '}
-                  {hasLocalPassword ? (
-                    <span className="text-emerald-600">설정 완료</span>
-                  ) : (
-                    <span className="text-[#E63946]">미설정</span>
-                  )}
+              {isLoadingProfile || hasLocalPassword === null ? (
+                <div className="text-sm text-neutral-400">비밀번호 설정 정보를 불러오는 중입니다.</div>
+              ) : (
+              <>
+              {/* Account Status Header: 백엔드의 hasLocalPassword 값을 신뢰하여 표시 */}
+              {hasLocalPassword === true ? (
+                <div className="mb-2 flex items-center justify-between border border-emerald-200 bg-emerald-50 px-5 py-4">
+                  <div className="text-sm font-bold text-emerald-600">이메일 로그인 비밀번호: 설정 완료</div>
+                  <div className="hidden text-xs text-neutral-500 sm:block">
+                    CLI에서 이메일/비밀번호 로그인을 사용할 수 있습니다.
+                  </div>
                 </div>
-                {!hasLocalPassword && (
-                  <div className="text-xs text-neutral-500 hidden sm:block">
-                    이 계정은 소셜 로그인만 사용할 수 있습니다. 이메일 로그인도 사용하려면 비밀번호를 설정하세요.
+              ) : (
+                <div className="mb-2 flex items-center justify-between border border-rose-200 bg-rose-50 px-5 py-4">
+                  <div className="text-sm font-bold text-[#E63946]">이메일 로그인 비밀번호: 설정 미완료</div>
+                  <div className="hidden text-xs text-neutral-500 sm:block">
+                    비밀번호를 설정하면 CLI에서 이메일/비밀번호로 로그인할 수 있습니다.
+                  </div>
+                </div>
+              )}
+
+              {/* Form */}
+              {hasLocalPassword === true ? (
+                  /* hasLocalPassword: true → 이메일 인증 코드 플로우 (CURRENT PASSWORD 없음) */
+                  resetStep === 'idle' ? (
+                    <div className="space-y-4">
+                      <p className="text-sm text-neutral-500">
+                        비밀번호 변경을 위해 이메일 인증이 필요합니다.{' '}
+                        <span className="font-medium text-neutral-700">{email}</span>으로 인증 코드를 발송합니다.
+                      </p>
+                      <button
+                        className="bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={isSendingResetCode || !email}
+                        onClick={() => void handleInitiateReset()}
+                        type="button"
+                      >
+                        {isSendingResetCode ? '발송 중...' : '인증 코드 발송'}
+                      </button>
+                    </div>
+                  ) : resetStep === 'code' ? (
+                    /* Step 2: 인증 코드 입력 + 검증 */
+                    <div className="space-y-4">
+                      <div className="border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-700">
+                        <span className="font-medium text-neutral-900">{email}</span>로 인증 코드를 발송했습니다. 메일함을 확인하고 코드를 입력해 주세요.
+                      </div>
+
+                      <label className="block">
+                        <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">인증 코드</span>
+                        <div className="mt-1 flex items-stretch gap-2">
+                          <input
+                            className="theme-settings-input block w-full border border-neutral-300 px-3 py-2 text-sm"
+                            onChange={(e) => setResetCode(e.target.value)}
+                            placeholder="6자리 코드 입력"
+                            type="text"
+                            value={resetCode}
+                          />
+                          <button
+                            className="w-32 shrink-0 border border-black bg-black px-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isVerifyingCode || !resetCode.trim()}
+                            onClick={() => void handleVerifyCode()}
+                            type="button"
+                          >
+                            {isVerifyingCode ? 'Verifying...' : '코드 확인'}
+                          </button>
+                        </div>
+                      </label>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={isSendingResetCode}
+                          onClick={() => void handleInitiateReset()}
+                          type="button"
+                        >
+                          {isSendingResetCode ? '재발송 중...' : '인증 코드 재발송'}
+                        </button>
+                        <button
+                          className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-700"
+                          onClick={handleCancelReset}
+                          type="button"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Step 3: 새 비밀번호 입력 (인증 완료 후) */
+                    <div className="space-y-4">
+                      <p className="text-sm text-neutral-500">
+                        새 비밀번호를 입력해 주세요. 8자 이상 72자 이하, 이전에 사용한 적 없는 값으로 입력해 주세요.
+                      </p>
+
+                      <label className="block">
+                        <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">NEW PASSWORD</span>
+                        <input
+                          className="theme-settings-input mt-1 block w-full border border-neutral-300 px-3 py-2 text-sm"
+                          onChange={(e) => setResetNewPassword(e.target.value)}
+                          placeholder="8자 이상 72자 이하"
+                          type="password"
+                          value={resetNewPassword}
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CONFIRM PASSWORD</span>
+                        <input
+                          className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
+                            resetConfirmPassword && resetNewPassword === resetConfirmPassword
+                              ? 'border-emerald-500'
+                              : 'border-neutral-300'
+                          }`}
+                          onChange={(e) => setResetConfirmPassword(e.target.value)}
+                          type="password"
+                          value={resetConfirmPassword}
+                        />
+                        {resetConfirmPassword && resetNewPassword === resetConfirmPassword ? (
+                          <p className="mt-2 text-sm text-emerald-600">새 비밀번호가 일치합니다.</p>
+                        ) : null}
+                      </label>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          className="bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={isCompletingReset}
+                          onClick={() => void handleCompleteReset()}
+                          type="button"
+                        >
+                          {isCompletingReset ? 'Resetting...' : '비밀번호 재설정'}
+                        </button>
+                        <button
+                          className="border border-neutral-300 px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={isCompletingReset}
+                          onClick={handleCancelReset}
+                          type="button"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  /* hasLocalPassword: false / undefined → 직접 새 비밀번호 설정 (CURRENT PASSWORD 없음) */
+                  <div className="grid gap-4">
+                    <label className="block">
+                      <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">NEW PASSWORD</span>
+                      <input
+                        className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
+                          passwordErrors.newPassword ? 'border-rose-500' : 'border-neutral-300'
+                        }`}
+                        onChange={(event) => handleNewPasswordChange(event.target.value)}
+                        type="password"
+                        value={passwordValues.newPassword}
+                      />
+                      {passwordErrors.newPassword ? (
+                        <p className="mt-2 text-sm text-rose-600">{passwordErrors.newPassword}</p>
+                      ) : null}
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CONFIRM PASSWORD</span>
+                      <input
+                        className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
+                          passwordErrors.confirmPassword
+                            ? 'border-rose-500'
+                            : isConfirmPasswordMatched
+                              ? 'border-emerald-500'
+                              : 'border-neutral-300'
+                        }`}
+                        onChange={(event) => handleConfirmPasswordChange(event.target.value)}
+                        type="password"
+                        value={passwordValues.confirmPassword}
+                      />
+                      {passwordErrors.confirmPassword ? (
+                        <p className="mt-2 text-sm text-rose-600">{passwordErrors.confirmPassword}</p>
+                      ) : isConfirmPasswordMatched ? (
+                        <p className="mt-2 text-sm text-emerald-600">새 비밀번호가 일치합니다.</p>
+                      ) : null}
+                    </label>
+
+                    {renderMessage(passwordMessage)}
+
+                    <button
+                      className="bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isChangingPassword}
+                      onClick={() => void handlePasswordChange()}
+                      type="button"
+                    >
+                      {isChangingPassword ? 'Setting...' : 'Set Password'}
+                    </button>
                   </div>
                 )}
-              </div>
-
-              <div className="grid gap-4">
-                {!isSetupMode && (
-                  <label className="block">
-                    <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CURRENT PASSWORD</span>
-                    <input
-                      className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
-                        passwordErrors.currentPassword ? 'border-rose-500' : 'border-neutral-300'
-                      }`}
-                      onChange={(event) => handleCurrentPasswordChange(event.target.value)}
-                      type="password"
-                      value={passwordValues.currentPassword}
-                    />
-                    {passwordErrors.currentPassword ? (
-                      <p className="mt-2 text-sm text-rose-600">{passwordErrors.currentPassword}</p>
-                    ) : (
-                      <p className="mt-2 text-sm text-neutral-500">
-                        현재 비밀번호가 맞아야 새 비밀번호 입력 필드가 정상적으로 열립니다.
-                      </p>
-                    )}
-                  </label>
-                )}
-
-                <label className="block">
-                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">NEW PASSWORD</span>
-                  <input
-                    className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
-                      passwordErrors.newPassword ? 'border-rose-500' : 'border-neutral-300'
-                    } ${areNewPasswordFieldsLocked ? 'bg-neutral-50 text-neutral-400' : ''}`}
-                    disabled={areNewPasswordFieldsLocked}
-                    onChange={(event) => handleNewPasswordChange(event.target.value)}
-                    type="password"
-                    value={passwordValues.newPassword}
-                  />
-                  {passwordErrors.newPassword ? (
-                    <p className="mt-2 text-sm text-rose-600">{passwordErrors.newPassword}</p>
-                  ) : null}
-                </label>
-
-                <label className="block">
-                  <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CONFIRM PASSWORD</span>
-                  <input
-                    className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
-                      passwordErrors.confirmPassword
-                        ? 'border-rose-500'
-                        : isConfirmPasswordMatched
-                          ? 'border-emerald-500'
-                          : 'border-neutral-300'
-                    } ${areNewPasswordFieldsLocked ? 'bg-neutral-50 text-neutral-400' : ''}`}
-                    disabled={areNewPasswordFieldsLocked}
-                    onChange={(event) => handleConfirmPasswordChange(event.target.value)}
-                    type="password"
-                    value={passwordValues.confirmPassword}
-                  />
-                  {passwordErrors.confirmPassword ? (
-                    <p className="mt-2 text-sm text-rose-600">{passwordErrors.confirmPassword}</p>
-                  ) : isConfirmPasswordMatched ? (
-                    <p className="mt-2 text-sm text-emerald-600">새 비밀번호가 일치합니다.</p>
-                  ) : null}
-                </label>
-              </div>
-
-              {renderMessage(passwordMessage)}
-
-                <button
-                className="bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isChangingPassword}
-                onClick={() => void handlePasswordChange()}
-                type="button"
-              >
-                {isChangingPassword ? 'Updating...' : (isSetupMode ? 'Set Password' : 'Change Password')}
-              </button>
+              </>
+              )}
             </div>
           ) : null}
 
