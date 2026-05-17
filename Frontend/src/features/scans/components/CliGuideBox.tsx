@@ -23,11 +23,13 @@ export default function CliGuideBox({ mode }: CliGuideBoxProps) {
     ? [
         { label: 'SSAfer 설치 (개발/검증)', cmd: 'cd CLI && python -m pip install -e .' },
         { label: '백엔드 인증 로그인', cmd: 'ssafer login' },
+        { label: '스캔 도구 설치 (Trivy 등)', cmd: 'ssafer tools' },
         { label: '에이전트 실행', cmd: 'ssafer agent' },
       ]
     : [
         { label: 'SSAfer 설치 (개발/검증)', cmd: 'cd CLI && python -m pip install -e .' },
         { label: '백엔드 인증 로그인', cmd: 'ssafer login' },
+        { label: '스캔 도구 설치 (Trivy 등)', cmd: 'ssafer tools' },
         { label: '스캔 실행 및 업로드', cmd: 'ssafer run --upload' },
       ];
 
