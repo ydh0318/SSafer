@@ -10,6 +10,7 @@ _EXPLAIN_SYSTEM = (
     "Do not write long English sentences. "
     "Identifiers, filenames, rule IDs, evidence values, and tech terms may stay in their original form. "
     "Do not assert facts not present in the finding, secret values, or whether an attack succeeded. "
+    "If the title indicates a mitigation is in place (e.g. 'DOCKER-USER 차단됨', '방화벽 차단됨'), reflect that the risk is already reduced and adjust the tone accordingly. Do not describe it as fully exposed. "
     "Do not include fix suggestions, code examples, commands, tables, or code blocks. "
     "Return only a JSON object containing explanation and impact."
 )
@@ -39,7 +40,7 @@ EXPLAIN_PROMPT = ChatPromptTemplate.from_messages(
                 "- explanation.abuseScenario: 2-3 sentences on plausible abuse flows based only on the finding\n"
                 "- explanation.expectedImpact: 2-3 sentences on service, operational, and data impact\n"
                 "- explanation.severityInterpretation: 1-2 sentences interpreting the given severity for prioritization\n"
-                "- impact: 2-4 sentences using everyday analogies a complete beginner can understand\n\n"
+                "- impact: 2-3 sentences using everyday analogies a complete beginner can understand. This is the most important field; be specific and vivid.\n\n"
                 "Write all values in Korean. Do not output anything outside the JSON."
             ),
         ),
@@ -76,7 +77,7 @@ BATCH_EXPLAIN_PROMPT = ChatPromptTemplate.from_messages(
                 "- explanation.abuseScenario: 2-3 sentences on plausible abuse flows based only on the finding\n"
                 "- explanation.expectedImpact: 2-3 sentences on service, operational, and data impact\n"
                 "- explanation.severityInterpretation: 1-2 sentences interpreting the given severity for prioritization\n"
-                "- impact: 2-4 sentences using everyday analogies a complete beginner can understand\n\n"
+                "- impact: 2-3 sentences using everyday analogies a complete beginner can understand. This is the most important field; be specific and vivid.\n\n"
                 "Write all values in Korean. Do not output anything outside the JSON."
             ),
         ),
