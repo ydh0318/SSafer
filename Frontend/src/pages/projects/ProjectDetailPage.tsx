@@ -639,7 +639,39 @@ function ProjectDetailPage() {
 
       {projectError && <PageBanner message={projectError} tone="error" />}
 
-      {/* ── 메인: 스캔 요청 + 프로젝트 정보 ── */}
+      {/* ── 스캔 이력 (가장 위 — 사용자가 최근 스캔 결과를 가장 먼저 확인) ── */}
+      <ProjectScanList
+        deletingScanIds={deletingScanIds}
+        errorMessage={scanListError}
+        filters={scanFilters}
+        isLoading={isScanListLoading}
+        onDeleteScan={(scanId) => void handleDeleteScan(scanId)}
+        onFilterChange={setScanFilters}
+        onRefresh={() => void handleRefreshScans()}
+        projectId={projectId}
+        scans={scans}
+      />
+
+      {/* ── Agent 상세 (스캔 이력 다음 — 현재 연결 상태 확인) ── */}
+      <AgentStatusCard
+        agentStatus={agentStatus}
+        errorMessage={agentError}
+        isLoading={isAgentLoading}
+        patchApplyEnabled={agentIsOnline && latestAgentScanHasFindings}
+        onRefresh={() => void handleRefreshAgentStatus()}
+        onRequestApply={() => {
+          const latestDoneScan = completedScans[0];
+          if (latestDoneScan) {
+            navigate(ROUTES.resultDetail.replace(':scanId', String(latestDoneScan.scanId)), { state: { projectId } });
+          }
+        }}
+        onRequestScan={() => {
+          setScanRequestMethod('AGENT');
+          document.getElementById('scan-request-section')?.scrollIntoView({ behavior: 'smooth' });
+        }}
+      />
+
+      {/* ── 새 스캔 요청 + 프로젝트 정보 (가장 아래로 이동) ── */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
 
         {/* 새 스캔 요청 (주요 액션) */}
@@ -713,38 +745,6 @@ function ProjectDetailPage() {
           )}
         </div>
       </div>
-
-      {/* ── 스캔 이력 ── */}
-      <ProjectScanList
-        deletingScanIds={deletingScanIds}
-        errorMessage={scanListError}
-        filters={scanFilters}
-        isLoading={isScanListLoading}
-        onDeleteScan={(scanId) => void handleDeleteScan(scanId)}
-        onFilterChange={setScanFilters}
-        onRefresh={() => void handleRefreshScans()}
-        projectId={projectId}
-        scans={scans}
-      />
-
-      {/* ── Agent 상세 ── */}
-      <AgentStatusCard
-        agentStatus={agentStatus}
-        errorMessage={agentError}
-        isLoading={isAgentLoading}
-        patchApplyEnabled={agentIsOnline && latestAgentScanHasFindings}
-        onRefresh={() => void handleRefreshAgentStatus()}
-        onRequestApply={() => {
-          const latestDoneScan = completedScans[0];
-          if (latestDoneScan) {
-            navigate(ROUTES.resultDetail.replace(':scanId', String(latestDoneScan.scanId)), { state: { projectId } });
-          }
-        }}
-        onRequestScan={() => {
-          setScanRequestMethod('AGENT');
-          document.getElementById('scan-request-section')?.scrollIntoView({ behavior: 'smooth' });
-        }}
-      />
 
       {isDeleteModalOpen && targetProject ? (
         <ProjectDeleteModal

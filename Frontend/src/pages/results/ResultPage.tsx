@@ -559,7 +559,9 @@ function ResultPage() {
                         >
                           <Link
                             className="flex flex-1 items-start gap-4 p-5 hover:bg-[#F5F5F5]"
-                            state={routeState}
+                            // 박스 자체를 누르면 항상 "왜 위험한가" 탭으로 진입한다.
+                            // 옆에 있는 "고치기" 버튼만 'apply' 탭으로 직접 진입한다.
+                            state={{ ...routeState, initialView: 'explain' }}
                             to={findingUrl}
                           >
                             <div className="flex shrink-0 items-start pt-1">
