@@ -831,6 +831,7 @@ function SettingsPage() {
       }
       if (shouldResetToCode) {
         setResetToken('');
+        setResetCode('');
         setResetStep('code');
       }
     } finally {
