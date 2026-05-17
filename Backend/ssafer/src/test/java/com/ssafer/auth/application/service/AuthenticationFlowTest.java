@@ -11,6 +11,10 @@ import com.ssafer.auth.infrastructure.token.JwtAuthTokenProvider;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
+import com.ssafer.global.security.JwtAuthenticationTokenParser;
+import com.ssafer.project.domain.repository.ProjectRepository;
+import com.ssafer.scan.application.service.ScanStatusSseEmitterRegistry;
+import com.ssafer.scan.domain.repository.ScanRepository;
 import com.ssafer.user.application.service.UserRegistrationService;
 import com.ssafer.user.application.service.UserWithdrawalService;
 import com.ssafer.user.domain.entity.User;
@@ -18,6 +22,7 @@ import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -36,17 +41,24 @@ class AuthenticationFlowTest {
 
   private EmailVerificationService emailVerificationService;
   private UserRepository userRepository;
+  private ProjectRepository projectRepository;
+  private ScanRepository scanRepository;
+  private ScanStatusSseEmitterRegistry scanStatusSseEmitterRegistry;
   private InMemoryRefreshTokenStore refreshTokenStore;
   private UserRegistrationService userRegistrationService;
   private UserWithdrawalService userWithdrawalService;
   private AuthLoginService authLoginService;
   private AuthTokenRefreshService authTokenRefreshService;
   private AuthLogoutService authLogoutService;
+  private JwtAuthenticationTokenParser jwtAuthenticationTokenParser;
 
   @BeforeEach
   void setUp() {
     emailVerificationService = Mockito.mock(EmailVerificationService.class);
     userRepository = Mockito.mock(UserRepository.class);
+    projectRepository = Mockito.mock(ProjectRepository.class);
+    scanRepository = Mockito.mock(ScanRepository.class);
+    scanStatusSseEmitterRegistry = Mockito.mock(ScanStatusSseEmitterRegistry.class);
     refreshTokenStore = new InMemoryRefreshTokenStore();
 
     PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -64,10 +76,17 @@ class AuthenticationFlowTest {
         userRepository,
         passwordEncoder
     );
-    userWithdrawalService = new UserWithdrawalService(userRepository, refreshTokenStore);
+    userWithdrawalService = new UserWithdrawalService(
+        userRepository,
+        projectRepository,
+        scanRepository,
+        scanStatusSseEmitterRegistry,
+        refreshTokenStore
+    );
     authLoginService = new AuthLoginService(userRepository, passwordEncoder, authTokenProvider);
     authTokenRefreshService = new AuthTokenRefreshService(authTokenProvider);
     authLogoutService = new AuthLogoutService(authTokenProvider);
+    jwtAuthenticationTokenParser = new JwtAuthenticationTokenParser(SECRET, "ssafer", userRepository);
 
     configureStatefulUserRepositoryMock();
   }
@@ -132,6 +151,10 @@ class AuthenticationFlowTest {
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.INVALID_CREDENTIALS);
     assertThat(refreshTokenStore.findByUserId(firstUserId)).isEmpty();
+    assertThatThrownBy(() -> jwtAuthenticationTokenParser.parse(firstLoginResult.accessToken()))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.UNAUTHORIZED);
 
     Long reactivatedUserId = userRegistrationService.register(
         "user@ssafer.co.kr",
@@ -149,6 +172,12 @@ class AuthenticationFlowTest {
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.INVALID_CREDENTIALS);
+    assertThatThrownBy(() -> jwtAuthenticationTokenParser.parse(firstLoginResult.accessToken()))
+        .isInstanceOf(BusinessException.class)
+        .extracting(ex -> ((BusinessException) ex).getErrorCode())
+        .isEqualTo(ErrorCode.UNAUTHORIZED);
+    assertThat(jwtAuthenticationTokenParser.parse(secondLoginResult.accessToken()).userId())
+        .isEqualTo(firstUserId);
   }
 
   private void configureStatefulUserRepositoryMock() {
@@ -177,6 +206,10 @@ class AuthenticationFlowTest {
           User user = usersById.get(userId);
           return user != null && user.getAccountStatus() == status;
         });
+    given(projectRepository.findByUserIdAndDeletedAtIsNull(any(Long.class)))
+        .willReturn(List.of());
+    given(scanRepository.findByProjectIdAndDeletedAtIsNull(any(Long.class)))
+        .willReturn(List.of());
     given(userRepository.save(any(User.class)))
         .willAnswer(invocation -> {
           User user = invocation.getArgument(0);

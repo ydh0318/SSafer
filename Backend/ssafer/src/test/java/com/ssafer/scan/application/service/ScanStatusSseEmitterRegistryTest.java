@@ -27,4 +27,15 @@ class ScanStatusSseEmitterRegistryTest {
 
     assertThat(registry.getEmitters(actor)).hasSize(1);
   }
+
+  @Test
+  void removeAllClearsEmittersForActor() {
+    AuthenticatedActor actor = AuthenticatedActor.member(1L);
+    registry.register(actor, new SseEmitter());
+    registry.register(actor, new SseEmitter());
+
+    registry.removeAll(actor);
+
+    assertThat(registry.getEmitters(actor)).isEmpty();
+  }
 }

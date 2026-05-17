@@ -2,6 +2,7 @@ package com.ssafer.scan.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -70,8 +71,8 @@ class UploadScanAnalysisTaskDispatcherTest {
     Agent agent = new Agent(project, AgentStatus.OFFLINE, true);
     ReflectionTestUtils.setField(agent, "id", 3001L);
 
-    when(projectRepository.findById(2001L)).thenReturn(Optional.of(project));
-    when(scanRepository.findById(1001L)).thenReturn(Optional.of(scan));
+    when(projectRepository.findByIdAndDeletedAtIsNull(2001L)).thenReturn(Optional.of(project));
+    when(scanRepository.findByIdAndDeletedAtIsNull(1001L)).thenReturn(Optional.of(scan));
     when(agentRepository.findFirstByProjectId(2001L)).thenReturn(Optional.of(agent));
     when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
       AgentTask saved = invocation.getArgument(0);
@@ -103,5 +104,46 @@ class UploadScanAnalysisTaskDispatcherTest {
     assertThat(message.tool()).isEqualTo("ssafer-web-upload");
     assertThat(message.toolVersion()).isEqualTo("0.1.0");
     assertThat(message.payloadHash()).isEqualTo("sha256:abc123");
+  }
+
+  @Test
+  void dispatchSkipsWhenProjectIsDeletedOrMissing() {
+    when(projectRepository.findByIdAndDeletedAtIsNull(2001L)).thenReturn(Optional.empty());
+
+    dispatcher.dispatch(
+        1001L,
+        2001L,
+        "s3://ssafer/raw/1001/uuid/scan_result.json",
+        12,
+        "ssafer-web-upload",
+        "0.1.0",
+        "sha256:abc123"
+    );
+
+    verify(scanRepository, never()).findByIdAndDeletedAtIsNull(any());
+    verify(agentTaskRepository, never()).save(any());
+    verify(agentTaskPublisher, never()).publishScanRequest(any());
+  }
+
+  @Test
+  void dispatchSkipsWhenScanIsDeletedOrMissing() {
+    Project project = new Project(1L, null, "project-a", null, com.ssafer.project.domain.enums.ScanMode.AGENT, false);
+    ReflectionTestUtils.setField(project, "id", 2001L);
+
+    when(projectRepository.findByIdAndDeletedAtIsNull(2001L)).thenReturn(Optional.of(project));
+    when(scanRepository.findByIdAndDeletedAtIsNull(1001L)).thenReturn(Optional.empty());
+
+    dispatcher.dispatch(
+        1001L,
+        2001L,
+        "s3://ssafer/raw/1001/uuid/scan_result.json",
+        12,
+        "ssafer-web-upload",
+        "0.1.0",
+        "sha256:abc123"
+    );
+
+    verify(agentTaskRepository, never()).save(any());
+    verify(agentTaskPublisher, never()).publishScanRequest(any());
   }
 }

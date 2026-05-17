@@ -42,6 +42,20 @@ public class ScanStatusSseEmitterRegistry {
     return List.copyOf(emitters.values());
   }
 
+  public void removeAll(AuthenticatedActor actor) {
+    String actorKey = toActorKey(actor);
+    Map<String, SseEmitter> emitters = emittersByActorKey.remove(actorKey);
+    if (emitters == null || emitters.isEmpty()) {
+      return;
+    }
+
+    for (SseEmitter emitter : emitters.values()) {
+      emitter.complete();
+    }
+
+    log.info("?ㅼ틪 ?곹깭 SSE emitter瑜?紐⑤몢 ?댁젣?덉뒿?덈떎. actorKey={}, emitterCount=0", actorKey);
+  }
+
   int countEmitters(AuthenticatedActor actor) {
     return getEmitters(actor).size();
   }
