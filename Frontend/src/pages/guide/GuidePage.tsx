@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, Check, Copy, Eye, EyeOff, Terminal } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, Copy, Eye, EyeOff, KeyRound, Terminal } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -149,16 +149,35 @@ function Step({ num, label, desc, isLast, children }: StepProps) {
 function Section0() {
   return (
     <>
-      <Step num="01" label="설치" desc="개발·검증 환경에서는 소스로 직접 설치합니다. 배포 확정 후에는 pipx를 사용합니다.">
+      <Step num="01" label="설치" desc="pip로 설치합니다. 최신 버전을 받으려면 git 저장소에서 직접 설치하세요.">
         <Terminal_ lines={[
-          { comment: '개발/검증 환경', cmd: 'cd CLI && python -m pip install -e .' },
-          { comment: '최종 배포 후', cmd: 'pipx install ssafer' },
+          { comment: '최신 버전 (권장)', cmd: 'pip install "git+https://lab.ssafy.com/s14-final/S14P31B105.git@develop#subdirectory=CLI"' },
+          { comment: '개발/검증 환경 (소스 직접 설치)', cmd: 'cd CLI && pip install -e .' },
         ]} />
       </Step>
       <Step num="02" label="로그인" desc="SSAfer 계정으로 로그인하여 스캔 결과 업로드 권한을 획득합니다.">
         <Terminal_ lines={[{ cmd: 'ssafer login' }]} />
+        <div className="mt-3">
+          <Note>
+            <strong>Google · GitHub로 가입한 계정</strong>은 비밀번호가 없어 이메일/비밀번호 로그인이 되지 않습니다.
+            설정 페이지에서 비밀번호를 먼저 설정한 뒤 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer login</code>을 사용하세요.
+            <Link
+              to={ROUTES.settings}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
+            >
+              <KeyRound className="h-3 w-3" />
+              비밀번호 설정하러 가기
+            </Link>
+          </Note>
+        </div>
       </Step>
-      <Step num="03" label="스캔 및 업로드" desc="프로젝트 루트에서 스캔을 실행합니다. --upload 없이 실행하면 로컬에만 저장됩니다." isLast>
+      <Step num="03" label="환경 점검 및 도구 설치" desc="Trivy 등 스캔에 필요한 도구가 설치되어 있는지 확인하고, 없으면 설치합니다.">
+        <Terminal_ lines={[
+          { comment: '환경 및 도구 상태 확인', cmd: 'ssafer doctor' },
+          { comment: 'Trivy 등 필요한 도구 설치', cmd: 'ssafer tools' },
+        ]} />
+      </Step>
+      <Step num="04" label="스캔 및 업로드" desc="프로젝트 루트에서 스캔을 실행합니다. --upload 없이 실행하면 로컬에만 저장됩니다." isLast>
         <Terminal_ lines={[
           { cmd: 'cd <프로젝트 루트>' },
           { cmd: 'ssafer run --upload' },
@@ -184,8 +203,27 @@ function Section1() {
           { cmd: 'ssafer login' },
           { comment: '게스트로 시작하는 경우', cmd: 'ssafer login --guest' },
         ]} />
+        <div className="mt-3">
+          <Note>
+            <strong>Google · GitHub로 가입한 계정</strong>은 비밀번호가 없어 이메일/비밀번호 로그인이 되지 않습니다.
+            설정 페이지에서 비밀번호를 먼저 설정한 뒤 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer login</code>을 사용하세요.
+            <Link
+              to={ROUTES.settings}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
+            >
+              <KeyRound className="h-3 w-3" />
+              비밀번호 설정하러 가기
+            </Link>
+          </Note>
+        </div>
       </Step>
-      <Step num="02" label="Agent 실행" desc="웹에서 보내는 스캔·패치 요청을 현재 서버에서 즉시 처리하도록 Agent를 시작합니다." isLast>
+      <Step num="02" label="환경 점검 및 도구 설치" desc="Agent가 스캔을 실행하려면 Trivy 등 도구가 필요합니다. 설치 여부를 확인하고 없으면 설치합니다.">
+        <Terminal_ lines={[
+          { comment: '환경 및 도구 상태 확인', cmd: 'ssafer doctor' },
+          { comment: 'Trivy 등 필요한 도구 설치', cmd: 'ssafer tools' },
+        ]} />
+      </Step>
+      <Step num="03" label="Agent 실행" desc="웹에서 보내는 스캔·패치 요청을 현재 서버에서 즉시 처리하도록 Agent를 시작합니다." isLast>
         <Terminal_ lines={[
           { comment: '점검할 디렉토리를 --path 로 지정 (기본값: 현재 디렉토리)', cmd: 'ssafer agent --path /opt/app' },
           { comment: '현재 디렉토리를 루트로 사용하는 경우', cmd: 'ssafer agent' },
