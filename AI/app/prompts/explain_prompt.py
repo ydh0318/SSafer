@@ -40,7 +40,7 @@ EXPLAIN_PROMPT = ChatPromptTemplate.from_messages(
                 "- explanation.abuseScenario: 2-3 sentences on plausible abuse flows based only on the finding\n"
                 "- explanation.expectedImpact: 2-3 sentences on service, operational, and data impact\n"
                 "- explanation.severityInterpretation: 1-2 sentences interpreting the given severity for prioritization\n"
-                "- impact: 2-4 sentences using everyday analogies a complete beginner can understand\n\n"
+                "- impact: 2-3 sentences using everyday analogies a complete beginner can understand. This is the most important field; be specific and vivid.\n\n"
                 "Write all values in Korean. Do not output anything outside the JSON."
             ),
         ),
@@ -77,7 +77,7 @@ BATCH_EXPLAIN_PROMPT = ChatPromptTemplate.from_messages(
                 "- explanation.abuseScenario: 2-3 sentences on plausible abuse flows based only on the finding\n"
                 "- explanation.expectedImpact: 2-3 sentences on service, operational, and data impact\n"
                 "- explanation.severityInterpretation: 1-2 sentences interpreting the given severity for prioritization\n"
-                "- impact: 2-4 sentences using everyday analogies a complete beginner can understand\n\n"
+                "- impact: 2-3 sentences using everyday analogies a complete beginner can understand. This is the most important field; be specific and vivid.\n\n"
                 "Write all values in Korean. Do not output anything outside the JSON."
             ),
         ),
