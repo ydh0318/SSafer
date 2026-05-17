@@ -57,6 +57,8 @@ public class PendingAgentTaskQueryService {
     }
 
     Instant sentAt = Instant.now();
+    // Local Agent pull API is intentionally scoped to agent_tasks only.
+    // Upload-analysis work now lives in worker_jobs, so it must never appear here.
     return agentTaskRepository.findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(agent.getId(), DISPATCH_TARGET_STATUSES)
         .stream()
         .map(task -> mapToResponseAndMarkSent(task, sentAt))

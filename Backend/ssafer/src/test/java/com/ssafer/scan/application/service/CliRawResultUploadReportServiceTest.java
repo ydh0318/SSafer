@@ -10,11 +10,8 @@ import static org.mockito.Mockito.when;
 import com.ssafer.agent.application.service.AgentTaskPublisher;
 import com.ssafer.agent.application.service.ScanRequestTaskMessage;
 import com.ssafer.agent.domain.entity.Agent;
-import com.ssafer.agent.domain.entity.AgentTask;
 import com.ssafer.agent.domain.enums.AgentStatus;
-import com.ssafer.agent.domain.enums.AgentTaskStatus;
 import com.ssafer.agent.domain.repository.AgentRepository;
-import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
@@ -28,6 +25,9 @@ import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
+import com.ssafer.worker.domain.entity.WorkerJob;
+import com.ssafer.worker.domain.enums.WorkerJobStatus;
+import com.ssafer.worker.domain.repository.WorkerJobRepository;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -49,7 +49,7 @@ class CliRawResultUploadReportServiceTest {
   @Mock
   private AgentRepository agentRepository;
   @Mock
-  private AgentTaskRepository agentTaskRepository;
+  private WorkerJobRepository workerJobRepository;
   @Mock
   private ProjectAuthorizationService projectAuthorizationService;
   @Mock
@@ -73,11 +73,11 @@ class CliRawResultUploadReportServiceTest {
     when(agentRepository.findFirstByProjectId(101L)).thenReturn(Optional.of(agent));
     when(rawResultObjectVerifier.exists(scan.getRawResultPath())).thenReturn(true);
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
-    when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
-      AgentTask task = invocation.getArgument(0);
-      ReflectionTestUtils.setField(task, "id", 3001L);
-      ReflectionTestUtils.setField(task, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
-      return task;
+    when(workerJobRepository.save(any(WorkerJob.class))).thenAnswer(invocation -> {
+      WorkerJob job = invocation.getArgument(0);
+      ReflectionTestUtils.setField(job, "id", 3001L);
+      ReflectionTestUtils.setField(job, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
+      return job;
     });
 
     CliRawResultUploadReportResponseData response = service.report(
@@ -98,11 +98,11 @@ class CliRawResultUploadReportServiceTest {
     assertThat(scan.getProgressStep()).isEqualTo("WAITING_FOR_WORKER");
     assertThat(scan.getRawResultJson()).isEqualTo("{\"ok\":true}");
 
-    ArgumentCaptor<AgentTask> taskCaptor = ArgumentCaptor.forClass(AgentTask.class);
-    verify(agentTaskRepository).save(taskCaptor.capture());
-    AgentTask savedTask = taskCaptor.getValue();
-    assertThat(savedTask.getTaskStatus()).isEqualTo(AgentTaskStatus.SENT);
-    assertThat(savedTask.getPayloadJson()).isEqualTo("{\"ok\":true}");
+    ArgumentCaptor<WorkerJob> jobCaptor = ArgumentCaptor.forClass(WorkerJob.class);
+    verify(workerJobRepository).save(jobCaptor.capture());
+    WorkerJob savedJob = jobCaptor.getValue();
+    assertThat(savedJob.getJobStatus()).isEqualTo(WorkerJobStatus.PUBLISHED);
+    assertThat(savedJob.getPayloadJson()).isEqualTo("{\"ok\":true}");
 
     ArgumentCaptor<ScanRequestTaskMessage> messageCaptor = ArgumentCaptor.forClass(ScanRequestTaskMessage.class);
     verify(agentTaskPublisher).publishScanRequest(messageCaptor.capture());
@@ -140,11 +140,11 @@ class CliRawResultUploadReportServiceTest {
       return fallback;
     });
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
-    when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
-      AgentTask task = invocation.getArgument(0);
-      ReflectionTestUtils.setField(task, "id", 3002L);
-      ReflectionTestUtils.setField(task, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:01Z"));
-      return task;
+    when(workerJobRepository.save(any(WorkerJob.class))).thenAnswer(invocation -> {
+      WorkerJob job = invocation.getArgument(0);
+      ReflectionTestUtils.setField(job, "id", 3002L);
+      ReflectionTestUtils.setField(job, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:01Z"));
+      return job;
     });
 
     CliRawResultUploadReportResponseData response = service.report(
@@ -172,11 +172,11 @@ class CliRawResultUploadReportServiceTest {
     when(agentRepository.findFirstByProjectId(101L)).thenReturn(Optional.of(agent));
     when(rawResultObjectVerifier.exists(scan.getRawResultPath())).thenReturn(true);
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
-    when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
-      AgentTask task = invocation.getArgument(0);
-      ReflectionTestUtils.setField(task, "id", 3001L);
-      ReflectionTestUtils.setField(task, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
-      return task;
+    when(workerJobRepository.save(any(WorkerJob.class))).thenAnswer(invocation -> {
+      WorkerJob job = invocation.getArgument(0);
+      ReflectionTestUtils.setField(job, "id", 3001L);
+      ReflectionTestUtils.setField(job, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
+      return job;
     });
     doThrow(new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR))
         .when(agentTaskPublisher)

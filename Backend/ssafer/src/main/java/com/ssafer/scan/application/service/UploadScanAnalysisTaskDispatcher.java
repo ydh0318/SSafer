@@ -3,12 +3,8 @@ package com.ssafer.scan.application.service;
 import com.ssafer.agent.application.service.AgentTaskPublisher;
 import com.ssafer.agent.application.service.ScanRequestTaskMessage;
 import com.ssafer.agent.domain.entity.Agent;
-import com.ssafer.agent.domain.entity.AgentTask;
 import com.ssafer.agent.domain.enums.AgentStatus;
-import com.ssafer.agent.domain.enums.AgentTaskStatus;
-import com.ssafer.agent.domain.enums.AgentTaskType;
 import com.ssafer.agent.domain.repository.AgentRepository;
-import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.project.domain.entity.Project;
 import com.ssafer.project.domain.repository.ProjectRepository;
 import com.ssafer.scan.domain.entity.Scan;
@@ -19,6 +15,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
+import com.ssafer.worker.domain.entity.WorkerJob;
+import com.ssafer.worker.domain.enums.WorkerJobStatus;
+import com.ssafer.worker.domain.enums.WorkerJobType;
+import com.ssafer.worker.domain.repository.WorkerJobRepository;
 
 @Component
 @RequiredArgsConstructor
@@ -28,7 +28,7 @@ public class UploadScanAnalysisTaskDispatcher {
   private final ProjectRepository projectRepository;
   private final ScanRepository scanRepository;
   private final AgentRepository agentRepository;
-  private final AgentTaskRepository agentTaskRepository;
+  private final WorkerJobRepository workerJobRepository;
   private final AgentTaskPublisher agentTaskPublisher;
   private final ObjectMapper objectMapper;
 
@@ -65,18 +65,19 @@ public class UploadScanAnalysisTaskDispatcher {
     }
 
     Agent agent = loadOrCreateDispatchAgent(project);
-    AgentTask task = agentTaskRepository.save(new AgentTask(
-        agent,
+    // 업로드 분석 요청은 Local Agent polling 대상이 아니므로 worker_jobs에만 적재한다.
+    WorkerJob workerJob = workerJobRepository.save(new WorkerJob(
         project,
         scan,
-        null,
-        AgentTaskType.SCAN_REQUEST,
-        AgentTaskStatus.PENDING,
+        WorkerJobType.UPLOAD_ANALYSIS_REQUEST,
+        WorkerJobStatus.PENDING,
         null
     ));
 
-    ScanRequestTaskMessage message = ScanRequestTaskMessage.of(
-        task,
+    // worker consumer 계약은 유지하고, 내부 추적용 taskId만 worker_job.id로 전환한다.
+    ScanRequestTaskMessage message = ScanRequestTaskMessage.ofUploadAnalysis(
+        workerJob,
+        agent.getId(),
         rawResultPath,
         resultCount,
         tool,
@@ -86,9 +87,9 @@ public class UploadScanAnalysisTaskDispatcher {
 
     try {
       String payloadJson = objectMapper.writeValueAsString(message);
-      task.updatePayloadJson(payloadJson);
+      workerJob.updatePayloadJson(payloadJson);
       agentTaskPublisher.publishScanRequest(message);
-      task.markSent(Instant.now());
+      workerJob.markPublished(Instant.now());
     } catch (Exception ex) {
       throw new UploadScanQueuePublishException("Failed to publish upload scan task", ex);
     }

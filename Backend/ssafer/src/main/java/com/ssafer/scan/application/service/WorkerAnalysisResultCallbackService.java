@@ -4,10 +4,6 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
-import com.ssafer.agent.domain.entity.AgentTask;
-import com.ssafer.agent.domain.enums.AgentTaskStatus;
-import com.ssafer.agent.domain.enums.AgentTaskType;
-import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.scan.api.dto.WorkerAnalysisResultCallbackRequest;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.ScanStatus;
@@ -20,6 +16,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.ssafer.worker.domain.entity.WorkerJob;
+import com.ssafer.worker.domain.enums.WorkerJobStatus;
+import com.ssafer.worker.domain.enums.WorkerJobType;
+import com.ssafer.worker.domain.repository.WorkerJobRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -31,17 +31,18 @@ public class WorkerAnalysisResultCallbackService {
   private static final String FAILED_PROGRESS_STEP = "ANALYSIS_FAILED";
 
   private final ScanRepository scanRepository;
-  private final AgentTaskRepository agentTaskRepository;
+  private final WorkerJobRepository workerJobRepository;
   private final ApplicationEventPublisher applicationEventPublisher;
 
   @Transactional
   public Scan report(Long scanId, WorkerAnalysisResultCallbackRequest request) {
     Scan scan = scanRepository.findByIdForUpdate(scanId)
         .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Scan not found: " + scanId));
-    AgentTask agentTask = agentTaskRepository.findByIdAndScanId(request.taskId(), scanId)
-        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Agent task not found: " + request.taskId()));
+    // Worker callback의 taskId는 이제 agent_task.id가 아니라 worker_job.id를 의미한다.
+    WorkerJob workerJob = workerJobRepository.findByIdAndScanIdForUpdate(request.taskId(), scanId)
+        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Worker job not found: " + request.taskId()));
 
-    validateReportable(scan, agentTask);
+    validateReportable(scan, workerJob);
 
     ScanStatus requestedStatus = resolveStatus(request);
     validateRequestedStatus(requestedStatus, request);
@@ -54,14 +55,14 @@ public class WorkerAnalysisResultCallbackService {
     validateResolvedTimeRange(startedAt, completedAt);
 
     if (requestedStatus == ScanStatus.RUNNING) {
-      markTaskRunning(agentTask, lastUpdatedAt);
+      markJobRunning(workerJob, lastUpdatedAt);
       scan.markAnalysisRunning(resolveRunningProgressStep(request.progressStep()), startedAt, lastUpdatedAt);
       return scan;
     }
 
     if (requestedStatus == ScanStatus.FAILED) {
-      markTaskRunning(agentTask, lastUpdatedAt);
-      markTaskFailed(agentTask, lastUpdatedAt, request.failureReason());
+      markJobRunning(workerJob, lastUpdatedAt);
+      markJobFailed(workerJob, lastUpdatedAt, request.failureReason());
       scan.markAnalysisFailed(
           resolveFailureProgressStep(request.progressStep()),
           normalizeBlank(request.failureReason()),
@@ -75,7 +76,7 @@ public class WorkerAnalysisResultCallbackService {
     }
 
     // 성공 콜백은 결과 파일 경로만 기록하고, 실제 적재는 비동기 이벤트로 넘긴다.
-    markTaskAcked(agentTask, lastUpdatedAt);
+    markJobRunning(workerJob, lastUpdatedAt);
     scan.markAnalysisQueuedForIngestion(
         resolveIngestingProgressStep(request.progressStep()),
         request.analysisResultPath().trim(),
@@ -83,12 +84,12 @@ public class WorkerAnalysisResultCallbackService {
         lastUpdatedAt
     );
     applicationEventPublisher.publishEvent(
-        new WorkerAnalysisResultIngestionRequestedEvent(scanId, agentTask.getId(), startedAt, completedAt)
+        new WorkerAnalysisResultIngestionRequestedEvent(scanId, workerJob.getId(), startedAt, completedAt)
     );
     return scan;
   }
 
-  private void validateReportable(Scan scan, AgentTask agentTask) {
+  private void validateReportable(Scan scan, WorkerJob workerJob) {
     if (scan.getStatus().isTerminal()) {
       throw new ResponseStatusException(
           CONFLICT,
@@ -101,17 +102,17 @@ public class WorkerAnalysisResultCallbackService {
           "Analysis result callback requires QUEUED or RUNNING scan status"
       );
     }
-    if (agentTask.getTaskType() != AgentTaskType.SCAN_REQUEST) {
-      throw new ResponseStatusException(BAD_REQUEST, "Analysis result callback requires SCAN_REQUEST task");
+    if (workerJob.getJobType() != WorkerJobType.UPLOAD_ANALYSIS_REQUEST) {
+      throw new ResponseStatusException(BAD_REQUEST, "Analysis result callback requires upload analysis worker job");
     }
-    if (agentTask.getTaskStatus().isTerminal()) {
+    if (workerJob.getJobStatus().isTerminal()) {
       throw new ResponseStatusException(
           CONFLICT,
-          "Analysis result callback is not allowed for current task status: " + agentTask.getTaskStatus()
+          "Analysis result callback is not allowed for current worker job status: " + workerJob.getJobStatus()
       );
     }
-    if (agentTask.getTaskStatus() == AgentTaskStatus.PENDING) {
-      throw new ResponseStatusException(CONFLICT, "Analysis result callback requires SENT or RUNNING task status");
+    if (workerJob.getJobStatus() == WorkerJobStatus.PENDING) {
+      throw new ResponseStatusException(CONFLICT, "Analysis result callback requires PUBLISHED or RUNNING worker job status");
     }
   }
 
@@ -136,21 +137,14 @@ public class WorkerAnalysisResultCallbackService {
     }
   }
 
-  private void markTaskAcked(AgentTask agentTask, LocalDateTime lastUpdatedAt) {
-    if (agentTask.getTaskStatus() == AgentTaskStatus.SENT) {
-      agentTask.markAcked(toInstant(lastUpdatedAt));
+  private void markJobRunning(WorkerJob workerJob, LocalDateTime lastUpdatedAt) {
+    if (workerJob.getJobStatus() == WorkerJobStatus.PUBLISHED) {
+      workerJob.markRunning(toInstant(lastUpdatedAt));
     }
   }
 
-  private void markTaskRunning(AgentTask agentTask, LocalDateTime lastUpdatedAt) {
-    markTaskAcked(agentTask, lastUpdatedAt);
-    if (agentTask.getTaskStatus() == AgentTaskStatus.ACKED) {
-      agentTask.markRunning(toInstant(lastUpdatedAt));
-    }
-  }
-
-  private void markTaskFailed(AgentTask agentTask, LocalDateTime lastUpdatedAt, String failureReason) {
-    agentTask.markFailed(toInstant(lastUpdatedAt), normalizeBlank(failureReason));
+  private void markJobFailed(WorkerJob workerJob, LocalDateTime lastUpdatedAt, String failureReason) {
+    workerJob.markFailed(toInstant(lastUpdatedAt), normalizeBlank(failureReason));
   }
 
   private LocalDateTime resolveLastUpdatedAt(WorkerAnalysisResultCallbackRequest request, LocalDateTime now) {

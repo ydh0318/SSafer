@@ -3,11 +3,7 @@ package com.ssafer.scan.application.service;
 import com.ssafer.agent.application.service.AgentTaskPublisher;
 import com.ssafer.agent.application.service.ScanRequestTaskMessage;
 import com.ssafer.agent.domain.entity.Agent;
-import com.ssafer.agent.domain.entity.AgentTask;
-import com.ssafer.agent.domain.enums.AgentTaskStatus;
-import com.ssafer.agent.domain.enums.AgentTaskType;
 import com.ssafer.agent.domain.repository.AgentRepository;
-import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
@@ -27,6 +23,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
+import com.ssafer.worker.domain.entity.WorkerJob;
+import com.ssafer.worker.domain.enums.WorkerJobStatus;
+import com.ssafer.worker.domain.enums.WorkerJobType;
+import com.ssafer.worker.domain.repository.WorkerJobRepository;
 
 @Service
 @Slf4j
@@ -39,7 +39,7 @@ public class CliRawResultUploadReportService {
 
   private final ScanRepository scanRepository;
   private final AgentRepository agentRepository;
-  private final AgentTaskRepository agentTaskRepository;
+  private final WorkerJobRepository workerJobRepository;
   private final ProjectAuthorizationService projectAuthorizationService;
   private final RawResultObjectVerifier rawResultObjectVerifier;
   private final AgentTaskPublisher agentTaskPublisher;
@@ -64,22 +64,22 @@ public class CliRawResultUploadReportService {
 
     // 프로젝트에 Agent가 없으면 OFFLINE placeholder Agent를 먼저 만든 뒤 같은 경로로 발행한다.
     // taskId/agentId를 포함한 기존 Rabbit 메시지 계약을 그대로 유지하기 위함이다.
+    // 업로드 분석은 worker_jobs로 추적하지만, MQ payload에는 기존 agentId가 남아 있어 dispatch agent는 유지한다.
     Agent agent = loadOrCreateDispatchAgent(project);
     LocalDateTime now = LocalDateTime.now();
 
-    AgentTask agentTask = agentTaskRepository.save(new AgentTask(
-        agent,
-        agent.getProject(),
+    WorkerJob workerJob = workerJobRepository.save(new WorkerJob(
+        project,
         scan,
-        null,
-        AgentTaskType.SCAN_REQUEST,
-        AgentTaskStatus.PENDING,
+        WorkerJobType.UPLOAD_ANALYSIS_REQUEST,
+        WorkerJobStatus.PENDING,
         null
     ));
 
     String rawResultMetadataJson = buildRawResultMetadataJson(request);
-    ScanRequestTaskMessage message = ScanRequestTaskMessage.of(
-        agentTask,
+    ScanRequestTaskMessage message = ScanRequestTaskMessage.ofUploadAnalysis(
+        workerJob,
+        agent.getId(),
         scan.getRawResultPath(),
         request.resultCount(),
         normalizeBlank(request.tool()),
@@ -89,9 +89,10 @@ public class CliRawResultUploadReportService {
     String taskPayloadJson = buildTaskPayloadJson(message);
 
     // DB의 payload_json과 실제 publish payload를 동일하게 맞춘 뒤 전송한다.
-    agentTask.updatePayloadJson(taskPayloadJson);
+    // 발행 payload를 worker_jobs에도 그대로 남겨 callback/debug 시 같은 메시지를 다시 볼 수 있게 한다.
+    workerJob.updatePayloadJson(taskPayloadJson);
     agentTaskPublisher.publishScanRequest(message);
-    agentTask.markSent(Instant.now());
+    workerJob.markPublished(Instant.now());
 
     scan.markQueued(
         QUEUED_PROGRESS_STEP,
@@ -103,7 +104,7 @@ public class CliRawResultUploadReportService {
     log.info(
         "CLI analysis completion accepted and queued: scanId={}, taskId={}, agentId={}, actorType={}, actorUserId={}, status={}",
         scan.getId(),
-        agentTask.getId(),
+        workerJob.getId(),
         agent.getId(),
         actor.actorType(),
         actor.userId(),
@@ -179,7 +180,7 @@ public class CliRawResultUploadReportService {
     try {
       return objectMapper.writeValueAsString(message);
     } catch (Exception ex) {
-      log.error("Failed to serialize agent task payload: taskId={}", message.taskId(), ex);
+      log.error("Failed to serialize worker dispatch payload: taskId={}", message.taskId(), ex);
       throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
   }

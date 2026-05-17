@@ -1,8 +1,5 @@
 package com.ssafer.scan.application.service;
 
-import com.ssafer.agent.domain.entity.AgentTask;
-import com.ssafer.agent.domain.enums.AgentTaskStatus;
-import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.entity.ScanNode;
@@ -34,6 +31,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
+import com.ssafer.worker.domain.entity.WorkerJob;
+import com.ssafer.worker.domain.enums.WorkerJobStatus;
+import com.ssafer.worker.domain.repository.WorkerJobRepository;
 
 @Service
 @Slf4j
@@ -48,7 +48,7 @@ public class WorkerAnalysisResultPersistenceService {
   private static final String DEFAULT_NODE_TYPE = "ANALYSIS_RESULT";
 
   private final ScanRepository scanRepository;
-  private final AgentTaskRepository agentTaskRepository;
+  private final WorkerJobRepository workerJobRepository;
   private final ScanNodeRepository scanNodeRepository;
   private final ScanFindingRepository scanFindingRepository;
   private final AnalysisResultObjectReader analysisResultObjectReader;
@@ -59,16 +59,17 @@ public class WorkerAnalysisResultPersistenceService {
   public void persist(WorkerAnalysisResultIngestionRequestedEvent event) {
     Scan scan = scanRepository.findByIdForUpdate(event.scanId())
         .orElseThrow(() -> new IllegalStateException("Scan not found: " + event.scanId()));
-    AgentTask agentTask = agentTaskRepository.findByIdAndScanId(event.taskId(), event.scanId())
-        .orElseThrow(() -> new IllegalStateException("Agent task not found: " + event.taskId()));
+    // ingestion 단계도 같은 worker_job.id를 따라가면서 upload 분석 경로를 끝까지 분리한다.
+    WorkerJob workerJob = workerJobRepository.findByIdAndScanIdForUpdate(event.taskId(), event.scanId())
+        .orElseThrow(() -> new IllegalStateException("Worker job not found: " + event.taskId()));
 
-    if (scan.getStatus() == ScanStatus.DONE && agentTask.getTaskStatus() == AgentTaskStatus.SUCCEEDED) {
+    if (scan.getStatus() == ScanStatus.DONE && workerJob.getJobStatus() == WorkerJobStatus.SUCCEEDED) {
       log.info("Skip duplicate ingestion because scan is already completed: scanId={}, taskId={}", event.scanId(), event.taskId());
       return;
     }
 
-    if (agentTask.getTaskStatus() == AgentTaskStatus.ACKED) {
-      agentTask.markRunning(Instant.now());
+    if (workerJob.getJobStatus() == WorkerJobStatus.PUBLISHED) {
+      workerJob.markRunning(Instant.now());
     }
 
     String analysisResultPath = requireAnalysisResultPath(scan);
@@ -80,7 +81,7 @@ public class WorkerAnalysisResultPersistenceService {
     ScanNode node = resolveNode(scan, root, startedAt);
     persistFindings(scan, node, root, now);
 
-    agentTask.markSucceeded(toInstant(completedAt));
+    workerJob.markSucceeded(toInstant(completedAt));
     scan.markAnalysisCompleted(COMPLETED_PROGRESS_STEP, startedAt, completedAt, completedAt);
     // 완료 알림은 커밋 이후 발행해서 프론트가 즉시 재조회해도 DONE을 읽도록 맞춘다.
     applicationEventPublisher.publishEvent(new ScanStatusSsePublishRequestedEvent(scan.getId(), ScanStatus.DONE));
@@ -88,7 +89,7 @@ public class WorkerAnalysisResultPersistenceService {
     log.info(
         "Worker analysis result persisted: scanId={}, taskId={}, nodeId={}, findingCount={}",
         scan.getId(),
-        agentTask.getId(),
+        workerJob.getId(),
         node.getId(),
         scanFindingRepository.countByScanId(scan.getId())
     );
@@ -98,10 +99,10 @@ public class WorkerAnalysisResultPersistenceService {
   public void markFailed(WorkerAnalysisResultIngestionRequestedEvent event, Exception ex) {
     Scan scan = scanRepository.findByIdForUpdate(event.scanId())
         .orElse(null);
-    AgentTask agentTask = agentTaskRepository.findByIdAndScanId(event.taskId(), event.scanId())
+    WorkerJob workerJob = workerJobRepository.findByIdAndScanIdForUpdate(event.taskId(), event.scanId())
         .orElse(null);
 
-    if (scan == null || agentTask == null) {
+    if (scan == null || workerJob == null) {
       return;
     }
 
@@ -109,11 +110,11 @@ public class WorkerAnalysisResultPersistenceService {
     LocalDateTime startedAt = event.startedAt() != null ? event.startedAt() : resolveStartedAt(scan, now);
     String failureReason = abbreviateFailureReason(ex);
 
-    if (!agentTask.getTaskStatus().isTerminal()) {
-      if (agentTask.getTaskStatus() == AgentTaskStatus.ACKED) {
-        agentTask.markRunning(toInstant(now));
+    if (!workerJob.getJobStatus().isTerminal()) {
+      if (workerJob.getJobStatus() == WorkerJobStatus.PUBLISHED) {
+        workerJob.markRunning(toInstant(now));
       }
-      agentTask.markFailed(toInstant(now), failureReason);
+      workerJob.markFailed(toInstant(now), failureReason);
     }
 
     if (!scan.getStatus().isTerminal()) {

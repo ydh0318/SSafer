@@ -9,10 +9,8 @@ import static org.mockito.Mockito.when;
 import com.ssafer.agent.application.service.AgentTaskPublisher;
 import com.ssafer.agent.application.service.ScanRequestTaskMessage;
 import com.ssafer.agent.domain.entity.Agent;
-import com.ssafer.agent.domain.entity.AgentTask;
 import com.ssafer.agent.domain.enums.AgentStatus;
 import com.ssafer.agent.domain.repository.AgentRepository;
-import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.project.domain.entity.Project;
 import com.ssafer.project.domain.repository.ProjectRepository;
 import com.ssafer.scan.domain.entity.Scan;
@@ -21,6 +19,8 @@ import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
+import com.ssafer.worker.domain.entity.WorkerJob;
+import com.ssafer.worker.domain.repository.WorkerJobRepository;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -43,7 +43,7 @@ class UploadScanAnalysisTaskDispatcherTest {
   @Mock
   private AgentRepository agentRepository;
   @Mock
-  private AgentTaskRepository agentTaskRepository;
+  private WorkerJobRepository workerJobRepository;
   @Mock
   private AgentTaskPublisher agentTaskPublisher;
   @Mock
@@ -74,8 +74,8 @@ class UploadScanAnalysisTaskDispatcherTest {
     when(projectRepository.findByIdAndDeletedAtIsNull(2001L)).thenReturn(Optional.of(project));
     when(scanRepository.findByIdAndDeletedAtIsNull(1001L)).thenReturn(Optional.of(scan));
     when(agentRepository.findFirstByProjectId(2001L)).thenReturn(Optional.of(agent));
-    when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
-      AgentTask saved = invocation.getArgument(0);
+    when(workerJobRepository.save(any(WorkerJob.class))).thenAnswer(invocation -> {
+      WorkerJob saved = invocation.getArgument(0);
       ReflectionTestUtils.setField(saved, "id", 4001L);
       ReflectionTestUtils.setField(saved, "queuedAt", Instant.parse("2026-05-08T05:10:00Z"));
       return saved;
@@ -121,7 +121,7 @@ class UploadScanAnalysisTaskDispatcherTest {
     );
 
     verify(scanRepository, never()).findByIdAndDeletedAtIsNull(any());
-    verify(agentTaskRepository, never()).save(any());
+    verify(workerJobRepository, never()).save(any());
     verify(agentTaskPublisher, never()).publishScanRequest(any());
   }
 
@@ -143,7 +143,7 @@ class UploadScanAnalysisTaskDispatcherTest {
         "sha256:abc123"
     );
 
-    verify(agentTaskRepository, never()).save(any());
+    verify(workerJobRepository, never()).save(any());
     verify(agentTaskPublisher, never()).publishScanRequest(any());
   }
 }
