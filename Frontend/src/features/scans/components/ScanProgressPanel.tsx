@@ -1,7 +1,7 @@
 import { Check, RefreshCw, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
-import type { ScanProgressStatusData } from '../../../types/scan';
+import type { ScanProgressStatusData, ScanType } from '../../../types/scan';
 import { formatDateTime, isTerminalScanStatus } from '../utils/scanPresentation';
 
 type ScanProgressPanelProps = {
@@ -13,67 +13,93 @@ type ScanProgressPanelProps = {
   onAutoRefreshChange: (nextValue: boolean) => void;
 };
 
-const progressSteps = [
-  {
-    key: 'SCAN_REGISTERED',
-    statusKey: 'REQUESTED',
-    code: 'SCAN_REGISTERED',
-    label: '요청 등록',
-    doing: '스캔 작업을 시스템에 등록하고 있습니다.',
-    checks: ['스캔 요청 유효성 검사', '프로젝트 권한 확인', '작업 큐 배치 준비'],
-  },
-  {
-    key: 'AGENT_DISPATCHED',
-    statusKey: 'QUEUED',
-    code: 'AGENT_DISPATCHED',
-    label: '대기열 등록',
-    doing: '엔진 서버에 작업을 배포하고 응답을 기다립니다.',
-    checks: ['RabbitMQ 작업 큐 등록', '엔진 서버 연결 확인', '스캔 범위 설정'],
-  },
-  {
-    key: 'SCAN_RUNNING',
-    statusKey: 'RUNNING',
-    code: 'SCAN_RUNNING',
-    label: '보안 점검',
-    doing: 'Trivy와 커스텀 룰로 설정 파일을 분석합니다.',
-    checks: [
-      '하드코딩된 시크릿 · API 키 탐지',
-      '환경변수 직접 노출 여부 확인',
-      '컨테이너 root 권한 · 특권 모드',
-      '불필요하게 열린 포트 탐지',
-      'Docker 이미지 취약점 스캔',
-    ],
-  },
-  {
-    key: 'RAW_UPLOADED',
-    statusKey: 'RAW_UPLOADED',
-    code: 'RAW_UPLOADED',
-    label: '결과 저장',
-    doing: '원본 스캔 결과를 저장하고 AI 분석을 준비합니다.',
-    checks: ['S3 원본 결과 업로드', 'AI 분석 작업 발행', 'Finding 파싱 준비'],
-  },
-  {
-    key: 'ANALYSIS_RUNNING',
-    statusKey: 'RAW_UPLOADED',
-    code: 'ANALYSIS_RUNNING',
-    label: 'AI 분석',
-    doing: 'AI가 각 취약점의 원인을 설명하고 수정 코드를 작성합니다.',
-    checks: [
-      '취약점 심각도 · 영향 범위 분석',
-      '발견 원인 한국어 해설 생성',
-      '파일별 수정 코드(패치) 생성',
-      '참고 링크 · 권장 조치 정리',
-    ],
-  },
-  {
-    key: 'DONE',
-    statusKey: 'DONE',
-    code: 'DONE',
-    label: '완료',
-    doing: '모든 분석이 완료되었습니다.',
-    checks: ['탐지 결과 DB 저장', '수정 가이드 확정', '결과 화면 준비 완료'],
-  },
-] as const;
+// 보안 점검 단계의 체크 항목은 scanType에 따라 달라진다.
+// PROJECT_FILE: 로컬 프로젝트의 설정 파일 (Dockerfile, .env, docker-compose.yml 등)
+// SERVER_AUDIT: 실행 중인 서버의 환경/구성 검사
+function getRunningStepChecks(scanType: ScanType | undefined): string[] {
+  if (scanType === 'SERVER_AUDIT') {
+    return [
+      '외부 노출 포트 · 서비스 점검',
+      '시스템 접근 정책 검사',
+      '사용자 권한 · 인증 설정 검토',
+      '시스템 패키지 보안 상태 점검',
+    ];
+  }
+  // 기본값: PROJECT_FILE
+  return [
+    '설정 파일 내 하드코딩 시크릿 탐지',
+    'Dockerfile · compose 보안 설정 검사',
+    '컨테이너 권한 · 노출 설정 점검',
+    '베이스 이미지 알려진 취약점 스캔',
+  ];
+}
+
+function getRunningStepDoing(scanType: ScanType | undefined): string {
+  if (scanType === 'SERVER_AUDIT') {
+    return 'Trivy와 커스텀 룰로 서버 환경을 점검합니다.';
+  }
+  return 'Trivy와 커스텀 룰로 설정 파일을 분석합니다.';
+}
+
+function getProgressSteps(scanType: ScanType | undefined) {
+  return [
+    {
+      key: 'SCAN_REGISTERED',
+      statusKey: 'REQUESTED',
+      code: 'SCAN_REGISTERED',
+      label: '요청 등록',
+      doing: '스캔 작업을 시스템에 등록하고 있습니다.',
+      checks: ['스캔 요청 유효성 검사', '프로젝트 권한 확인', '작업 큐 배치 준비'],
+    },
+    {
+      key: 'AGENT_DISPATCHED',
+      statusKey: 'QUEUED',
+      code: 'AGENT_DISPATCHED',
+      label: '대기열 등록',
+      doing: '엔진 서버에 작업을 배포하고 응답을 기다립니다.',
+      checks: ['RabbitMQ 작업 큐 등록', '엔진 서버 연결 확인', '스캔 범위 설정'],
+    },
+    {
+      key: 'SCAN_RUNNING',
+      statusKey: 'RUNNING',
+      code: 'SCAN_RUNNING',
+      label: '보안 점검',
+      doing: getRunningStepDoing(scanType),
+      checks: getRunningStepChecks(scanType),
+    },
+    {
+      key: 'RAW_UPLOADED',
+      statusKey: 'RAW_UPLOADED',
+      code: 'RAW_UPLOADED',
+      label: '결과 저장',
+      doing: '원본 스캔 결과를 저장하고 AI 분석을 준비합니다.',
+      checks: ['S3 원본 결과 업로드', 'AI 분석 작업 발행', 'Finding 파싱 준비'],
+    },
+    {
+      key: 'ANALYSIS_RUNNING',
+      statusKey: 'RAW_UPLOADED',
+      code: 'ANALYSIS_RUNNING',
+      label: 'AI 분석',
+      doing: 'AI가 각 취약점의 원인을 설명하고 수정 코드를 작성합니다.',
+      checks: [
+        '취약점 심각도 · 영향 범위 분석',
+        '발견 원인 한국어 해설 생성',
+        '파일별 수정 코드(패치) 생성',
+        '참고 링크 · 권장 조치 정리',
+      ],
+    },
+    {
+      key: 'DONE',
+      statusKey: 'DONE',
+      code: 'DONE',
+      label: '완료',
+      doing: '모든 분석이 완료되었습니다.',
+      checks: ['탐지 결과 DB 저장', '수정 가이드 확정', '결과 화면 준비 완료'],
+    },
+  ] as const;
+}
+
+type ProgressStep = ReturnType<typeof getProgressSteps>[number];
 
 const securityTips = [
   { label: '환경변수 분리', code: 'DB_PASSWORD=${DB_PASSWORD}' },
@@ -82,7 +108,10 @@ const securityTips = [
   { label: '비특권 유저로 실행', code: 'USER node' },
 ] as const;
 
-function resolveActiveStepIndex(statusData: ScanProgressStatusData | null) {
+function resolveActiveStepIndex(
+  statusData: ScanProgressStatusData | null,
+  progressSteps: readonly ProgressStep[],
+) {
   if (!statusData) return 0;
   if (statusData.status === 'DONE') return progressSteps.length - 1;
   if (statusData.status === 'FAILED' || statusData.status === 'CANCELED')
@@ -104,7 +133,10 @@ function ScanProgressPanel({
   onRefresh,
   onAutoRefreshChange,
 }: ScanProgressPanelProps) {
-  const activeStepIndex = resolveActiveStepIndex(statusData);
+  // scanType이 바뀔 때만 progressSteps를 다시 계산한다 (보안 점검 단계의 체크 항목이 달라짐)
+  const progressSteps = useMemo(() => getProgressSteps(statusData?.scanType), [statusData?.scanType]);
+
+  const activeStepIndex = resolveActiveStepIndex(statusData, progressSteps);
   const isTerminal = statusData ? isTerminalScanStatus(statusData.status) : false;
   const progressPercent = Math.min((activeStepIndex / (progressSteps.length - 1)) * 100, 100);
 
@@ -299,11 +331,12 @@ function ScanProgressPanel({
 
           {/* 터미널 (어두운 카드로만 한정) */}
           <div className="mt-3 overflow-hidden rounded-lg bg-[#111]">
-            <div className="flex items-center gap-1.5 border-b border-neutral-800 px-4 py-2.5">
-              <span className="h-2 w-2 rounded-full bg-[#FF5F57]" />
-              <span className="h-2 w-2 rounded-full bg-[#FEBC2E]" />
-              <span className="h-2 w-2 rounded-full bg-[#28C840]" />
-              <span className="ml-2 font-mono text-[10px] text-neutral-500">secure-config.yml</span>
+            <div className="flex items-center justify-between border-b border-neutral-800 bg-[#0d0d0d] px-4 py-2">
+              <div className="flex items-center gap-2">
+                <span className="select-none font-mono text-[10px] text-[#D4FC64]">▶</span>
+                <span className="font-mono text-[11px] tracking-[0.15em] text-neutral-500">yaml</span>
+              </div>
+              <span className="select-none font-mono text-[10px] tracking-wider text-neutral-700">secure-config.yml</span>
             </div>
             <div className="min-h-[80px] px-5 py-4 font-mono text-sm text-[#D4FC64]">
               <span className="whitespace-pre-wrap">{typedCode}</span>

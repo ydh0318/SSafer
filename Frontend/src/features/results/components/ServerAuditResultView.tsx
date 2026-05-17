@@ -1,7 +1,6 @@
 import { AlertTriangle, FileStack, ShieldAlert, TerminalSquare } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import MetricCard from '../../../components/common/MetricCard';
 import SectionPanel from '../../../components/common/SectionPanel';
 import { ROUTES } from '../../../constants/routes';
 import ScanTypeBadge from '../../scans/components/ScanTypeBadge';
@@ -13,14 +12,41 @@ type ServerAuditResultViewProps = {
   routeState: { projectId?: string };
 };
 
+// PROJECT_FILE 결과 페이지의 Severity 카드와 동일한 톤 (좌측 컬러 보더 + 흰 배경)
+type AuditMetricTone = {
+  label: string;
+  accent: string; // 좌측 보더 + 라벨 컬러
+  helper: string;
+};
+
+function AuditMetricCard({ tone, value }: { tone: AuditMetricTone; value: number }) {
+  return (
+    <div
+      className="border border-neutral-100 bg-white px-5 py-4"
+      style={{ borderLeftColor: tone.accent, borderLeftWidth: '3px' }}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: tone.accent }}>
+        {tone.label}
+      </span>
+      <div className={`mt-2 text-4xl font-black ${value === 0 ? 'text-neutral-200' : 'text-black'}`}>{value}</div>
+      <p className="mt-2 text-xs leading-6 text-neutral-500">{tone.helper}</p>
+    </div>
+  );
+}
+
+const findingsTone: AuditMetricTone = { label: 'FINDINGS', accent: '#E63946', helper: '즉시 확인이 필요한 서버 점검 finding 수' };
+const warningsTone: AuditMetricTone = { label: 'WARNINGS', accent: '#F59E0B', helper: '운영 시 주의가 필요한 warning 수' };
+const artifactsTone: AuditMetricTone = { label: 'ARTIFACTS', accent: '#0EA5E9', helper: '수집된 런타임 증적 수' };
+const actionsTone: AuditMetricTone = { label: 'AI ACTIONS', accent: '#10B981', helper: 'AI가 정리한 운영 조치 제안 수' };
+
 function ServerAuditResultView({ result, routeState }: ServerAuditResultViewProps) {
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard helper="즉시 확인이 필요한 서버 점검 finding 수" label="Findings" tone="red" value={result.findings.length} />
-        {result.warnings.length > 0 && <MetricCard helper="운영 시 주의가 필요한 warning 수" label="Warnings" tone="amber" value={result.warnings.length} />}
-        {result.artifacts.length > 0 && <MetricCard helper="수집된 런타임 증적 수" label="Artifacts" tone="sky" value={result.artifacts.length} />}
-        {result.actions.length > 0 && <MetricCard helper="AI가 정리한 운영 조치 제안 수" label="AI Actions" tone="green" value={result.actions.length} />}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <AuditMetricCard tone={findingsTone} value={result.findings.length} />
+        {result.warnings.length > 0 && <AuditMetricCard tone={warningsTone} value={result.warnings.length} />}
+        {result.artifacts.length > 0 && <AuditMetricCard tone={artifactsTone} value={result.artifacts.length} />}
+        {result.actions.length > 0 && <AuditMetricCard tone={actionsTone} value={result.actions.length} />}
       </div>
 
       <SectionPanel
@@ -29,19 +55,19 @@ function ServerAuditResultView({ result, routeState }: ServerAuditResultViewProp
         title="운영 보안 점검 개요"
       >
         <div className="grid gap-4 lg:grid-cols-3">
-          <div className="border border-neutral-200 bg-[#fafafa] p-4">
-            <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">scan type</div>
+          <div className="border border-neutral-100 bg-white px-5 py-4">
+            <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">scan type</div>
             <div className="mt-3">
               <ScanTypeBadge scanType={result.scanType} />
             </div>
           </div>
-          <div className="border border-neutral-200 bg-[#fafafa] p-4">
-            <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">target</div>
+          <div className="border border-neutral-100 bg-white px-5 py-4">
+            <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">target</div>
             <div className="mt-3 text-lg font-black text-black">{result.targetLabel}</div>
             <div className="mt-1 text-sm text-neutral-500">{result.hostLabel}</div>
           </div>
-          <div className="border border-neutral-200 bg-[#fafafa] p-4">
-            <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-500">generated at</div>
+          <div className="border border-neutral-100 bg-white px-5 py-4">
+            <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">generated at</div>
             <div className="mt-3 text-lg font-black text-black">{formatDateTime(result.generatedAt)}</div>
             <div className="mt-1 text-sm text-neutral-500">scanId #{result.scanId}</div>
           </div>
@@ -56,7 +82,7 @@ function ServerAuditResultView({ result, routeState }: ServerAuditResultViewProp
         <div className="space-y-3">
           {result.findings.map((finding) => (
             <Link
-              className="group flex items-start gap-4 border border-neutral-200 bg-white p-5 transition hover:border-black hover:bg-[#fafafa]"
+              className="group flex items-start gap-4 border border-neutral-100 bg-white px-5 py-4 transition hover:border-black"
               key={finding.findingId}
               state={routeState}
               to={ROUTES.resultFindingDetail
@@ -112,7 +138,7 @@ function ServerAuditResultView({ result, routeState }: ServerAuditResultViewProp
             >
               <div className="space-y-3">
                 {result.actions.map((action) => (
-                  <article className="border border-neutral-200 bg-white p-4" key={`${action.priority}-${action.title}`}>
+                  <article className="border border-neutral-100 bg-white px-5 py-4" key={`${action.priority}-${action.title}`}>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-xs font-bold text-neutral-700">
                         {action.priority}
@@ -151,7 +177,7 @@ function ServerAuditResultView({ result, routeState }: ServerAuditResultViewProp
                     </div>
                     <div className="space-y-3">
                       {result.warnings.map((warning) => (
-                        <article className="border border-neutral-200 bg-white p-4" key={warning.code}>
+                        <article className="border border-neutral-100 bg-white px-5 py-4" key={warning.code}>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-xs font-bold text-neutral-700">
                               {warning.severity}
@@ -174,7 +200,7 @@ function ServerAuditResultView({ result, routeState }: ServerAuditResultViewProp
                     </div>
                     <div className="space-y-3">
                       {result.artifacts.map((artifact) => (
-                        <article className="border border-neutral-200 bg-white p-4" key={`${artifact.kind}-${artifact.name}`}>
+                        <article className="border border-neutral-100 bg-white px-5 py-4" key={`${artifact.kind}-${artifact.name}`}>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-xs font-bold text-neutral-700">
                               {artifact.kind}

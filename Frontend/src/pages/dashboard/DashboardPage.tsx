@@ -16,13 +16,15 @@ import { useNavigate } from 'react-router-dom';
 import PageBanner from '../../components/common/PageBanner';
 import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
+import { getProjectAgentStatus } from '../../features/agents/api/agents';
 import { getProjects } from '../../features/projects/api/projects';
 import { getScanSummary } from '../../features/results/api/results';
 import { getProjectScans } from '../../features/scans/api/scans';
 import { useAuthStore } from '../../store/authStore';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
+import { formatDateTime } from '../../features/scans/utils/scanPresentation';
 import type { ProjectListItemData } from '../../types/project';
-import type { ProjectScanListItemData, ScanMode, ScanStatus, ScanSummaryData } from '../../types/scan';
+import type { AgentStatusResponseData, ProjectScanListItemData, ScanMode, ScanStatus, ScanSummaryData } from '../../types/scan';
 
 type DashboardScan = ProjectScanListItemData & {
   projectId: number;
@@ -205,6 +207,8 @@ function DashboardPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectListItemData[]>([]);
   const [scans, setScans] = useState<DashboardScan[]>([]);
+  const [agentStatusMap, setAgentStatusMap] = useState<Record<number, AgentStatusResponseData | null>>({});
+  const [isAgentStatusLoaded, setIsAgentStatusLoaded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ScanStatus>('ALL');
 
@@ -281,7 +285,68 @@ function DashboardPage() {
     () => scans.find((scan) => (scan.summary?.criticalCount ?? 0) > 0) ?? recentDoneScan,
     [recentDoneScan, scans],
   );
-  const monitorProjects = useMemo(() => buildDashboardMonitorProjects(projects), [projects]);
+  // 모니터링 활성화된 프로젝트의 실제 Agent 연결 상태를 fetch (ProjectListPage와 동일 패턴).
+  // 백엔드 API(`/projects/{id}/agent/status`)는 ONLINE 상태일 때만 데이터를 반환하고
+  // OFFLINE/미연결이면 NOT_FOUND를 던지므로 catch해서 null 처리한다.
+  const monitoredProjectKey = useMemo(
+    () => projects.filter((p) => p.monitorEnabled).map((p) => p.projectId).join(','),
+    [projects],
+  );
+  useEffect(() => {
+    const monitored = projects.filter((p) => p.monitorEnabled);
+    if (monitored.length === 0) {
+      setAgentStatusMap({});
+      setIsAgentStatusLoaded(true);
+      return;
+    }
+
+    let isMounted = true;
+    setIsAgentStatusLoaded(false);
+
+    void (async () => {
+      const entries = await Promise.all(
+        monitored.map(async (project) => {
+          const status = await getProjectAgentStatus(String(project.projectId)).catch(() => null);
+          return [project.projectId, status] as const;
+        }),
+      );
+      if (isMounted) {
+        setAgentStatusMap(Object.fromEntries(entries));
+        setIsAgentStatusLoaded(true);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monitoredProjectKey]);
+
+  const monitorProjects = useMemo(() => {
+    const monitorStatuses = projects
+      .filter((p) => p.monitorEnabled)
+      .map((p) => {
+        const agentStatus = agentStatusMap[p.projectId] ?? null;
+        // 백엔드가 ONLINE 외 케이스를 모두 NOT_FOUND로 응답하므로
+        // null === OFFLINE 으로 간주한다 (단, fetch 완료 후에만).
+        let status: DashboardMonitorStatus;
+        if (!isAgentStatusLoaded) {
+          status = 'UNKNOWN';
+        } else if (agentStatus?.status === 'ONLINE') {
+          status = 'ONLINE';
+        } else if (agentStatus?.status === 'ERROR') {
+          status = 'ERROR';
+        } else {
+          status = 'OFFLINE';
+        }
+        return {
+          projectId: p.projectId,
+          status,
+          lastSeenAt: agentStatus?.lastSeenAt ?? null,
+        };
+      });
+    return buildDashboardMonitorProjects(projects, monitorStatuses);
+  }, [projects, agentStatusMap, isAgentStatusLoaded]);
   const isGuestSession = user?.role === 'GUEST';
 
   const displayErrorMessage =
@@ -564,7 +629,11 @@ function DashboardPage() {
                     <div className="min-w-0">
                       <div className="truncate font-mono">{project.projectName}</div>
                       <div className="mt-1 text-xs text-neutral-400">
-                        {project.lastSeenAt ? `최근 확인 ${project.lastSeenAt}` : '연결 상태 API 대기 중'}
+                        {project.lastSeenAt
+                          ? `최근 확인 ${formatDateTime(project.lastSeenAt)}`
+                          : project.status === 'UNKNOWN'
+                            ? '연결 상태 확인 중'
+                            : '아직 Agent가 연결된 적이 없습니다'}
                       </div>
                     </div>
                     <span className={getDashboardMonitorStatusClassName(project.status)}>{getDashboardMonitorStatusLabel(project.status)}</span>

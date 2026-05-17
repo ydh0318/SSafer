@@ -85,16 +85,16 @@ const landingStyle = {
 
 type LandingStats = {
   activeMonth: string;
-  patchCount: number;
   scanCount: number;
-  userCount: number;
+  findingCount: number;
+  criticalCount: number;
 };
 
 const initialStats: LandingStats = {
   activeMonth: new Date().toISOString().slice(0, 7),
-  patchCount: 0,
   scanCount: 0,
-  userCount: 0,
+  findingCount: 0,
+  criticalCount: 0,
 };
 
 function LandingPage() {
@@ -123,9 +123,9 @@ function LandingPage() {
 
         setStats({
           activeMonth: new Date().toISOString().slice(0, 7),
-          patchCount: 0,
           scanCount: historyData.summary.totalScanCount ?? 0,
-          userCount: 0,
+          findingCount: historyData.summary.totalFindingCount ?? 0,
+          criticalCount: historyData.summary.criticalCount ?? 0,
         });
       } catch (error) {
         console.error('Failed to load landing stats.', error);
@@ -145,11 +145,11 @@ function LandingPage() {
 
   const formattedStats = useMemo(
     () => ({
-      patchCount: stats.patchCount.toLocaleString('ko-KR'),
       scanCount: stats.scanCount.toLocaleString('ko-KR'),
-      userCount: stats.userCount.toLocaleString('ko-KR'),
+      findingCount: stats.findingCount.toLocaleString('ko-KR'),
+      criticalCount: stats.criticalCount.toLocaleString('ko-KR'),
     }),
-    [stats.patchCount, stats.scanCount, stats.userCount],
+    [stats.scanCount, stats.findingCount, stats.criticalCount],
   );
 
   const openEntryModal = () => {
@@ -276,16 +276,16 @@ function LandingPage() {
           <section className="theme-dark-soft-card mt-3 flex flex-col gap-5 bg-white px-7 py-6 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-8">
               <div>
-                <div className="mb-1 text-[10px] font-mono tracking-widest text-neutral-400">사용자</div>
-                <div className="text-xl font-black tabular-nums">{formattedStats.userCount}</div>
-              </div>
-              <div>
-                <div className="mb-1 text-[10px] font-mono tracking-widest text-neutral-400">스캔</div>
+                <div className="mb-1 text-[10px] font-mono tracking-widest text-neutral-400">누적 스캔</div>
                 <div className="text-xl font-black tabular-nums">{formattedStats.scanCount}</div>
               </div>
               <div>
-                <div className="mb-1 text-[10px] font-mono tracking-widest text-neutral-400">패치 적용</div>
-                <div className="text-xl font-black tabular-nums">{formattedStats.patchCount}</div>
+                <div className="mb-1 text-[10px] font-mono tracking-widest text-neutral-400">누적 탐지</div>
+                <div className="text-xl font-black tabular-nums">{formattedStats.findingCount}</div>
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] font-mono tracking-widest text-neutral-400">Critical</div>
+                <div className="text-xl font-black tabular-nums">{formattedStats.criticalCount}</div>
               </div>
             </div>
             <div className="text-xs font-mono text-neutral-400">{stats.activeMonth} 기준 집계</div>
