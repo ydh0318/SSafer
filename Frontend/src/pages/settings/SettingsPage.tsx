@@ -296,6 +296,9 @@ function SettingsPage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isCurrentPasswordRejected, setIsCurrentPasswordRejected] = useState(false);
   const [hasLocalPassword, setHasLocalPassword] = useState<boolean | null>(null);
+  // 이번 세션에서 사용자가 직접 비밀번호 설정/변경을 완료했음을 표시한다.
+  // 성공 직후 즉시 다른 폼으로 자동 전환되지 않도록 "완료 화면"을 유지하기 위함.
+  const [sessionPasswordSet, setSessionPasswordSet] = useState(false);
 
   const [resetStep, setResetStep] = useState<PasswordResetStep>('idle');
   const [resetCode, setResetCode] = useState('');
@@ -580,6 +583,7 @@ function SettingsPage() {
       setPasswordMessage(null);
       setIsCurrentPasswordRejected(false);
       setHasLocalPassword(true);
+      setSessionPasswordSet(true);
       toast.success(
         isSetupMode
           ? '비밀번호가 설정되었습니다. 이제 이메일/비밀번호 로그인도 사용할 수 있습니다.'
@@ -745,6 +749,7 @@ function SettingsPage() {
       setPasswordErrors({});
       setPasswordMessage(null);
       setHasLocalPassword(true);
+      setSessionPasswordSet(true);
       toast.success('비밀번호가 성공적으로 재설정되었습니다.');
     } catch (error) {
       console.error('[completePasswordReset] failed:', error);
@@ -975,21 +980,111 @@ function SettingsPage() {
               )}
 
               {/* Form */}
-              {hasLocalPassword === true ? (
-                  /* hasLocalPassword: true → 이메일 인증 코드 플로우 (CURRENT PASSWORD 없음) */
+              {sessionPasswordSet ? (
+                /* 이번 세션에서 비밀번호 설정/변경/재설정을 완료한 직후 — 성공 화면을 유지하고 자동 폼 전환을 막는다. */
+                <div className="space-y-4">
+                  <div className="border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-700">
+                    ✓ 비밀번호가 정상적으로 설정되었습니다. 이제 이메일/비밀번호로 로그인할 수 있어요.
+                  </div>
+                  <button
+                    className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-700"
+                    onClick={() => {
+                      setSessionPasswordSet(false);
+                      setResetStep('idle');
+                      setResetCode('');
+                      setResetToken('');
+                      setResetNewPassword('');
+                      setResetConfirmPassword('');
+                      setPasswordValues(initialPasswordForm);
+                      setPasswordErrors({});
+                      setPasswordMessage(null);
+                    }}
+                    type="button"
+                  >
+                    비밀번호 다시 변경하기
+                  </button>
+                </div>
+              ) : hasLocalPassword === true ? (
+                  /* hasLocalPassword: true (이메일 가입자 또는 비밀번호 설정 완료한 OAuth 가입자)
+                   * → 기본은 CURRENT PASSWORD 입력 폼.
+                   * → 현재 비밀번호를 모르는 사용자는 "비밀번호를 잊으셨나요?" 링크로 이메일 코드 흐름 진입.
+                   */
                   resetStep === 'idle' ? (
                     <div className="space-y-4">
-                      <p className="text-sm text-neutral-500">
-                        비밀번호 변경을 위해 이메일 인증이 필요합니다.{' '}
-                        <span className="font-medium text-neutral-700">{email}</span>으로 인증 코드를 발송합니다.
-                      </p>
+                      <label className="block">
+                        <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CURRENT PASSWORD</span>
+                        <input
+                          className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
+                            passwordErrors.currentPassword ? 'border-rose-500' : 'border-neutral-300'
+                          }`}
+                          onChange={(event) => handleCurrentPasswordChange(event.target.value)}
+                          type="password"
+                          value={passwordValues.currentPassword}
+                        />
+                        {passwordErrors.currentPassword ? (
+                          <p className="mt-2 text-sm text-rose-600">{passwordErrors.currentPassword}</p>
+                        ) : (
+                          <p className="mt-2 text-sm text-neutral-500">
+                            현재 비밀번호를 입력하면 새 비밀번호 입력 칸이 열립니다.
+                          </p>
+                        )}
+                        <button
+                          className="mt-2 text-xs text-neutral-400 underline underline-offset-2 hover:text-neutral-600 disabled:cursor-not-allowed"
+                          disabled={isSendingResetCode || !email}
+                          onClick={() => void handleInitiateReset()}
+                          type="button"
+                        >
+                          {isSendingResetCode ? '코드 발송 중...' : '비밀번호를 잊으셨나요?'}
+                        </button>
+                      </label>
+
+                      <label className="block">
+                        <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">NEW PASSWORD</span>
+                        <input
+                          className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
+                            passwordErrors.newPassword ? 'border-rose-500' : 'border-neutral-300'
+                          } ${areNewPasswordFieldsLocked ? 'bg-neutral-50 text-neutral-400' : ''}`}
+                          disabled={areNewPasswordFieldsLocked}
+                          onChange={(event) => handleNewPasswordChange(event.target.value)}
+                          type="password"
+                          value={passwordValues.newPassword}
+                        />
+                        {passwordErrors.newPassword ? (
+                          <p className="mt-2 text-sm text-rose-600">{passwordErrors.newPassword}</p>
+                        ) : null}
+                      </label>
+
+                      <label className="block">
+                        <span className="text-xs font-bold tracking-[0.24em] text-neutral-500">CONFIRM PASSWORD</span>
+                        <input
+                          className={`theme-settings-input mt-1 block w-full border px-3 py-2 text-sm ${
+                            passwordErrors.confirmPassword
+                              ? 'border-rose-500'
+                              : isConfirmPasswordMatched
+                                ? 'border-emerald-500'
+                                : 'border-neutral-300'
+                          } ${areNewPasswordFieldsLocked ? 'bg-neutral-50 text-neutral-400' : ''}`}
+                          disabled={areNewPasswordFieldsLocked}
+                          onChange={(event) => handleConfirmPasswordChange(event.target.value)}
+                          type="password"
+                          value={passwordValues.confirmPassword}
+                        />
+                        {passwordErrors.confirmPassword ? (
+                          <p className="mt-2 text-sm text-rose-600">{passwordErrors.confirmPassword}</p>
+                        ) : isConfirmPasswordMatched ? (
+                          <p className="mt-2 text-sm text-emerald-600">새 비밀번호가 일치합니다.</p>
+                        ) : null}
+                      </label>
+
+                      {renderMessage(passwordMessage)}
+
                       <button
                         className="bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={isSendingResetCode || !email}
-                        onClick={() => void handleInitiateReset()}
+                        disabled={isChangingPassword}
+                        onClick={() => void handlePasswordChange()}
                         type="button"
                       >
-                        {isSendingResetCode ? '발송 중...' : '인증 코드 발송'}
+                        {isChangingPassword ? 'Updating...' : 'Change Password'}
                       </button>
                     </div>
                   ) : resetStep === 'code' ? (
