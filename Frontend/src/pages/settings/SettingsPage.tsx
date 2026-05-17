@@ -998,6 +998,8 @@ function SettingsPage() {
                       setPasswordValues(initialPasswordForm);
                       setPasswordErrors({});
                       setPasswordMessage(null);
+                      // 이전 시도에서 잘못된 현재 비밀번호로 인해 잠긴 상태가 남지 않도록 함께 초기화한다.
+                      setIsCurrentPasswordRejected(false);
                     }}
                     type="button"
                   >
