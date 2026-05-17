@@ -157,18 +157,18 @@ function Section0() {
       </Step>
       <Step num="02" label="로그인" desc="SSAfer 계정으로 로그인하여 스캔 결과 업로드 권한을 획득합니다.">
         <Terminal_ lines={[{ cmd: 'ssafer login' }]} />
-        <div className="mt-3">
+        <div className="mt-3 space-y-2">
           <Note>
             <strong>Google · GitHub로 가입한 계정</strong>은 비밀번호가 없어 이메일/비밀번호 로그인이 되지 않습니다.
             설정 페이지에서 비밀번호를 먼저 설정한 뒤 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer login</code>을 사용하세요.
-            <Link
-              to={ROUTES.settings}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
-            >
-              <KeyRound className="h-3 w-3" />
-              비밀번호 설정하러 가기
-            </Link>
           </Note>
+          <Link
+            to={ROUTES.settings}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
+          >
+            <KeyRound className="h-3 w-3" />
+            비밀번호 설정하러 가기
+          </Link>
         </div>
       </Step>
       <Step num="03" label="환경 점검 및 도구 설치" desc="Trivy 등 스캔에 필요한 도구가 설치되어 있는지 확인하고, 없으면 설치합니다.">
@@ -203,18 +203,18 @@ function Section1() {
           { cmd: 'ssafer login' },
           { comment: '게스트로 시작하는 경우', cmd: 'ssafer login --guest' },
         ]} />
-        <div className="mt-3">
+        <div className="mt-3 space-y-2">
           <Note>
             <strong>Google · GitHub로 가입한 계정</strong>은 비밀번호가 없어 이메일/비밀번호 로그인이 되지 않습니다.
             설정 페이지에서 비밀번호를 먼저 설정한 뒤 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer login</code>을 사용하세요.
-            <Link
-              to={ROUTES.settings}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
-            >
-              <KeyRound className="h-3 w-3" />
-              비밀번호 설정하러 가기
-            </Link>
           </Note>
+          <Link
+            to={ROUTES.settings}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
+          >
+            <KeyRound className="h-3 w-3" />
+            비밀번호 설정하러 가기
+          </Link>
         </div>
       </Step>
       <Step num="02" label="환경 점검 및 도구 설치" desc="Agent가 스캔을 실행하려면 Trivy 등 도구가 필요합니다. 설치 여부를 확인하고 없으면 설치합니다.">
