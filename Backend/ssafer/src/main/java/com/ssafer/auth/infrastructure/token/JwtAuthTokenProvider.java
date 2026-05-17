@@ -26,6 +26,7 @@ import org.springframework.stereotype.Component;
 public class JwtAuthTokenProvider implements AuthTokenProvider {
 
   private static final String TOKEN_TYPE_CLAIM_KEY = "tokenType";
+  private static final String TOKEN_ISSUED_AT_NANOS_CLAIM_KEY = "iatNanos";
   private static final String ACCESS_TOKEN_TYPE = "ACCESS";
   private static final String REFRESH_TOKEN_TYPE = "REFRESH";
 
@@ -61,13 +62,26 @@ public class JwtAuthTokenProvider implements AuthTokenProvider {
     // 활성 회원에게만 새 토큰을 발급해서 탈퇴/정지 계정의 재사용을 막는다.
     validateActiveMember(userId);
 
-    Instant issuedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-    Instant accessTokenExpiresAt = issuedAt.plus(accessTokenTtl);
-    Instant refreshTokenExpiresAt = issuedAt.plus(refreshTokenTtl);
+    Instant preciseIssuedAt = Instant.now();
+    Instant jwtIssuedAt = preciseIssuedAt.truncatedTo(ChronoUnit.SECONDS);
+    Instant accessTokenExpiresAt = jwtIssuedAt.plus(accessTokenTtl);
+    Instant refreshTokenExpiresAt = jwtIssuedAt.plus(refreshTokenTtl);
     String subject = String.valueOf(userId);
 
-    String accessToken = buildToken(subject, issuedAt, accessTokenExpiresAt, ACCESS_TOKEN_TYPE);
-    String refreshToken = buildToken(subject, issuedAt, refreshTokenExpiresAt, REFRESH_TOKEN_TYPE);
+    String accessToken = buildToken(
+        subject,
+        jwtIssuedAt,
+        accessTokenExpiresAt,
+        ACCESS_TOKEN_TYPE,
+        preciseIssuedAt
+    );
+    String refreshToken = buildToken(
+        subject,
+        jwtIssuedAt,
+        refreshTokenExpiresAt,
+        REFRESH_TOKEN_TYPE,
+        preciseIssuedAt
+    );
     refreshTokenStore.save(userId, refreshToken, refreshTokenTtl);
 
     return new AuthTokenResult(
@@ -121,16 +135,27 @@ public class JwtAuthTokenProvider implements AuthTokenProvider {
     return userId;
   }
 
-  private String buildToken(String subject, Instant issuedAt, Instant expiresAt, String tokenType) {
+  private String buildToken(
+      String subject,
+      Instant jwtIssuedAt,
+      Instant expiresAt,
+      String tokenType,
+      Instant preciseIssuedAt
+  ) {
     return Jwts.builder()
         .id(UUID.randomUUID().toString())
         .subject(subject)
         .issuer(issuer)
-        .issuedAt(Date.from(issuedAt))
+        .issuedAt(Date.from(jwtIssuedAt))
         .expiration(Date.from(expiresAt))
         .claim(TOKEN_TYPE_CLAIM_KEY, tokenType)
+        .claim(TOKEN_ISSUED_AT_NANOS_CLAIM_KEY, String.valueOf(toEpochNanos(preciseIssuedAt)))
         .signWith(secretKey, Jwts.SIG.HS256)
         .compact();
+  }
+
+  private long toEpochNanos(Instant instant) {
+    return instant.getEpochSecond() * 1_000_000_000L + instant.getNano();
   }
 
   private Claims parseClaims(String token) {

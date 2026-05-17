@@ -15,12 +15,14 @@ import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.repository.ScanRepository;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class UploadScanAnalysisTaskDispatcher {
 
   private final ProjectRepository projectRepository;
@@ -40,11 +42,27 @@ public class UploadScanAnalysisTaskDispatcher {
       String toolVersion,
       String payloadHash
   ) {
-    // 업로드 경로도 기존 Worker 계약을 재사용하기 위해 AgentTask를 만들고 메시지를 발행한다.
-    Project project = projectRepository.findById(projectId)
-        .orElseThrow(() -> new IllegalStateException("Project not found for upload scan dispatch"));
-    Scan scan = scanRepository.findById(scanId)
-        .orElseThrow(() -> new IllegalStateException("Scan not found for upload scan dispatch"));
+    Project project = projectRepository.findByIdAndDeletedAtIsNull(projectId)
+        .orElse(null);
+    if (project == null) {
+      log.info(
+          "Skip upload scan dispatch because project is deleted or missing: projectId={}, scanId={}",
+          projectId,
+          scanId
+      );
+      return;
+    }
+
+    Scan scan = scanRepository.findByIdAndDeletedAtIsNull(scanId)
+        .orElse(null);
+    if (scan == null) {
+      log.info(
+          "Skip upload scan dispatch because scan is deleted or missing: scanId={}, projectId={}",
+          scanId,
+          projectId
+      );
+      return;
+    }
 
     Agent agent = loadOrCreateDispatchAgent(project);
     AgentTask task = agentTaskRepository.save(new AgentTask(
@@ -77,7 +95,6 @@ public class UploadScanAnalysisTaskDispatcher {
   }
 
   private Agent loadOrCreateDispatchAgent(Project project) {
-    // 실제 로컬 에이전트와 무관한 내부 dispatch 용도 Agent를 재사용/생성한다.
     return agentRepository.findFirstByProjectId(project.getId())
         .orElseGet(() -> agentRepository.save(new Agent(
             project,

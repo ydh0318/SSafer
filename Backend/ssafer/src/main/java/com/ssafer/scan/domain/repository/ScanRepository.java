@@ -16,17 +16,17 @@ import org.springframework.data.repository.query.Param;
 public interface ScanRepository extends JpaRepository<Scan, Long>, JpaSpecificationExecutor<Scan> {
 
   Optional<Scan> findByIdAndProjectId(Long id, Long projectId);
+
   Optional<Scan> findByIdAndDeletedAtIsNull(Long id);
 
-  // 같은 scanId로 완료 보고가 동시에 들어오면 한 트랜잭션씩 순차 처리되도록 row lock 조회를 사용한다.
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select s from Scan s where s.id = :scanId and s.deletedAt is null")
   Optional<Scan> findByIdForUpdate(@Param("scanId") Long scanId);
 
-  // 히스토리 API에서 특정 사용자가 요청한 scan을 최신순으로 조회한다.
+  List<Scan> findByProjectIdAndDeletedAtIsNull(Long projectId);
+
   List<Scan> findByRequestedByUserIdOrderByRequestedAtDescIdDesc(Long requestedByUserId);
 
-  // scan 생성 직후 raw result 저장 경로를 별도로 반영할 때 사용한다.
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("update Scan s set s.rawResultPath = :rawResultPath where s.id = :scanId")
   int updateRawResultPath(@Param("scanId") Long scanId, @Param("rawResultPath") String rawResultPath);
@@ -42,6 +42,7 @@ public interface ScanRepository extends JpaRepository<Scan, Long>, JpaSpecificat
              s.completedAt = :completedAt,
              s.lastUpdatedAt = :lastUpdatedAt
        where s.id = :scanId
+         and s.deletedAt is null
          and s.status = :expectedStatus
       """)
   int updateRawResultPathAndStatusIfCurrent(
@@ -57,7 +58,6 @@ public interface ScanRepository extends JpaRepository<Scan, Long>, JpaSpecificat
   );
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
-  // 상태 경쟁을 피하기 위해 expectedStatus를 만족할 때만 상태를 갱신한다.
   @Query("""
       update Scan s
          set s.status = :nextStatus,
@@ -67,6 +67,7 @@ public interface ScanRepository extends JpaRepository<Scan, Long>, JpaSpecificat
              s.completedAt = :completedAt,
              s.lastUpdatedAt = :lastUpdatedAt
        where s.id = :scanId
+         and s.deletedAt is null
          and s.status = :expectedStatus
       """)
   int updateStatusIfCurrent(

@@ -200,7 +200,7 @@ public class UserController {
     UserProfileResult profile = userProfileService.getCurrentUserProfile(actor);
     return ResponseEntity.ok(ApiResponse.success(
         PROFILE_RETRIEVE_SUCCESS_MESSAGE,
-        new UserProfileResponseData(profile.email(), profile.displayName())
+        new UserProfileResponseData(profile.email(), profile.displayName(), profile.hasLocalPassword())
     ));
   }
 
@@ -350,7 +350,7 @@ public class UserController {
     UserProfileResult profile = userProfileService.updateCurrentUserProfile(actor, request.displayName());
     return ResponseEntity.ok(ApiResponse.success(
         PROFILE_UPDATE_SUCCESS_MESSAGE,
-        new UserProfileResponseData(profile.email(), profile.displayName())
+        new UserProfileResponseData(profile.email(), profile.displayName(), profile.hasLocalPassword())
     ));
   }
 

@@ -34,6 +34,9 @@ public class User {
   @Column(name = "account_status", nullable = false, length = 20)
   private AccountStatus accountStatus;
 
+  @Column(name = "token_invalidated_at")
+  private Instant tokenInvalidatedAt;
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
@@ -88,7 +91,12 @@ public class User {
   }
 
   public void deactivate() {
+    this.passwordHash = null;
     this.accountStatus = AccountStatus.INACTIVE;
+  }
+
+  public void invalidateAccessTokens(Instant when) {
+    this.tokenInvalidatedAt = when;
   }
 
   public void reactivate(String displayName, String passwordHash) {
@@ -112,6 +120,10 @@ public class User {
 
   public AccountStatus getAccountStatus() {
     return accountStatus;
+  }
+
+  public Instant getTokenInvalidatedAt() {
+    return tokenInvalidatedAt;
   }
 
   public boolean isActive() {

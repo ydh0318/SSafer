@@ -209,13 +209,14 @@ class UserControllerTest {
     AuthenticatedActor actor = AuthenticatedActor.member(1L);
     given(currentActorProvider.getCurrentActor()).willReturn(actor);
     given(userProfileService.getCurrentUserProfile(actor))
-        .willReturn(new UserProfileResult("user@ssafer.co.kr", "Alice"));
+        .willReturn(new UserProfileResult("user@ssafer.co.kr", "Alice", false));
 
     mockMvc.perform(get("/api/v1/users/me"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.message").value("User profile retrieval succeeded"))
         .andExpect(jsonPath("$.data.email").value("user@ssafer.co.kr"))
-        .andExpect(jsonPath("$.data.displayName").value("Alice"));
+        .andExpect(jsonPath("$.data.displayName").value("Alice"))
+        .andExpect(jsonPath("$.data.hasLocalPassword").value(false));
   }
 
   @Test
@@ -334,7 +335,7 @@ class UserControllerTest {
     AuthenticatedActor actor = AuthenticatedActor.member(1L);
     given(currentActorProvider.getCurrentActor()).willReturn(actor);
     given(userProfileService.updateCurrentUserProfile(actor, "Alice Updated"))
-        .willReturn(new UserProfileResult("user@ssafer.co.kr", "Alice Updated"));
+        .willReturn(new UserProfileResult("user@ssafer.co.kr", "Alice Updated", true));
 
     mockMvc.perform(patch("/api/v1/users/me/profile")
             .contentType(APPLICATION_JSON)
@@ -346,7 +347,8 @@ class UserControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.message").value("User profile update succeeded"))
         .andExpect(jsonPath("$.data.email").value("user@ssafer.co.kr"))
-        .andExpect(jsonPath("$.data.displayName").value("Alice Updated"));
+        .andExpect(jsonPath("$.data.displayName").value("Alice Updated"))
+        .andExpect(jsonPath("$.data.hasLocalPassword").value(true));
   }
 
   @Test

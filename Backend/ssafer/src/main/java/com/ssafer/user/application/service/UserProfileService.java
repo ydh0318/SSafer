@@ -24,7 +24,7 @@ public class UserProfileService {
   @Transactional(readOnly = true)
   public UserProfileResult getCurrentUserProfile(AuthenticatedActor actor) {
     User user = loadCurrentMemberOrThrow(actor);
-    return new UserProfileResult(user.getEmail(), user.getDisplayName());
+    return new UserProfileResult(user.getEmail(), user.getDisplayName(), user.hasPasswordCredential());
   }
 
   @Transactional
@@ -37,7 +37,7 @@ public class UserProfileService {
     try {
       user.updateDisplayName(normalizedDisplayName);
       userRepository.flush();
-      return new UserProfileResult(user.getEmail(), user.getDisplayName());
+      return new UserProfileResult(user.getEmail(), user.getDisplayName(), user.hasPasswordCredential());
     } catch (DataIntegrityViolationException ex) {
       // 동시 수정 충돌은 DB 제약 이름을 보고 닉네임 중복으로 변환한다.
       throw UserConstraintViolationSupport.translateProfileUpdateException(ex);

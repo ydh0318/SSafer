@@ -4,9 +4,13 @@ import com.ssafer.auth.domain.repository.RefreshTokenStore;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
+import com.ssafer.project.domain.repository.ProjectRepository;
+import com.ssafer.scan.application.service.ScanStatusSseEmitterRegistry;
+import com.ssafer.scan.domain.repository.ScanRepository;
 import com.ssafer.user.domain.entity.User;
 import com.ssafer.user.domain.enums.AccountStatus;
 import com.ssafer.user.domain.repository.UserRepository;
+import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,26 +18,41 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserWithdrawalService {
 
   private final UserRepository userRepository;
+  private final ProjectRepository projectRepository;
+  private final ScanRepository scanRepository;
+  private final ScanStatusSseEmitterRegistry scanStatusSseEmitterRegistry;
   private final RefreshTokenStore refreshTokenStore;
 
   public UserWithdrawalService(
       UserRepository userRepository,
+      ProjectRepository projectRepository,
+      ScanRepository scanRepository,
+      ScanStatusSseEmitterRegistry scanStatusSseEmitterRegistry,
       RefreshTokenStore refreshTokenStore
   ) {
     this.userRepository = userRepository;
+    this.projectRepository = projectRepository;
+    this.scanRepository = scanRepository;
+    this.scanStatusSseEmitterRegistry = scanStatusSseEmitterRegistry;
     this.refreshTokenStore = refreshTokenStore;
   }
 
   @Transactional
   public void withdrawCurrentUser(AuthenticatedActor actor) {
     User user = loadCurrentMemberOrThrow(actor);
-    // 탈퇴 시 계정은 비활성화하고, 세션 연장을 막기 위해 refresh token을 제거한다.
+    projectRepository.findByUserIdAndDeletedAtIsNull(user.getId())
+        .forEach(project -> {
+          scanRepository.findByProjectIdAndDeletedAtIsNull(project.getId())
+              .forEach(scan -> scan.softDelete());
+          project.softDelete();
+        });
+    scanStatusSseEmitterRegistry.removeAll(AuthenticatedActor.member(user.getId()));
+    user.invalidateAccessTokens(Instant.now());
     user.deactivate();
     refreshTokenStore.delete(user.getId());
   }
 
   private User loadCurrentMemberOrThrow(AuthenticatedActor actor) {
-    // 탈퇴는 회원 전용 기능이므로 게스트 요청은 금지한다.
     if (actor == null || !actor.isMember()) {
       throw new BusinessException(ErrorCode.FORBIDDEN);
     }
