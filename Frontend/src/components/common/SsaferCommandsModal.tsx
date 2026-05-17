@@ -1,5 +1,6 @@
-import { Check, Copy, Terminal, X } from 'lucide-react';
-import { useState } from 'react';
+import { Check, Copy, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useUiStore } from '../../store/uiStore';
 
 const COMMAND_GROUPS = [
   {
@@ -65,6 +66,15 @@ const COMMAND_GROUPS = [
 
 export default function SsaferCommandsModal({ onClose }: { onClose: () => void }) {
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
+  const isDark = useUiStore((s) => s.theme === 'dark');
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const handleCopy = async (cmd: string) => {
     try {
@@ -79,145 +89,109 @@ export default function SsaferCommandsModal({ onClose }: { onClose: () => void }
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
+      style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.6)]"
-        style={{ background: '#0e0e0e', border: '1px solid rgba(255,255,255,0.08)' }}
+        className="theme-cli-modal relative w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.18)] border border-neutral-200 bg-white"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Title bar */}
-        <div
-          className="flex items-center justify-between px-5 py-3.5 shrink-0"
-          style={{ background: '#161616', borderBottom: '1px solid rgba(255,255,255,0.07)' }}
-        >
-          <div className="flex items-center gap-3">
-            {/* Traffic lights */}
-            <div className="flex items-center gap-1.5">
-              <button
-                aria-label="닫기"
-                className="h-3 w-3 rounded-full transition-opacity hover:opacity-80"
-                onClick={onClose}
-                style={{ background: '#ff5f57' }}
-                type="button"
-              />
-              <div className="h-3 w-3 rounded-full" style={{ background: '#febc2e' }} />
-              <div className="h-3 w-3 rounded-full" style={{ background: '#28c840' }} />
-            </div>
-            <div className="w-px h-4 mx-1" style={{ background: 'rgba(255,255,255,0.1)' }} />
-            <Terminal className="h-3.5 w-3.5" style={{ color: '#D4FC64' }} />
-            <span className="font-mono text-xs font-bold tracking-widest" style={{ color: 'rgba(255,255,255,0.5)' }}>
-              ssafer --help
-            </span>
-          </div>
+        {/* 상단 액센트 바 */}
+        <div className="h-1 w-full shrink-0 bg-[#D4FC64]" />
 
+        {/* Title bar */}
+        <div className="flex items-center justify-between px-6 py-4 shrink-0 bg-white border-b border-neutral-100">
           <div className="flex items-center gap-3">
-            <span
-              className="font-mono text-[10px] font-black tracking-[0.3em]"
-              style={{ color: '#D4FC64' }}
-            >
-              SSAFER CLI
+            <span className="inline-flex items-center rounded-md bg-[#111] px-2.5 py-1 font-mono text-[10px] font-black tracking-[0.22em] text-[#D4FC64]">
+              CLI
             </span>
-            <button
-              aria-label="닫기"
-              className="rounded-lg p-1.5 transition-colors hover:bg-white/10"
-              onClick={onClose}
-              style={{ color: 'rgba(255,255,255,0.35)' }}
-              type="button"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <span className="text-base font-black tracking-tight text-black">
+              명령어 치트시트
+            </span>
           </div>
+          <button
+            aria-label="닫기"
+            className="rounded-lg p-1.5 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-black"
+            onClick={onClose}
+            type="button"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Hero banner */}
-        <div
-          className="px-6 py-4 shrink-0"
-          style={{ background: 'linear-gradient(135deg, #0e1a00 0%, #0e0e0e 100%)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <p className="font-mono text-[10px] font-bold tracking-[0.35em]" style={{ color: 'rgba(212,252,100,0.5)' }}>
-            CHEAT SHEET
-          </p>
-          <h2 className="mt-1 text-lg font-black tracking-tight text-white">
-            SSAFER 주요 명령어 모음집
-          </h2>
-          <p className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            숨겨진 이스터 에그를 발견했습니다. 명령어를 클릭해 바로 복사하세요.
+        <div className="px-6 py-4 shrink-0 bg-white border-b border-neutral-100">
+          <p className="text-xs text-neutral-400 leading-relaxed">
+            🎉 숨겨진 이스터 에그를 발견했습니다. 명령어를 클릭하면 클립보드에 복사됩니다.
           </p>
         </div>
 
         {/* Commands */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5"
-          style={{ scrollbarColor: 'rgba(255,255,255,0.1) transparent', scrollbarWidth: 'thin' }}
-        >
+        <div className="theme-cli-scroll flex-1 overflow-y-auto px-4 py-4 space-y-5 bg-neutral-100">
           {COMMAND_GROUPS.map((group) => (
             <div key={group.label}>
+              {/* Category label */}
               <div className="flex items-center gap-2 mb-2 px-1">
-                <div className="h-px flex-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                <span
-                  className="font-mono text-[10px] font-bold tracking-[0.2em] uppercase shrink-0"
-                  style={{ color: group.color, opacity: 0.7 }}
-                >
-                  {group.label}
-                </span>
-                <div className="h-px flex-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                <div className="h-px flex-1 bg-neutral-200" />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span
+                    className="inline-block h-1.5 w-1.5 rounded-full"
+                    style={{ background: group.color }}
+                  />
+                  <span className="font-mono text-[10px] font-bold tracking-[0.2em] uppercase text-neutral-500">
+                    {group.label}
+                  </span>
+                </div>
+                <div className="h-px flex-1 bg-neutral-200" />
               </div>
 
+              {/* Command rows */}
               <div className="space-y-1">
                 {group.commands.map((c) => {
                   const isCopied = copiedCmd === c.cmd;
                   return (
                     <button
                       key={c.cmd}
-                      className="group w-full text-left rounded-xl px-4 py-3 transition-colors"
+                      className={`group w-full text-left rounded-xl px-4 py-3 border transition-all ${
+                        isCopied
+                          ? isDark
+                            ? 'border-[#4d7a00] bg-[#1a2e08]'
+                            : 'border-[#b8e832] bg-[#F6FDE8]'
+                          : 'border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50'
+                      }`}
                       onClick={() => void handleCopy(c.cmd)}
-                      style={{
-                        background: isCopied ? 'rgba(212,252,100,0.06)' : 'rgba(255,255,255,0.03)',
-                        border: isCopied
-                          ? '1px solid rgba(212,252,100,0.25)'
-                          : '1px solid rgba(255,255,255,0.05)',
-                      }}
                       title="클릭해서 복사"
                       type="button"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span
-                              className="font-mono text-[10px] select-none shrink-0"
-                              style={{ color: 'rgba(255,255,255,0.2)' }}
-                            >
-                              $
-                            </span>
-                            {/* Base command */}
-                            <span
-                              className="font-mono text-sm font-bold"
-                              style={{ color: group.color }}
-                            >
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono text-[11px] text-neutral-300 select-none shrink-0">$</span>
+                            <span className="font-mono text-[13px] font-black text-black">
                               {c.cmd.split(' ')[0]}
                             </span>
-                            {/* Subcommand */}
                             {c.cmd.split(' ').slice(1).join(' ') && (
-                              <span className="font-mono text-sm font-semibold text-white/80">
+                              <span
+                                className="font-mono text-[13px] font-semibold"
+                                style={{ color: group.color }}
+                              >
                                 {c.cmd.split(' ').slice(1).join(' ')}
                               </span>
                             )}
                           </div>
-                          <p
-                            className="mt-1.5 text-xs leading-relaxed"
-                            style={{ color: 'rgba(255,255,255,0.38)' }}
-                          >
+                          <p className="mt-1.5 text-xs leading-relaxed text-neutral-400">
                             {c.desc}
                           </p>
                         </div>
 
                         <div
-                          className="shrink-0 mt-0.5 rounded-md p-1.5 transition-all"
-                          style={{
-                            color: isCopied ? '#D4FC64' : 'rgba(255,255,255,0.2)',
-                            background: isCopied ? 'rgba(212,252,100,0.1)' : 'transparent',
-                          }}
+                          className={`shrink-0 mt-0.5 rounded-md p-1.5 transition-all ${
+                            isCopied
+                              ? isDark
+                                ? 'text-[#a3d62a] bg-[#2a4a10]'
+                                : 'text-[#5a9900] bg-[#D4FC64]/30'
+                              : 'text-neutral-300'
+                          }`}
                         >
                           {isCopied ? (
                             <Check className="h-3.5 w-3.5" />
@@ -235,10 +209,11 @@ export default function SsaferCommandsModal({ onClose }: { onClose: () => void }
         </div>
 
         {/* Footer */}
-        <div
-          className="px-6 py-3 shrink-0"
-          style={{ background: '#161616', borderTop: '1px solid rgba(255,255,255,0.07)' }}
-        />
+        <div className="px-6 py-2.5 shrink-0 bg-neutral-50 border-t border-neutral-200">
+          <p className="text-center font-mono text-[10px] text-neutral-300 tracking-widest">
+            ESC · 빨간 버튼 · 바깥 클릭으로 닫기
+          </p>
+        </div>
       </div>
     </div>
   );

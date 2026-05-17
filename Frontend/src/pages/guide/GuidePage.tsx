@@ -68,11 +68,13 @@ function Terminal_({ lines }: { lines: CmdLine[] }) {
 
   return (
     <div className="overflow-hidden rounded-lg border border-neutral-800 bg-[#0D0D0D]">
-      {/* window chrome */}
-      <div className="flex items-center gap-1.5 border-b border-neutral-800 px-4 py-2.5">
-        <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
-        <span className="h-2.5 w-2.5 rounded-full bg-[#FEBC2E]" />
-        <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
+      {/* terminal header */}
+      <div className="flex items-center justify-between border-b border-neutral-800 bg-[#111] px-4 py-2">
+        <div className="flex items-center gap-2">
+          <span className="select-none font-mono text-[10px] text-[#D4FC64]">▶</span>
+          <span className="font-mono text-[11px] tracking-[0.15em] text-neutral-500">bash</span>
+        </div>
+        <span className="select-none font-mono text-[10px] tracking-wider text-neutral-700">~/ssafer</span>
       </div>
       {/* lines */}
       <div className="px-5 py-4 space-y-0.5">
