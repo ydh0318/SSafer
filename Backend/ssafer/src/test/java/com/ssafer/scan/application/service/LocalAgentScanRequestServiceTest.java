@@ -124,6 +124,7 @@ class LocalAgentScanRequestServiceTest {
     JsonNode payload = objectMapper.readTree(task.getPayloadJson());
     assertThat(payload.get("targetPath").asText()).isEqualTo("/opt/app");
     assertThat(payload.get("scanName").asText()).isEqualTo("운영 서버 점검");
+    assertThat(payload.get("scanType").asText()).isEqualTo("PROJECT_FILE");
     assertThat(payload.get("includeLogs").asBoolean()).isFalse();
     assertThat(payload.get("rawResultPath").asText()).startsWith("s3://ssafer-test/raw/1000/");
     assertThat(payload.has("rawUploadUrl")).isFalse();
@@ -163,6 +164,13 @@ class LocalAgentScanRequestServiceTest {
     assertThat(targetSnapshot.get("scanType").asText()).isEqualTo("SERVER_AUDIT");
     assertThat(targetSnapshot.get("targetPath").asText()).isEqualTo("/opt/app");
     assertThat(targetSnapshot.get("includeLogs").asBoolean()).isTrue();
+
+    ArgumentCaptor<AgentTask> taskCaptor = ArgumentCaptor.forClass(AgentTask.class);
+    verify(agentTaskRepository).save(taskCaptor.capture());
+    JsonNode payload = objectMapper.readTree(taskCaptor.getValue().getPayloadJson());
+    assertThat(payload.get("scanType").asText()).isEqualTo("SERVER_AUDIT");
+    assertThat(payload.get("rawResultPath").asText()).startsWith("s3://ssafer-test/raw/1000/");
+    assertThat(payload.has("rawUploadUrl")).isFalse();
   }
 
   @Test

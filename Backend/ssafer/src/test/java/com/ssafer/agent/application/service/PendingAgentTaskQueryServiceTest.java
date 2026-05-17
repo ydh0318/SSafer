@@ -83,6 +83,7 @@ class PendingAgentTaskQueryServiceTest {
             {
               "targetPath": "/opt/app",
               "scanName": "운영 서버 점검",
+              "scanType": "SERVER_AUDIT",
               "includeLogs": false,
               "rawResultPath": "s3://ssafer/raw/55/upload/scan_result.json"
             }
@@ -106,6 +107,7 @@ class PendingAgentTaskQueryServiceTest {
     assertThat(result.get(0).taskStatus()).isEqualTo(AgentTaskStatus.SENT);
     assertThat(result.get(0).payload().get("targetPath").asText()).isEqualTo("/opt/app");
     assertThat(result.get(0).payload().get("scanName").asText()).isEqualTo("운영 서버 점검");
+    assertThat(result.get(0).payload().get("scanType").asText()).isEqualTo("SERVER_AUDIT");
     assertThat(result.get(0).payload().get("includeLogs").asBoolean()).isFalse();
     assertThat(result.get(0).payload().get("rawResultPath").asText()).isEqualTo("s3://ssafer/raw/55/upload/scan_result.json");
     assertThat(result.get(0).payload().get("rawUploadUrl").asText()).isEqualTo("https://upload.example.com/fresh-raw-url");

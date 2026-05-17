@@ -126,7 +126,7 @@ public class LocalAgentScanRequestService {
 
     // Local Agent는 pending task 조회 응답의 payload만 보고 실행해야 하므로,
     // 점검 대상 정보와 raw 결과 저장 위치를 같은 payload에 담아 둔다.
-    String payloadJson = buildTaskPayloadJson(normalizedTargetPath, scanName, includeLogs, rawResultPath);
+    String payloadJson = buildTaskPayloadJson(normalizedTargetPath, scanName, scanType, includeLogs, rawResultPath);
     AgentTask task = agentTaskRepository.save(new AgentTask(
         agent,
         project,
@@ -176,6 +176,7 @@ public class LocalAgentScanRequestService {
   private String buildTaskPayloadJson(
       String targetPath,
       String scanName,
+      ScanType scanType,
       Boolean includeLogs,
       String rawResultPath
   ) {
@@ -184,6 +185,7 @@ public class LocalAgentScanRequestService {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("targetPath", targetPath);
     payload.put("scanName", scanName);
+    payload.put("scanType", scanType.name());
     payload.put("includeLogs", includeLogs);
     payload.put("rawResultPath", rawResultPath);
     return writeJson(payload);
