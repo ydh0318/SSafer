@@ -83,17 +83,17 @@ function MonitorPage() {
         aside={
           <FeatureInfoCard
             className="min-w-[280px]"
-            description="5초 단위 heartbeat와 WebSocket 상태를 기준으로 Agent 연결 상태를 추적합니다."
-            eyebrow="LIVE"
-            title={<div className="text-lg font-black">실시간 연결 모니터</div>}
+            description="실시간 알림과 위험 변동 추적 기능은 곧 추가될 예정입니다."
+            eyebrow="COMING SOON"
+            title={<div className="text-lg font-black">모니터링 서비스 준비 중</div>}
             tone="dark"
           />
         }
-        description="Local Agent 연결 상태, 최근 알림, 새로 생긴 위험과 해결된 위험을 한 화면에서 바로 확인할 수 있도록 구성합니다."
+        description="프로젝트별 Local Agent의 연결 상태를 한눈에 확인할 수 있습니다."
         eyebrow="MONITOR"
         title={
           <div>
-            <div className="text-sm text-neutral-500">실시간 연결과 알림 흐름</div>
+            <div className="text-sm text-neutral-500">Agent 연결 상태</div>
             <h1 className="mt-3 text-5xl font-black tracking-tight md:text-6xl">모니터</h1>
           </div>
         }
@@ -110,6 +110,19 @@ function MonitorPage() {
           eyebrow="RUNNING TASK"
           title={<div className="text-4xl font-black">{isLoading ? '-' : runningTaskCount}</div>}
         />
+      </div>
+
+      {/* 모니터링 기능 준비 중 안내 — 사용자에게 친근한 톤으로 한 줄 안내 */}
+      <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+        <span className="mt-0.5 text-base">🚧</span>
+        <div>
+          <div className="font-bold">모니터링 서비스는 일부 기능이 준비 중이에요.</div>
+          <div className="mt-1 text-xs leading-6 text-amber-800">
+            지금은 Agent의 <span className="font-bold">연결 여부</span>만 확인할 수 있어요.
+            실시간 알림이나 위험 변동 알림은 곧 만나보실 수 있어요.
+            최신 상태가 궁금하시면 아래 <span className="font-bold">새로고침</span> 버튼을 눌러주세요.
+          </div>
+        </div>
       </div>
 
       {errorMessage ? <PageBanner message={errorMessage} tone="error" /> : null}

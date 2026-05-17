@@ -6,6 +6,7 @@ import ModalFrame from '../../components/common/ModalFrame';
 import PageBanner from '../../components/common/PageBanner';
 import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
+import { getProjectAgentStatus } from '../../features/agents/api/agents';
 import { useToast } from '../../features/feedback/useToast';
 import { createProject, getProjects } from '../../features/projects/api/projects';
 import ProjectCreateForm from '../../features/projects/components/ProjectCreateForm';
@@ -24,7 +25,7 @@ import { getScanUploadValidationIssue } from '../../features/scans/utils/uploadV
 import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import { useProjectStore } from '../../store/projectStore';
 import type { CreateProjectFormValues, ProjectSummary } from '../../types/project';
-import type { ProjectScanListItemData, ProjectScanOptionsData, ScanType } from '../../types/scan';
+import type { AgentStatusResponseData, ProjectScanListItemData, ProjectScanOptionsData, ScanType } from '../../types/scan';
 
 type ScanModeOption = 'UPLOAD' | 'CLI' | 'AGENT';
 
@@ -74,12 +75,43 @@ function normalizeProjectName(value: string) {
   return value.trim();
 }
 
-function getAgentTone(project: ProjectSummary, isSelected: boolean) {
-  if (!project.monitorEnabled) {
-    return isSelected ? 'text-neutral-400' : 'text-neutral-500';
+function getAgentDisplay(
+  project: ProjectSummary,
+  agentStatus: AgentStatusResponseData | null,
+  isSelected: boolean,
+) {
+  // 실제 agent 상태가 fetch된 경우 우선 사용
+  if (agentStatus) {
+    if (agentStatus.status === 'ONLINE') {
+      return {
+        label: 'Agent 연결됨',
+        className: isSelected ? 'text-[#D4FC64]' : 'text-[#8CC319]',
+      };
+    }
+    if (agentStatus.status === 'ERROR') {
+      return {
+        label: 'Agent 오류',
+        className: isSelected ? 'text-orange-300' : 'text-orange-500',
+      };
+    }
+    // OFFLINE — agent는 등록되어 있지만 현재 끊김
+    return {
+      label: 'Agent 오프라인',
+      className: isSelected ? 'text-neutral-400' : 'text-neutral-500',
+    };
   }
 
-  return isSelected ? 'text-[#D4FC64]' : 'text-[#8CC319]';
+  // agent 상태 정보가 없음 (미등록이거나 아직 로딩 중) — monitorEnabled 설정으로 fallback
+  if (project.monitorEnabled) {
+    return {
+      label: 'Agent 미연결',
+      className: isSelected ? 'text-neutral-400' : 'text-neutral-500',
+    };
+  }
+  return {
+    label: 'Agent 없음',
+    className: isSelected ? 'text-neutral-400' : 'text-neutral-500',
+  };
 }
 
 function formatFileSize(bytes: number) {
@@ -119,6 +151,7 @@ function ProjectListPage() {
   const [selectedProjectScanOptions, setSelectedProjectScanOptions] = useState<ProjectScanOptionsData | null>(null);
   const [completedScansRefreshKey, setCompletedScansRefreshKey] = useState(0);
   const [selectedAgentScanType, setSelectedAgentScanType] = useState<ScanType>('PROJECT_FILE');
+  const [agentStatusMap, setAgentStatusMap] = useState<Record<string, AgentStatusResponseData | null>>({});
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useScanEventSubscription(
@@ -190,6 +223,37 @@ function ProjectListPage() {
       isMounted = false;
     };
   }, [setProjectsFromList]);
+
+  // 프로젝트별 Agent 연결 상태를 병렬로 가져온다 (MonitorPage와 동일한 패턴).
+  // 프로젝트 목록이 바뀔 때만 다시 fetch 한다.
+  const projectIdsKey = useMemo(() => projects.map((p) => p.id).join(','), [projects]);
+  useEffect(() => {
+    if (projects.length === 0) {
+      setAgentStatusMap({});
+      return;
+    }
+
+    let isMounted = true;
+    const targetProjects = projects.slice();
+
+    void (async () => {
+      const entries = await Promise.all(
+        targetProjects.map(async (project) => {
+          const status = await getProjectAgentStatus(project.id).catch(() => null);
+          return [project.id, status] as const;
+        }),
+      );
+
+      if (isMounted) {
+        setAgentStatusMap(Object.fromEntries(entries));
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectIdsKey]);
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -552,9 +616,14 @@ function ProjectListPage() {
                   type="button"
                 >
                   <span className="truncate text-[clamp(1.35rem,2vw,1.85rem)]">{project.name}</span>
-                  <span className={`shrink-0 text-sm font-bold ${getAgentTone(project, isSelected)}`}>
-                    {project.monitorEnabled ? 'Agent 사용' : 'Agent 없음'}
-                  </span>
+                  {(() => {
+                    const agentDisplay = getAgentDisplay(project, agentStatusMap[project.id] ?? null, isSelected);
+                    return (
+                      <span className={`shrink-0 text-sm font-bold ${agentDisplay.className}`}>
+                        {agentDisplay.label}
+                      </span>
+                    );
+                  })()}
                 </button>
               );
             })}
