@@ -10,14 +10,6 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
-import com.ssafer.agent.domain.entity.Agent;
-import com.ssafer.agent.domain.entity.AgentTask;
-import com.ssafer.agent.domain.enums.AgentStatus;
-import com.ssafer.agent.domain.enums.AgentTaskStatus;
-import com.ssafer.agent.domain.enums.AgentTaskType;
-import com.ssafer.agent.domain.repository.AgentTaskRepository;
-import com.ssafer.project.domain.entity.Project;
-import com.ssafer.project.domain.enums.ScanMode;
 import com.ssafer.scan.api.dto.WorkerAnalysisResultCallbackRequest;
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.enums.RequestActorType;
@@ -33,6 +25,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.server.ResponseStatusException;
+import com.ssafer.project.domain.entity.Project;
+import com.ssafer.project.domain.enums.ScanMode;
+import com.ssafer.worker.domain.entity.WorkerJob;
+import com.ssafer.worker.domain.enums.WorkerJobStatus;
+import com.ssafer.worker.domain.enums.WorkerJobType;
+import com.ssafer.worker.domain.repository.WorkerJobRepository;
 
 @ExtendWith(MockitoExtension.class)
 class WorkerAnalysisResultCallbackServiceTest {
@@ -41,7 +39,7 @@ class WorkerAnalysisResultCallbackServiceTest {
   private ScanRepository scanRepository;
 
   @Mock
-  private AgentTaskRepository agentTaskRepository;
+  private WorkerJobRepository workerJobRepository;
 
   @Mock
   private ApplicationEventPublisher applicationEventPublisher;
@@ -56,10 +54,10 @@ class WorkerAnalysisResultCallbackServiceTest {
     LocalDateTime completedAt = requestedAt.plusMinutes(5);
     LocalDateTime lastUpdatedAt = requestedAt.plusMinutes(5);
     Scan scan = queuedScan(requestedAt);
-    AgentTask agentTask = sentTask(scan);
+    WorkerJob workerJob = publishedJob(scan);
 
     when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(scan));
-    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+    when(workerJobRepository.findByIdAndScanIdForUpdate(100L, 1L)).thenReturn(Optional.of(workerJob));
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         100L,
@@ -78,13 +76,13 @@ class WorkerAnalysisResultCallbackServiceTest {
     assertThat(scan.getStatus()).isEqualTo(ScanStatus.RUNNING);
     assertThat(scan.getAnalysisResultPath()).isEqualTo("s3://ssafer/result/1/analysis_result.json");
     assertThat(scan.getProgressStep()).isEqualTo("INGESTING_ANALYSIS_RESULT");
-    assertThat(agentTask.getTaskStatus()).isEqualTo(AgentTaskStatus.ACKED);
+    assertThat(workerJob.getJobStatus()).isEqualTo(WorkerJobStatus.RUNNING);
 
     ArgumentCaptor<WorkerAnalysisResultIngestionRequestedEvent> eventCaptor =
         ArgumentCaptor.forClass(WorkerAnalysisResultIngestionRequestedEvent.class);
     verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
     assertThat(eventCaptor.getValue()).isEqualTo(
-        new WorkerAnalysisResultIngestionRequestedEvent(1L, agentTask.getId(), startedAt, completedAt)
+        new WorkerAnalysisResultIngestionRequestedEvent(1L, workerJob.getId(), startedAt, completedAt)
     );
   }
 
@@ -94,10 +92,10 @@ class WorkerAnalysisResultCallbackServiceTest {
     LocalDateTime startedAt = requestedAt.plusMinutes(1);
     LocalDateTime lastUpdatedAt = requestedAt.plusMinutes(2);
     Scan scan = queuedScan(requestedAt);
-    AgentTask agentTask = sentTask(scan);
+    WorkerJob workerJob = publishedJob(scan);
 
     when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(scan));
-    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+    when(workerJobRepository.findByIdAndScanIdForUpdate(100L, 1L)).thenReturn(Optional.of(workerJob));
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         100L,
@@ -115,7 +113,7 @@ class WorkerAnalysisResultCallbackServiceTest {
     assertThat(reported).isSameAs(scan);
     assertThat(scan.getStatus()).isEqualTo(ScanStatus.RUNNING);
     assertThat(scan.getProgressStep()).isEqualTo("ANALYZING");
-    assertThat(agentTask.getTaskStatus()).isEqualTo(AgentTaskStatus.RUNNING);
+    assertThat(workerJob.getJobStatus()).isEqualTo(WorkerJobStatus.RUNNING);
     verify(applicationEventPublisher, org.mockito.Mockito.never()).publishEvent(any());
   }
 
@@ -125,10 +123,10 @@ class WorkerAnalysisResultCallbackServiceTest {
     LocalDateTime startedAt = requestedAt.plusMinutes(1);
     LocalDateTime lastUpdatedAt = requestedAt.plusMinutes(2);
     Scan scan = runningScan(requestedAt, startedAt, lastUpdatedAt);
-    AgentTask agentTask = runningTask(scan);
+    WorkerJob workerJob = runningJob(scan);
 
     when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(scan));
-    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+    when(workerJobRepository.findByIdAndScanIdForUpdate(100L, 1L)).thenReturn(Optional.of(workerJob));
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         100L,
@@ -145,17 +143,17 @@ class WorkerAnalysisResultCallbackServiceTest {
 
     assertThat(reported.getStatus()).isEqualTo(ScanStatus.FAILED);
     assertThat(reported.getFailureReason()).isEqualTo("worker analysis failed");
-    assertThat(agentTask.getTaskStatus()).isEqualTo(AgentTaskStatus.FAILED);
+    assertThat(workerJob.getJobStatus()).isEqualTo(WorkerJobStatus.FAILED);
     verify(applicationEventPublisher).publishEvent(new ScanStatusSsePublishRequestedEvent(1L, ScanStatus.FAILED));
   }
 
   @Test
   void reportDoneStatusWithoutAnalysisResultPathThrowsBadRequest() {
     Scan scan = queuedScan(LocalDateTime.of(2026, 4, 24, 15, 0));
-    AgentTask agentTask = sentTask(scan);
+    WorkerJob workerJob = publishedJob(scan);
 
     when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(scan));
-    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+    when(workerJobRepository.findByIdAndScanIdForUpdate(100L, 1L)).thenReturn(Optional.of(workerJob));
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         100L,
@@ -177,10 +175,10 @@ class WorkerAnalysisResultCallbackServiceTest {
   @Test
   void reportWithoutStatusThrowsBadRequest() {
     Scan scan = queuedScan(LocalDateTime.of(2026, 4, 24, 15, 0));
-    AgentTask agentTask = sentTask(scan);
+    WorkerJob workerJob = publishedJob(scan);
 
     when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(scan));
-    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.of(agentTask));
+    when(workerJobRepository.findByIdAndScanIdForUpdate(100L, 1L)).thenReturn(Optional.of(workerJob));
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         100L,
@@ -225,7 +223,7 @@ class WorkerAnalysisResultCallbackServiceTest {
     Scan scan = queuedScan(LocalDateTime.of(2026, 4, 24, 15, 0));
 
     when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(scan));
-    when(agentTaskRepository.findByIdAndScanId(100L, 1L)).thenReturn(Optional.empty());
+    when(workerJobRepository.findByIdAndScanIdForUpdate(100L, 1L)).thenReturn(Optional.empty());
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         100L,
@@ -257,10 +255,10 @@ class WorkerAnalysisResultCallbackServiceTest {
         .requestedAt(requestedAt)
         .lastUpdatedAt(requestedAt.plusMinutes(1))
         .build();
-    AgentTask agentTask = sentTask(scan);
+    WorkerJob workerJob = publishedJob(scan);
 
     when(scanRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(scan));
-    when(agentTaskRepository.findByIdAndScanId(anyLong(), anyLong())).thenReturn(Optional.of(agentTask));
+    when(workerJobRepository.findByIdAndScanIdForUpdate(anyLong(), anyLong())).thenReturn(Optional.of(workerJob));
 
     WorkerAnalysisResultCallbackRequest request = new WorkerAnalysisResultCallbackRequest(
         100L,
@@ -308,19 +306,22 @@ class WorkerAnalysisResultCallbackServiceTest {
         .build();
   }
 
-  private AgentTask sentTask(Scan scan) {
-    return new AgentTask(agent(), project(), scan, null, AgentTaskType.SCAN_REQUEST, AgentTaskStatus.SENT, null);
+  private WorkerJob publishedJob(Scan scan) {
+    WorkerJob job = baseJob(scan);
+    job.markPublished(java.time.Instant.now());
+    return job;
   }
 
-  private AgentTask runningTask(Scan scan) {
-    AgentTask task = new AgentTask(agent(), project(), scan, null, AgentTaskType.SCAN_REQUEST, AgentTaskStatus.SENT, null);
-    task.markAcked(java.time.Instant.now());
-    task.markRunning(java.time.Instant.now());
-    return task;
+  private WorkerJob runningJob(Scan scan) {
+    WorkerJob job = publishedJob(scan);
+    job.markRunning(java.time.Instant.now());
+    return job;
   }
 
-  private Agent agent() {
-    return new Agent(project(), AgentStatus.ONLINE);
+  private WorkerJob baseJob(Scan scan) {
+    WorkerJob job = new WorkerJob(project(), scan, WorkerJobType.UPLOAD_ANALYSIS_REQUEST, WorkerJobStatus.PENDING, null);
+    org.springframework.test.util.ReflectionTestUtils.setField(job, "id", 100L);
+    return job;
   }
 
   private Project project() {

@@ -3,6 +3,8 @@ package com.ssafer.agent.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.ssafer.agent.api.dto.PendingAgentTaskResponseData;
 import com.ssafer.agent.domain.entity.Agent;
@@ -137,6 +139,32 @@ class PendingAgentTaskQueryServiceTest {
     assertThat(result.get(0).taskStatus()).isEqualTo(AgentTaskStatus.SENT);
     assertThat(task.getTaskStatus()).isEqualTo(AgentTaskStatus.SENT);
     assertThat(task.getSentAt()).isNull();
+  }
+
+  @Test
+  void getPendingTasksDoesNotAppendRawUploadUrlForNonScanRequestTask() {
+    Agent agent = buildAgent(1L, 10L);
+    AgentTask task = buildTask(
+        101L,
+        agent,
+        AgentTaskStatus.PENDING,
+        "{\"action\":\"PATCH_APPLY\"}",
+        Instant.parse("2026-04-23T09:00:00Z"),
+        AgentTaskType.PATCH_APPLY
+    );
+
+    given(agentRepository.findById(1L)).willReturn(Optional.of(agent));
+    given(agentTaskRepository.findByAgentIdAndTaskStatusInOrderByQueuedAtAsc(
+        Mockito.eq(1L),
+        Mockito.anyCollection()
+    )).willReturn(List.of(task));
+
+    List<PendingAgentTaskResponseData> result = service.getPendingTasks(1L, 1L);
+
+    assertThat(result).hasSize(1);
+    assertThat(result.get(0).taskType()).isEqualTo(AgentTaskType.PATCH_APPLY);
+    assertThat(result.get(0).payload().get("action").asText()).isEqualTo("PATCH_APPLY");
+    verify(rawUploadUrlIssuer, never()).issuePutUrl(Mockito.anyString());
   }
 
   @Test

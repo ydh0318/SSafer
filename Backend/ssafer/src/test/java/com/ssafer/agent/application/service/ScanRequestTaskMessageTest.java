@@ -13,6 +13,9 @@ import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.enums.ScanType;
+import com.ssafer.worker.domain.entity.WorkerJob;
+import com.ssafer.worker.domain.enums.WorkerJobStatus;
+import com.ssafer.worker.domain.enums.WorkerJobType;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -66,5 +69,57 @@ class ScanRequestTaskMessageTest {
     assertThat(message.toolVersion()).isEqualTo("1.4.0");
     assertThat(message.payloadHash()).isEqualTo("sha256:abc");
     assertThat(message.queuedAt()).isEqualTo(Instant.parse("2026-05-06T04:00:00Z"));
+  }
+
+  @Test
+  void ofUploadAnalysisKeepsMqContractButUsesWorkerJobIdentity() {
+    Project project = new Project(1L, null, "project-a", null, com.ssafer.project.domain.enums.ScanMode.AGENT, false);
+    ReflectionTestUtils.setField(project, "id", 10L);
+
+    Scan scan = Scan.builder()
+        .id(30L)
+        .projectId(project.getId())
+        .requestActorType(RequestActorType.USER)
+        .scanMode(ScanMode.UPLOAD)
+        .scanType(ScanType.PROJECT_FILE)
+        .status(ScanStatus.RAW_UPLOADED)
+        .requestedAt(LocalDateTime.now())
+        .lastUpdatedAt(LocalDateTime.now())
+        .build();
+
+    WorkerJob job = new WorkerJob(
+        project,
+        scan,
+        WorkerJobType.UPLOAD_ANALYSIS_REQUEST,
+        WorkerJobStatus.PENDING,
+        null
+    );
+    ReflectionTestUtils.setField(job, "id", 70L);
+    ReflectionTestUtils.setField(job, "queuedAt", Instant.parse("2026-05-06T04:00:01Z"));
+
+    ScanRequestTaskMessage message = ScanRequestTaskMessage.ofUploadAnalysis(
+        job,
+        20L,
+        "s3://ssafer/raw/30/scan_result.json",
+        7,
+        "ssafer-web-upload",
+        "0.1.0",
+        "sha256:def"
+    );
+
+    assertThat(message.messageType()).isEqualTo("SCAN_REQUEST");
+    assertThat(message.messageVersion()).isEqualTo(2);
+    assertThat(message.taskType()).isEqualTo(AgentTaskType.SCAN_REQUEST);
+    assertThat(message.taskId()).isEqualTo(70L);
+    assertThat(message.agentId()).isEqualTo(20L);
+    assertThat(message.projectId()).isEqualTo(10L);
+    assertThat(message.scanId()).isEqualTo(30L);
+    assertThat(message.scanType()).isEqualTo(ScanType.PROJECT_FILE);
+    assertThat(message.rawResultPath()).isEqualTo("s3://ssafer/raw/30/scan_result.json");
+    assertThat(message.resultCount()).isEqualTo(7);
+    assertThat(message.tool()).isEqualTo("ssafer-web-upload");
+    assertThat(message.toolVersion()).isEqualTo("0.1.0");
+    assertThat(message.payloadHash()).isEqualTo("sha256:def");
+    assertThat(message.queuedAt()).isEqualTo(Instant.parse("2026-05-06T04:00:01Z"));
   }
 }

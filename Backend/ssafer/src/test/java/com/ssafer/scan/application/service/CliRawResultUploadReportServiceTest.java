@@ -10,11 +10,8 @@ import static org.mockito.Mockito.when;
 import com.ssafer.agent.application.service.AgentTaskPublisher;
 import com.ssafer.agent.application.service.ScanRequestTaskMessage;
 import com.ssafer.agent.domain.entity.Agent;
-import com.ssafer.agent.domain.entity.AgentTask;
 import com.ssafer.agent.domain.enums.AgentStatus;
-import com.ssafer.agent.domain.enums.AgentTaskStatus;
 import com.ssafer.agent.domain.repository.AgentRepository;
-import com.ssafer.agent.domain.repository.AgentTaskRepository;
 import com.ssafer.global.error.BusinessException;
 import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.security.AuthenticatedActor;
@@ -28,17 +25,22 @@ import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.repository.ScanRepository;
+import com.ssafer.worker.domain.entity.WorkerJob;
+import com.ssafer.worker.domain.enums.WorkerJobStatus;
+import com.ssafer.worker.domain.repository.WorkerJobRepository;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,7 +51,7 @@ class CliRawResultUploadReportServiceTest {
   @Mock
   private AgentRepository agentRepository;
   @Mock
-  private AgentTaskRepository agentTaskRepository;
+  private WorkerJobRepository workerJobRepository;
   @Mock
   private ProjectAuthorizationService projectAuthorizationService;
   @Mock
@@ -58,26 +60,42 @@ class CliRawResultUploadReportServiceTest {
   private AgentTaskPublisher agentTaskPublisher;
   @Mock
   private ObjectMapper objectMapper;
+  @Mock
+  private PlatformTransactionManager transactionManager;
 
-  @InjectMocks
   private CliRawResultUploadReportService service;
+
+  @BeforeEach
+  void setUp() {
+    service = new CliRawResultUploadReportService(
+        scanRepository,
+        agentRepository,
+        workerJobRepository,
+        projectAuthorizationService,
+        rawResultObjectVerifier,
+        agentTaskPublisher,
+        objectMapper,
+        transactionManager
+    );
+  }
 
   @Test
   void reportSuccessCreatesTaskPublishesAndQueuesScan() throws Exception {
     Scan scan = createScan(ScanStatus.REQUESTED);
     Project project = createProject(101L);
     Agent agent = createAgent(200L, 101L);
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
     when(projectAuthorizationService.loadAuthorizedProjectOrThrow(101L, AuthenticatedActor.member(1L)))
         .thenReturn(project);
     when(agentRepository.findFirstByProjectId(101L)).thenReturn(Optional.of(agent));
     when(rawResultObjectVerifier.exists(scan.getRawResultPath())).thenReturn(true);
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
-    when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
-      AgentTask task = invocation.getArgument(0);
-      ReflectionTestUtils.setField(task, "id", 3001L);
-      ReflectionTestUtils.setField(task, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
-      return task;
+    when(workerJobRepository.save(any(WorkerJob.class))).thenAnswer(invocation -> {
+      WorkerJob job = invocation.getArgument(0);
+      ReflectionTestUtils.setField(job, "id", 3001L);
+      ReflectionTestUtils.setField(job, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
+      return job;
     });
 
     CliRawResultUploadReportResponseData response = service.report(
@@ -98,11 +116,11 @@ class CliRawResultUploadReportServiceTest {
     assertThat(scan.getProgressStep()).isEqualTo("WAITING_FOR_WORKER");
     assertThat(scan.getRawResultJson()).isEqualTo("{\"ok\":true}");
 
-    ArgumentCaptor<AgentTask> taskCaptor = ArgumentCaptor.forClass(AgentTask.class);
-    verify(agentTaskRepository).save(taskCaptor.capture());
-    AgentTask savedTask = taskCaptor.getValue();
-    assertThat(savedTask.getTaskStatus()).isEqualTo(AgentTaskStatus.SENT);
-    assertThat(savedTask.getPayloadJson()).isEqualTo("{\"ok\":true}");
+    ArgumentCaptor<WorkerJob> jobCaptor = ArgumentCaptor.forClass(WorkerJob.class);
+    verify(workerJobRepository).save(jobCaptor.capture());
+    WorkerJob savedJob = jobCaptor.getValue();
+    assertThat(savedJob.getJobStatus()).isEqualTo(WorkerJobStatus.PUBLISHED);
+    assertThat(savedJob.getPayloadJson()).isEqualTo("{\"ok\":true}");
 
     ArgumentCaptor<ScanRequestTaskMessage> messageCaptor = ArgumentCaptor.forClass(ScanRequestTaskMessage.class);
     verify(agentTaskPublisher).publishScanRequest(messageCaptor.capture());
@@ -127,6 +145,7 @@ class CliRawResultUploadReportServiceTest {
     // 프로젝트에 agent가 없어도 fallback agent를 생성해
     // 기존 메시지 발행 경로가 끊기지 않아야 한다.
     // 프로젝트에 Agent가 없어도 placeholder Agent를 생성하고 publish가 이어져야 한다.
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
     Scan scan = createScan(ScanStatus.REQUESTED);
     Project project = createProject(101L);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
@@ -140,11 +159,11 @@ class CliRawResultUploadReportServiceTest {
       return fallback;
     });
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
-    when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
-      AgentTask task = invocation.getArgument(0);
-      ReflectionTestUtils.setField(task, "id", 3002L);
-      ReflectionTestUtils.setField(task, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:01Z"));
-      return task;
+    when(workerJobRepository.save(any(WorkerJob.class))).thenAnswer(invocation -> {
+      WorkerJob job = invocation.getArgument(0);
+      ReflectionTestUtils.setField(job, "id", 3002L);
+      ReflectionTestUtils.setField(job, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:01Z"));
+      return job;
     });
 
     CliRawResultUploadReportResponseData response = service.report(
@@ -163,21 +182,25 @@ class CliRawResultUploadReportServiceTest {
 
   @Test
   void reportWhenPublishFailsThrowsInternalServerError() throws Exception {
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
     Scan scan = createScan(ScanStatus.REQUESTED);
     Project project = createProject(101L);
     Agent agent = createAgent(200L, 101L);
+    WorkerJob[] savedJobHolder = new WorkerJob[1];
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
     when(projectAuthorizationService.loadAuthorizedProjectOrThrow(101L, AuthenticatedActor.member(1L)))
         .thenReturn(project);
     when(agentRepository.findFirstByProjectId(101L)).thenReturn(Optional.of(agent));
     when(rawResultObjectVerifier.exists(scan.getRawResultPath())).thenReturn(true);
     when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
-    when(agentTaskRepository.save(any(AgentTask.class))).thenAnswer(invocation -> {
-      AgentTask task = invocation.getArgument(0);
-      ReflectionTestUtils.setField(task, "id", 3001L);
-      ReflectionTestUtils.setField(task, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
-      return task;
+    when(workerJobRepository.save(any(WorkerJob.class))).thenAnswer(invocation -> {
+      WorkerJob job = invocation.getArgument(0);
+      ReflectionTestUtils.setField(job, "id", 3001L);
+      ReflectionTestUtils.setField(job, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:00Z"));
+      savedJobHolder[0] = job;
+      return job;
     });
+    when(workerJobRepository.findByIdAndScanIdForUpdate(3001L, 1001L)).thenAnswer(invocation -> Optional.of(savedJobHolder[0]));
     doThrow(new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR))
         .when(agentTaskPublisher)
         .publishScanRequest(any(ScanRequestTaskMessage.class));
@@ -190,10 +213,20 @@ class CliRawResultUploadReportServiceTest {
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
         .isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR);
+
+    ArgumentCaptor<WorkerJob> jobCaptor = ArgumentCaptor.forClass(WorkerJob.class);
+    verify(workerJobRepository).save(jobCaptor.capture());
+    WorkerJob savedJob = jobCaptor.getValue();
+    assertThat(savedJob.getJobStatus()).isEqualTo(WorkerJobStatus.CANCELED);
+    assertThat(savedJob.getFailureReason()).isEqualTo("ANALYSIS_QUEUE_PUBLISH_FAILED");
+    assertThat(scan.getStatus()).isEqualTo(ScanStatus.RAW_UPLOADED);
+    assertThat(scan.getFailureReason()).isEqualTo("ANALYSIS_QUEUE_PUBLISH_FAILED");
+    assertThat(scan.getProgressStep()).isEqualTo("CLI_ANALYSIS_QUEUE_PUBLISH_FAILED");
   }
 
   @Test
   void reportWithInvalidPayloadHashThrowsInvalidPayloadHash() {
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
     Scan scan = createScan(ScanStatus.REQUESTED);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
 
@@ -208,8 +241,9 @@ class CliRawResultUploadReportServiceTest {
   }
 
   @ParameterizedTest
-  @EnumSource(value = ScanStatus.class, names = {"RAW_UPLOADED", "QUEUED", "RUNNING", "DONE"})
+  @EnumSource(value = ScanStatus.class, names = {"QUEUED", "RUNNING", "DONE"})
   void reportWhenStatusIsAlreadyAcceptedFlowThrowsDuplicate(ScanStatus status) {
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
     Scan scan = createScan(status);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
 
@@ -226,6 +260,7 @@ class CliRawResultUploadReportServiceTest {
   @ParameterizedTest
   @EnumSource(value = ScanStatus.class, names = {"FAILED", "CANCELED"})
   void reportWhenStatusIsNotAcceptableThrowsConflict(ScanStatus status) {
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
     Scan scan = createScan(status);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
 
@@ -241,6 +276,7 @@ class CliRawResultUploadReportServiceTest {
 
   @Test
   void reportWhenRawResultObjectMissingThrowsNotFound() {
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
     Scan scan = createScan(ScanStatus.REQUESTED);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
     when(rawResultObjectVerifier.exists(scan.getRawResultPath())).thenReturn(false);
@@ -257,6 +293,7 @@ class CliRawResultUploadReportServiceTest {
 
   @Test
   void reportWhenActorHasNoProjectPermissionThrowsForbidden() {
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
     Scan scan = createScan(ScanStatus.REQUESTED);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
     doThrow(new BusinessException(ErrorCode.FORBIDDEN))
@@ -275,6 +312,7 @@ class CliRawResultUploadReportServiceTest {
 
   @Test
   void reportWhenProjectIsInactiveOrMissingThrowsNotFound() {
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
     Scan scan = createScan(ScanStatus.REQUESTED);
     when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
     doThrow(new BusinessException(ErrorCode.NOT_FOUND))
@@ -303,6 +341,36 @@ class CliRawResultUploadReportServiceTest {
         .requestedAt(LocalDateTime.now().minusMinutes(1))
         .lastUpdatedAt(LocalDateTime.now().minusMinutes(1))
         .build();
+  }
+
+  @Test
+  void reportWhenStatusIsRawUploadedAllowsRetryAndQueuesAgain() throws Exception {
+    when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+
+    Scan scan = createScan(ScanStatus.RAW_UPLOADED);
+    Project project = createProject(101L);
+    Agent agent = createAgent(200L, 101L);
+    when(scanRepository.findByIdForUpdate(1001L)).thenReturn(Optional.of(scan));
+    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(101L, AuthenticatedActor.member(1L)))
+        .thenReturn(project);
+    when(agentRepository.findFirstByProjectId(101L)).thenReturn(Optional.of(agent));
+    when(rawResultObjectVerifier.exists(scan.getRawResultPath())).thenReturn(true);
+    when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
+    when(workerJobRepository.save(any(WorkerJob.class))).thenAnswer(invocation -> {
+      WorkerJob job = invocation.getArgument(0);
+      ReflectionTestUtils.setField(job, "id", 3003L);
+      ReflectionTestUtils.setField(job, "queuedAt", java.time.Instant.parse("2026-05-06T04:00:02Z"));
+      return job;
+    });
+
+    CliRawResultUploadReportResponseData response = service.report(
+        1001L,
+        AuthenticatedActor.member(1L),
+        new CliRawResultUploadReportRequest("ssafer-cli", "1.4.0", 10, null)
+    );
+
+    assertThat(response.status()).isEqualTo(ScanStatus.QUEUED);
+    verify(agentTaskPublisher).publishScanRequest(any(ScanRequestTaskMessage.class));
   }
 
   private Agent createAgent(Long agentId, Long projectId) {

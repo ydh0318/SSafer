@@ -54,7 +54,7 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
       String rawResultPath = uploadScanRawResultUploader.upload(command.scanId(), resultPath);
       uploadScanStatusUpdater.markRawUploaded(command.scanId(), rawResultPath);
 
-      uploadScanAnalysisTaskDispatcher.dispatch(
+      boolean dispatched = uploadScanAnalysisTaskDispatcher.dispatch(
           command.scanId(),
           command.projectId(),
           rawResultPath,
@@ -63,7 +63,22 @@ public class WebUploadScanProcessorImpl implements WebUploadScanProcessor {
           uploadScanToolMetadata.toolVersion(),
           payloadHash
       );
-      uploadScanStatusUpdater.markQueued(command.scanId());
+      if (!dispatched) {
+        uploadScanStatusUpdater.markQueuePublishFailed(
+            command.scanId(),
+            ScanFailureReason.ANALYSIS_QUEUE_PUBLISH_FAILED
+        );
+        log.warn(
+            "Upload scan dispatch skipped after raw upload: scanId={}, projectId={}, rawResultPath={}",
+            command.scanId(),
+            command.projectId(),
+            rawResultPath
+        );
+        return UploadScanProcessingResult.rawUploadedFailed(
+            ScanFailureReason.ANALYSIS_QUEUE_PUBLISH_FAILED,
+            ErrorCode.ANALYSIS_QUEUE_PUBLISH_FAILED
+        );
+      }
 
       log.info(
           "Upload scan processing completed and queued: scanId={}, projectId={}, rawResultPath={}",
