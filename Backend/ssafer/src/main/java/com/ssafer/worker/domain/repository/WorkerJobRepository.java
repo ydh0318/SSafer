@@ -23,6 +23,14 @@ public interface WorkerJobRepository extends JpaRepository<WorkerJob, Long> {
       select job
       from WorkerJob job
       where job.id = :jobId
+      """)
+  Optional<WorkerJob> findByIdForUpdate(@Param("jobId") Long jobId);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("""
+      select job
+      from WorkerJob job
+      where job.id = :jobId
         and job.scan.id = :scanId
       """)
   Optional<WorkerJob> findByIdAndScanIdForUpdate(

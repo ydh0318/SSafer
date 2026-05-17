@@ -54,6 +54,12 @@ public class WorkerJob {
   @Column(name = "published_at")
   private Instant publishedAt;
 
+  @Column(name = "publish_attempt_count", nullable = false)
+  private int publishAttemptCount;
+
+  @Column(name = "last_publish_attempt_at")
+  private Instant lastPublishAttemptAt;
+
   @Column(name = "started_at")
   private Instant startedAt;
 
@@ -123,6 +129,14 @@ public class WorkerJob {
     return startedAt;
   }
 
+  public int getPublishAttemptCount() {
+    return publishAttemptCount;
+  }
+
+  public Instant getLastPublishAttemptAt() {
+    return lastPublishAttemptAt;
+  }
+
   public Instant getCompletedAt() {
     return completedAt;
   }
@@ -137,7 +151,11 @@ public class WorkerJob {
 
   public void markPublished(Instant now) {
     transitionTo(WorkerJobStatus.PUBLISHED);
-    this.publishedAt = now;
+    if (this.publishedAt == null) {
+      this.publishedAt = now;
+    }
+    this.lastPublishAttemptAt = now;
+    this.publishAttemptCount += 1;
     this.failureReason = null;
   }
 

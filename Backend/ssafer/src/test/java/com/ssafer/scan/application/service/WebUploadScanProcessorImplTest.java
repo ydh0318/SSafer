@@ -75,6 +75,15 @@ class WebUploadScanProcessorImplTest {
     when(uploadScanRawResultUploader.upload(1001L, output)).thenReturn(rawResultPath);
     when(uploadScanToolMetadata.toolName()).thenReturn("ssafer-web-upload");
     when(uploadScanToolMetadata.toolVersion()).thenReturn("0.1.0");
+    when(uploadScanAnalysisTaskDispatcher.dispatch(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.eq(2001L),
+        org.mockito.ArgumentMatchers.eq(rawResultPath),
+        org.mockito.ArgumentMatchers.eq(1),
+        org.mockito.ArgumentMatchers.eq("ssafer-web-upload"),
+        org.mockito.ArgumentMatchers.eq("0.1.0"),
+        org.mockito.ArgumentMatchers.anyString()
+    )).thenReturn(true);
 
     UploadScanProcessingResult result = processor.process(command);
 
@@ -92,7 +101,6 @@ class WebUploadScanProcessorImplTest {
     );
     // MQ payloadHash는 실제 scan_result.json bytes 기준 SHA-256과 동일해야 한다.
     assertThat(payloadHashCaptor.getValue()).isEqualTo(calculatePayloadHash(output));
-    verify(uploadScanStatusUpdater).markQueued(1001L);
     verify(uploadScanStatusUpdater, never()).markExecutionFailed(any(), any());
     verify(uploadScanFindingPatchContextEnricher, never()).enrich(any(), any());
     verify(tempWorkspaceManager).cleanup(workspace);
@@ -139,6 +147,15 @@ class WebUploadScanProcessorImplTest {
     when(uploadScanRawResultUploader.upload(1001L, output)).thenReturn(rawResultPath);
     when(uploadScanToolMetadata.toolName()).thenReturn("ssafer-web-upload");
     when(uploadScanToolMetadata.toolVersion()).thenReturn("0.1.0");
+    when(uploadScanAnalysisTaskDispatcher.dispatch(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.eq(2001L),
+        org.mockito.ArgumentMatchers.eq(rawResultPath),
+        org.mockito.ArgumentMatchers.eq(1),
+        org.mockito.ArgumentMatchers.eq("ssafer-web-upload"),
+        org.mockito.ArgumentMatchers.eq("0.1.0"),
+        org.mockito.ArgumentMatchers.anyString()
+    )).thenReturn(true);
 
     UploadScanProcessingResult result = processor.process(command);
 
@@ -229,17 +246,57 @@ class WebUploadScanProcessorImplTest {
     when(uploadScanRawResultUploader.upload(1001L, output)).thenReturn(rawResultPath);
     when(uploadScanToolMetadata.toolName()).thenReturn("ssafer-web-upload");
     when(uploadScanToolMetadata.toolVersion()).thenReturn("0.1.0");
-    org.mockito.Mockito.doThrow(new UploadScanQueuePublishException("mq failed", new RuntimeException("boom")))
-        .when(uploadScanAnalysisTaskDispatcher)
-        .dispatch(
-            org.mockito.ArgumentMatchers.eq(1001L),
-            org.mockito.ArgumentMatchers.eq(2001L),
-            org.mockito.ArgumentMatchers.eq(rawResultPath),
-            org.mockito.ArgumentMatchers.anyInt(),
-            org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.anyString()
-        );
+    org.mockito.Mockito.when(uploadScanAnalysisTaskDispatcher.dispatch(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.eq(2001L),
+        org.mockito.ArgumentMatchers.eq(rawResultPath),
+        org.mockito.ArgumentMatchers.anyInt(),
+        org.mockito.ArgumentMatchers.anyString(),
+        org.mockito.ArgumentMatchers.anyString(),
+        org.mockito.ArgumentMatchers.anyString()
+    )).thenThrow(new UploadScanQueuePublishException("mq failed", new RuntimeException("boom")));
+
+    UploadScanProcessingResult result = processor.process(command);
+
+    assertThat(result.status()).isEqualTo(ScanStatus.RAW_UPLOADED);
+    assertThat(result.failureReason()).isEqualTo(ScanFailureReason.ANALYSIS_QUEUE_PUBLISH_FAILED);
+    assertThat(result.errorCode()).isEqualTo(ErrorCode.ANALYSIS_QUEUE_PUBLISH_FAILED);
+    verify(uploadScanStatusUpdater).markRawUploaded(1001L, rawResultPath);
+    verify(uploadScanStatusUpdater).markQueuePublishFailed(1001L, ScanFailureReason.ANALYSIS_QUEUE_PUBLISH_FAILED);
+    verify(tempWorkspaceManager).cleanup(workspace);
+  }
+
+  @Test
+  void processWhenDispatchIsSkippedReturnsRawUploadedFailure() throws Exception {
+    UploadScanProcessingCommand command = command();
+    Path workspace = Path.of("C:/tmp/upload-scan");
+    Path file = workspace.resolve(".env");
+    Path output = tempDir.resolve("scan_result-dispatch-skipped.json");
+    String rawResultPath = "s3://ssafer/raw/1001/uuid/scan_result.json";
+    Files.writeString(output, "{\"findings\":[]}", StandardCharsets.UTF_8);
+
+    when(tempWorkspaceManager.createWorkspace(1001L)).thenReturn(workspace);
+    when(tempWorkspaceManager.saveFiles(any(), any())).thenReturn(List.of(file));
+    when(uploadFileScanner.scanAll(List.of(file)))
+        .thenReturn(new UploadFileScanResult(List.of(), List.of(), null, null, null));
+    when(scanResultJsonBuilder.writeScanResultJson(
+        any(),
+        any(),
+        any(),
+        any(UploadFileScanResult.class)
+    )).thenReturn(output);
+    when(uploadScanRawResultUploader.upload(1001L, output)).thenReturn(rawResultPath);
+    when(uploadScanToolMetadata.toolName()).thenReturn("ssafer-web-upload");
+    when(uploadScanToolMetadata.toolVersion()).thenReturn("0.1.0");
+    when(uploadScanAnalysisTaskDispatcher.dispatch(
+        org.mockito.ArgumentMatchers.eq(1001L),
+        org.mockito.ArgumentMatchers.eq(2001L),
+        org.mockito.ArgumentMatchers.eq(rawResultPath),
+        org.mockito.ArgumentMatchers.anyInt(),
+        org.mockito.ArgumentMatchers.anyString(),
+        org.mockito.ArgumentMatchers.anyString(),
+        org.mockito.ArgumentMatchers.anyString()
+    )).thenReturn(false);
 
     UploadScanProcessingResult result = processor.process(command);
 
