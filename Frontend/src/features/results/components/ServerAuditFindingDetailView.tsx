@@ -144,7 +144,8 @@ function ServerAuditFindingDetailView({
                   active ? 'border-l-2 border-l-black bg-[#F5F5F5]' : ''
                 }`}
                 key={item.findingId}
-                state={routeState}
+                // 사이드바에서 다른 finding으로 이동할 때도 "왜 위험한가" 탭부터 시작한다.
+                state={{ ...routeState, initialView: 'explain' }}
                 to={ROUTES.resultFindingDetail.replace(':scanId', String(scanId)).replace(':findingId', String(item.findingId))}
               >
                 <div className="flex items-center gap-2">

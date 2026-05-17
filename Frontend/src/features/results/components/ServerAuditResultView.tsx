@@ -84,7 +84,8 @@ function ServerAuditResultView({ result, routeState }: ServerAuditResultViewProp
             <Link
               className="group flex items-start gap-4 border border-neutral-100 bg-white px-5 py-4 transition hover:border-black"
               key={finding.findingId}
-              state={routeState}
+              // finding 박스 진입은 항상 "왜 위험한가" 탭부터 (이전 routeState의 initialView를 덮어쓴다)
+              state={{ ...routeState, initialView: 'explain' }}
               to={ROUTES.resultFindingDetail
                 .replace(':scanId', String(result.scanId))
                 .replace(':findingId', String(finding.findingId))}

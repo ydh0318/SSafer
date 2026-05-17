@@ -423,12 +423,10 @@ function FindingDetailPage() {
                     <div className="border border-neutral-100 bg-white p-6">
                       <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">코드 가이드</div>
                       <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111]">
-                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full bg-[#FF5F57]" />
-                            <span className="h-2 w-2 rounded-full bg-[#FEBC2E]" />
-                            <span className="h-2 w-2 rounded-full bg-[#28C840]" />
-                            <span className="ml-2 font-mono text-[10px] text-neutral-500">code-guidance</span>
+                        <div className="flex items-center justify-between border-b border-neutral-800 bg-[#0d0d0d] px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="select-none font-mono text-[10px] text-[#D4FC64]">▶</span>
+                            <span className="font-mono text-[11px] tracking-[0.15em] text-neutral-500">code-guidance</span>
                           </div>
                           <button
                             className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-500 transition hover:text-white disabled:opacity-30"
@@ -527,12 +525,10 @@ function FindingDetailPage() {
                       <div>
                         <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#FF5F57] before:content-['']">원본 코드</div>
                         <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111]">
-                          <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full bg-[#FF5F57]" />
-                              <span className="h-2 w-2 rounded-full bg-[#FEBC2E]" />
-                              <span className="h-2 w-2 rounded-full bg-[#28C840]" />
-                              <span className="ml-2 font-mono text-[10px] text-neutral-500">raw-snippet</span>
+                          <div className="flex items-center justify-between border-b border-neutral-800 bg-[#0d0d0d] px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className="select-none font-mono text-[10px] text-[#D4FC64]">▶</span>
+                              <span className="font-mono text-[11px] tracking-[0.15em] text-neutral-500">raw-snippet</span>
                             </div>
                             <button
                               className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-500 transition hover:text-white"
@@ -552,12 +548,10 @@ function FindingDetailPage() {
                       <div>
                         <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">수정 제안</div>
                         <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111]">
-                          <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full bg-[#FF5F57]" />
-                              <span className="h-2 w-2 rounded-full bg-[#FEBC2E]" />
-                              <span className="h-2 w-2 rounded-full bg-[#28C840]" />
-                              <span className="ml-2 font-mono text-[10px] text-neutral-500">recommended-action</span>
+                          <div className="flex items-center justify-between border-b border-neutral-800 bg-[#0d0d0d] px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className="select-none font-mono text-[10px] text-[#D4FC64]">▶</span>
+                              <span className="font-mono text-[11px] tracking-[0.15em] text-neutral-500">recommended-action</span>
                             </div>
                             <button
                               className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-500 transition hover:text-white disabled:opacity-30"
@@ -756,7 +750,8 @@ function FindingDetailPage() {
                       active ? 'bg-[#F4FFD9]' : dimmed ? 'bg-neutral-50 hover:bg-neutral-100' : 'hover:bg-[#FAFAF7]'
                     }`}
                     key={item.findingId}
-                    state={routeState}
+                    // 관련 finding 사이드바 진입도 항상 "왜 위험한가" 탭부터 (현재 페이지의 initialView가 묻어가지 않도록 명시)
+                    state={{ ...routeState, initialView: 'explain' }}
                     to={ROUTES.resultFindingDetail
                       .replace(':scanId', String(item.scanId))
                       .replace(':findingId', String(item.findingId))}
