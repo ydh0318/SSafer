@@ -11,6 +11,7 @@ _FIX_SYSTEM = (
     "Write all user-facing natural-language fields in Korean. "
     "Filenames, rule IDs, finding IDs, tech terms, and code snippets may stay in their original form. "
     "Never use Japanese, Chinese, Hanja, Thai, Spanish, Latin, or broken characters. "
+    "If the title indicates a mitigation is in place (e.g. 'DOCKER-USER 차단됨', '방화벽 차단됨'), reflect that the risk is already reduced and focus on maintaining or strengthening the existing protection rather than treating it as fully exposed. "
     "If source is server-audit or Scan Type is SERVER_AUDIT, do not generate patches; focus on operational guidance and verification commands. "
     "Include patches only when finding.patchContext provides enough context for a safe CLI patch.\n\n"
     "Patch rules:\n"

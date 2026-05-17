@@ -38,6 +38,8 @@ class AgentTaskResult:
     status: str
     message: str
     patch_results: list[PatchApplyResult]
+    scan_id: int | None = None
+    scan_type: str | None = None
 
 
 def build_agent_ws_url(api_url: str) -> str:
@@ -137,7 +139,12 @@ def handle_agent_task(
         )
 
     try:
-        results = apply_patch_candidates(project_root, candidates, dry_run=dry_run)
+        results = apply_patch_candidates(
+            project_root,
+            candidates,
+            dry_run=dry_run,
+            allow_hash_mismatch_if_text_matches=True,
+        )
     except PatchError as exc:
         return AgentTaskResult(
             task_id=task.task_id,
@@ -200,6 +207,8 @@ def _handle_scan_request_task(
             status="DRY_RUN",
             message=f"SCAN_REQUEST validated for {target_label}.",
             patch_results=[],
+            scan_id=task.scan_id,
+            scan_type=scan_type,
         )
     if not upload_token:
         return _failed_task(
@@ -233,16 +242,23 @@ def _handle_scan_request_task(
         status="SUCCESS",
         message=f"{scan_type} completed and uploaded for scanId={task.scan_id}.",
         patch_results=[],
+        scan_id=task.scan_id,
+        scan_type=scan_type,
     )
 
 
 def _failed_task(task: AgentTask, message: str) -> AgentTaskResult:
+    scan_type = None
+    if isinstance(task.payload, dict):
+        scan_type = _payload_string(task.payload, "scanType", "scan_type")
     return AgentTaskResult(
         task_id=task.task_id,
         task_type=task.task_type,
         status="FAILED",
         message=message,
         patch_results=[],
+        scan_id=task.scan_id,
+        scan_type=scan_type.upper() if scan_type else None,
     )
 
 
