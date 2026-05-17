@@ -446,6 +446,60 @@ function FindingDetailPage() {
                       </div>
                     </div>
                     <div className="border border-neutral-100 bg-white p-6">
+                      <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">코드 변경 미리보기</div>
+                      {finding.fix.patches && finding.fix.patches.length > 0 ? (
+                        <>
+                          {(finding.filePath || (finding.lineNumber ?? finding.line) != null) && (
+                            <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-xs">
+                              {finding.filePath && (
+                                <span className="rounded bg-neutral-100 px-2.5 py-1 text-neutral-600">{finding.filePath}</span>
+                              )}
+                              {(finding.lineNumber ?? finding.line) != null && (
+                                <span className="rounded bg-[#D4FC64] px-2.5 py-1 font-black text-black">
+                                  L{finding.lineNumber ?? finding.line}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <div className="mt-4 space-y-3">
+                            {finding.fix.patches.map((patch) => (
+                              <div className="overflow-hidden rounded-lg border border-neutral-200" key={patch.patchId}>
+                                {patch.filePath && (
+                                  <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-4 py-2">
+                                    <span className="font-mono text-xs text-neutral-500">{patch.filePath}</span>
+                                    <span className="rounded border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-bold tracking-[0.1em] text-neutral-600">
+                                      {patch.operation === 'replace' ? '코드 교체' : '코드 추가'}
+                                    </span>
+                                  </div>
+                                )}
+                                {patch.operation === 'replace' ? (
+                                  <div className="grid grid-cols-1 divide-y divide-neutral-200 font-mono text-sm md:grid-cols-2 md:divide-x md:divide-y-0">
+                                    <div className="whitespace-pre-wrap bg-rose-50 p-4 text-rose-900">
+                                      <div className="mb-2 text-xs font-bold text-rose-500">− 수정 전</div>
+                                      {patch.oldText || <span className="italic text-rose-400">(원본 없음)</span>}
+                                    </div>
+                                    <div className="whitespace-pre-wrap bg-emerald-50 p-4 text-emerald-900">
+                                      <div className="mb-2 text-xs font-bold text-emerald-500">+ 수정 후</div>
+                                      {patch.newText || <span className="italic text-emerald-400">(제거됨)</span>}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="whitespace-pre-wrap bg-emerald-50 p-4 font-mono text-sm text-emerald-900">
+                                    <div className="mb-2 text-xs font-bold text-emerald-500">+ 파일 끝에 추가</div>
+                                    {patch.newText || <span className="italic text-emerald-400">(추가할 내용 없음)</span>}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="mt-3 leading-8 text-neutral-400">
+                          이 취약점은 코드 변경 미리보기를 자동으로 제공할 수 없습니다. 위 코드 가이드를 참고해 직접 수정해 주세요.
+                        </p>
+                      )}
+                    </div>
+                    <div className="border border-neutral-100 bg-white p-6">
                       <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">검증 방법</div>
                       <p className="mt-3 leading-8 text-neutral-800">{finding.fix.verification || '내용이 제공되지 않았습니다.'}</p>
                     </div>
