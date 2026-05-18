@@ -127,8 +127,6 @@ class ScanResult(BaseModel):
             raise ValueError("must be an ISO 8601 datetime")
 
         normalized = value.replace("Z", "+00:00")
-        from datetime import datetime
-
         try:
             datetime.fromisoformat(normalized)
         except ValueError as exc:

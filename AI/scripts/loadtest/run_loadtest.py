@@ -262,7 +262,7 @@ def run_scenario(
         findings_per_msg=findings,
     )
 
-    summary = wait_for_completion(mock_spring_url, msg_count, timeout=timeout)
+    wait_for_completion(mock_spring_url, msg_count, timeout=timeout)
     metrics = collect_metrics(mock_spring_url, mock_fastapi_url)
     print_results(f"{scenario_key}: {scenario['name']}", metrics, msg_count)
 
