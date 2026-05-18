@@ -63,7 +63,7 @@ function getAgentDisplay(
     if (agentStatus.status === 'ONLINE') {
       return {
         label: 'Agent 연결됨',
-        className: isSelected ? 'text-[#D4FC64]' : 'text-[#8CC319]',
+        className: isSelected ? 'text-emerald-300' : 'text-emerald-700',
       };
     }
     if (agentStatus.status === 'ERROR') {
