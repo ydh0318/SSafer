@@ -653,6 +653,7 @@ def project_create(
         console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
         raise typer.Exit(code=1)
     console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
+    _print_project_web_link(effective_endpoint, project_id)
 
 
 def _has_saved_agent_config(config: dict) -> bool:
@@ -743,6 +744,7 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
             console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
             raise typer.Exit(code=1)
         console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
+        _print_project_web_link(endpoint, project_id)
         return int(project_id)
 
     console.print("[cyan]Local Agent를 연결할 프로젝트를 선택하세요.[/cyan]")
@@ -1164,6 +1166,7 @@ def login(
             raise typer.Exit(code=1) from exc
         console.print("[green]웹 게스트 토큰을 CLI에 저장했습니다.[/green]")
         console.print("[dim]이제 ssafer upload, ssafer agent 같은 명령에서 같은 게스트 세션을 사용합니다.[/dim]")
+        _print_guest_web_hint(effective_endpoint)
         _prompt_start_agent_after_login()
         return
     if guest:
@@ -1191,6 +1194,7 @@ def login(
             else:
                 console.print("[dim]웹에서 이어 보기 URL은 토큰이 포함되어 있어 기본 출력에서는 숨깁니다.[/dim]")
                 console.print("[dim]원문 URL이 필요하면 [bold]ssafer guest --show-url[/bold]을 실행하세요.[/dim]")
+        _print_guest_web_hint(effective_endpoint)
         _prompt_start_agent_after_login()
         return
 
@@ -1260,50 +1264,125 @@ def guest(
         else:
             console.print("[dim]웹에서 이어 보기 URL은 토큰이 포함되어 있어 기본 출력에서는 숨깁니다.[/dim]")
             console.print("[dim]원문 URL이 필요하면 [bold]ssafer guest --show-url[/bold]을 실행하세요.[/dim]")
+        _print_guest_web_hint(effective_endpoint)
         return
     login(endpoint=endpoint, logout=False, guest=True, guest_token=None, show_url=show_url)
 
 
-@app.command(help="이메일 인증부터 회원가입까지 터미널에서 한 번에 진행합니다.", rich_help_panel="계정/상태")
+@app.command(help="이메일 인증을 거쳐 새 SSAfer 계정을 만듭니다.", rich_help_panel="계정/상태")
 def signup(
     endpoint: Optional[str] = typer.Option(None, "--endpoint", help="회원가입에 사용할 SSAfer 백엔드 API URL입니다."),
 ) -> None:
-    """이메일 인증을 거쳐 SSAfer 계정을 생성합니다."""
+    """이메일 인증 후 SSAfer 계정을 생성합니다."""
     from ssafer.core.auth import (
+        load_auth_identity,
         load_endpoint,
+        login_with_credentials,
         register_user,
+        save_auth_tokens,
         send_email_verification_code,
         verify_email_code,
     )
 
     effective_endpoint = endpoint or load_endpoint()
-    console.print("[cyan]SSAfer 계정을 생성합니다. 이메일 인증 코드 확인까지 한 번에 진행합니다.[/cyan]")
-    email = typer.prompt("이메일")
+    console.print("[cyan]SSAfer 계정을 만듭니다. 이메일 인증을 마친 뒤 회원가입을 진행합니다.[/cyan]")
+    email = _prompt_signup_email()
     display_name = typer.prompt("표시 이름")
     password = typer.prompt("비밀번호", hide_input=True)
-    if not email.strip() or not display_name.strip() or not password.strip():
-        console.print("[red]이메일, 표시 이름, 비밀번호를 모두 입력해야 합니다.[/red]")
+    if not display_name.strip() or not password.strip():
+        console.print("[red]표시 이름과 비밀번호는 비워둘 수 없습니다.[/red]")
         raise typer.Exit(code=1)
+
     try:
-        console.print("[cyan]이메일 인증 코드를 발송합니다...[/cyan]")
-        send_email_verification_code(effective_endpoint, email.strip())
-        console.print("[green]인증 코드를 보냈습니다. 이메일함을 확인한 뒤 코드를 입력하세요.[/green]")
-        code = typer.prompt("인증 코드")
-        if not code.strip():
-            console.print("[red]이메일 인증 코드를 입력해야 합니다.[/red]")
-            raise typer.Exit(code=1)
-        console.print("[cyan]인증 코드를 확인합니다...[/cyan]")
-        verify_email_code(effective_endpoint, email.strip(), code.strip())
+        email = _verify_signup_email_code(
+            effective_endpoint,
+            email,
+            send_email_verification_code,
+            verify_email_code,
+        )
         console.print("[cyan]회원가입을 요청합니다...[/cyan]")
-        register_user(effective_endpoint, email.strip(), display_name.strip(), password)
+        register_user(effective_endpoint, email, display_name.strip(), password)
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]회원가입 실패:[/red] {_format_http_error(exc)}")
         raise typer.Exit(code=1) from exc
     except httpx.HTTPError as exc:
         console.print(f"[red]회원가입 실패:[/red] {_format_http_transport_error(exc)}")
         raise typer.Exit(code=1) from exc
-    console.print("[green]회원가입 완료. 이제 [bold]ssafer login[/bold]으로 로그인하세요.[/green]")
 
+    console.print("[green]회원가입이 완료되었습니다.[/green]")
+    if not typer.confirm("가입한 계정으로 바로 로그인할까요?", default=False):
+        console.print("[dim]나중에 로그인하려면 [bold]ssafer login[/bold]을 실행하세요.[/dim]")
+        return
+
+    previous_auth_mode, previous_auth_subject = load_auth_identity()
+    try:
+        auth_data = login_with_credentials(effective_endpoint, email, password)
+        save_auth_tokens(auth_data, effective_endpoint)
+        _clear_agent_config_if_auth_changed(previous_auth_mode, previous_auth_subject)
+    except httpx.HTTPStatusError as exc:
+        console.print(f"[red]로그인 실패:[/red] {_format_http_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        console.print(f"[red]로그인 실패:[/red] {_format_http_transport_error(exc)}")
+        raise typer.Exit(code=1) from exc
+    except ValueError as exc:
+        console.print(f"[red]로그인 실패:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print("[green]로그인 완료. 토큰은 ~/.ssafer/config.yml에 저장됩니다.[/green]")
+    console.print(f"웹 대시보드: {_web_url(effective_endpoint, '/dashboard')}")
+    _prompt_start_agent_after_login()
+
+
+def _prompt_signup_email() -> str:
+    while True:
+        email = typer.prompt("이메일").strip()
+        if not email:
+            console.print("[red]이메일은 비워둘 수 없습니다.[/red]")
+            continue
+        if _is_valid_email(email):
+            return email
+        console.print("[red]이메일 형식이 올바르지 않습니다. 예: user@example.com[/red]")
+
+
+def _is_valid_email(email: str) -> bool:
+    return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()))
+
+
+def _verify_signup_email_code(
+    endpoint: str,
+    email: str,
+    send_code: Callable[[str, str], object],
+    verify_code: Callable[[str, str, str], object],
+) -> str:
+    while True:
+        console.print("[cyan]이메일 인증 코드를 발송합니다...[/cyan]")
+        send_code(endpoint, email)
+        console.print("[green]인증 코드를 보냈습니다. 이메일함에서 코드를 확인해 주세요.[/green]")
+        for attempt in range(1, 4):
+            code = typer.prompt("인증 코드").strip()
+            if not code:
+                console.print("[red]인증 코드는 비워둘 수 없습니다.[/red]")
+            else:
+                try:
+                    console.print("[cyan]인증 코드를 확인합니다...[/cyan]")
+                    verify_code(endpoint, email, code)
+                    return email
+                except httpx.HTTPStatusError:
+                    if attempt >= 3:
+                        raise
+                    console.print(f"[yellow]인증 코드가 올바르지 않습니다. 남은 횟수: {3 - attempt}[/yellow]")
+                    if typer.confirm("인증 코드를 다시 발송할까요?", default=False):
+                        break
+                    if typer.confirm("이메일을 다시 입력할까요?", default=False):
+                        email = _prompt_signup_email()
+                        break
+                    continue
+            if attempt >= 3:
+                console.print("[red]인증 코드 입력 가능 횟수를 초과했습니다. 다시 signup을 실행해 주세요.[/red]")
+                raise typer.Exit(code=1)
+        else:
+            raise typer.Exit(code=1)
 
 @app.command("send-email-code", hidden=True)
 def send_email_code(
@@ -2166,6 +2245,19 @@ def _web_url(api_url: object, path: str) -> str:
 
     base_url = normalize_api_url(str(api_url or DEFAULT_API_URL))
     return f"{base_url}{path}"
+
+
+def _web_project_url(api_url: object, project_id: object) -> str:
+    return _web_url(api_url, f"/projects/{project_id}")
+
+
+def _print_project_web_link(api_url: object, project_id: object) -> None:
+    console.print(f"웹 프로젝트: {_web_project_url(api_url, project_id)}")
+
+
+def _print_guest_web_hint(api_url: object) -> None:
+    console.print(f"웹 대시보드: {_web_url(api_url, '/dashboard')}")
+    console.print("[dim]웹에서 만든 프로젝트 요청을 이 PC/서버가 처리하려면 프로젝트 폴더에서 [bold]ssafer agent[/bold]를 실행하세요.[/dim]")
 
 
 def _apply_web_scan_url(project_root: Path, api_url: str | None, scan_id: int) -> str:
