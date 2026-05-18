@@ -9,7 +9,7 @@ INSERT INTO users (
 VALUES
     (
         'test1@ssafer.co.kr',
-        'test1',
+        'ssafer-demo-test1',
         '$2a$10$U.hv04VfYHsMu16HJ5DDbugcRDGq5rq/PFrWJq/b4L57qrTkIZiRW',
         'ACTIVE',
         CURRENT_TIMESTAMP,
@@ -17,7 +17,7 @@ VALUES
     ),
     (
         'test2@ssafer.co.kr',
-        'test2',
+        'ssafer-demo-test2',
         '$2a$10$U.hv04VfYHsMu16HJ5DDbugcRDGq5rq/PFrWJq/b4L57qrTkIZiRW',
         'ACTIVE',
         CURRENT_TIMESTAMP,
@@ -25,7 +25,7 @@ VALUES
     ),
     (
         'test3@ssafer.co.kr',
-        'test3',
+        'ssafer-demo-test3',
         '$2a$10$U.hv04VfYHsMu16HJ5DDbugcRDGq5rq/PFrWJq/b4L57qrTkIZiRW',
         'ACTIVE',
         CURRENT_TIMESTAMP,
@@ -33,7 +33,7 @@ VALUES
     ),
     (
         'test4@ssafer.co.kr',
-        'test4',
+        'ssafer-demo-test4',
         '$2a$10$U.hv04VfYHsMu16HJ5DDbugcRDGq5rq/PFrWJq/b4L57qrTkIZiRW',
         'ACTIVE',
         CURRENT_TIMESTAMP,
@@ -41,10 +41,10 @@ VALUES
     ),
     (
         'test5@ssafer.co.kr',
-        'test5',
+        'ssafer-demo-test5',
         '$2a$10$U.hv04VfYHsMu16HJ5DDbugcRDGq5rq/PFrWJq/b4L57qrTkIZiRW',
         'ACTIVE',
         CURRENT_TIMESTAMP,
         CURRENT_TIMESTAMP
     )
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT DO NOTHING;
