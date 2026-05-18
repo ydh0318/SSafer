@@ -116,7 +116,12 @@ function ScanDetailPage() {
   }, [refreshNotice, toast]);
 
   useEffect(() => {
-    if (!statusData || statusData.status !== 'DONE' || hasAutoNavigatedRef.current) {
+    if (
+      !routeState.autoOpenedFromScanRequest ||
+      !statusData ||
+      statusData.status !== 'DONE' ||
+      hasAutoNavigatedRef.current
+    ) {
       return;
     }
 

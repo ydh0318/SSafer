@@ -2,6 +2,8 @@ import { motion } from 'framer-motion';
 import { ArrowUp, X } from 'lucide-react';
 import { useRef } from 'react';
 
+import { SCAN_UPLOAD_FILE_COUNT_LIMIT } from '../utils/uploadValidation';
+
 type UploadDropZoneProps = {
   files: File[];
   onFilesChange: (files: File[] | null) => void;
@@ -15,12 +17,39 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function getFileIdentity(file: File) {
+  return `${file.name}-${file.size}-${file.lastModified}`;
+}
+
+function getFileDisplayName(file: File) {
+  return file.webkitRelativePath || file.name;
+}
+
+function formatFileModifiedTime(file: File) {
+  if (!file.lastModified) return null;
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(file.lastModified));
+}
+
+function mergeFiles(currentFiles: File[], nextFiles: File[] | null) {
+  if (!nextFiles || nextFiles.length === 0) return currentFiles;
+
+  return [...currentFiles, ...nextFiles].filter((file, index, allFiles) => (
+    allFiles.findIndex((candidate) => getFileIdentity(candidate) === getFileIdentity(file)) === index
+  ));
+}
+
 function UploadDropZone({ files, onFilesChange, isDragOver, onDragStateChange }: UploadDropZoneProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const hasFiles = files.length > 0;
 
-  const updateFiles = (nextFiles: File[] | null) => {
-    onFilesChange(nextFiles && nextFiles.length > 0 ? nextFiles : null);
+  const updateFiles = (nextFiles: File[] | null, options: { append?: boolean } = {}) => {
+    const mergedFiles = options.append ? mergeFiles(files, nextFiles) : nextFiles;
+    onFilesChange(mergedFiles && mergedFiles.length > 0 ? mergedFiles : null);
 
     if (inputRef.current) {
       inputRef.current.value = '';
@@ -50,7 +79,7 @@ function UploadDropZone({ files, onFilesChange, isDragOver, onDragStateChange }:
       onDrop={(event) => {
         event.preventDefault();
         onDragStateChange(false);
-        updateFiles(Array.from(event.dataTransfer.files));
+        updateFiles(Array.from(event.dataTransfer.files), { append: true });
       }}
       role="button"
       tabIndex={0}
@@ -59,7 +88,7 @@ function UploadDropZone({ files, onFilesChange, isDragOver, onDragStateChange }:
         accept=".env,.yml,.yaml,Dockerfile,Containerfile,sshd_config,nginx.conf"
         className="sr-only"
         multiple
-        onChange={(event) => updateFiles(Array.from(event.target.files ?? []))}
+        onChange={(event) => updateFiles(Array.from(event.target.files ?? []), { append: true })}
         ref={inputRef}
         type="file"
       />
@@ -81,25 +110,26 @@ function UploadDropZone({ files, onFilesChange, isDragOver, onDragStateChange }:
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.16em] text-neutral-400">
         <span>
-          최대 <span className="font-bold text-neutral-700">3개</span>
+          최대 <span className="font-bold text-neutral-700">{SCAN_UPLOAD_FILE_COUNT_LIMIT}개</span>
         </span>
         <span className="text-neutral-300">·</span>
         <span>
           총 <span className="font-bold text-neutral-700">1MB</span> 이하
         </span>
         <span className="text-neutral-300">·</span>
-        <span>분석 후 즉시 삭제</span>
+        <span>추가 선택 시 목록에 누적</span>
       </div>
 
       {hasFiles ? (
         <div
-          className="mt-8 flex w-full max-w-2xl flex-col gap-3 bg-[#111111] px-4 py-4 text-left text-sm text-white landing-inner-radius"
+          className="mt-8 flex w-full max-w-4xl flex-col gap-4 bg-[#111111] px-5 py-5 text-left text-sm text-white landing-inner-radius md:px-6 md:py-6"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-400">선택된 파일</p>
-              <p className="mt-1 text-sm font-bold text-white">{files.length}개 파일을 업로드합니다.</p>
+              <p className="mt-1 text-sm font-bold text-white">{files.length}/{SCAN_UPLOAD_FILE_COUNT_LIMIT}개 파일을 업로드합니다.</p>
+              <p className="mt-1 text-xs text-neutral-400">같은 이름의 파일은 수정 시간과 크기를 함께 확인하세요.</p>
             </div>
             <button
               aria-label="선택한 파일 전체 비우기"
@@ -115,28 +145,40 @@ function UploadDropZone({ files, onFilesChange, isDragOver, onDragStateChange }:
             </button>
           </div>
 
-          {files.map((file, index) => (
-            <div
-              className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 rounded-sm bg-white/5 px-3 py-2.5 font-mono"
-              key={`${file.name}-${file.size}-${file.lastModified}`}
-            >
-              <span className="truncate text-white" title={file.name}>
-                {file.name}
-              </span>
-              <span className="shrink-0 text-xs text-neutral-300">{formatFileSize(file.size)}</span>
-              <button
-                aria-label={`${file.name} 파일 제거`}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  removeFileAt(index);
-                }}
-                type="button"
+          {files.map((file, index) => {
+            const modifiedTime = formatFileModifiedTime(file);
+
+            return (
+              <div
+              className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-4 rounded-sm bg-white/5 px-4 py-3 font-mono"
+                key={getFileIdentity(file)}
               >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[11px] font-black text-white">
+                  {index + 1}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[15px] text-white" title={getFileDisplayName(file)}>
+                    {getFileDisplayName(file)}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[10px] text-neutral-400">
+                    {modifiedTime ? `수정 ${modifiedTime} · ` : ''}{file.type || 'config file'}
+                  </span>
+                </span>
+                <span className="shrink-0 text-sm text-neutral-300">{formatFileSize(file.size)}</span>
+                <button
+                  aria-label={`${file.name} 파일 제거`}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    removeFileAt(index);
+                  }}
+                  type="button"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>

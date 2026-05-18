@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronDown, Clock, FolderPlus, Plus, ScanSearch, Search, Trash2, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ChevronDown, Clock, FolderPlus, Plus, ScanSearch, Search, Trash2, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -380,25 +380,9 @@ function ProjectListPage() {
     };
   }, [selectedProject]);
 
-  const completedProjectEntries = useMemo(
-    () =>
-      projects
-        .map((project) => {
-          const latestCompleted = latestCompletedScans[project.id];
-
-          if (!latestCompleted) {
-            return null;
-          }
-
-          return { latestCompleted, project };
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null)
-        .sort((left, right) => {
-          const leftTime = new Date(left.latestCompleted.scan.completedAt ?? left.latestCompleted.scan.requestedAt).getTime();
-          const rightTime = new Date(right.latestCompleted.scan.completedAt ?? right.latestCompleted.scan.requestedAt).getTime();
-          return rightTime - leftTime;
-        }),
-    [latestCompletedScans, projects],
+  const selectedLatestCompleted = useMemo(
+    () => (selectedProjectId ? latestCompletedScans[selectedProjectId] ?? null : null),
+    [latestCompletedScans, selectedProjectId],
   );
 
   const resetCreateForm = () => {
@@ -706,78 +690,55 @@ function ProjectListPage() {
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-sm text-neutral-500">최근 결과</div>
-            <h2 className="mt-1.5 text-xl font-black tracking-tight text-[#080B16] md:text-2xl">가장 최근에 완료된 스캔</h2>
+            <h2 className="mt-1.5 text-xl font-black tracking-tight text-[#080B16] md:text-2xl">선택한 프로젝트의 최신 완료 스캔</h2>
           </div>
-          <p className="text-sm text-neutral-500">프로젝트별 최신 완료 결과를 바로 열어볼 수 있습니다.</p>
+          <p className="text-sm text-neutral-500">현재 선택한 프로젝트의 가장 최근 완료 결과만 보여줍니다.</p>
         </div>
 
         {isLoadingCompletedScans ? (
           <div className="border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">최신 완료 결과를 불러오는 중입니다.</div>
-        ) : completedProjectEntries.length === 0 ? (
+        ) : !selectedProject ? (
           <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600 landing-card-radius">
-            아직 완료된 스캔이 없습니다.
+            먼저 프로젝트를 선택하면 최신 완료 스캔을 확인할 수 있습니다.
+          </div>
+        ) : !selectedLatestCompleted ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600 landing-card-radius">
+            <span>선택한 프로젝트에 아직 완료된 스캔이 없습니다.</span>
+            <button
+              className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white transition hover:bg-neutral-800"
+              onClick={() => setSelectedMode('UPLOAD')}
+              type="button"
+            >
+              스캔 시작하기
+            </button>
           </div>
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {completedProjectEntries.map(({ project, latestCompleted }) => {
-              const detailPath = ROUTES.projectDetail.replace(':projectId', project.id);
-              const resultPath = ROUTES.resultDetail.replace(':scanId', String(latestCompleted.scan.scanId));
-
-              return (
-                <button
-                  className="flex flex-col gap-4 border border-black/5 bg-white p-5 text-left transition landing-card-radius hover:-translate-y-0.5 hover:border-black/15 hover:shadow-[0_18px_40px_rgba(15,23,42,0.06)]"
-                  key={project.id}
-                  onClick={() => navigate(resultPath, { state: { projectId: project.id } })}
-                  type="button"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Latest Result</div>
-                      <h3 className="mt-1.5 text-xl font-black tracking-tight text-black">{project.name}</h3>
-                    </div>
-                    <span className="rounded-full bg-black px-2.5 py-1 text-[11px] font-bold text-white">Scan #{latestCompleted.scan.scanId}</span>
-                  </div>
-
-                  <div className="grid gap-3 text-xs text-neutral-600 md:grid-cols-2">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Completed</div>
-                      <div className="mt-1 text-sm font-semibold text-black">
-                        {formatCompactDateTime(latestCompleted.scan.completedAt ?? latestCompleted.scan.requestedAt)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Mode</div>
-                      <div className="mt-1 text-sm font-semibold text-black">{getScanModeLabel(latestCompleted.scan.scanMode)}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center bg-[#D4FC64] px-3 py-1.5 text-xs font-bold text-black landing-inner-radius">결과 바로 보기</span>
-                    <button
-                      className="border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition landing-inner-radius hover:border-black hover:text-black"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        navigate(detailPath);
-                      }}
-                      type="button"
-                    >
-                      프로젝트 상세
-                    </button>
-                    <button
-                      className="border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition landing-inner-radius hover:border-rose-300 hover:bg-rose-50"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openDeleteModal({ id: project.id, name: project.name });
-                      }}
-                      type="button"
-                    >
-                      프로젝트 삭제
-                    </button>
-                  </div>
-                </button>
-              );
+          <button
+            className="flex w-full flex-col gap-4 border border-black/5 bg-white p-5 text-left transition landing-card-radius hover:-translate-y-0.5 hover:border-black/15 hover:shadow-[0_18px_40px_rgba(15,23,42,0.06)] md:flex-row md:items-center md:justify-between"
+            onClick={() => navigate(ROUTES.resultDetail.replace(':scanId', String(selectedLatestCompleted.scan.scanId)), {
+              state: { projectId: selectedLatestCompleted.projectId },
             })}
-          </div>
+            type="button"
+          >
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Latest Result</div>
+              <h3 className="mt-1.5 truncate text-xl font-black tracking-tight text-black">{selectedLatestCompleted.projectName}</h3>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-600">
+                <span>
+                  <span className="font-bold uppercase tracking-[0.18em] text-neutral-400">Completed</span>{' '}
+                  <span className="font-semibold text-black">{formatCompactDateTime(selectedLatestCompleted.scan.completedAt ?? selectedLatestCompleted.scan.requestedAt)}</span>
+                </span>
+                <span>
+                  <span className="font-bold uppercase tracking-[0.18em] text-neutral-400">Mode</span>{' '}
+                  <span className="font-semibold text-black">{getScanModeLabel(selectedLatestCompleted.scan.scanMode)}</span>
+                </span>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <span className="rounded-full bg-black px-2.5 py-1 text-[11px] font-bold text-white">Scan #{selectedLatestCompleted.scan.scanId}</span>
+              <span className="inline-flex items-center bg-[#D4FC64] px-3 py-1.5 text-xs font-bold text-black landing-inner-radius">결과 바로 보기</span>
+            </div>
+          </button>
         )}
       </section>
 
@@ -850,6 +811,18 @@ function ProjectListPage() {
                     </p>
                   </button>
                 </div>
+                {selectedAgentScanType === 'SERVER_AUDIT' ? (
+                  <div className="mt-3 flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900 landing-inner-radius">
+                    <AlertTriangle className="mt-1 h-4 w-4 shrink-0" />
+                    <div>
+                      <p className="font-black text-amber-950">Agent 서버 점검은 비대화형으로 실행됩니다.</p>
+                      <p className="mt-1">
+                        비밀번호 입력이 필요한 sudo 명령은 실행할 수 없어 DOCKER-USER, iptables, 일부 방화벽 상세 점검 결과가 제한될 수 있습니다.
+                        더 완전한 점검이 필요하면 서버 터미널에서 <code className="rounded bg-amber-100 px-1 font-mono">ssafer server --upload</code>를 직접 실행하세요.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
 
