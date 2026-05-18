@@ -1107,9 +1107,10 @@ def test_start_agent_refresh_selects_project_instead_of_reusing_saved_project(mo
     )
     issued: dict[str, object] = {}
 
-    def fake_select_project(endpoint: str, access_token: str) -> int:
+    def fake_select_project(endpoint: str, access_token: str, *, saved_project_id: int | None = None) -> int:
         assert endpoint == "https://api.example.com"
         assert access_token == "access-token"
+        assert saved_project_id == 1
         return 8
 
     def fake_issue(
@@ -1205,6 +1206,30 @@ def test_select_agent_project_id_can_create_project_from_existing_list(monkeypat
     project_id = main_module._select_agent_project_id("https://api.example.com", "access-token")
 
     assert project_id == 88
+
+
+def test_select_agent_project_id_defaults_to_saved_project(monkeypatch):
+    monkeypatch.setattr(
+        auth_module,
+        "list_projects",
+        lambda endpoint, token: [
+            {"projectId": 15, "name": "first-project"},
+            {"projectId": 66, "name": "saved-project"},
+        ],
+    )
+
+    def fake_prompt(*args, **kwargs):
+        return kwargs["default"]
+
+    monkeypatch.setattr(main_module.typer, "prompt", fake_prompt)
+
+    project_id = main_module._select_agent_project_id(
+        "https://api.example.com",
+        "access-token",
+        saved_project_id=66,
+    )
+
+    assert project_id == 66
 
 
 def test_project_create_command_creates_project(monkeypatch, tmp_path):

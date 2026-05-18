@@ -564,16 +564,17 @@ def _start_agent(*, path: Path, refresh_token: bool = False, verbose: bool = Fal
 
     project_root = path.resolve()
     agent_config = load_agent_config(project_root)
-    if refresh_token or not _has_saved_agent_config(agent_config):
-        endpoint = load_endpoint()
-        access_token = load_token()
-        if access_token is None:
-            console.print("[red]로그인이 필요합니다. 먼저 ssafer login을 실행하세요.[/red]")
-            raise typer.Exit(code=1)
-        if refresh_token:
-            project_id = _select_agent_project_id(endpoint, access_token)
-        else:
-            project_id = _saved_agent_project_id(agent_config) or _select_agent_project_id(endpoint, access_token)
+    endpoint = load_endpoint()
+    access_token = load_token()
+    if access_token is None:
+        console.print("[red]로그인이 필요합니다. 먼저 ssafer login을 실행하세요.[/red]")
+        raise typer.Exit(code=1)
+
+    saved_project_id = _saved_agent_project_id(agent_config)
+    project_id = _select_agent_project_id(endpoint, access_token, saved_project_id=saved_project_id)
+    if not refresh_token and _has_saved_agent_config(agent_config) and saved_project_id == project_id:
+        console.print("[green]저장된 Agent 설정을 사용합니다.[/green]")
+    else:
         agent_config = _issue_and_save_agent_token(
             project_id,
             endpoint,
@@ -705,8 +706,19 @@ def _issue_and_save_agent_token(
         raise typer.Exit(code=1) from exc
 
 
-def _select_agent_project_id(endpoint: str, access_token: str) -> int:
+def _select_agent_project_id(endpoint: str, access_token: str, *, saved_project_id: int | None = None) -> int:
     from ssafer.core.auth import create_project, list_projects
+
+    def _project_id_as_int(value: object) -> int | None:
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _prompt_project_id(*, default_project_id: int | None = None) -> int:
+        if default_project_id is None:
+            return typer.prompt("프로젝트 ID", type=int)
+        return typer.prompt("프로젝트 ID", type=int, default=default_project_id)
 
     def create_agent_project() -> int:
         console.print("[cyan]새 프로젝트 이름을 입력하세요. 그냥 Enter를 누르면 현재 폴더명을 사용합니다.[/cyan]")
@@ -735,11 +747,11 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
     except httpx.HTTPStatusError as exc:
         console.print(f"[yellow]프로젝트 목록 조회 실패:[/yellow] {_format_http_error(exc)}")
         console.print("[dim]웹에서 만든 프로젝트의 ID를 알고 있다면 직접 입력할 수 있습니다.[/dim]")
-        return typer.prompt("프로젝트 ID", type=int)
+        return _prompt_project_id(default_project_id=saved_project_id)
     except httpx.HTTPError as exc:
         console.print(f"[yellow]프로젝트 목록 조회 실패:[/yellow] {_format_http_transport_error(exc)}")
         console.print("[dim]웹에서 만든 프로젝트의 ID를 알고 있다면 직접 입력할 수 있습니다.[/dim]")
-        return typer.prompt("프로젝트 ID", type=int)
+        return _prompt_project_id(default_project_id=saved_project_id)
 
     if not projects:
         console.print("[yellow]이 계정에 연결된 SSAfer 프로젝트가 아직 없습니다.[/yellow]")
@@ -757,21 +769,25 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
 
     console.print("[cyan]Local Agent를 연결할 프로젝트를 선택하세요.[/cyan]")
     console.print("[dim]웹에서 이 프로젝트로 보낸 스캔/수정 요청을 현재 PC 또는 서버의 agent가 처리합니다.[/dim]")
-    console.print("[dim]아래 표의 선택 번호를 입력하세요. Enter를 누르면 1번을 선택합니다.[/dim]")
     project_table = Table(title="프로젝트 목록")
     project_table.add_column("선택 번호", justify="right")
     project_table.add_column("프로젝트 이름")
     project_table.add_column("projectId", justify="right")
+    default_index = 1
     for index, project in enumerate(projects, start=1):
         project_id = project.get("projectId") or project.get("id")
         name = project.get("name") or "(unnamed)"
+        if saved_project_id is not None and _project_id_as_int(project_id) == saved_project_id:
+            default_index = index
+            name = f"{name} (현재 연결)"
         project_table.add_row(str(index), str(name), str(project_id or "-"))
     create_index = len(projects) + 1
     project_table.add_row(str(create_index), "새 프로젝트 만들기", "-")
+    console.print(f"[dim]아래 표의 선택 번호를 입력하세요. Enter를 누르면 {default_index}번을 선택합니다.[/dim]")
     console.print(project_table)
 
     while True:
-        selected = typer.prompt("선택 번호", default="1", show_default=False)
+        selected = typer.prompt("선택 번호", default=str(default_index), show_default=False)
         if selected.isdigit():
             index = int(selected)
             if 1 <= index <= len(projects):

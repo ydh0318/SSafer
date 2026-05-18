@@ -691,9 +691,15 @@ def test_agent_command_starts_with_saved_agent_config(monkeypatch, tmp_path: Pat
             "agentToken": "raw-agent-token",
         },
     )
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://api.example.com")
+    monkeypatch.setattr("ssafer.core.auth.load_token", lambda: "access-token")
+    monkeypatch.setattr(
+        "ssafer.core.auth.list_projects",
+        lambda endpoint, token: [{"projectId": 10, "name": "Saved project"}],
+    )
     monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
 
-    result = CliRunner().invoke(app, ["agent", "--path", str(tmp_path)])
+    result = CliRunner().invoke(app, ["agent", "--path", str(tmp_path)], input="\n")
 
     assert result.exit_code == 0
     assert calls[0]["api_url"] == "https://api.example.com"
