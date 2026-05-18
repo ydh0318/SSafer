@@ -1,7 +1,12 @@
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 
 from app.worker.config import WorkerSettings
-from app.worker.processor import build_analysis_result_path, ScanTaskProcessor
+from app.worker.processor import (
+    build_analysis_result_path,
+    ScanTaskProcessor,
+    TaskIdempotencyRegistry,
+)
 from app.worker.schemas import FastApiAnalyzeResponse, ScanRequestMessage
 
 
@@ -287,6 +292,112 @@ class WorkerProcessorTest(unittest.TestCase):
                 scanType="PROJECT_SCAN",
                 rawResultPath="s3://bucket/raw.json",
             )
+
+
+class TaskIdempotencyRegistryTest(unittest.TestCase):
+    def test_first_claim_succeeds_and_duplicate_in_flight_is_rejected(self):
+        registry = TaskIdempotencyRegistry()
+
+        self.assertTrue(registry.claim(123))
+        self.assertFalse(registry.claim(123))
+
+    def test_release_without_completion_allows_retry(self):
+        registry = TaskIdempotencyRegistry()
+        registry.claim(123)
+        registry.release(123, completed=False)
+
+        self.assertTrue(registry.claim(123))
+
+    def test_recently_completed_blocks_future_claim(self):
+        registry = TaskIdempotencyRegistry()
+        registry.claim(123)
+        registry.release(123, completed=True)
+
+        self.assertFalse(registry.claim(123))
+
+    def test_completed_lru_evicts_oldest_beyond_capacity(self):
+        registry = TaskIdempotencyRegistry(max_completed=2)
+        for task_id in (1, 2, 3):
+            registry.claim(task_id)
+            registry.release(task_id, completed=True)
+
+        self.assertTrue(registry.claim(1))
+        self.assertFalse(registry.claim(2))
+        self.assertFalse(registry.claim(3))
+
+    def test_concurrent_claim_grants_exactly_one(self):
+        registry = TaskIdempotencyRegistry()
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(lambda _: registry.claim(42), range(8)))
+
+        self.assertEqual(sum(1 for granted in results if granted), 1)
+
+
+class WorkerProcessorIdempotencyTest(unittest.TestCase):
+    def _build_processor(self, fastapi_client=None, registry=None):
+        spring_client = FakeSpringClient()
+        if fastapi_client is None:
+            fastapi_client = FakeFastApiClient(
+                FastApiAnalyzeResponse(
+                    status="completed",
+                    scan_result_path=(
+                        "s3://ssafer-scan-storage-dev/raw/5/scan_result.json"
+                    ),
+                    analysis_result_path=(
+                        "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+                    ),
+                )
+            )
+        processor = ScanTaskProcessor(
+            spring_client=spring_client,
+            fastapi_client=fastapi_client,
+            settings=build_settings(),
+            idempotency_registry=registry,
+        )
+        return processor, spring_client, fastapi_client
+
+    def test_duplicate_in_flight_skips_pipeline_and_callbacks(self):
+        registry = TaskIdempotencyRegistry()
+        processor, spring_client, fastapi_client = self._build_processor(
+            registry=registry,
+        )
+        registry.claim(123)
+
+        processor.process(build_message())
+
+        self.assertEqual(fastapi_client.requests, [])
+        self.assertEqual(spring_client.callbacks, [])
+
+    def test_duplicate_after_completion_skips_pipeline_and_callbacks(self):
+        registry = TaskIdempotencyRegistry()
+        processor, spring_client, fastapi_client = self._build_processor(
+            registry=registry,
+        )
+
+        processor.process(build_message())
+        self.assertEqual(len(fastapi_client.requests), 1)
+        self.assertEqual(len(spring_client.callbacks), 2)
+
+        processor.process(build_message())
+
+        self.assertEqual(len(fastapi_client.requests), 1)
+        self.assertEqual(len(spring_client.callbacks), 2)
+
+    def test_skipped_duplicate_emits_log(self):
+        registry = TaskIdempotencyRegistry()
+        processor, _spring_client, _fastapi_client = self._build_processor(
+            registry=registry,
+        )
+        registry.claim(123)
+
+        with self.assertLogs("app.worker.processor", level="INFO") as logs:
+            processor.process(build_message())
+
+        output = "\n".join(logs.output)
+        self.assertIn("Skipping duplicate scan task delivery.", output)
+        self.assertIn("taskId=123", output)
+        self.assertIn("status=SKIPPED_DUPLICATE", output)
 
 
 if __name__ == "__main__":

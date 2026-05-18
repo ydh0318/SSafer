@@ -1,5 +1,7 @@
+from collections import OrderedDict
 from datetime import datetime, timezone
 import logging
+import threading
 
 from app.core.analysis_errors import (
     ANALYSIS_FAILED_PROGRESS_STEP,
@@ -23,6 +25,44 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 ANALYSIS_STARTED_PROGRESS_STEP = "analysis_started"
+
+DEFAULT_RECENTLY_COMPLETED_CAPACITY = 1024
+
+
+class TaskIdempotencyRegistry:
+    """Per-process dedupe for SCAN_REQUEST taskIds.
+
+    RabbitMQ prefetch + asyncio.to_thread fan-out can dispatch the same
+    taskId to multiple worker threads. This registry serializes the entry
+    check with a lock so only one thread proceeds; subsequent duplicates
+    (in-flight or recently completed) return False and are ack'd by the
+    consumer without re-running the analysis pipeline.
+    """
+
+    def __init__(self, max_completed: int = DEFAULT_RECENTLY_COMPLETED_CAPACITY):
+        self._lock = threading.Lock()
+        self._in_progress: set[int] = set()
+        self._completed: OrderedDict[int, None] = OrderedDict()
+        self._max_completed = max_completed
+
+    def claim(self, task_id: int) -> bool:
+        with self._lock:
+            if task_id in self._completed or task_id in self._in_progress:
+                return False
+            self._in_progress.add(task_id)
+            return True
+
+    def release(self, task_id: int, *, completed: bool) -> None:
+        with self._lock:
+            self._in_progress.discard(task_id)
+            if not completed:
+                return
+            if task_id in self._completed:
+                self._completed.move_to_end(task_id)
+            else:
+                self._completed[task_id] = None
+            while len(self._completed) > self._max_completed:
+                self._completed.popitem(last=False)
 
 
 def utc_now_iso() -> str:
@@ -55,12 +95,39 @@ class ScanTaskProcessor:
         spring_client: SpringClient,
         fastapi_client: FastApiClient,
         settings: WorkerSettings,
+        idempotency_registry: TaskIdempotencyRegistry | None = None,
     ):
         self.spring_client = spring_client
         self.fastapi_client = fastapi_client
         self.settings = settings
+        self.idempotency_registry = (
+            idempotency_registry or TaskIdempotencyRegistry()
+        )
 
     def process(self, message: ScanRequestMessage) -> None:
+        if not self.idempotency_registry.claim(message.task_id):
+            log_with_fields(
+                logger,
+                logging.INFO,
+                "Skipping duplicate scan task delivery.",
+                scanId=message.scan_id,
+                taskId=message.task_id,
+                stage="MESSAGE_CONSUMED",
+                status="SKIPPED_DUPLICATE",
+            )
+            return
+
+        completed = False
+        try:
+            self._process_inner(message)
+            completed = True
+        finally:
+            self.idempotency_registry.release(
+                message.task_id,
+                completed=completed,
+            )
+
+    def _process_inner(self, message: ScanRequestMessage) -> None:
         started_at = utc_now_iso()
         started_ms = monotonic_ms()
         analysis_result_path = build_analysis_result_path(message, self.settings)
