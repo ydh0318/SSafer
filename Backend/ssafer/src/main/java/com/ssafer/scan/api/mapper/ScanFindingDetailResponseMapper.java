@@ -146,9 +146,16 @@ public final class ScanFindingDetailResponseMapper {
 
     List<ScanFindingReferenceResponse> mapped = new ArrayList<>();
     for (JsonNode ref : references) {
+      if (!ref.isObject()) {
+        continue;
+      }
+      String url = readNullableText(ref, "url");
+      if (url == null) {
+        continue;
+      }
       mapped.add(new ScanFindingReferenceResponse(
           readNullableText(ref, "title"),
-          readNullableText(ref, "url"),
+          url,
           readNullableText(ref, "snippet")
       ));
     }
