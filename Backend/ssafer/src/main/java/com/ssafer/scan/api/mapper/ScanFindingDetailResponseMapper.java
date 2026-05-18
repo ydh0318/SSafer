@@ -4,6 +4,7 @@ import com.ssafer.scan.api.dto.ScanFindingDetailResponse;
 import com.ssafer.scan.api.dto.ScanFindingExplanationResponse;
 import com.ssafer.scan.api.dto.ScanFindingFixPatchResponse;
 import com.ssafer.scan.api.dto.ScanFindingFixResponse;
+import com.ssafer.scan.api.dto.ScanFindingReferenceResponse;
 import com.ssafer.scan.domain.entity.ScanFinding;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +42,7 @@ public final class ScanFindingDetailResponseMapper {
         finding.getAttackScenario(),
         finding.getRemediationGuide(),
         resolveFix(rawSnippet),
+        readReferenceArray(rawSnippet),
         readTextArray(rawSnippet, "targetFiles"),
         finding.getRawSnippetJson(),
         finding.getPatchPayloadJson(),
@@ -131,6 +133,30 @@ public final class ScanFindingDetailResponseMapper {
           readNullableText(patch, "oldText"),
           readNullableText(patch, "newText"),
           readNullableText(patch, "expectedFileHash")
+      ));
+    }
+    return mapped;
+  }
+
+  private static List<ScanFindingReferenceResponse> readReferenceArray(JsonNode rawSnippet) {
+    JsonNode references = rawSnippet.path("references");
+    if (!references.isArray() || references.isEmpty()) {
+      return List.of();
+    }
+
+    List<ScanFindingReferenceResponse> mapped = new ArrayList<>();
+    for (JsonNode ref : references) {
+      if (!ref.isObject()) {
+        continue;
+      }
+      String url = readNullableText(ref, "url");
+      if (url == null) {
+        continue;
+      }
+      mapped.add(new ScanFindingReferenceResponse(
+          readNullableText(ref, "title"),
+          url,
+          readNullableText(ref, "snippet")
       ));
     }
     return mapped;
