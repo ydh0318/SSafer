@@ -170,6 +170,98 @@ class AsyncConsumerProcessMessageTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(shutdown_event.is_set())
 
 
+class AsyncConsumerStructuredLoggingTest(unittest.IsolatedAsyncioTestCase):
+    """Verifies failure log lines carry the structured fields ops rely on."""
+
+    async def test_invalid_message_log_includes_error_class_and_delivery_tag(self):
+        processor = MagicMock()
+        processor.redelivery_tracker = RedeliveryTracker(cap=5)
+        message = _make_aio_message(b"not valid json")
+        message.delivery_tag = 42
+
+        with self.assertLogs("app.worker.async_consumer", level="ERROR") as logs:
+            await process_message(
+                message,
+                processor=processor,
+                semaphore=asyncio.Semaphore(5),
+            )
+
+        output = "\n".join(logs.output)
+        self.assertIn("Invalid RabbitMQ scan request message.", output)
+        self.assertIn("errorClass=JSONDecodeError", output)
+        self.assertIn("deliveryTag=42", output)
+        self.assertIn("stage=MESSAGE_CONSUMED", output)
+        self.assertIn("status=REJECTED", output)
+
+    async def test_redelivery_cap_log_includes_count_and_stage(self):
+        processor = MagicMock()
+        processor.process = MagicMock()
+        processor.redelivery_tracker = RedeliveryTracker(cap=2)
+        for _ in range(processor.redelivery_tracker.cap):
+            processor.redelivery_tracker.record(
+                VALID_MESSAGE_PAYLOAD["taskId"],
+            )
+
+        message = _make_aio_message(VALID_MESSAGE_PAYLOAD)
+
+        with self.assertLogs("app.worker.async_consumer", level="WARNING") as logs:
+            await process_message(
+                message,
+                processor=processor,
+                semaphore=asyncio.Semaphore(5),
+            )
+
+        output = "\n".join(logs.output)
+        self.assertIn("Redelivery cap exceeded.", output)
+        self.assertIn("redeliveryCount=3", output)
+        self.assertIn("cap=2", output)
+        self.assertIn("stage=MESSAGE_DROPPED", output)
+        self.assertIn("status=DROPPED", output)
+
+    async def test_processing_log_includes_redelivery_count(self):
+        processor = MagicMock()
+        processor.process = MagicMock()
+        processor.redelivery_tracker = RedeliveryTracker(cap=5)
+        message = _make_aio_message(VALID_MESSAGE_PAYLOAD)
+
+        with self.assertLogs("app.worker.async_consumer", level="INFO") as logs:
+            await process_message(
+                message,
+                processor=processor,
+                semaphore=asyncio.Semaphore(5),
+            )
+
+        output = "\n".join(logs.output)
+        self.assertIn("Processing scan task.", output)
+        self.assertIn("redeliveryCount=1", output)
+        self.assertIn("stage=MESSAGE_CONSUMED", output)
+        self.assertIn("status=PROCESSING", output)
+
+    async def test_processor_exception_log_includes_error_class_and_status(self):
+        processor = MagicMock()
+        processor.process = MagicMock(
+            side_effect=JsonHttpClientError("HTTP 503", status_code=503)
+        )
+        processor.redelivery_tracker = RedeliveryTracker(cap=5)
+        message = _make_aio_message(VALID_MESSAGE_PAYLOAD)
+
+        with self.assertLogs("app.worker.async_consumer", level="ERROR") as logs:
+            await process_message(
+                message,
+                processor=processor,
+                semaphore=asyncio.Semaphore(5),
+            )
+
+        output = "\n".join(logs.output)
+        self.assertIn("Unhandled scan task failure.", output)
+        self.assertIn("errorClass=JsonHttpClientError", output)
+        self.assertIn("statusCode=503", output)
+        self.assertIn("requeue=True", output)
+        self.assertIn("redeliveryCount=1", output)
+        self.assertIn("stage=TASK_FAILED", output)
+        self.assertIn("status=FAILED", output)
+
+
 class WorkerSettingsConcurrencyTest(unittest.TestCase):
     def test_default_max_concurrency(self):
         from app.worker.config import load_worker_settings

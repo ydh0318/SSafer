@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from app.core.logging_utils import log_with_fields
 from app.worker.bootstrap import build_processor, should_requeue_exception
 from app.worker.config import load_worker_settings
 from app.worker.schemas import ScanRequestMessage
@@ -33,54 +34,115 @@ async def process_message(
             json.JSONDecodeError,
             ValidationError,
             ValueError,
-        ):
-            logger.exception("Invalid RabbitMQ scan request message.")
+        ) as exc:
+            log_with_fields(
+                logger,
+                logging.ERROR,
+                "Invalid RabbitMQ scan request message.",
+                deliveryTag=message.delivery_tag,
+                redelivered=message.redelivered,
+                errorClass=type(exc).__name__,
+                stage="MESSAGE_CONSUMED",
+                status="REJECTED",
+                exc_info=True,
+            )
             await message.nack(requeue=False)
             return
 
         attempts = processor.redelivery_tracker.record(scan_msg.task_id)
         if attempts > processor.redelivery_tracker.cap:
-            logger.warning(
-                "Redelivery cap exceeded. taskId=%s scanId=%s attempts=%d cap=%d",
-                scan_msg.task_id,
-                scan_msg.scan_id,
-                attempts,
-                processor.redelivery_tracker.cap,
+            log_with_fields(
+                logger,
+                logging.WARNING,
+                "Redelivery cap exceeded.",
+                scanId=scan_msg.scan_id,
+                taskId=scan_msg.task_id,
+                redeliveryCount=attempts,
+                cap=processor.redelivery_tracker.cap,
+                deliveryTag=message.delivery_tag,
+                stage="MESSAGE_DROPPED",
+                status="DROPPED",
             )
             try:
                 await message.nack(requeue=False)
             except Exception:
-                logger.exception("Failed to nack message after redelivery cap.")
+                log_with_fields(
+                    logger,
+                    logging.ERROR,
+                    "Failed to nack message after redelivery cap.",
+                    scanId=scan_msg.scan_id,
+                    taskId=scan_msg.task_id,
+                    deliveryTag=message.delivery_tag,
+                    stage="NACK_FAILED",
+                    status="ERROR",
+                    exc_info=True,
+                )
             return
 
         try:
-            logger.info(
-                "Processing scan task taskId=%s scanId=%s rawResultPath=%s deliveryTag=%s redelivered=%s",
-                scan_msg.task_id,
-                scan_msg.scan_id,
-                scan_msg.raw_result_path,
-                message.delivery_tag,
-                message.redelivered,
+            log_with_fields(
+                logger,
+                logging.INFO,
+                "Processing scan task.",
+                scanId=scan_msg.scan_id,
+                taskId=scan_msg.task_id,
+                rawResultPath=scan_msg.raw_result_path,
+                deliveryTag=message.delivery_tag,
+                redelivered=message.redelivered,
+                redeliveryCount=attempts,
+                stage="MESSAGE_CONSUMED",
+                status="PROCESSING",
             )
             await asyncio.to_thread(processor.process, scan_msg)
         except Exception as exc:
             requeue = should_requeue_exception(exc)
-            logger.exception(
-                "Unhandled scan task failure taskId=%s scanId=%s requeue=%s",
-                scan_msg.task_id,
-                scan_msg.scan_id,
-                requeue,
+            log_with_fields(
+                logger,
+                logging.ERROR,
+                "Unhandled scan task failure.",
+                scanId=scan_msg.scan_id,
+                taskId=scan_msg.task_id,
+                errorClass=type(exc).__name__,
+                statusCode=getattr(exc, "status_code", None),
+                requeue=requeue,
+                redeliveryCount=processor.redelivery_tracker.current(
+                    scan_msg.task_id
+                ),
+                deliveryTag=message.delivery_tag,
+                stage="TASK_FAILED",
+                status="FAILED",
+                exc_info=True,
             )
             try:
                 await message.nack(requeue=requeue)
             except Exception:
-                logger.exception("Failed to nack message after processing error.")
+                log_with_fields(
+                    logger,
+                    logging.ERROR,
+                    "Failed to nack message after processing error.",
+                    scanId=scan_msg.scan_id,
+                    taskId=scan_msg.task_id,
+                    deliveryTag=message.delivery_tag,
+                    stage="NACK_FAILED",
+                    status="ERROR",
+                    exc_info=True,
+                )
             return
 
         try:
             await message.ack()
         except Exception:
-            logger.exception("Failed to ack message after successful processing.")
+            log_with_fields(
+                logger,
+                logging.ERROR,
+                "Failed to ack message after successful processing.",
+                scanId=scan_msg.scan_id,
+                taskId=scan_msg.task_id,
+                deliveryTag=message.delivery_tag,
+                stage="ACK_FAILED",
+                status="ERROR",
+                exc_info=True,
+            )
 
 
 async def run_async() -> None:
