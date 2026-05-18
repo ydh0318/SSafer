@@ -137,6 +137,8 @@ def handle_agent_task(
         )
 
     if task.payload is None:
+        if on_step:
+            on_step("PATCH_APPLY payload를 확인하는 중...")
         return AgentTaskResult(
             task_id=task.task_id,
             task_type=task.task_type,
@@ -145,6 +147,8 @@ def handle_agent_task(
             patch_results=[],
         )
 
+    if on_step:
+        on_step("수정안 payload를 검증하는 중...")
     candidates = extract_patch_candidates(task.payload)
     if not candidates:
         return AgentTaskResult(
@@ -156,6 +160,8 @@ def handle_agent_task(
         )
 
     try:
+        if on_step:
+            on_step(f"수정안 {len(candidates)}개를 적용하는 중...")
         results = apply_patch_candidates(
             project_root,
             candidates,
@@ -163,6 +169,8 @@ def handle_agent_task(
             allow_hash_mismatch_if_text_matches=True,
         )
     except PatchError as exc:
+        if on_step:
+            on_step("수정안 적용 실패를 정리하는 중...")
         return AgentTaskResult(
             task_id=task.task_id,
             task_type=task.task_type,
@@ -170,6 +178,8 @@ def handle_agent_task(
             message=str(exc),
             patch_results=[],
         )
+    if on_step:
+        on_step("수정안 적용 결과를 정리하는 중...")
     return AgentTaskResult(
         task_id=task.task_id,
         task_type=task.task_type,

@@ -301,6 +301,40 @@ def test_handle_agent_task_applies_patch_payload(tmp_path: Path):
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
 
 
+def test_handle_agent_task_emits_patch_apply_steps(tmp_path: Path):
+    target = tmp_path / "Dockerfile"
+    target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+    task = agent.AgentTask(
+        task_id=12,
+        task_type="PATCH_APPLY",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=3,
+        payload={
+            "patches": [
+                {
+                    "patchId": "PATCH-1",
+                    "filePath": "Dockerfile",
+                    "oldText": "USER root",
+                    "newText": "USER appuser",
+                    "expectedFileHash": hash_file(target),
+                }
+            ]
+        },
+    )
+    steps: list[str] = []
+
+    result = agent.handle_agent_task(tmp_path, task, on_step=steps.append)
+
+    assert result.status == "SUCCESS"
+    assert steps == [
+        "수정안 payload를 검증하는 중...",
+        "수정안 1개를 적용하는 중...",
+        "수정안 적용 결과를 정리하는 중...",
+    ]
+
+
 def test_handle_agent_task_fails_invalid_patch_apply_payload(tmp_path: Path):
     task = agent.AgentTask(
         task_id=10,
