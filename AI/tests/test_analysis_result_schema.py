@@ -269,6 +269,44 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
         self.assertEqual(patch["oldText"], "USER root")
         self.assertNotIn("targetFile", patch)
 
+    def test_normalize_analysis_result_patches_copies_finding_line_to_patch(self):
+        analysis_result = build_analysis_result_with_patch(build_patch())
+
+        normalize_analysis_result_patches(
+            findings=[build_finding(line=42)],
+            scan_result={"sourceFileHashes": {"Dockerfile": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        patch = analysis_result["results"][0]["fix"]["patches"][0]
+        self.assertEqual(patch["line"], 42)
+
+    def test_normalize_analysis_result_patches_omits_line_when_finding_line_is_none(self):
+        analysis_result = build_analysis_result_with_patch(build_patch())
+
+        normalize_analysis_result_patches(
+            findings=[build_finding(line=None)],
+            scan_result={"sourceFileHashes": {"Dockerfile": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        patch = analysis_result["results"][0]["fix"]["patches"][0]
+        self.assertNotIn("line", patch)
+
+    def test_normalize_analysis_result_patches_does_not_trust_llm_line(self):
+        analysis_result = build_analysis_result_with_patch(
+            build_patch(line=999)
+        )
+
+        normalize_analysis_result_patches(
+            findings=[build_finding(line=42)],
+            scan_result={"sourceFileHashes": {"Dockerfile": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        patch = analysis_result["results"][0]["fix"]["patches"][0]
+        self.assertEqual(patch["line"], 42)
+
     def test_normalize_analysis_result_patches_removes_patch_without_patch_context(self):
         finding = build_finding()
         finding.pop("patchContext")
