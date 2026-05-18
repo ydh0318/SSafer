@@ -1923,10 +1923,13 @@ def _format_warning_path(path: object) -> str:
     try:
         parsed = Path(text)
         if parsed.is_absolute():
-            try:
-                return str(parsed.relative_to(Path.cwd()))
-            except ValueError:
-                return parsed.name
+            cwd = Path.cwd()
+            for base in (cwd, *cwd.parents):
+                try:
+                    return str(parsed.relative_to(base))
+                except ValueError:
+                    continue
+            return parsed.name
         return text
     except (OSError, ValueError):
         return text
