@@ -54,24 +54,33 @@ ssafer --help
 pip install --upgrade --force-reinstall "git+https://lab.ssafy.com/s14-final/S14P31B105.git@develop#subdirectory=CLI"
 ```
 
-### 최종 배포 방식
+### 최종 배포 설치
 
-최종 배포는 PyPI에 `ssafer` 패키지를 올린 뒤 `pipx`로 설치하는 방식을 권장합니다.
+최종 배포 후 사용자는 PyPI에 올라간 `ssafer` 패키지를 설치합니다.
+
+```bash
+pip install ssafer
+ssafer version
+```
+
+CLI 도구만 독립 환경에 설치하려면 `pipx` 사용을 권장합니다.
 
 ```bash
 pipx install ssafer
 ssafer version
 ```
 
-업데이트는 아래처럼 합니다.
+업데이트는 아래처럼 진행합니다.
 
 ```bash
 pipx upgrade ssafer
+# 또는
+pip install --upgrade ssafer
 ```
 
 `pipx`는 PyPI 패키지를 사용자 환경의 독립 venv에 설치해 주는 도구입니다. 사용자는 venv를 직접 활성화하지 않아도 `ssafer` 명령을 바로 사용할 수 있습니다.
 
-PyPI는 같은 버전을 다시 업로드할 수 없습니다. 배포할 때는 `CLI/pyproject.toml`의 `version`을 올린 뒤 배포해야 합니다.
+PyPI는 같은 버전을 다시 업로드할 수 없습니다. 배포할 때마다 버전을 올린 뒤 새로 빌드해 업로드해야 합니다.
 
 ---
 
@@ -399,44 +408,98 @@ rules:
 
 ## 빌드와 배포 준비
 
-PyPI 배포 전 로컬에서 wheel/sdist를 만들고 검사합니다.
+PyPI 배포는 계정 권한과 API token이 필요합니다. 처음 배포 전 PyPI 또는 TestPyPI 계정을 만들고, 계정 설정에서 API token을 발급받아 `twine` 업로드 시 사용합니다.
+
+### 빌드 도구 설치
 
 ```bash
 cd CLI
 python -m pip install --upgrade build twine
+```
+
+### 버전 올리기
+
+PyPI는 같은 버전을 다시 업로드할 수 없으므로 배포마다 버전을 올려야 합니다.
+
+현재 버전은 아래 두 곳을 함께 맞춥니다.
+
+- `CLI/pyproject.toml`의 `version`
+- `CLI/ssafer/__init__.py`의 `__version__`
+
+### 이전 빌드 삭제 후 재빌드
+
+```bash
+rm -rf dist/
 python -m build
 python -m twine check dist/*
 ```
 
-로컬 wheel 설치 검증:
+Windows PowerShell에서는 이전 빌드 삭제를 아래처럼 실행할 수 있습니다.
 
 ```powershell
-cd CLI
-python -m venv .release-test-venv
-.\.release-test-venv\Scripts\activate
-pip install .\dist\ssafer-*.whl
-ssafer version
-ssafer --help
+Remove-Item -Recurse -Force dist
 ```
 
-Linux 서버에서 wheel을 직접 검증하려면:
+### TestPyPI 사전 배포
+
+처음 배포하거나 metadata를 바꾼 경우 실제 PyPI 전에 TestPyPI에서 먼저 확인하는 것을 권장합니다.
 
 ```bash
-python3 -m venv ~/.ssafer-venv
-source ~/.ssafer-venv/bin/activate
-pip install --force-reinstall ./ssafer-*.whl
+python -m twine upload --repository testpypi dist/*
+```
+
+TestPyPI 배포본 설치 확인:
+
+```bash
+pipx install --index-url https://test.pypi.org/simple/ --pip-args="--extra-index-url https://pypi.org/simple" ssafer
+```
+
+또는 venv/pip 환경에서:
+
+```bash
+python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple ssafer
+```
+
+확인:
+
+```bash
 ssafer version
 ssafer --help
 ```
 
-PyPI 배포 후 사용자 설치:
+### 실제 PyPI 배포
+
+TestPyPI 검증이 끝나면 실제 PyPI에 업로드합니다.
+
+```bash
+python -m twine upload dist/*
+```
+
+첫 업로드 후 패키지 페이지가 생성됩니다.
+
+https://pypi.org/project/ssafer/
+
+첫 배포 후에는 계정 전체 token보다 프로젝트 범위 token으로 교체하는 것이 더 안전합니다.
+
+### 사용자 설치와 업데이트
+
+설치:
+
+```bash
+pip install ssafer
+ssafer version
+```
+
+또는:
 
 ```bash
 pipx install ssafer
 ```
 
-PyPI 배포 후 사용자 업데이트:
+업데이트:
 
 ```bash
 pipx upgrade ssafer
+# 또는
+pip install --upgrade ssafer
 ```

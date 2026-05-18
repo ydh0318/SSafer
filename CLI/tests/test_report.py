@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from rich.console import Console
 
 import ssafer.main as main
@@ -279,6 +281,22 @@ def test_format_scan_warning_summarizes_standalone_compose_file():
             _format_scan_warning(warning)
             == r"Compose 파일 - Frontend\docker-compose.front.yml: 이 compose 파일만 단독으로 분석했습니다. 같은 폴더에 docker-compose.yml이 있으면 함께 분석됩니다."
         )
+
+
+def test_format_scan_warning_keeps_parent_relative_path(monkeypatch, tmp_path: Path):
+    project_root = tmp_path / "project"
+    cli_dir = project_root / "CLI"
+    compose_file = project_root / "Frontend" / "docker-compose.front.yml"
+    cli_dir.mkdir(parents=True)
+    compose_file.parent.mkdir(parents=True)
+    compose_file.write_text("services: {}\n", encoding="utf-8")
+    monkeypatch.chdir(cli_dir)
+    warning = f"{compose_file}을 함께 쓸 기본 Compose 파일 없이 단독으로 분석했습니다."
+
+    assert (
+        _format_scan_warning(warning)
+        == f"Compose 파일 - {Path('Frontend') / 'docker-compose.front.yml'}: 이 compose 파일만 단독으로 분석했습니다. 같은 폴더에 docker-compose.yml이 있으면 함께 분석됩니다."
+    )
 
 
 def test_format_scan_warning_summarizes_standalone_compose_metadata():
