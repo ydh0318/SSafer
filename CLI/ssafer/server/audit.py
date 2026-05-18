@@ -540,8 +540,8 @@ def parse_ufw_rules(output: str) -> dict[int, list[tuple[str, str]]]:
     return rules
 
 
-def parse_iptables_input_rules(output: str) -> dict[int, list[str]]:
-    rules: dict[int, list[str]] = {}
+def parse_iptables_input_rules(output: str) -> dict[int, list[tuple[str, str]]]:
+    rules: dict[int, list[tuple[str, str]]] = {}
     for line in output.splitlines():
         if line.startswith("-P"):
             continue
@@ -550,7 +550,9 @@ def parse_iptables_input_rules(output: str) -> dict[int, list[str]]:
             port = int(m.group(1))
             action = m.group(2)
             normalized = "ALLOW" if action == "ACCEPT" else "DENY"
-            rules.setdefault(port, []).append(normalized)
+            src_match = _IPTABLES_INPUT_SRC_RE.search(line)
+            source = src_match.group(1) if src_match else ""
+            rules.setdefault(port, []).append((normalized, source))
     return rules
 
 
@@ -568,19 +570,20 @@ class FirewallPortState:
 
 def _resolve_firewall_state(
     ufw_rules: dict[int, list[tuple[str, str]]],
-    iptables_rules: dict[int, list[str]],
+    iptables_rules: dict[int, list[tuple[str, str]]],
 ) -> dict[int, FirewallPortState]:
     all_ports = set(ufw_rules) | set(iptables_rules)
     state: dict[int, FirewallPortState] = {}
     for port in all_ports:
         ufw_entries = ufw_rules.get(port, [])
         ipt_entries = iptables_rules.get(port, [])
-        all_actions = [a for a, _ in ufw_entries] + ipt_entries
+        all_actions = [a for a, _ in ufw_entries] + [a for a, _ in ipt_entries]
         deny_actions = {"DENY", "REJECT"}
         if any(a in deny_actions for a in all_actions):
             state[port] = FirewallPortState("DENY", [])
         elif any(a == "ALLOW" for a in all_actions):
             sources = [s for a, s in ufw_entries if a == "ALLOW" and s]
+            sources += [s for a, s in ipt_entries if a == "ALLOW" and s]
             state[port] = FirewallPortState("ALLOW", sources)
         else:
             state[port] = FirewallPortState("UNKNOWN", [])
