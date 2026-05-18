@@ -81,6 +81,13 @@ class ScanFindingDetailQueryServiceTest {
             {
               "maskedEvidence": "USER root",
               "impact": "초보자도 이해하기 쉬운 영향",
+              "references": [
+                {
+                  "title": "CVE-2024-21626 - NVD",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-21626",
+                  "snippet": "A container escape vulnerability"
+                }
+              ],
               "targetFiles": ["Dockerfile"],
               "explanation": {
                 "summary": "취약점 요약",
@@ -144,6 +151,8 @@ class ScanFindingDetailQueryServiceTest {
     assertThat(response.impact()).isEqualTo("초보자도 이해하기 쉬운 영향");
     assertThat(response.fix()).isNotNull();
     assertThat(response.fix().patches()).hasSize(1);
+    assertThat(response.references()).hasSize(1);
+    assertThat(response.references().getFirst().url()).isEqualTo("https://nvd.nist.gov/vuln/detail/CVE-2024-21626");
     assertThat(response.targetFiles()).containsExactly("Dockerfile");
     assertThat(response.patchApprovedActorType()).isEqualTo(RequestActorType.USER);
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(101L, actor);

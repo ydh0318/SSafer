@@ -151,10 +151,9 @@ function Step({ num, label, desc, isLast, children }: StepProps) {
 function Section0() {
   return (
     <>
-      <Step num="01" label="설치" desc="pip로 설치합니다. 최신 버전을 받으려면 git 저장소에서 직접 설치하세요.">
+      <Step num="01" label="설치" desc="PyPI에 배포된 SSAfer CLI를 pip로 설치합니다.">
         <Terminal_ lines={[
-          { comment: '최신 버전 (권장)', cmd: 'pip install "git+https://lab.ssafy.com/s14-final/S14P31B105.git@develop#subdirectory=CLI"' },
-          { comment: '개발/검증 환경 (소스 직접 설치)', cmd: 'cd CLI && pip install -e .' },
+          { comment: '권장 설치', cmd: 'pip install ssafer' },
         ]} />
       </Step>
       <Step num="02" label="로그인" desc="SSAfer 계정으로 로그인하여 스캔 결과 업로드 권한을 획득합니다.">

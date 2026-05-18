@@ -515,12 +515,19 @@ def _short_command_error(result: CommandResult) -> str:
     return text.splitlines()[-1][:200]
 
 
-_UFW_RULE_RE = re.compile(r"^(\d+)(?:/\w+)?\s+(ALLOW|DENY|REJECT|LIMIT)\s+")
+_UFW_RULE_RE = re.compile(r"^(\d+)(?:/\w+)?\s+(ALLOW|DENY|REJECT|LIMIT)\s+(.*)")
 _IPTABLES_DPORT_RE = re.compile(r"-A\s+INPUT\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT)")
+_IPTABLES_INPUT_SRC_RE = re.compile(r"-s\s+(\S+)")
+
+_ANYWHERE_SOURCES = frozenset({"anywhere", "anywhere (v6)", "0.0.0.0/0", "::/0"})
 
 
-def parse_ufw_rules(output: str) -> dict[int, list[str]]:
-    rules: dict[int, list[str]] = {}
+def _is_anywhere(source: str) -> bool:
+    return source.strip().lower() in _ANYWHERE_SOURCES or not source.strip()
+
+
+def parse_ufw_rules(output: str) -> dict[int, list[tuple[str, str]]]:
+    rules: dict[int, list[tuple[str, str]]] = {}
     if "Status: inactive" in output:
         return rules
     for line in output.splitlines():
@@ -528,12 +535,13 @@ def parse_ufw_rules(output: str) -> dict[int, list[str]]:
         if m:
             port = int(m.group(1))
             action = m.group(2)
-            rules.setdefault(port, []).append(action)
+            source = m.group(3).strip()
+            rules.setdefault(port, []).append((action, source))
     return rules
 
 
-def parse_iptables_input_rules(output: str) -> dict[int, list[str]]:
-    rules: dict[int, list[str]] = {}
+def parse_iptables_input_rules(output: str) -> dict[int, list[tuple[str, str]]]:
+    rules: dict[int, list[tuple[str, str]]] = {}
     for line in output.splitlines():
         if line.startswith("-P"):
             continue
@@ -542,30 +550,48 @@ def parse_iptables_input_rules(output: str) -> dict[int, list[str]]:
             port = int(m.group(1))
             action = m.group(2)
             normalized = "ALLOW" if action == "ACCEPT" else "DENY"
-            rules.setdefault(port, []).append(normalized)
+            src_match = _IPTABLES_INPUT_SRC_RE.search(line)
+            source = src_match.group(1) if src_match else ""
+            rules.setdefault(port, []).append((normalized, source))
     return rules
 
 
+@dataclass
+class FirewallPortState:
+    action: str
+    sources: list[str]
+
+    @property
+    def is_restricted(self) -> bool:
+        return self.action == "ALLOW" and self.sources and all(
+            not _is_anywhere(s) for s in self.sources
+        )
+
+
 def _resolve_firewall_state(
-    ufw_rules: dict[int, list[str]],
-    iptables_rules: dict[int, list[str]],
-) -> dict[int, str]:
+    ufw_rules: dict[int, list[tuple[str, str]]],
+    iptables_rules: dict[int, list[tuple[str, str]]],
+) -> dict[int, FirewallPortState]:
     all_ports = set(ufw_rules) | set(iptables_rules)
-    state: dict[int, str] = {}
+    state: dict[int, FirewallPortState] = {}
     for port in all_ports:
-        actions = ufw_rules.get(port, []) + iptables_rules.get(port, [])
+        ufw_entries = ufw_rules.get(port, [])
+        ipt_entries = iptables_rules.get(port, [])
+        all_actions = [a for a, _ in ufw_entries] + [a for a, _ in ipt_entries]
         deny_actions = {"DENY", "REJECT"}
-        if any(a in deny_actions for a in actions):
-            state[port] = "DENY"
-        elif any(a == "ALLOW" for a in actions):
-            state[port] = "ALLOW"
+        if any(a in deny_actions for a in all_actions):
+            state[port] = FirewallPortState("DENY", [])
+        elif any(a == "ALLOW" for a in all_actions):
+            sources = [s for a, s in ufw_entries if a == "ALLOW" and s]
+            sources += [s for a, s in ipt_entries if a == "ALLOW" and s]
+            state[port] = FirewallPortState("ALLOW", sources)
         else:
-            state[port] = "UNKNOWN"
+            state[port] = FirewallPortState("UNKNOWN", [])
     return state
 
 
 def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
-    ufw_rules: dict[int, list[str]] = {}
+    ufw_rules: dict[int, list[tuple[str, str]]] = {}
     iptables_rules: dict[int, list[str]] = {}
     has_firewall_data = False
     for artifact in result.artifacts:
@@ -583,7 +609,10 @@ def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
         return
 
     firewall_state = _resolve_firewall_state(ufw_rules, iptables_rules)
-    result.artifacts.append(ServerArtifact("firewall-rules", "resolved", firewall_state))
+    result.artifacts.append(ServerArtifact(
+        "firewall-rules", "resolved",
+        {p: {"action": s.action, "sources": s.sources} for p, s in firewall_state.items()},
+    ))
 
     for finding in result.findings:
         if finding.ruleId != "SERVER_PUBLIC_SENSITIVE_PORT":
@@ -593,16 +622,21 @@ def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
             continue
         port = int(port_match.group(1))
         fw = firewall_state.get(port)
-        if fw == "DENY":
+        if fw is None:
+            finding.severity = "MEDIUM"
+            finding.title += " (방화벽 규칙 없음)"
+        elif fw.action == "DENY":
             finding.severity = "LOW"
             finding.title += " (방화벽 차단됨)"
-        elif fw == "ALLOW":
+        elif fw.is_restricted:
+            finding.severity = "LOW"
+            source_list = ", ".join(fw.sources)
+            finding.title += f" (방화벽 제한됨: {source_list})"
+            finding.evidence += f" [허용 IP: {source_list}]"
+        elif fw.action == "ALLOW":
             if port not in DEFAULT_ALLOWED_PORTS:
                 finding.severity = "CRITICAL"
             finding.title += " (방화벽 허용됨)"
-        elif fw is None:
-            finding.severity = "MEDIUM"
-            finding.title += " (방화벽 규칙 없음)"
 
 
 @dataclass(frozen=True)
@@ -687,24 +721,89 @@ def parse_docker_inspect_ports(inspect_output: str) -> list[DockerPublishedPort]
     return ports
 
 
-_DOCKER_USER_DPORT_RE = re.compile(
-    r"-A\s+DOCKER-USER\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT|RETURN)"
-)
+_IPTABLES_CHAIN_RULE_RE = re.compile(r"^-A\s+(?P<chain>\S+)(?P<body>.*?)\s+-j\s+(?P<target>\S+)(?:\s|$)")
+_IPTABLES_DPORT_ANY_RE = re.compile(r"--dport\s+(\d+)")
+_IPTABLES_MULTIPORT_ANY_RE = re.compile(r"--dports\s+([0-9,:]+)")
 _FORWARD_DPORT_RE = re.compile(
     r"-A\s+FORWARD\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT)"
 )
 
 
 def parse_docker_user_rules(output: str) -> dict[int, list[str]]:
-    rules: dict[int, list[str]] = {}
+    return parse_docker_user_rules_with_chains(output, "")
+
+
+def parse_docker_user_rules_with_chains(docker_user_output: str, iptables_output: str = "") -> dict[int, list[str]]:
+    chain_rules = _iptables_rules_by_chain("\n".join([docker_user_output, iptables_output]))
+    return _resolve_iptables_chain_ports(chain_rules, "DOCKER-USER", set())
+
+
+def _iptables_rules_by_chain(output: str) -> dict[str, list[tuple[list[int], str]]]:
+    rules: dict[str, list[tuple[list[int], str]]] = {}
     for line in output.splitlines():
-        m = _DOCKER_USER_DPORT_RE.search(line)
-        if m:
-            port = int(m.group(1))
-            action = m.group(2)
-            normalized = "DENY" if action in {"DROP", "REJECT"} else "ALLOW"
-            rules.setdefault(port, []).append(normalized)
+        match = _IPTABLES_CHAIN_RULE_RE.search(line.strip())
+        if not match:
+            continue
+        chain = match.group("chain")
+        body = match.group("body")
+        target = match.group("target")
+        ports = _iptables_ports_from_rule_body(body)
+        rules.setdefault(chain, []).append((ports, target))
     return rules
+
+
+def _resolve_iptables_chain_ports(
+    chain_rules: dict[str, list[tuple[list[int], str]]],
+    chain: str,
+    visited: set[str],
+    inherited_ports: list[int] | None = None,
+) -> dict[int, list[str]]:
+    rules: dict[int, list[str]] = {}
+    if chain in visited:
+        return rules
+    visited = {*visited, chain}
+    for ports, target in chain_rules.get(chain, []):
+        effective_ports = ports or inherited_ports or []
+        if target in {"DROP", "REJECT", "ACCEPT"}:
+            normalized = "DENY" if target in {"DROP", "REJECT"} else "ALLOW"
+            for port in effective_ports:
+                rules.setdefault(port, []).append(normalized)
+            continue
+        if target == "RETURN":
+            continue
+        nested = _resolve_iptables_chain_ports(chain_rules, target, visited, effective_ports or None)
+        for port, actions in nested.items():
+            rules.setdefault(port, []).extend(actions)
+    return rules
+
+
+def _iptables_ports_from_rule_body(body: str) -> list[int]:
+    ports: list[int] = []
+    for match in _IPTABLES_DPORT_ANY_RE.finditer(body):
+        ports.append(int(match.group(1)))
+    for match in _IPTABLES_MULTIPORT_ANY_RE.finditer(body):
+        ports.extend(_parse_iptables_port_list(match.group(1)))
+    return list(dict.fromkeys(ports))
+
+
+def _parse_iptables_port_list(value: str) -> list[int]:
+    ports: list[int] = []
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if ":" in item:
+            start_text, end_text = item.split(":", 1)
+            if not start_text.isdigit() or not end_text.isdigit():
+                continue
+            start = int(start_text)
+            end = int(end_text)
+            if 0 < start <= end and end - start <= 256:
+                ports.extend(range(start, end + 1))
+            continue
+        if item.isdigit():
+            ports.append(int(item))
+    return ports
 
 
 def _audit_docker_ports(
@@ -742,15 +841,25 @@ def _audit_docker_ports(
     ))
 
     docker_user_rules: dict[int, list[str]] = {}
+    docker_user_stdout = ""
+    iptables_stdout = ""
     for artifact in result.artifacts:
+        if (
+            artifact.type == "command-output"
+            and isinstance(artifact.content, dict)
+            and artifact.target == "iptables -S"
+            and artifact.content.get("exit_code") == 0
+        ):
+            iptables_stdout = artifact.content.get("stdout", "")
         if (
             artifact.type == "command-output"
             and isinstance(artifact.content, dict)
             and artifact.target == "iptables -S DOCKER-USER"
             and artifact.content.get("exit_code") == 0
         ):
-            docker_user_rules = parse_docker_user_rules(artifact.content.get("stdout", ""))
-            break
+            docker_user_stdout = artifact.content.get("stdout", "")
+    if docker_user_stdout or iptables_stdout:
+        docker_user_rules = parse_docker_user_rules_with_chains(docker_user_stdout, iptables_stdout)
 
     seen: set[tuple[int, str]] = set()
     for port in published:

@@ -39,6 +39,16 @@ class ScanFindingDetailResponseMapperTest {
             {
               "maskedEvidence": "USER root",
               "impact": "초보자도 이해하기 쉬운 영향",
+              "references": [
+                {
+                  "title": "CVE-2024-21626 - NVD",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-21626",
+                  "snippet": "A container escape vulnerability"
+                },
+                {
+                  "title": "Broken reference"
+                }
+              ],
               "targetFiles": ["Dockerfile", "docker-compose.yml"],
               "explanation": {
                 "summary": "취약점 요약",
@@ -115,6 +125,9 @@ class ScanFindingDetailResponseMapperTest {
     assertThat(response.fix().cautions()).containsExactly("주의사항");
     assertThat(response.fix().patches()).hasSize(1);
     assertThat(response.fix().patches().getFirst().patchId()).isEqualTo("PATCH-0001");
+    assertThat(response.references()).hasSize(1);
+    assertThat(response.references().getFirst().title()).isEqualTo("CVE-2024-21626 - NVD");
+    assertThat(response.references().getFirst().url()).isEqualTo("https://nvd.nist.gov/vuln/detail/CVE-2024-21626");
     assertThat(response.targetFiles()).containsExactly("Dockerfile", "docker-compose.yml");
     assertThat(response.rawSnippetJson()).contains("\"maskedEvidence\"");
     assertThat(response.rawSnippetJson()).contains("USER root");
@@ -152,6 +165,7 @@ class ScanFindingDetailResponseMapperTest {
     assertThat(response.explanation().summary()).isEqualTo("취약점 요약");
     assertThat(response.explanation().abuseScenario()).isEqualTo("악용 가능 시나리오");
     assertThat(response.fix()).isNull();
+    assertThat(response.references()).isEmpty();
     assertThat(response.targetFiles()).isEmpty();
   }
 }

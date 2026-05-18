@@ -281,6 +281,9 @@ public class WorkerAnalysisResultPersistenceService {
       if (result.has("fix")) {
         snippet.set("fix", result.get("fix"));
       }
+      if (result.has("references") && result.get("references").isArray()) {
+        snippet.set("references", result.get("references"));
+      }
       return objectMapper.writeValueAsString(snippet);
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to serialize raw snippet json", ex);

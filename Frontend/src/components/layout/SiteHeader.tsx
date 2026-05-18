@@ -8,10 +8,11 @@ import {
   ScanSearch,
   Trophy,
 } from 'lucide-react';
+import { useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { ROUTES } from '../../constants/routes';
-import { logoutCurrentUser } from '../../features/auth/api/member';
+import { getCurrentUserProfile, logoutCurrentUser } from '../../features/auth/api/member';
 import { hasStoredMemberSession, isStoredGuestSession } from '../../features/auth/utils/session';
 import { useAuthStore } from '../../store/authStore';
 import AppBrand from '../common/AppBrand';
@@ -21,8 +22,8 @@ type SiteHeaderProps = {
   showSessionBar?: boolean;
 };
 
-function getProfileInitial(name?: string, email?: string) {
-  const source = (name?.trim() || email?.trim() || 'U').charAt(0);
+function getProfileInitial(name?: string, email?: string, fallback = 'U') {
+  const source = (name?.trim() || email?.trim() || fallback).charAt(0);
   return source.toUpperCase();
 }
 
@@ -31,13 +32,47 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
   const navigate = useNavigate();
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const user = useAuthStore((state) => state.user);
+  const setUser = useAuthStore((state) => state.setUser);
   const logout = useAuthStore((state) => state.logout);
 
-  const profileInitial = getProfileInitial(user?.name, user?.email);
   const isMemberSession =
     Boolean(refreshToken) || user?.role === 'USER' || user?.role === 'ADMIN' || hasStoredMemberSession();
   const isGuestSession = user?.role === 'GUEST' || isStoredGuestSession();
+  const profileInitial = getProfileInitial(user?.name, user?.email, isGuestSession ? 'G' : 'U');
   void showSessionBar;
+
+  useEffect(() => {
+    if (!isMemberSession || isGuestSession || user?.name) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadHeaderProfile = async () => {
+      try {
+        const profile = await getCurrentUserProfile();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setUser({
+          id: profile.email,
+          email: profile.email,
+          name: profile.displayName,
+          role: user?.role ?? 'USER',
+        });
+      } catch {
+        // Header profile hydration should not block navigation or logout.
+      }
+    };
+
+    void loadHeaderProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isGuestSession, isMemberSession, setUser, user?.name, user?.role]);
 
   const handleLogout = async () => {
     try {
@@ -152,7 +187,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
                 onClick={() => navigate(ROUTES.settings)}
                 type="button"
               >
-                <span>G1</span>
+                <span>{profileInitial}</span>
               </button>
 
               <button

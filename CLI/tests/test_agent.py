@@ -626,6 +626,59 @@ def test_process_agent_tasks_emits_scan_request_step(monkeypatch, tmp_path: Path
     assert ("task_step", {"taskId": 10, "taskType": "SCAN_REQUEST", "scanId": 2, "message": "uploading"}) in events
 
 
+def test_process_agent_tasks_waits_for_scan_analysis_after_result_report(monkeypatch, tmp_path: Path):
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="SCAN_REQUEST",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=None,
+        payload={"rawUploadUrl": "https://s3.example.com/raw"},
+    )
+    events: list[tuple[str, object]] = []
+    statuses = iter([
+        {"scanId": 2, "status": "ANALYZING", "progressStep": "EXPLAIN"},
+        {"scanId": 2, "status": "DONE", "progressStep": "ANALYSIS_RESULT_SAVED"},
+    ])
+
+    monkeypatch.setattr(
+        agent,
+        "handle_agent_task",
+        lambda *args, **kwargs: agent.AgentTaskResult(
+            task_id=10,
+            task_type="SCAN_REQUEST",
+            status="SUCCESS",
+            message="done",
+            patch_results=[],
+            scan_id=2,
+        ),
+    )
+    monkeypatch.setattr(agent, "report_agent_task_result", lambda *args, **kwargs: {"taskId": 10})
+    monkeypatch.setattr(agent, "fetch_scan_status", lambda api_url, scan_id, token: next(statuses))
+    monkeypatch.setattr(agent, "_sleep", lambda seconds: None)
+
+    agent._process_agent_tasks(
+        api_url="https://api.example.com",
+        agent_id=1,
+        agent_token="agent-token",
+        project_root=tmp_path,
+        dry_run=False,
+        on_event=lambda event_type, payload: events.append((event_type, payload)),
+        upload_token="access-token",
+        tasks=[task],
+    )
+
+    event_types = [event_type for event_type, _ in events]
+    assert event_types == [
+        "task",
+        "task_result_reported",
+        "analysis_wait_started",
+        "analysis_status",
+        "analysis_done",
+    ]
+
+
 def test_handle_agent_task_dry_runs_scan_request_without_running_scan(monkeypatch, tmp_path: Path):
     def fail_run_scan(*args, **kwargs):
         raise AssertionError("run_scan should not be called in dry-run")

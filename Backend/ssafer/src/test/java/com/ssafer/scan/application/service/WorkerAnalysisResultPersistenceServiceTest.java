@@ -56,6 +56,13 @@ class WorkerAnalysisResultPersistenceServiceTest {
             "line": 1,
             "title": "Hardcoded secret",
             "maskedEvidence": "DB_PASSWORD=***MASKED***",
+            "references": [
+              {
+                "title": "OWASP Secrets Management Cheat Sheet",
+                "url": "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+                "snippet": "Guidance for handling secrets securely"
+              }
+            ],
             "explanation": {
               "summary": "summary 1",
               "abuseScenario": "abuse scenario 1"
@@ -137,6 +144,9 @@ class WorkerAnalysisResultPersistenceServiceTest {
     assertThat(findingsCaptor.getValue()).hasSize(1);
     assertThat(findingsCaptor.getValue().getFirst().getResolutionStatus()).isEqualTo(ResolutionStatus.OPEN);
     assertThat(findingsCaptor.getValue().getFirst().getPatchPayloadJson()).contains("PATCH-0001");
+    assertThat(findingsCaptor.getValue().getFirst().getRawSnippetJson()).contains("\"references\"");
+    assertThat(findingsCaptor.getValue().getFirst().getRawSnippetJson())
+        .contains("https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html");
     assertThat(workerJob.getJobStatus()).isEqualTo(WorkerJobStatus.SUCCEEDED);
     assertThat(scan.getStatus()).isEqualTo(ScanStatus.DONE);
     verify(applicationEventPublisher).publishEvent(new ScanStatusSsePublishRequestedEvent(1L, ScanStatus.DONE));

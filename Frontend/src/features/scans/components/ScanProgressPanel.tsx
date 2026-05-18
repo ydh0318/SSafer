@@ -269,14 +269,22 @@ function ScanProgressPanel({
             const isActive = idx === activeStepIndex && !isTerminal;
             return (
               <div key={step.key} className="flex flex-1 flex-col items-center gap-1.5">
-                <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
-                  isDone
-                    ? 'bg-black text-white'
-                    : isActive
-                    ? 'bg-[#D4FC64] text-black ring-2 ring-[#D4FC64] ring-offset-2'
-                    : 'bg-neutral-100 text-neutral-400'
-                }`}>
-                  {isDone ? <Check className="h-3 w-3" /> : idx + 1}
+                <div className="relative flex h-8 w-8 items-center justify-center">
+                  {isActive ? (
+                    <>
+                      <span className="absolute h-6 w-6 rounded-full bg-[#D4FC64]/45 animate-ping" />
+                      <span className="absolute h-8 w-8 rounded-full border border-[#D4FC64]/70 animate-pulse" />
+                    </>
+                  ) : null}
+                  <div className={`relative z-10 flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
+                    isDone
+                      ? 'bg-black text-white'
+                      : isActive
+                      ? 'bg-[#D4FC64] text-black shadow-[0_0_0_6px_rgba(212,252,100,0.18),0_0_28px_rgba(212,252,100,0.65)]'
+                      : 'bg-neutral-100 text-neutral-400'
+                  }`}>
+                    {isDone ? <Check className="h-3 w-3" /> : idx + 1}
+                  </div>
                 </div>
                 <span className={`hidden text-center font-mono text-[9px] leading-tight sm:block ${
                   isActive ? 'font-bold text-black' : isDone ? 'text-neutral-400' : 'text-neutral-300'
@@ -307,8 +315,17 @@ function ScanProgressPanel({
 
           <ul className="mt-4 space-y-2.5">
             {activeStep.checks.map((check, i) => (
-              <li key={i} className="flex items-center gap-2.5 text-sm text-neutral-700">
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${isTerminal ? 'bg-[#9FCC2E]' : 'bg-neutral-300'}`} />
+              <li
+                key={i}
+                className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition ${
+                  isTerminal ? 'text-neutral-600' : 'bg-[#F8FFE8] text-neutral-800 shadow-[inset_3px_0_0_#D4FC64]'
+                }`}
+                style={!isTerminal ? { animationDelay: `${i * 120}ms` } : undefined}
+              >
+                <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
+                  {!isTerminal ? <span className="absolute h-3 w-3 rounded-full bg-[#D4FC64]/50 animate-ping" /> : null}
+                  <span className={`relative h-1.5 w-1.5 rounded-full ${isTerminal ? 'bg-[#9FCC2E]' : 'bg-[#6FA400]'}`} />
+                </span>
                 {check}
               </li>
             ))}

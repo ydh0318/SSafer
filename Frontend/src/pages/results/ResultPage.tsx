@@ -5,9 +5,10 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import PageBanner from '../../components/common/PageBanner';
 import PageHero from '../../components/common/PageHero';
 import { ROUTES } from '../../constants/routes';
-import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
-import { getScanBasic, getScanFindingDetail, getScanFindings, getScanSummary } from '../../features/results/api/results';
 import { getProjectDetail } from '../../features/projects/api/projects';
+import { getScanBasic, getScanFindingDetail, getScanFindings, getScanSummary } from '../../features/results/api/results';
+import ScanScopeInfo from '../../features/results/components/ScanScopeInfo';
+import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
 import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
@@ -287,16 +288,19 @@ function ResultPage() {
       .filter((group) => group.items.length > 0);
   }, [findingsData.items]);
 
+  const projectBackPath = routeState.projectId
+    ? ROUTES.projectDetail.replace(':projectId', routeState.projectId)
+    : ROUTES.projects;
+
   return (
     <section className="space-y-8">
       <div className="flex flex-wrap items-center gap-3">
         <Link
           className="inline-flex items-center gap-2 text-sm text-neutral-500 transition hover:text-black"
-          state={routeState}
-          to={ROUTES.scanDetail.replace(':scanId', scanId)}
+          to={projectBackPath}
         >
           <ArrowLeft className="h-4 w-4" />
-          스캔 진행 화면으로 돌아가기
+          프로젝트 화면으로 돌아가기
         </Link>
       </div>
 
@@ -399,7 +403,10 @@ function ResultPage() {
       ) : null}
 
       {!isInitialLoading && currentScanType === 'SERVER_AUDIT' && serverAuditViewModel ? (
-        <ServerAuditResultView result={serverAuditViewModel} routeState={routeState} />
+        <>
+          <ServerAuditResultView result={serverAuditViewModel} routeState={routeState} />
+          <ScanScopeInfo />
+        </>
       ) : null}
 
       {!isInitialLoading && currentScanType === 'PROJECT_FILE' && summary ? (
@@ -635,6 +642,8 @@ function ResultPage() {
               </button>
             </div>
           </div>
+
+          <ScanScopeInfo />
         </>
       ) : null}
     </section>

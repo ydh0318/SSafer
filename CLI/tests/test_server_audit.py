@@ -15,6 +15,7 @@ from ssafer.server.audit import (
     parse_docker_inspect_ports,
     parse_docker_ports_from_ps,
     parse_docker_user_rules,
+    parse_docker_user_rules_with_chains,
     parse_iptables_input_rules,
     parse_ssh_settings,
     parse_ss_listening_ports,
@@ -751,6 +752,27 @@ def test_parse_docker_user_accept():
     assert rules[8080] == ["ALLOW"]
 
 
+def test_parse_docker_user_multiport_drop():
+    output = "-A DOCKER-USER -p tcp -m multiport --dports 8080,8989 -j DROP\n"
+    rules = parse_docker_user_rules(output)
+    assert rules[8080] == ["DENY"]
+    assert rules[8989] == ["DENY"]
+
+
+def test_parse_docker_user_rules_follows_custom_chain_jump():
+    docker_user_output = "-A DOCKER-USER -j ufw-user-forward\n-A DOCKER-USER -j RETURN\n"
+    iptables_output = "-A ufw-user-forward -p tcp -m tcp --dport 8080 -j DROP\n"
+    rules = parse_docker_user_rules_with_chains(docker_user_output, iptables_output)
+    assert rules[8080] == ["DENY"]
+
+
+def test_parse_docker_user_rules_applies_parent_port_to_custom_chain():
+    docker_user_output = "-A DOCKER-USER -p tcp -m tcp --dport 8989 -j SSAFER-FILTER\n"
+    iptables_output = "-A SSAFER-FILTER -j DROP\n"
+    rules = parse_docker_user_rules_with_chains(docker_user_output, iptables_output)
+    assert rules[8989] == ["DENY"]
+
+
 def test_parse_docker_user_empty():
     output = "-A DOCKER-USER -j RETURN\n"
     rules = parse_docker_user_rules(output)
@@ -762,6 +784,7 @@ def test_parse_docker_user_empty():
 def _docker_audit_runner(
     docker_ps_ports: str = "0.0.0.0:3306->3306/tcp",
     docker_user_output: str = "",
+    iptables_output: str = "",
     inspect_output: str = "",
 ):
     def fake_runner(command: list[str]) -> CommandResult:
@@ -776,7 +799,7 @@ def _docker_audit_runner(
         if command[-1] == "DOCKER-USER":
             return CommandResult(command, 0, docker_user_output)
         if "iptables" in command:
-            return CommandResult(command, 0, "")
+            return CommandResult(command, 0, iptables_output)
         return CommandResult(command, 0, "")
     return fake_runner
 
@@ -800,6 +823,18 @@ def test_docker_public_publish_docker_user_drop_is_medium():
     assert len(findings) == 1
     assert findings[0].severity == "MEDIUM"
     assert "DOCKER-USER 차단됨" in findings[0].title
+
+
+def test_docker_public_publish_custom_chain_drop_is_medium():
+    runner = _docker_audit_runner(
+        docker_ps_ports="0.0.0.0:8080->8080/tcp",
+        docker_user_output="-A DOCKER-USER -j ufw-user-forward\n-A DOCKER-USER -j RETURN\n",
+        iptables_output="-A ufw-user-forward -p tcp -m tcp --dport 8080 -j DROP\n",
+    )
+    result = run_server_audit(checks=["docker", "firewall"], runner=runner)
+    findings = [f for f in result.findings if f.ruleId == "SERVER_DOCKER_PUBLIC_PUBLISHED_PORT"]
+    assert len(findings) == 1
+    assert findings[0].severity == "MEDIUM"
 
 
 def test_docker_localhost_publish_no_finding():
