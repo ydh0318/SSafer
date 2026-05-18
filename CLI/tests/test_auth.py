@@ -160,15 +160,21 @@ def test_status_command_prints_saved_login_and_agent_config(monkeypatch, tmp_pat
         endpoint="https://api.example.com",
         project_root=tmp_path,
     )
+    monkeypatch.setattr(
+        auth_module,
+        "get_project_agent_status",
+        lambda endpoint, project_id, token: {"status": "ONLINE", "agentId": 7, "lastSeenAt": "2026-05-18T00:00:00Z"},
+    )
 
     result = CliRunner().invoke(app, ["status"])
 
     assert result.exit_code == 0
-    assert "로그인" in result.output
-    assert "됨" in result.output
+    assert "인증 상태" in result.output
+    assert "회원 로그인" in result.output
     assert "https://api.example.com" in result.output
     assert "upload.accessToken" in result.output
     assert "agentId=7, projectId=10" in result.output
+    assert "ONLINE" in result.output
     assert "agent-token-123" not in result.output
     assert "access-token-123" not in result.output
 
@@ -1176,6 +1182,29 @@ def test_select_agent_project_id_creates_project_when_no_projects(monkeypatch, t
     project_id = main_module._select_agent_project_id("https://api.example.com", "access-token")
 
     assert project_id == 77
+
+
+def test_select_agent_project_id_can_create_project_from_existing_list(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        auth_module,
+        "list_projects",
+        lambda endpoint, token: [{"projectId": 15, "name": "S14P31B105"}],
+    )
+    answers = iter(["2", "new-project"])
+    monkeypatch.setattr(main_module.typer, "prompt", lambda *args, **kwargs: next(answers))
+
+    def fake_create_project(endpoint: str, access_token: str, *, name: str, **kwargs: object) -> dict[str, int]:
+        assert endpoint == "https://api.example.com"
+        assert access_token == "access-token"
+        assert name == "new-project"
+        return {"projectId": 88}
+
+    monkeypatch.setattr(auth_module, "create_project", fake_create_project)
+
+    project_id = main_module._select_agent_project_id("https://api.example.com", "access-token")
+
+    assert project_id == 88
 
 
 def test_project_create_command_creates_project(monkeypatch, tmp_path):

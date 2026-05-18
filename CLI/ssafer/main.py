@@ -148,36 +148,41 @@ def status() -> None:
         except (TypeError, ValueError) as exc:
             backend_agent_error = str(exc)
 
+    if not token:
+        auth_status = "[red]로그인 안 됨[/red]"
+        auth_detail = "ssafer login 또는 ssafer guest로 먼저 로그인하세요."
+    elif auth_mode == "member":
+        auth_status = "[green]회원 로그인[/green]"
+        auth_detail = f"토큰 출처: {token_source}. CLI 업로드와 Local Agent 연결에 사용됩니다."
+    elif auth_mode == "guest":
+        auth_status = "[green]게스트 로그인[/green]"
+        auth_detail = f"토큰 출처: {token_source}. 같은 게스트 세션에서 만든 프로젝트/스캔에 사용됩니다."
+    else:
+        auth_status = "[yellow]로그인됨[/yellow]"
+        auth_detail = f"토큰 출처: {token_source}. 기존 토큰에는 계정 방식 정보가 없습니다. 다시 로그인하면 회원/게스트가 표시됩니다."
+
     table = Table(title="SSAfer 상태")
     table.add_column("항목")
     table.add_column("상태")
     table.add_column("설명", overflow="fold")
-    table.add_row("로그인", "[green]됨[/green]" if token else "[red]안 됨[/red]", "저장된 access token 기준")
-    table.add_row("토큰 출처", token_source, "환경변수 토큰이 저장된 로그인 토큰보다 우선됩니다")
-    if not token:
-        account_mode = "-"
-        account_mode_detail = "로그인되어 있지 않습니다."
-    elif auth_mode == "member":
-        account_mode = "회원"
-        account_mode_detail = "회원 계정 토큰으로 로그인되어 있습니다."
-    elif auth_mode == "guest":
-        account_mode = "게스트"
-        account_mode_detail = "게스트 토큰으로 로그인되어 있습니다."
-    elif token:
-        account_mode = "알 수 없음"
-        account_mode_detail = "기존 토큰에는 계정 방식 정보가 없습니다. 다시 로그인하면 표시됩니다."
-    table.add_row("계정 방식", account_mode, account_mode_detail)
+    table.add_row("인증 상태", auth_status, auth_detail)
     table.add_row("Endpoint", endpoint, "현재 사용할 백엔드 API")
     if _has_saved_agent_config(agent_config):
+        project_id = agent_config.get("projectId")
         detail = (
-            f"agentId={agent_config.get('agentId')}, projectId={agent_config.get('projectId')}\n"
-            f"설정 파일: {agent_config_path}"
+            f"agentId={agent_config.get('agentId')}, projectId={project_id}\n"
+            f"설정 파일: {agent_config_path}\n"
+            f"웹 프로젝트: {_web_project_url(endpoint, project_id)}"
         )
         status_label = "[green]설정됨[/green]"
         if backend_agent_status:
             status_value = str(backend_agent_status.get("status") or "UNKNOWN")
             status_label = "[green]ONLINE[/green]" if status_value == "ONLINE" else f"[yellow]{status_value}[/yellow]"
             detail_lines = [detail, f"백엔드 상태: {status_value}"]
+            if status_value == "ONLINE":
+                detail_lines.append("현재 이 프로젝트의 웹 스캔/수정 요청을 받을 수 있습니다.")
+            else:
+                detail_lines.append("조치: agent 터미널이 켜져 있는지 확인하고, 필요하면 프로젝트 루트에서 ssafer agent를 다시 실행하세요.")
             if backend_agent_status.get("lastSeenAt"):
                 detail_lines.append(f"마지막 확인: {backend_agent_status.get('lastSeenAt')}")
             if backend_agent_status.get("currentTaskType"):
@@ -185,10 +190,10 @@ def status() -> None:
             detail = "\n".join(detail_lines)
         elif backend_agent_error:
             status_label = "[yellow]확인 실패[/yellow]"
-            detail = f"{detail}\n백엔드 상태 확인 실패: {backend_agent_error}"
+            detail = f"{detail}\n백엔드 상태 확인 실패: {backend_agent_error}\n조치: 네트워크 또는 로그인 토큰을 확인하세요."
         table.add_row("Local Agent", status_label, detail)
     else:
-        table.add_row("Local Agent", "[yellow]미설정[/yellow]", "ssafer agent 실행 시 설정 가능")
+        table.add_row("Local Agent", "[yellow]연결 전[/yellow]", "웹에서 스캔/수정 요청을 보내려면 프로젝트 루트에서 ssafer agent를 실행하세요.")
     table.add_row("Config", str(CONFIG_PATH), "토큰 값은 출력하지 않음")
     console.print(table)
 
@@ -703,6 +708,28 @@ def _issue_and_save_agent_token(
 def _select_agent_project_id(endpoint: str, access_token: str) -> int:
     from ssafer.core.auth import create_project, list_projects
 
+    def create_agent_project() -> int:
+        console.print("[cyan]새 프로젝트 이름을 입력하세요. 그냥 Enter를 누르면 현재 폴더명을 사용합니다.[/cyan]")
+        name = typer.prompt("프로젝트 이름", default=Path.cwd().name)
+        if not name.strip():
+            console.print("[red]프로젝트 이름을 입력해야 합니다.[/red]")
+            raise typer.Exit(code=1)
+        try:
+            project = create_project(endpoint, access_token, name=name.strip())
+        except httpx.HTTPStatusError as exc:
+            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_error(exc)}")
+            raise typer.Exit(code=1) from exc
+        except httpx.HTTPError as exc:
+            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_transport_error(exc)}")
+            raise typer.Exit(code=1) from exc
+        project_id = project.get("projectId") or project.get("id")
+        if project_id is None:
+            console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
+            raise typer.Exit(code=1)
+        console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
+        _print_project_web_link(endpoint, project_id)
+        return int(project_id)
+
     try:
         projects = list_projects(endpoint, access_token)
     except httpx.HTTPStatusError as exc:
@@ -726,26 +753,7 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
                 "[bold]ssafer agent[/bold]를 다시 실행하세요.[/yellow]"
             )
             raise typer.Exit(code=1)
-        console.print("[cyan]새 프로젝트 이름을 입력하세요. 그냥 Enter를 누르면 현재 폴더명을 사용합니다.[/cyan]")
-        name = typer.prompt("프로젝트 이름", default=Path.cwd().name)
-        if not name.strip():
-            console.print("[red]프로젝트 이름을 입력해야 합니다.[/red]")
-            raise typer.Exit(code=1)
-        try:
-            project = create_project(endpoint, access_token, name=name.strip())
-        except httpx.HTTPStatusError as exc:
-            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_error(exc)}")
-            raise typer.Exit(code=1) from exc
-        except httpx.HTTPError as exc:
-            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_transport_error(exc)}")
-            raise typer.Exit(code=1) from exc
-        project_id = project.get("projectId") or project.get("id")
-        if project_id is None:
-            console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
-            raise typer.Exit(code=1)
-        console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
-        _print_project_web_link(endpoint, project_id)
-        return int(project_id)
+        return create_agent_project()
 
     console.print("[cyan]Local Agent를 연결할 프로젝트를 선택하세요.[/cyan]")
     console.print("[dim]웹에서 이 프로젝트로 보낸 스캔/수정 요청을 현재 PC 또는 서버의 agent가 처리합니다.[/dim]")
@@ -758,6 +766,8 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
         project_id = project.get("projectId") or project.get("id")
         name = project.get("name") or "(unnamed)"
         project_table.add_row(str(index), str(name), str(project_id or "-"))
+    create_index = len(projects) + 1
+    project_table.add_row(str(create_index), "새 프로젝트 만들기", "-")
     console.print(project_table)
 
     while True:
@@ -769,7 +779,9 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
                 project_id = project.get("projectId") or project.get("id")
                 if project_id is not None:
                     return int(project_id)
-        console.print("[red]목록 왼쪽의 선택 번호를 입력해 주세요. 예: 1[/red]")
+            if index == create_index:
+                return create_agent_project()
+        console.print(f"[red]목록 왼쪽의 선택 번호를 입력해 주세요. 예: 1 또는 {create_index}[/red]")
 
 
 def _run_agent_watch(
@@ -805,8 +817,9 @@ def _run_agent_watch(
     console.print(
         f"[green]Local Agent 실행 중[/green] projectId={effective_project_id}"
     )
+    console.print(f"웹 프로젝트: {_web_project_url(effective_url, effective_project_id)}")
     console.print(f"[dim]스캔 기준 경로: {project_root}[/dim]")
-    console.print("[dim]웹에서 스캔/수정 요청을 보내면 이 터미널에서 처리합니다. 종료하려면 Ctrl+C를 누르세요.[/dim]")
+    console.print("[dim]웹에서 이 프로젝트로 스캔/수정 요청을 보내면 이 터미널에서 처리합니다. 종료하려면 Ctrl+C를 누르세요.[/dim]")
     if project_root.name.lower() == "cli":
         console.print(
             "[yellow]현재 CLI 폴더에서 agent를 실행 중입니다. "
