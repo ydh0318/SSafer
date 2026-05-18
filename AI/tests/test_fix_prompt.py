@@ -12,17 +12,23 @@ class FixPromptTest(unittest.TestCase):
         self.assertIn('"patches"', rendered_prompt)
         self.assertIn('"operation": "replace"', rendered_prompt)
         self.assertIn("patchContext.oldText", rendered_prompt)
-        self.assertIn("operation이 append면 oldText를 만들지 마세요", rendered_prompt)
         self.assertIn(
-            "operation, oldText, newText만 포함하세요",
+            "If operation is append, do not create an oldText field.",
             rendered_prompt,
         )
         self.assertIn(
-            "filePath, expectedFileHash, patchId, findingId는 출력하지 마세요",
+            "Each patch must contain only operation, oldText, newText.",
             rendered_prompt,
         )
-        self.assertIn("패치 조건을 만족하지 못하면", rendered_prompt)
-        self.assertIn("한국어 중심", rendered_prompt)
+        self.assertIn(
+            "Do not output filePath, expectedFileHash, patchId, or findingId",
+            rendered_prompt,
+        )
+        self.assertIn("Omit patches if patchContext is missing", rendered_prompt)
+        self.assertIn(
+            "Write all user-facing natural-language fields in Korean",
+            rendered_prompt,
+        )
         self.assertIn("***MASKED***", rendered_prompt)
         self.assertIn("server-audit", rendered_prompt)
 
@@ -34,16 +40,22 @@ class FixPromptTest(unittest.TestCase):
 
         self.assertIn("patches field failed validation", retry_prompt)
         self.assertIn("patchContext.oldText", retry_prompt)
-        self.assertIn("operation이 append면 oldText를 새로 만들지 마세요", retry_prompt)
         self.assertIn(
-            "operation, oldText, newText만 포함하세요",
+            "If operation is append, do not create oldText.",
             retry_prompt,
         )
         self.assertIn(
-            "filePath, expectedFileHash, patchId, findingId는 출력하지 마세요",
+            "Each patch must contain only operation, oldText, newText.",
             retry_prompt,
         )
-        self.assertIn("한국어 중심", retry_prompt)
+        self.assertIn(
+            "Do not output filePath, expectedFileHash, patchId, or findingId",
+            retry_prompt,
+        )
+        self.assertIn(
+            "Write all natural-language values in Korean.",
+            retry_prompt,
+        )
         self.assertIn("server-audit", retry_prompt)
 
 

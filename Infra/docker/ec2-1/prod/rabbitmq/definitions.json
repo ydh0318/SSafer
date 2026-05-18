@@ -1,0 +1,45 @@
+{
+  "policies": [
+    {
+      "vhost": "/",
+      "name": "scan-dlx-policy",
+      "pattern": "^ssafer\\.agent\\.scan\\.request$",
+      "definition": {
+        "dead-letter-exchange": "ssafer.agent.tasks.dlx",
+        "dead-letter-routing-key": "agent.scan.request"
+      },
+      "priority": 0,
+      "apply-to": "queues"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "ssafer.agent.tasks.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "ssafer.agent.scan.request.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "ssafer.agent.tasks.dlx",
+      "vhost": "/",
+      "destination": "ssafer.agent.scan.request.dlq",
+      "destination_type": "queue",
+      "routing_key": "agent.scan.request",
+      "arguments": {}
+    }
+  ]
+}

@@ -46,17 +46,10 @@ ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest")
 ANTHROPIC_TEMPERATURE = _get_float_env("ANTHROPIC_TEMPERATURE", 0.1)
 ANTHROPIC_TIMEOUT_SECONDS = _get_float_env("ANTHROPIC_TIMEOUT_SECONDS", 600.0)
 GMS_API_KEY = os.getenv("GMS_API_KEY")
-# Previous GMS Claude base URL:
-# GMS_BASE_URL = os.getenv(
-#     "GMS_BASE_URL",
-#     "https://gms.ssafy.io/gmsapi/api.anthropic.com",
-# )
 GMS_BASE_URL = os.getenv(
     "GMS_BASE_URL",
     "https://gms.ssafy.io/gmsapi/api.openai.com/v1",
 )
-# Previous GMS Claude default:
-# GMS_MODEL = os.getenv("GMS_MODEL", "claude-haiku-4-5-20251001")
 GMS_MODEL = os.getenv("GMS_MODEL", "gpt-5-mini")
 GMS_TEMPERATURE = _get_float_env("GMS_TEMPERATURE", 0.1)
 GMS_TIMEOUT_SECONDS = _get_float_env("GMS_TIMEOUT_SECONDS", 600.0)

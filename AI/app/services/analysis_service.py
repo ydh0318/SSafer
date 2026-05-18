@@ -509,7 +509,7 @@ def _analyze_findings_batch(
             log_fields=log_fields,
             findingCount=finding_total,
         )
-    except (LLMTimeoutError, LLMCallError, ValueError) as exc:
+    except (LLMTimeoutError, LLMCallError, ValueError):
         log_analysis_step(
             "Batch explain failed, falling back to per-finding.",
             stage="BATCH_EXPLAIN_FALLBACK",
@@ -530,7 +530,7 @@ def _analyze_findings_batch(
             log_fields=log_fields,
             findingCount=finding_total,
         )
-    except (LLMTimeoutError, LLMCallError, ValueError) as exc:
+    except (LLMTimeoutError, LLMCallError, ValueError):
         log_analysis_step(
             "Batch fix failed, falling back to per-finding.",
             stage="BATCH_FIX_FALLBACK",

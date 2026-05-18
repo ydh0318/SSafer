@@ -23,10 +23,12 @@ def log_with_fields(
     logger: logging.Logger,
     level: int,
     message: str,
+    *,
+    exc_info: Any = False,
     **fields: Any,
 ) -> None:
     field_text = format_log_fields(**fields)
     if field_text:
-        logger.log(level, "%s %s", message, field_text)
+        logger.log(level, "%s %s", message, field_text, exc_info=exc_info)
         return
-    logger.log(level, "%s", message)
+    logger.log(level, "%s", message, exc_info=exc_info)
