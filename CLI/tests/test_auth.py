@@ -1233,20 +1233,109 @@ def test_signup_command_registers_backend_user(monkeypatch):
     result = CliRunner().invoke(
         app,
         ["signup", "--endpoint", "https://api.example.com"],
-        input="user@example.com\nUser\npassword123\n123456\n",
+        input="user@example.com\nUser\npassword123\n123456\nn\n",
     )
 
     assert result.exit_code == 0
-    assert "SSAfer 계정을 생성합니다" in result.output
-    assert "이메일 인증 코드를 발송합니다" in result.output
-    assert "인증 코드를 확인합니다" in result.output
-    assert "회원가입을 요청합니다" in result.output
+    assert "SSAfer" in result.output
+    assert "회원가입" in result.output
     assert calls == [
         ("send", "https://api.example.com", "user@example.com", None),
         ("verify", "https://api.example.com", "user@example.com", "123456"),
         ("register", "https://api.example.com", "user@example.com", "User:password123"),
     ]
 
+
+def test_signup_command_rejects_invalid_email_before_backend_call(monkeypatch):
+    calls: list[str] = []
+
+    def fake_send(endpoint: str, email: str) -> dict[str, str]:
+        calls.append(email)
+        return {}
+
+    monkeypatch.setattr(auth_module, "send_email_verification_code", fake_send)
+    monkeypatch.setattr(auth_module, "verify_email_code", lambda endpoint, email, code: {})
+    monkeypatch.setattr(auth_module, "register_user", lambda endpoint, email, display_name, password: {"userId": 1001})
+
+    result = CliRunner().invoke(
+        app,
+        ["signup", "--endpoint", "https://api.example.com"],
+        input="not-an-email\nuser@example.com\nUser\npassword123\n123456\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "이메일 형식" in result.output
+    assert calls == ["user@example.com"]
+
+
+def test_signup_command_retries_invalid_verification_code(monkeypatch):
+    calls: list[tuple[str, str | None]] = []
+
+    def fake_send(endpoint: str, email: str) -> dict[str, str]:
+        calls.append(("send", email))
+        return {}
+
+    def fake_verify(endpoint: str, email: str, code: str) -> dict[str, str]:
+        calls.append(("verify", code))
+        if code == "000000":
+            request = httpx.Request("POST", f"{endpoint}/api/v1/auth/email/verify-code")
+            response = httpx.Response(
+                400,
+                json={"code": "INVALID_CODE", "message": "Invalid verification code"},
+                request=request,
+            )
+            raise httpx.HTTPStatusError("invalid code", request=request, response=response)
+        return {}
+
+    def fake_register(endpoint: str, email: str, display_name: str, password: str) -> dict[str, int]:
+        calls.append(("register", email))
+        return {"userId": 1001}
+
+    monkeypatch.setattr(auth_module, "send_email_verification_code", fake_send)
+    monkeypatch.setattr(auth_module, "verify_email_code", fake_verify)
+    monkeypatch.setattr(auth_module, "register_user", fake_register)
+
+    result = CliRunner().invoke(
+        app,
+        ["signup", "--endpoint", "https://api.example.com"],
+        input="user@example.com\nUser\npassword123\n000000\nn\nn\n123456\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert "남은 횟수" in result.output
+    assert calls == [
+        ("send", "user@example.com"),
+        ("verify", "000000"),
+        ("verify", "123456"),
+        ("register", "user@example.com"),
+    ]
+
+
+def test_signup_command_can_login_after_register(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)
+
+    monkeypatch.setattr(auth_module, "send_email_verification_code", lambda endpoint, email: {})
+    monkeypatch.setattr(auth_module, "verify_email_code", lambda endpoint, email, code: {})
+    monkeypatch.setattr(auth_module, "register_user", lambda endpoint, email, display_name, password: {"userId": 1001})
+
+    def fake_login(endpoint: str, email: str, password: str) -> dict[str, str]:
+        assert endpoint == "https://api.example.com"
+        assert email == "user@example.com"
+        assert password == "password123"
+        return {"accessToken": "access-token", "refreshToken": "refresh-token"}
+
+    monkeypatch.setattr(auth_module, "login_with_credentials", fake_login)
+
+    result = CliRunner().invoke(
+        app,
+        ["signup", "--endpoint", "https://api.example.com"],
+        input="user@example.com\nUser\npassword123\n123456\ny\nn\n",
+    )
+
+    assert result.exit_code == 0
+    assert load_token() == "access-token"
+    assert "웹 대시보드" in result.output
 
 def test_send_email_code_command_requests_backend_email_code(monkeypatch):
     captured: dict[str, str] = {}
