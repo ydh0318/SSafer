@@ -29,6 +29,9 @@ def build_settings() -> WorkerSettings:
         max_concurrency=5,
         shutdown_timeout_seconds=1800,
         redelivery_cap=5,
+        http_max_retries=2,
+        http_retry_backoff_seconds=1.0,
+        http_retry_backoff_max_seconds=30.0,
     )
 
 

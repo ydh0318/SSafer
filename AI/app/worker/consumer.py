@@ -36,12 +36,18 @@ def build_processor() -> ScanTaskProcessor:
             base_url=settings.spring_base_url,
             timeout_seconds=settings.http_timeout_seconds,
             default_headers=spring_headers,
+            max_retries=settings.http_max_retries,
+            retry_backoff_seconds=settings.http_retry_backoff_seconds,
+            retry_backoff_max_seconds=settings.http_retry_backoff_max_seconds,
         )
     )
     fastapi_client = FastApiClient(
         JsonHttpClient(
             base_url=settings.fastapi_base_url,
             timeout_seconds=settings.http_timeout_seconds,
+            max_retries=settings.http_max_retries,
+            retry_backoff_seconds=settings.http_retry_backoff_seconds,
+            retry_backoff_max_seconds=settings.http_retry_backoff_max_seconds,
         )
     )
     return ScanTaskProcessor(
