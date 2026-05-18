@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from app.worker.bootstrap import build_processor, should_requeue_exception
 from app.worker.config import load_worker_settings
-from app.worker.consumer import build_processor, should_requeue_exception
 from app.worker.schemas import ScanRequestMessage
 
 if TYPE_CHECKING:

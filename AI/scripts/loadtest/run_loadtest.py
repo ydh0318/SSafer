@@ -4,7 +4,7 @@
     1. RabbitMQ 실행 중
     2. Mock FastAPI 실행: uvicorn scripts.loadtest.mock_fastapi:app --port 8000
     3. Mock Spring 실행: uvicorn scripts.loadtest.mock_spring:app --port 8080
-    4. Worker 실행: python -m app.worker.async_consumer (또는 app.worker.consumer)
+    4. Worker 실행: python -m app.worker.async_consumer
 
 사용법:
     python -m scripts.loadtest.run_loadtest --scenario S1

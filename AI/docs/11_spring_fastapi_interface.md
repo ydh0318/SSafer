@@ -33,7 +33,7 @@ AI 프로젝트 실행 단위:
 | 실행 단위 | 명령 | 역할 |
 | --- | --- | --- |
 | FastAPI | `uvicorn app.main:app --host 0.0.0.0 --port 8000` | `/analyze` 요청 수신, S3 raw 분석, S3 result 업로드 |
-| Worker | `python -m app.worker.consumer` | RabbitMQ consume, Spring Boot 상태/결과 콜백, FastAPI `/analyze` 호출 |
+| Worker | `python -m app.worker.async_consumer` | RabbitMQ consume, Spring Boot 상태/결과 콜백, FastAPI `/analyze` 호출 |
 
 FastAPI와 Worker는 같은 `AI/` 코드베이스에 있지만 별도 프로세스로 실행합니다.
 

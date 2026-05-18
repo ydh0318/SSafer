@@ -1,12 +1,11 @@
 import unittest
-from unittest.mock import MagicMock
 
-from app.worker.consumer import should_requeue_exception
+from app.worker.bootstrap import should_requeue_exception
 from app.worker.http_client import JsonHttpClientError
 from app.worker.processor import RedeliveryTracker
 
 
-class WorkerConsumerRetryPolicyTest(unittest.TestCase):
+class WorkerBootstrapRetryPolicyTest(unittest.TestCase):
     def test_does_not_requeue_permanent_http_failures(self):
         for status_code in (400, 401, 403, 404, 409):
             with self.subTest(status_code=status_code):
@@ -39,8 +38,8 @@ class WorkerConsumerRetryPolicyTest(unittest.TestCase):
 class RedeliveryCapDecisionTest(unittest.TestCase):
     """Verifies the consumer-side gate that drops messages beyond the cap.
 
-    The actual integration runs inside on_message in consumer.py; here we
-    exercise the same decision against a real RedeliveryTracker.
+    The actual integration runs inside process_message in async_consumer.py;
+    here we exercise the same decision against a real RedeliveryTracker.
     """
 
     def test_record_below_cap_proceeds(self):
