@@ -5,9 +5,10 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import PageBanner from '../../components/common/PageBanner';
 import PageHero from '../../components/common/PageHero';
 import { ROUTES } from '../../constants/routes';
-import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
-import { getScanBasic, getScanFindingDetail, getScanFindings, getScanSummary } from '../../features/results/api/results';
 import { getProjectDetail } from '../../features/projects/api/projects';
+import { getScanBasic, getScanFindingDetail, getScanFindings, getScanSummary } from '../../features/results/api/results';
+import ScanScopeInfo from '../../features/results/components/ScanScopeInfo';
+import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
 import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
@@ -399,7 +400,10 @@ function ResultPage() {
       ) : null}
 
       {!isInitialLoading && currentScanType === 'SERVER_AUDIT' && serverAuditViewModel ? (
-        <ServerAuditResultView result={serverAuditViewModel} routeState={routeState} />
+        <>
+          <ServerAuditResultView result={serverAuditViewModel} routeState={routeState} />
+          <ScanScopeInfo />
+        </>
       ) : null}
 
       {!isInitialLoading && currentScanType === 'PROJECT_FILE' && summary ? (
@@ -635,6 +639,8 @@ function ResultPage() {
               </button>
             </div>
           </div>
+
+          <ScanScopeInfo />
         </>
       ) : null}
     </section>
