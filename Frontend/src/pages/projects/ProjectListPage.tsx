@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, FolderPlus, Plus, ScanSearch, Trash2, Wrench } from 'lucide-react';
+import { ArrowRight, ChevronDown, Clock, FolderPlus, Plus, ScanSearch, Search, Trash2, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -107,6 +107,8 @@ function ProjectListPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [projectSearchTerm, setProjectSearchTerm] = useState('');
+  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
   const [selectedMode, setSelectedMode] = useState<ScanModeOption>('UPLOAD');
   const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
   const [createUploadFiles, setCreateUploadFiles] = useState<File[]>([]);
@@ -120,6 +122,7 @@ function ProjectListPage() {
   const [completedScansRefreshKey, setCompletedScansRefreshKey] = useState(0);
   const [selectedAgentScanType, setSelectedAgentScanType] = useState<ScanType>('PROJECT_FILE');
   const [agentStatusMap, setAgentStatusMap] = useState<Record<string, AgentStatusResponseData | null>>({});
+  const projectSelectRef = useRef<HTMLDivElement | null>(null);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useScanEventSubscription(
@@ -142,6 +145,19 @@ function ProjectListPage() {
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isProjectDropdownOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!projectSelectRef.current?.contains(event.target as Node)) {
+        setIsProjectDropdownOpen(false);
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [isProjectDropdownOpen]);
 
   const {
     closeDeleteModal,
@@ -313,6 +329,17 @@ function ProjectListPage() {
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
+
+  const filteredProjects = useMemo(() => {
+    const keyword = projectSearchTerm.trim().toLowerCase();
+    if (!keyword) return projects;
+
+    return projects.filter((project) => {
+      const name = project.name.toLowerCase();
+      const id = project.id.toLowerCase();
+      return name.includes(keyword) || id.includes(keyword);
+    });
+  }, [projectSearchTerm, projects]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -555,47 +582,101 @@ function ProjectListPage() {
         ) : loadError ? (
           <PageBanner message={loadError} tone="error" />
         ) : (
-          <div className="flex flex-wrap items-stretch gap-3">
-            {projects.map((project) => {
-              const isSelected = project.id === selectedProjectId;
+          <div className="relative max-w-2xl" ref={projectSelectRef}>
+            <button
+              className="flex min-h-[76px] w-full items-center justify-between gap-4 border border-neutral-200 bg-white px-5 text-left transition landing-card-radius hover:border-black"
+              onClick={() => setIsProjectDropdownOpen((current) => !current)}
+              type="button"
+            >
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Selected Project</p>
+                <p className="mt-1 truncate text-xl font-black text-black">
+                  {selectedProject ? selectedProject.name : '프로젝트를 선택하세요'}
+                </p>
+                {selectedProject ? (
+                  <p className="mt-1 text-xs font-semibold text-neutral-500">
+                    projectId #{selectedProject.id}
+                    {selectedProjectId && latestCompletedScans[selectedProjectId]
+                      ? ` · 최근 스캔 #${latestCompletedScans[selectedProjectId].scan.scanId}`
+                      : ''}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                {selectedProject ? (() => {
+                  const agentDisplay = getAgentDisplay(selectedProject, agentStatusMap[selectedProject.id] ?? null, true);
+                  return <span className={`hidden text-sm font-bold sm:inline ${agentDisplay.className}`}>{agentDisplay.label}</span>;
+                })() : null}
+                <ChevronDown className={`h-5 w-5 text-neutral-400 transition ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
 
-              return (
+            {isProjectDropdownOpen ? (
+              <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden border border-neutral-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.16)] landing-card-radius">
+                <div className="border-b border-neutral-100 p-3">
+                  <label className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm focus-within:border-black focus-within:bg-white">
+                    <Search className="h-4 w-4 text-neutral-400" />
+                    <input
+                      autoFocus
+                      className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-black outline-none placeholder:text-neutral-400"
+                      onChange={(event) => setProjectSearchTerm(event.target.value)}
+                      placeholder="프로젝트 이름 또는 ID 검색"
+                      type="text"
+                      value={projectSearchTerm}
+                    />
+                  </label>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto p-2">
+                  {filteredProjects.length > 0 ? (
+                    filteredProjects.map((project) => {
+                      const isSelected = project.id === selectedProjectId;
+                      const agentDisplay = getAgentDisplay(project, agentStatusMap[project.id] ?? null, isSelected);
+                      const latest = latestCompletedScans[project.id];
+
+                      return (
+                        <button
+                          className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition ${
+                            isSelected ? 'bg-black text-white' : 'text-black hover:bg-neutral-50'
+                          }`}
+                          key={project.id}
+                          onClick={() => {
+                            setSelectedProjectId(project.id);
+                            setProjectSearchTerm('');
+                            setIsProjectDropdownOpen(false);
+                          }}
+                          type="button"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black">{project.name}</p>
+                            <p className={`mt-0.5 text-xs ${isSelected ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                              projectId #{project.id}
+                              {latest ? ` · 최근 스캔 #${latest.scan.scanId}` : ''}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 text-xs font-bold ${agentDisplay.className}`}>{agentDisplay.label}</span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="px-3 py-5 text-center text-sm text-neutral-500">검색 결과가 없습니다.</div>
+                  )}
+                </div>
+
                 <button
-                  className={`inline-flex min-h-[72px] min-w-[220px] items-center gap-3 px-6 text-left text-base font-black transition landing-card-radius ${
-                    isSelected ? 'bg-[#111111] text-white' : 'bg-white text-black hover:bg-neutral-50'
-                  }`}
-                  key={project.id}
+                  className="flex w-full items-center gap-2 border-t border-dashed border-neutral-200 px-4 py-3 text-sm font-black text-black transition hover:bg-[#F8FFE8]"
                   onClick={() => {
-                    if (isSelected) {
-                      navigate(ROUTES.projectDetail.replace(':projectId', project.id));
-                      return;
-                    }
-
-                    setSelectedProjectId(project.id);
+                    setIsProjectDropdownOpen(false);
+                    setProjectSearchTerm('');
+                    setIsCreateOpen(true);
                   }}
                   type="button"
                 >
-                  <span className="truncate text-lg md:text-xl">{project.name}</span>
-                  {(() => {
-                    const agentDisplay = getAgentDisplay(project, agentStatusMap[project.id] ?? null, isSelected);
-                    return (
-                      <span className={`shrink-0 text-sm font-bold ${agentDisplay.className}`}>
-                        {agentDisplay.label}
-                      </span>
-                    );
-                  })()}
+                  <Plus className="h-4 w-4" />
+                  새 프로젝트 만들기
                 </button>
-              );
-            })}
-
-            <button
-              className="inline-flex min-h-[72px] min-w-[120px] items-center justify-center gap-2 border border-dashed border-neutral-300 bg-white px-6 text-xl font-black text-[#111111] transition landing-card-radius hover:border-black"
-              onClick={() => setIsCreateOpen(true)}
-              type="button"
-            >
-              <Plus className="h-5 w-5" />
-              추가
-            </button>
+              </div>
+            ) : null}
           </div>
         )}
 

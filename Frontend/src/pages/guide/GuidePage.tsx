@@ -44,7 +44,7 @@ const tips = [
 ];
 
 const nextSteps = [
-  'ssafer login 후 프로젝트 루트에서 ssafer run --upload 로 첫 스캔을 웹에 올려보세요.',
+  '프로젝트 루트에서 ssafer login 후 ssafer run --upload 로 첫 스캔을 웹에 올려보세요.',
   'ssafer agent 실행 후 웹 프로젝트 화면에서 Agent 스캔 버튼을 눌러보세요.',
   '웹 Finding 상세에서 diff를 확인하고 패치 적용 승인 버튼을 눌러보세요.',
   '홈 디렉터리에서 ssafer server --upload 로 서버 점검 결과를 웹에서 바로 확인해보세요.',
@@ -156,8 +156,11 @@ function Section0() {
           { comment: '권장 설치', cmd: 'pip install ssafer' },
         ]} />
       </Step>
-      <Step num="02" label="로그인" desc="SSAfer 계정으로 로그인하여 스캔 결과 업로드 권한을 획득합니다.">
-        <Terminal_ lines={[{ cmd: 'ssafer login' }]} />
+      <Step num="02" label="프로젝트 루트 이동 및 로그인" desc="스캔할 코드가 있는 프로젝트 루트로 이동한 뒤 SSAfer 계정으로 로그인합니다. 로그인 중 Agent를 바로 시작할 수 있으므로 위치를 먼저 맞춰야 합니다.">
+        <Terminal_ lines={[
+          { cmd: 'cd <프로젝트 루트>' },
+          { cmd: 'ssafer login' },
+        ]} />
         <div className="mt-3 space-y-2">
           <Note>
             <strong>Google · GitHub로 가입한 계정</strong>은 비밀번호가 없어 이메일/비밀번호 로그인이 되지 않습니다.
@@ -180,7 +183,6 @@ function Section0() {
       </Step>
       <Step num="04" label="스캔 및 업로드" desc="프로젝트 루트에서 스캔을 실행합니다. --upload 없이 실행하면 로컬에만 저장됩니다." isLast>
         <Terminal_ lines={[
-          { cmd: 'cd <프로젝트 루트>' },
           { cmd: 'ssafer run --upload' },
         ]} />
         <div className="mt-3">
@@ -199,8 +201,9 @@ function Section0() {
 function Section1() {
   return (
     <>
-      <Step num="01" label="로그인" desc="계정 로그인 또는 게스트 토큰으로 로그인합니다. 게스트 토큰은 웹에서 발급받을 수 있습니다.">
+      <Step num="01" label="프로젝트 루트 이동 및 로그인" desc="Agent가 처리할 코드가 있는 프로젝트 루트로 이동한 뒤 계정 로그인 또는 게스트 토큰으로 로그인합니다. 게스트 토큰은 웹에서 발급받을 수 있습니다.">
         <Terminal_ lines={[
+          { cmd: 'cd <프로젝트 루트>' },
           { cmd: 'ssafer login' },
           { comment: '게스트로 시작하는 경우', cmd: 'ssafer login --guest' },
         ]} />
