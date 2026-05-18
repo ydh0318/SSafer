@@ -690,6 +690,9 @@ def parse_docker_inspect_ports(inspect_output: str) -> list[DockerPublishedPort]
 _DOCKER_USER_DPORT_RE = re.compile(
     r"-A\s+DOCKER-USER\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT|RETURN)"
 )
+_DOCKER_USER_MULTIPORT_RE = re.compile(
+    r"-A\s+DOCKER-USER\s+.*--dports\s+([0-9,:]+)\s+.*-j\s+(ACCEPT|DROP|REJECT|RETURN)"
+)
 _FORWARD_DPORT_RE = re.compile(
     r"-A\s+FORWARD\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT)"
 )
@@ -704,7 +707,34 @@ def parse_docker_user_rules(output: str) -> dict[int, list[str]]:
             action = m.group(2)
             normalized = "DENY" if action in {"DROP", "REJECT"} else "ALLOW"
             rules.setdefault(port, []).append(normalized)
+            continue
+        m = _DOCKER_USER_MULTIPORT_RE.search(line)
+        if m:
+            action = m.group(2)
+            normalized = "DENY" if action in {"DROP", "REJECT"} else "ALLOW"
+            for port in _parse_iptables_port_list(m.group(1)):
+                rules.setdefault(port, []).append(normalized)
     return rules
+
+
+def _parse_iptables_port_list(value: str) -> list[int]:
+    ports: list[int] = []
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if ":" in item:
+            start_text, end_text = item.split(":", 1)
+            if not start_text.isdigit() or not end_text.isdigit():
+                continue
+            start = int(start_text)
+            end = int(end_text)
+            if 0 < start <= end and end - start <= 256:
+                ports.extend(range(start, end + 1))
+            continue
+        if item.isdigit():
+            ports.append(int(item))
+    return ports
 
 
 def _audit_docker_ports(

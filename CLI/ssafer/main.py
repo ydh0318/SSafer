@@ -955,6 +955,52 @@ def _run_agent_watch(
                 message = str(payload.get("message", "-"))
             console.print(f"[cyan]Agent scan 진행 중[/cyan] taskId={task_id}, scanId={scan_id}: {message}")
             return
+        if event_type == "analysis_wait_started":
+            scan_id = str(payload.get("scanId", "-")) if isinstance(payload, dict) else "-"
+            console.print(f"[cyan]AI 분석 완료를 기다리는 중...[/cyan] scanId={scan_id}")
+            return
+        if event_type == "analysis_status":
+            if isinstance(payload, dict):
+                console.print(
+                    f"[cyan]AI 분석 진행 중...[/cyan] "
+                    f"scanId={payload.get('scanId', '-')}, 상태={payload.get('status', '-')}, 단계={payload.get('progressStep') or '-'}"
+                )
+            return
+        if event_type == "analysis_status_retry":
+            if isinstance(payload, dict):
+                console.print(
+                    f"[yellow]AI 분석 상태 조회 재시도 중...[/yellow] "
+                    f"scanId={payload.get('scanId', '-')}, count={payload.get('count', '-')}"
+                )
+            return
+        if event_type == "analysis_status_failed":
+            error = "-"
+            scan_id = "-"
+            if isinstance(payload, dict):
+                scan_id = str(payload.get("scanId", "-"))
+                error = str(payload.get("error", "-"))
+            console.print(f"[yellow]AI 분석 상태를 확인하지 못했습니다.[/yellow] scanId={scan_id}, error={error}")
+            return
+        if event_type == "analysis_done":
+            scan_id = str(payload.get("scanId", "-")) if isinstance(payload, dict) else "-"
+            console.print(f"[green]AI 분석 완료.[/green] 결과: {_web_url(effective_url, f'/scans/{scan_id}')}")
+            return
+        if event_type == "analysis_failed":
+            scan_id = "-"
+            status_value = "-"
+            error_message = None
+            if isinstance(payload, dict):
+                scan_id = str(payload.get("scanId", "-"))
+                status_value = str(payload.get("status", "-"))
+                error_message = payload.get("errorMessage")
+            console.print(f"[red]AI 분석이 완료되지 못했습니다.[/red] scanId={scan_id}, 상태={status_value}")
+            if error_message:
+                console.print(f"[yellow]{error_message}[/yellow]")
+            return
+        if event_type == "analysis_timeout":
+            scan_id = str(payload.get("scanId", "-")) if isinstance(payload, dict) else "-"
+            console.print(f"[yellow]AI 분석 대기 시간이 초과되었습니다.[/yellow] 결과: {_web_url(effective_url, f'/scans/{scan_id}')}")
+            return
         if isinstance(payload, AgentTaskResult):
             _print_agent_task_result(payload)
 

@@ -751,6 +751,13 @@ def test_parse_docker_user_accept():
     assert rules[8080] == ["ALLOW"]
 
 
+def test_parse_docker_user_multiport_drop():
+    output = "-A DOCKER-USER -p tcp -m multiport --dports 8080,8989 -j DROP\n"
+    rules = parse_docker_user_rules(output)
+    assert rules[8080] == ["DENY"]
+    assert rules[8989] == ["DENY"]
+
+
 def test_parse_docker_user_empty():
     output = "-A DOCKER-USER -j RETURN\n"
     rules = parse_docker_user_rules(output)
