@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic as _monotonic
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse, urlunparse
 
 import httpx
@@ -99,6 +99,7 @@ def handle_agent_task(
     api_url: str | None = None,
     agent_token: str | None = None,
     upload_token: str | None = None,
+    on_step: Callable[[str], None] | None = None,
 ) -> AgentTaskResult:
     if task.task_type == "SCAN_REQUEST":
         return _handle_scan_request_task(
@@ -108,6 +109,7 @@ def handle_agent_task(
             api_url=api_url,
             agent_token=agent_token,
             upload_token=upload_token,
+            on_step=on_step,
         )
 
     if task.task_type != "PATCH_APPLY":
@@ -170,6 +172,7 @@ def _handle_scan_request_task(
     api_url: str | None,
     agent_token: str | None,
     upload_token: str | None,
+    on_step: Callable[[str], None] | None,
 ) -> AgentTaskResult:
     if task.scan_id is None:
         return _failed_task(task, "SCAN_REQUEST task is missing scanId.")
@@ -223,7 +226,7 @@ def _handle_scan_request_task(
         else:
             assert target_root is not None
             save_raw = bool(task.payload.get("saveRaw") or task.payload.get("save_raw"))
-            scan = run_scan(target_root, save_raw=save_raw)
+            scan = run_scan(target_root, save_raw=save_raw, on_step=on_step)
             upload_root = target_root
         upload_scan_result_to_registered_scan(
             upload_root,
@@ -232,6 +235,7 @@ def _handle_scan_request_task(
             token=upload_token,
             scan_id=task.scan_id,
             raw_upload_url=raw_upload_url,
+            on_step=on_step,
         )
     except Exception as exc:  # noqa: BLE001 - return task failure without killing the agent.
         return _failed_task(task, f"SCAN_REQUEST failed: {exc}")
@@ -479,6 +483,17 @@ def _process_agent_tasks(
         on_event("tasks_found", tasks)
     for task in tasks:
         try:
+            def emit_step(message: str, *, task: AgentTask = task) -> None:
+                on_event(
+                    "task_step",
+                    {
+                        "taskId": task.task_id,
+                        "taskType": task.task_type,
+                        "scanId": task.scan_id,
+                        "message": message,
+                    },
+                )
+
             result = handle_agent_task(
                 project_root,
                 task,
@@ -486,6 +501,7 @@ def _process_agent_tasks(
                 api_url=api_url,
                 agent_token=agent_token,
                 upload_token=upload_token,
+                on_step=emit_step,
             )
         except Exception as exc:  # noqa: BLE001 - keep the long-running agent alive per task.
             result = AgentTaskResult(

@@ -421,7 +421,16 @@ def test_handle_agent_task_runs_scan_request_and_uploads_result(monkeypatch, tmp
         calls["run_scan"] = {"project_root": project_root, "save_raw": save_raw}
         return scan_payload
 
-    def fake_upload_scan_result_to_registered_scan(project_root, scan, *, api_url, token, scan_id, raw_upload_url):
+    def fake_upload_scan_result_to_registered_scan(
+        project_root,
+        scan,
+        *,
+        api_url,
+        token,
+        scan_id,
+        raw_upload_url,
+        on_step=None,
+    ):
         calls["upload"] = {
             "project_root": project_root,
             "scan": scan,
@@ -429,7 +438,10 @@ def test_handle_agent_task_runs_scan_request_and_uploads_result(monkeypatch, tmp
             "token": token,
             "scan_id": scan_id,
             "raw_upload_url": raw_upload_url,
+            "on_step": on_step,
         }
+        if on_step is not None:
+            on_step("uploading")
         return {"scanId": scan_id, "status": "RAW_UPLOADED"}
 
     monkeypatch.setattr(agent, "run_scan", fake_run_scan)
@@ -450,12 +462,14 @@ def test_handle_agent_task_runs_scan_request_and_uploads_result(monkeypatch, tmp
         },
     )
 
+    steps: list[str] = []
     result = agent.handle_agent_task(
         tmp_path,
         task,
         api_url="https://api.example.com",
         agent_token="agent-token",
         upload_token="access-token",
+        on_step=steps.append,
     )
 
     assert result.status == "SUCCESS"
@@ -467,7 +481,9 @@ def test_handle_agent_task_runs_scan_request_and_uploads_result(monkeypatch, tmp
         "token": "access-token",
         "scan_id": 2,
         "raw_upload_url": "https://s3.example.com/raw",
+        "on_step": steps.append,
     }
+    assert steps == ["uploading"]
 
 
 def test_handle_agent_task_runs_server_audit_request_and_uploads_result(monkeypatch, tmp_path: Path):
@@ -481,7 +497,16 @@ def test_handle_agent_task_runs_server_audit_request_and_uploads_result(monkeypa
         }
         return ServerAuditResult()
 
-    def fake_upload_scan_result_to_registered_scan(project_root, scan, *, api_url, token, scan_id, raw_upload_url):
+    def fake_upload_scan_result_to_registered_scan(
+        project_root,
+        scan,
+        *,
+        api_url,
+        token,
+        scan_id,
+        raw_upload_url,
+        on_step=None,
+    ):
         calls["upload"] = {
             "project_root": project_root,
             "scan": scan,
@@ -489,6 +514,7 @@ def test_handle_agent_task_runs_server_audit_request_and_uploads_result(monkeypa
             "token": token,
             "scan_id": scan_id,
             "raw_upload_url": raw_upload_url,
+            "on_step": on_step,
         }
         return {"scanId": scan_id, "status": "RAW_UPLOADED"}
 
@@ -558,6 +584,46 @@ def test_handle_agent_task_rejects_scan_request_without_upload_token(monkeypatch
 
     assert result.status == "FAILED"
     assert "login or guest token" in result.message
+
+
+def test_process_agent_tasks_emits_scan_request_step(monkeypatch, tmp_path: Path):
+    task = agent.AgentTask(
+        task_id=10,
+        task_type="SCAN_REQUEST",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=None,
+        payload={"rawUploadUrl": "https://s3.example.com/raw"},
+    )
+    events: list[tuple[str, object]] = []
+
+    def fake_handle_agent_task(*args, on_step=None, **kwargs):
+        assert on_step is not None
+        on_step("uploading")
+        return agent.AgentTaskResult(
+            task_id=10,
+            task_type="SCAN_REQUEST",
+            status="SUCCESS",
+            message="done",
+            patch_results=[],
+            scan_id=2,
+        )
+
+    monkeypatch.setattr(agent, "handle_agent_task", fake_handle_agent_task)
+
+    agent._process_agent_tasks(
+        api_url="https://api.example.com",
+        agent_id=1,
+        agent_token="agent-token",
+        project_root=tmp_path,
+        dry_run=True,
+        on_event=lambda event_type, payload: events.append((event_type, payload)),
+        upload_token="access-token",
+        tasks=[task],
+    )
+
+    assert ("task_step", {"taskId": 10, "taskType": "SCAN_REQUEST", "scanId": 2, "message": "uploading"}) in events
 
 
 def test_handle_agent_task_dry_runs_scan_request_without_running_scan(monkeypatch, tmp_path: Path):

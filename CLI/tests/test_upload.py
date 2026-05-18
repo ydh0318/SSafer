@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import click
@@ -752,6 +753,25 @@ def test_upload_last_scan_requires_existing_scan(tmp_path: Path):
 def test_upload_last_server_audit_requires_existing_result(tmp_path: Path):
     with pytest.raises(RuntimeError, match="업로드할 server-audit 결과가 없습니다"):
         upload.upload_last_server_audit(tmp_path)
+
+
+def test_upload_server_audit_requires_login_with_readable_message(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.setattr("ssafer.core.auth.load_token", lambda token_env=None: None)
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://api.example.com")
+    monkeypatch.setattr(
+        "ssafer.core.config.load_project_config",
+        lambda path, warnings: SimpleNamespace(
+            upload=SimpleNamespace(token_env="SSAFER_TOKEN", endpoint="https://api.example.com")
+        ),
+    )
+
+    with pytest.raises(click.exceptions.Exit):
+        main_module._upload_server_audit_or_exit(tmp_path, None)
+
+    output = capsys.readouterr().out
+    assert "ssafer login" in output
+    assert "ssafer login --guest-token <token>" in output
+    assert "SSAFER_TOKEN" in output
 
 
 def test_upload_last_scan_blocks_unmasked_secret_before_backend_or_s3_requests(tmp_path: Path, monkeypatch):
