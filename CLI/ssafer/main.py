@@ -653,6 +653,7 @@ def project_create(
         console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
         raise typer.Exit(code=1)
     console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
+    _print_project_web_link(effective_endpoint, project_id)
 
 
 def _has_saved_agent_config(config: dict) -> bool:
@@ -743,6 +744,7 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
             console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
             raise typer.Exit(code=1)
         console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
+        _print_project_web_link(endpoint, project_id)
         return int(project_id)
 
     console.print("[cyan]Local Agent를 연결할 프로젝트를 선택하세요.[/cyan]")
@@ -1164,6 +1166,7 @@ def login(
             raise typer.Exit(code=1) from exc
         console.print("[green]웹 게스트 토큰을 CLI에 저장했습니다.[/green]")
         console.print("[dim]이제 ssafer upload, ssafer agent 같은 명령에서 같은 게스트 세션을 사용합니다.[/dim]")
+        _print_guest_web_hint(effective_endpoint)
         _prompt_start_agent_after_login()
         return
     if guest:
@@ -1191,6 +1194,7 @@ def login(
             else:
                 console.print("[dim]웹에서 이어 보기 URL은 토큰이 포함되어 있어 기본 출력에서는 숨깁니다.[/dim]")
                 console.print("[dim]원문 URL이 필요하면 [bold]ssafer guest --show-url[/bold]을 실행하세요.[/dim]")
+        _print_guest_web_hint(effective_endpoint)
         _prompt_start_agent_after_login()
         return
 
@@ -1260,6 +1264,7 @@ def guest(
         else:
             console.print("[dim]웹에서 이어 보기 URL은 토큰이 포함되어 있어 기본 출력에서는 숨깁니다.[/dim]")
             console.print("[dim]원문 URL이 필요하면 [bold]ssafer guest --show-url[/bold]을 실행하세요.[/dim]")
+        _print_guest_web_hint(effective_endpoint)
         return
     login(endpoint=endpoint, logout=False, guest=True, guest_token=None, show_url=show_url)
 
@@ -2240,6 +2245,19 @@ def _web_url(api_url: object, path: str) -> str:
 
     base_url = normalize_api_url(str(api_url or DEFAULT_API_URL))
     return f"{base_url}{path}"
+
+
+def _web_project_url(api_url: object, project_id: object) -> str:
+    return _web_url(api_url, f"/projects/{project_id}")
+
+
+def _print_project_web_link(api_url: object, project_id: object) -> None:
+    console.print(f"웹 프로젝트: {_web_project_url(api_url, project_id)}")
+
+
+def _print_guest_web_hint(api_url: object) -> None:
+    console.print(f"웹 대시보드: {_web_url(api_url, '/dashboard')}")
+    console.print("[dim]웹에서 만든 프로젝트 요청을 이 PC/서버가 처리하려면 프로젝트 폴더에서 [bold]ssafer agent[/bold]를 실행하세요.[/dim]")
 
 
 def _apply_web_scan_url(project_root: Path, api_url: str | None, scan_id: int) -> str:

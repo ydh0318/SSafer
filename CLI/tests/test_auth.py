@@ -973,7 +973,9 @@ def test_guest_command_show_url_reuses_saved_guest_token(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert load_token() == "saved guest/token"
     assert "https://api.example.com/guest/continue?token=saved+guest%2Ftoken" in result.output
-    assert "Local Agent" not in result.output
+    assert "https://api.example.com/dashboard" in result.output
+    assert "ssafer" in result.output
+    assert "agent" in result.output
 
 
 def test_login_command_guest_token_saves_web_guest_token(monkeypatch, tmp_path):
@@ -990,6 +992,8 @@ def test_login_command_guest_token_saves_web_guest_token(monkeypatch, tmp_path):
     assert load_token() == "web-guest-token"
     assert load_endpoint() == "https://api.example.com"
     assert "CLI" in result.output
+    assert "https://api.example.com/dashboard" in result.output
+    assert "ssafer agent" in result.output
 
 
 def test_login_command_guest_prints_web_continue_url(monkeypatch, tmp_path):
@@ -1209,6 +1213,7 @@ def test_project_create_command_creates_project(monkeypatch, tmp_path):
         "description": "from cli",
     }
     assert "projectId=88" in result.output
+    assert "https://api.example.com/projects/88" in result.output
 
 
 def test_signup_command_registers_backend_user(monkeypatch):
