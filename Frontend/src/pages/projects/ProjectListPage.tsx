@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, FolderPlus, Plus, ScanSearch, Trash2, Upload, Wrench } from 'lucide-react';
+import { ArrowRight, Clock, FolderPlus, Plus, ScanSearch, Trash2, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -13,12 +13,12 @@ import ProjectCreateForm from '../../features/projects/components/ProjectCreateF
 import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
 import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
 import {
-  createScanRequest,
   getProjectScanOptions,
   getProjectScans,
   requestAgentScan,
   requestUploadScan,
 } from '../../features/scans/api/scans';
+import CliGuideBox from '../../features/scans/components/CliGuideBox';
 import EstimatedDurationCard from '../../features/scans/components/EstimatedDurationCard';
 import ScanModePicker from '../../features/scans/components/ScanModePicker';
 import SecretMaskingCard from '../../features/scans/components/SecretMaskingCard';
@@ -508,12 +508,8 @@ function ProjectListPage() {
           includeLogs: false,
         });
       } else {
-        scanData = await createScanRequest({
-          projectName: selectedProject.name,
-          source: 'CLI',
-          scanName: `${selectedProject.name} CLI 스캔`,
-          includeLogs: false,
-        });
+        setScanError('CLI 방식은 웹에서 스캔 요청을 만들지 않습니다. 아래 안내된 명령어를 터미널에서 실행해 주세요.');
+        return;
       }
 
       navigate(ROUTES.scanDetail.replace(':scanId', String(scanData.scanId)), {
@@ -729,13 +725,14 @@ function ProjectListPage() {
               {selectedMode === 'CLI' ? '터미널에서 스캔하고 결과를 올립니다' : 'Agent가 연결된 환경에서 스캔을 시작합니다'}
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-7 text-neutral-500">
-              원하는 동작을 바로 눌러 시작하세요.
+              {selectedMode === 'CLI'
+                ? '웹 버튼으로 실행하지 않고, 아래 명령어를 프로젝트 루트 터미널에서 직접 실행합니다.'
+                : 'Agent 스캔은 스캔 실행과 결과 업로드를 한 번에 처리합니다.'}
             </p>
 
             {selectedMode === 'CLI' ? (
-              <div className="mt-7 flex items-center gap-3 border border-white/10 bg-[#0F0F0F] px-5 py-3.5 font-mono text-sm text-white/85 landing-inner-radius">
-                <span className="text-[#D4FC64]">$</span>
-                <span className="flex-1 truncate">pip install ssafer && ssafer run --upload</span>
+              <div className="mt-7">
+                <CliGuideBox mode="CLI_UPLOAD" />
               </div>
             ) : null}
 
@@ -775,92 +772,81 @@ function ProjectListPage() {
               </div>
             )}
 
-            <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {/* 스캔 */}
-              <button
-                className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={isStartingScan || !selectedProject}
-                onClick={() => void handleStartScan()}
-                type="button"
-              >
-                <div className="flex h-10 w-10 items-center justify-center bg-black landing-inner-radius">
-                  <ScanSearch className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <p className="font-black">스캔</p>
-                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                    {selectedMode === 'AGENT' ? '연결된 Agent가 서버를 직접 점검합니다.' : '스캔 요청을 서버에 등록합니다.'}
-                  </p>
-                </div>
-              </button>
+            {selectedMode === 'AGENT' ? (
+              <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {/* 스캔 */}
+                <button
+                  className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={isStartingScan || !selectedProject}
+                  onClick={() => void handleStartScan()}
+                  type="button"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center bg-black landing-inner-radius">
+                    <ScanSearch className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-black">스캔 및 업로드</p>
+                    <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                      연결된 Agent가 현재 환경을 점검하고 결과 JSON 업로드까지 이어서 처리합니다.
+                    </p>
+                  </div>
+                </button>
 
-              {/* 업로드 */}
-              <button
-                className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50"
-                onClick={() => setSelectedMode('UPLOAD')}
-                type="button"
-              >
-                <div className="flex h-10 w-10 items-center justify-center bg-neutral-100 landing-inner-radius">
-                  <Upload className="h-5 w-5 text-black" />
-                </div>
-                <div>
-                  <p className="font-black">업로드</p>
-                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">설정 파일을 직접 올려 스캔합니다.</p>
-                </div>
-              </button>
-
-              {/* 수정 */}
-              <button
-                className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!selectedProject || !(selectedProjectId && latestCompletedScans[selectedProjectId])}
-                onClick={() => {
-                  if (!selectedProjectId) return;
-                  const latest = latestCompletedScans[selectedProjectId];
-                  if (!latest?.scan?.scanId) return;
-                  navigate(ROUTES.resultDetail.replace(':scanId', String(latest.scan.scanId)));
-                }}
-                type="button"
-              >
-                <div className="flex h-10 w-10 items-center justify-center bg-neutral-100 landing-inner-radius">
-                  <Wrench className="h-5 w-5 text-black" />
-                </div>
-                <div>
-                  <p className="font-black">수정</p>
-                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                    {selectedProject && selectedProjectId && latestCompletedScans[selectedProjectId]
-                      ? '최근 스캔 결과에서 패치를 확인하고 적용합니다.'
-                      : '완료된 스캔이 없습니다. 먼저 스캔을 실행해 주세요.'}
-                  </p>
-                </div>
-              </button>
-            </div>
+                {/* 수정 */}
+                <button
+                  className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={!selectedProject || !(selectedProjectId && latestCompletedScans[selectedProjectId])}
+                  onClick={() => {
+                    if (!selectedProjectId) return;
+                    const latest = latestCompletedScans[selectedProjectId];
+                    if (!latest?.scan?.scanId) return;
+                    navigate(ROUTES.resultDetail.replace(':scanId', String(latest.scan.scanId)));
+                  }}
+                  type="button"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center bg-neutral-100 landing-inner-radius">
+                    <Wrench className="h-5 w-5 text-black" />
+                  </div>
+                  <div>
+                    <p className="font-black">수정</p>
+                    <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                      {selectedProject && selectedProjectId && latestCompletedScans[selectedProjectId]
+                        ? '최근 스캔 결과에서 패치를 확인하고 적용합니다.'
+                        : '완료된 스캔이 없습니다. 먼저 스캔을 실행해 주세요.'}
+                    </p>
+                  </div>
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
 
         <aside className="space-y-4">
           <SecretMaskingCard />
           <EstimatedDurationCard />
-          <button
-            className="inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-5 py-3.5 text-sm font-black text-black transition landing-inner-radius hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(212,252,100,0.45)] hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
-            disabled={
-              isStartingScan ||
-              !selectedProject ||
-              (selectedMode === 'UPLOAD' && selectedUploadFiles.length === 0)
-            }
-            onClick={() => void handleStartScan()}
-            type="button"
-          >
-            {isStartingScan
-              ? '스캔 요청 중...'
-              : !selectedProject
-              ? '프로젝트를 먼저 선택해 주세요'
-              : selectedMode === 'UPLOAD' && selectedUploadFiles.length === 0
-              ? '파일을 선택해 주세요'
-              : selectedMode === 'UPLOAD'
-              ? `파일 ${selectedUploadFiles.length}개로 스캔 시작`
-              : '스캔 요청 보내기'}
-            {isStartingScan ? <Clock className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-          </button>
+          {selectedMode !== 'CLI' ? (
+            <button
+              className="inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-5 py-3.5 text-sm font-black text-black transition landing-inner-radius hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(212,252,100,0.45)] hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
+              disabled={
+                isStartingScan ||
+                !selectedProject ||
+                (selectedMode === 'UPLOAD' && selectedUploadFiles.length === 0)
+              }
+              onClick={() => void handleStartScan()}
+              type="button"
+            >
+              {isStartingScan
+                ? '스캔 요청 중...'
+                : !selectedProject
+                ? '프로젝트를 먼저 선택해 주세요'
+                : selectedMode === 'UPLOAD' && selectedUploadFiles.length === 0
+                ? '파일을 선택해 주세요'
+                : selectedMode === 'UPLOAD'
+                ? `파일 ${selectedUploadFiles.length}개로 스캔 시작`
+                : 'Agent 스캔 및 업로드 시작'}
+              {isStartingScan ? <Clock className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+            </button>
+          ) : null}
         </aside>
       </section>
 
