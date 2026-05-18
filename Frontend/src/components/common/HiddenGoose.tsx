@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+
+import { useEasterEggStore } from '../../store/easterEggStore';
 import PixelGoose from './PixelGoose';
 import SsaferCommandsModal from './SsaferCommandsModal';
+
+const DOUBLE_CLICK_WINDOW_MS = 200;
 
 const PATROL_MS = 40_000;
 const SIZE = 56;
@@ -30,8 +34,12 @@ export default function HiddenGoose() {
   const [hovered, setHovered] = useState(false);
   const [mode, setMode] = useState<Mode>('patrolling');
 
+  const isTickerPaused = useEasterEggStore((state) => state.isTickerPaused);
+  const toggleTickerPaused = useEasterEggStore((state) => state.toggleTickerPaused);
+
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
+  const clickTimerRef = useRef<number | null>(null);
   const dragRef = useRef({
     startX: 0,
     startY: 0,
@@ -40,6 +48,14 @@ export default function HiddenGoose() {
     cosTheta: 1,
     sinTheta: 0,
   });
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (mode !== 'patrolling') {
@@ -131,13 +147,26 @@ export default function HiddenGoose() {
       return;
     }
     dragRef.current.dragStarted = false;
-    setShowModal(true);
+
+    // 더블클릭 감지 — 280ms 내에 두 번째 클릭이 오면 카운터 토글, 단일이면 모달
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      toggleTickerPaused();
+      return;
+    }
+
+    clickTimerRef.current = window.setTimeout(() => {
+      clickTimerRef.current = null;
+      setShowModal(true);
+    }, DOUBLE_CLICK_WINDOW_MS);
   };
 
-  const animPaused = hovered || mode !== 'patrolling';
+  const animPaused = hovered || mode !== 'patrolling' || isTickerPaused;
 
   const mood =
-    mode === 'dragging' ? 'eating'
+    isTickerPaused ? 'sleeping'
+    : mode === 'dragging' ? 'eating'
     : mode === 'returning' ? 'happy'
     : hovered ? 'happy'
     : 'idle';
@@ -167,7 +196,7 @@ export default function HiddenGoose() {
           onMouseLeave={() => setHovered(false)}
           onClick={handleClick}
           onTransitionEnd={handleTransitionEnd}
-          title="SSAFER 비밀 명령어"
+          title={isTickerPaused ? '쉿... 거위가 자고 있어요 (더블클릭으로 깨우기)' : 'SSAFER 비밀 명령어 (더블클릭은 이스터에그)'}
         >
           <PixelGoose mood={mood} size={SIZE} />
         </div>

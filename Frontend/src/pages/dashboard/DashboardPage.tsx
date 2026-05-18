@@ -1,14 +1,9 @@
 import {
   ArrowRight,
-  ChevronRight,
   Filter,
   Plus,
-  RefreshCw,
-  ScanSearch,
   Search,
-  Terminal,
   Trophy,
-  Upload,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -20,11 +15,11 @@ import { getProjectAgentStatus } from '../../features/agents/api/agents';
 import { getProjects } from '../../features/projects/api/projects';
 import { getScanSummary } from '../../features/results/api/results';
 import { getProjectScans } from '../../features/scans/api/scans';
-import { useAuthStore } from '../../store/authStore';
-import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
+import ScanTimeline from '../../features/scans/components/ScanTimeline';
 import { formatDateTime } from '../../features/scans/utils/scanPresentation';
+import { useAuthStore } from '../../store/authStore';
 import type { ProjectListItemData } from '../../types/project';
-import type { AgentStatusResponseData, ProjectScanListItemData, ScanMode, ScanStatus, ScanSummaryData } from '../../types/scan';
+import type { AgentStatusResponseData, ProjectScanListItemData, ScanStatus, ScanSummaryData } from '../../types/scan';
 
 type DashboardScan = ProjectScanListItemData & {
   projectId: number;
@@ -50,72 +45,6 @@ const severityColors = {
 } as const;
 
 const searchableStatuses: ScanStatus[] = ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED', 'DONE', 'FAILED', 'CANCELED'];
-
-function ScanModeBadge({ scanMode }: { scanMode: ScanMode }) {
-  const Icon = scanMode === 'CLI' ? Terminal : scanMode === 'UPLOAD' ? Upload : ScanSearch;
-  const label = scanMode === 'CLI' ? 'CLI' : scanMode === 'UPLOAD' ? 'Upload' : 'Agent';
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-600">
-      <Icon className="h-3 w-3" />
-      {label}
-    </span>
-  );
-}
-
-function getScanStatusBarClass(status: ScanStatus) {
-  if (status === 'DONE') return 'bg-[#9FCC2E]';
-  if (['RUNNING', 'QUEUED', 'REQUESTED', 'RAW_UPLOADED'].includes(status)) return 'bg-neutral-400';
-  if (status === 'FAILED') return 'bg-rose-400';
-  return 'bg-neutral-200';
-}
-
-function getScanStatusChipClass(status: ScanStatus) {
-  if (status === 'DONE') return 'bg-[#EDFFC0] text-[#4A7A00]';
-  if (status === 'RUNNING' || status === 'RAW_UPLOADED') return 'bg-neutral-200 text-neutral-600';
-  if (status === 'QUEUED' || status === 'REQUESTED') return 'bg-neutral-100 text-neutral-500';
-  if (status === 'FAILED') return 'bg-rose-50 text-rose-600';
-  if (status === 'CANCELED') return 'bg-neutral-100 text-neutral-400';
-  return 'bg-neutral-100 text-neutral-500';
-}
-
-const severityPills = [
-  { key: 'critical' as const, label: 'C', countKey: 'criticalCount' as const, cls: 'border-red-200 bg-red-50 text-red-700', dot: 'bg-red-500' },
-  { key: 'high' as const,     label: 'H', countKey: 'highCount' as const,     cls: 'border-orange-200 bg-orange-50 text-orange-700', dot: 'bg-orange-400' },
-  { key: 'medium' as const,   label: 'M', countKey: 'mediumCount' as const,   cls: 'border-yellow-200 bg-yellow-50 text-yellow-700', dot: 'bg-yellow-400' },
-  { key: 'low' as const,      label: 'L', countKey: 'lowCount' as const,      cls: 'border-blue-200 bg-blue-50 text-blue-600',   dot: 'bg-blue-400' },
-] as const;
-
-function formatRelativeDate(value: string | null) {
-  if (!value) {
-    return '-';
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  const diffMinutes = Math.round((Date.now() - date.getTime()) / 60000);
-
-  if (diffMinutes < 1) {
-    return '방금 전';
-  }
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes}분 전`;
-  }
-
-  const diffHours = Math.round(diffMinutes / 60);
-
-  if (diffHours < 24) {
-    return `${diffHours}시간 전`;
-  }
-
-  const diffDays = Math.round(diffHours / 24);
-  return `${diffDays}일 전`;
-}
 
 async function buildDashboardScans(projects: ProjectListItemData[]) {
   const scanLists = await Promise.all(
@@ -367,7 +296,7 @@ function DashboardPage() {
     <section className="space-y-10">
       {displayErrorMessage ? <PageBanner message={displayErrorMessage} tone="error" /> : null}
       {isGuestSession ? (
-        <div className="border border-neutral-200 bg-[#FAFAF7] px-6 py-5">
+        <div className="border border-neutral-200 bg-[#FAFAF7] px-6 py-5 landing-card-radius">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
               <p className="text-sm font-black tracking-[0.18em] text-neutral-500">GUEST SESSION</p>
@@ -375,7 +304,7 @@ function DashboardPage() {
               <p className="text-sm leading-6 text-neutral-600">로그인하면 프로젝트별 스캔 이력을 계속 보관하고, 이후에도 다시 확인할 수 있습니다.</p>
             </div>
             <button
-              className="inline-flex items-center gap-2 self-start border border-black px-4 py-3 text-sm font-bold text-black transition hover:bg-black hover:text-white"
+              className="inline-flex items-center gap-2 self-start border border-black px-4 py-3 text-sm font-bold text-black transition landing-inner-radius hover:bg-black hover:text-white"
               onClick={() => navigate(ROUTES.login)}
               type="button"
             >
@@ -391,7 +320,7 @@ function DashboardPage() {
           <div>
             <p className="text-lg text-neutral-700">현재 열려 있는 취약점 수</p>
             <div className="mt-6 flex flex-wrap items-end gap-6">
-              <div className="theme-accent-card bg-[#D4FC64] px-8 py-4 text-black">
+              <div className="theme-accent-card bg-[#D4FC64] px-8 py-4 text-black landing-inner-radius">
                 <span className="text-8xl font-black leading-none tabular-nums text-black md:text-[10rem]">{unresolvedCount}</span>
               </div>
               <div className="pb-2">
@@ -437,20 +366,20 @@ function DashboardPage() {
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="bg-white">
-          <div className="flex flex-col gap-4 border-b border-neutral-200 px-6 py-6 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-3xl font-black tracking-tight">최근 스캔</h2>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative">
+        <div className="overflow-hidden border border-neutral-200 bg-white landing-card-radius">
+          <div className="flex flex-col gap-4 border-b border-neutral-200 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+            <h2 className="shrink-0 whitespace-nowrap text-2xl font-black tracking-tight md:text-3xl">최근 스캔</h2>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <label className="relative min-w-0 flex-1 sm:flex-none">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
                 <input
-                  className="w-full border border-neutral-200 py-2 pl-8 pr-3 text-sm sm:w-56"
+                  className="w-full border border-neutral-200 py-2 pl-8 pr-3 text-sm sm:w-56 landing-inner-radius"
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="프로젝트 이름 또는 scanId"
                   value={searchTerm}
                 />
               </label>
-              <label className="inline-flex items-center gap-2 border border-neutral-200 px-3 py-2 text-sm text-neutral-700">
+              <label className="inline-flex items-center gap-2 border border-neutral-200 px-3 py-2 text-sm text-neutral-700 landing-inner-radius">
                 <Filter className="h-3.5 w-3.5" />
                 <select
                   className="bg-transparent outline-none"
@@ -466,7 +395,7 @@ function DashboardPage() {
                 </select>
               </label>
               <button
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-bold text-black hover:bg-[#F5F5F5]"
+                className="inline-flex shrink-0 items-center gap-2 px-3 py-2 text-sm font-bold text-black landing-inner-radius hover:bg-[#F5F5F5]"
                 onClick={() => navigate(ROUTES.projects)}
                 type="button"
               >
@@ -476,18 +405,16 @@ function DashboardPage() {
             </div>
           </div>
 
-          {isLoading ? (
-            <div className="px-6 py-16 text-center text-sm text-neutral-500">대시보드 정보를 불러오는 중입니다.</div>
-          ) : filteredScans.length === 0 && isGuestSession ? (
+          {filteredScans.length === 0 && isGuestSession && !isLoading ? (
             <div className="px-6 py-16">
-              <div className="mx-auto max-w-2xl border border-dashed border-neutral-300 bg-[#FCFCF8] px-6 py-10 text-center">
+              <div className="mx-auto max-w-2xl border border-dashed border-neutral-300 bg-[#FCFCF8] px-6 py-10 text-center landing-card-radius">
                 <p className="text-sm font-black tracking-[0.18em] text-neutral-500">NO SAVED HISTORY</p>
                 <h3 className="mt-4 text-2xl font-black text-black">게스트 모드에서는 스캔 이력이 누적 저장되지 않습니다.</h3>
                 <p className="mt-3 text-sm leading-6 text-neutral-600">
                   체험 업로드는 현재 세션에서만 확인할 수 있습니다. 로그인하면 프로젝트별 스캔 결과를 저장하고 이후에도 계속 추적할 수 있습니다.
                 </p>
                 <button
-                  className="mt-6 inline-flex items-center gap-2 border border-black px-4 py-3 text-sm font-bold text-black transition hover:bg-black hover:text-white"
+                  className="mt-6 inline-flex items-center gap-2 border border-black px-4 py-3 text-sm font-bold text-black transition landing-inner-radius hover:bg-black hover:text-white"
                   onClick={() => navigate(ROUTES.login)}
                   type="button"
                 >
@@ -496,94 +423,46 @@ function DashboardPage() {
                 </button>
               </div>
             </div>
-          ) : filteredScans.length === 0 ? (
-            <div className="px-6 py-16 text-center text-sm text-neutral-500">조건에 맞는 스캔이 없습니다.</div>
           ) : (
-            <div>
-              {filteredScans.slice(0, 8).map((scan) => {
-                const isActive = ['RUNNING', 'QUEUED', 'REQUESTED', 'RAW_UPLOADED'].includes(scan.status);
-                const totalFindings = scan.summary
-                  ? (scan.summary.criticalCount + scan.summary.highCount + scan.summary.mediumCount + scan.summary.lowCount)
-                  : 0;
-
-                return (
-                  <button
-                    className="group relative flex w-full items-stretch gap-0 border-b border-neutral-100 text-left transition hover:bg-[#FAFAF7]"
-                    key={scan.scanId}
-                    onClick={() => navigateToScan(scan)}
-                    type="button"
-                  >
-                    {/* 왼쪽 상태 컬러 바 */}
-                    <div className={`w-1 shrink-0 rounded-tl-sm rounded-bl-sm transition-all ${getScanStatusBarClass(scan.status)}`} />
-
-                    {/* 본문 */}
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-5">
-                      {/* 왼쪽: 이름 + 메타 */}
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="truncate text-base font-black text-black">{scan.projectName}</span>
-                          {/* 상태 칩 */}
-                          <span className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider ${getScanStatusChipClass(scan.status)} ${isActive ? 'animate-pulse' : ''}`}>
-                            {scan.status}
-                          </span>
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-mono text-neutral-400">
-                          <span className="text-neutral-300">#{scan.scanId}</span>
-                          <span className="text-neutral-200">·</span>
-                          <ScanModeBadge scanMode={scan.scanMode} />
-                          <ScanTypeBadge scanType={scan.scanType} />
-                          <span className="text-neutral-200">·</span>
-                          <span>{formatRelativeDate(scan.completedAt || scan.requestedAt)}</span>
-                        </div>
-                      </div>
-
-                      {/* 오른쪽: 취약점 배지 또는 진행 상태 */}
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {scan.status === 'DONE' && scan.summary ? (
-                          totalFindings === 0 ? (
-                            <span className="rounded border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-bold text-neutral-400">
-                              이슈 없음
-                            </span>
-                          ) : (
-                            severityPills.map((pill) => {
-                              const count = scan.summary![pill.countKey];
-                              if (count === 0) return null;
-                              return (
-                                <span
-                                  key={pill.key}
-                                  className={`flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] font-bold ${pill.cls}`}
-                                >
-                                  <span className={`h-1.5 w-1.5 rounded-full ${pill.dot}`} />
-                                  {pill.label} {count}
-                                </span>
-                              );
-                            })
-                          )
-                        ) : scan.status === 'DONE' ? (
-                          <span className="flex items-center gap-1.5 text-xs text-neutral-400">
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            요약 대기
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1.5 rounded border border-neutral-200 bg-neutral-100 px-2.5 py-1 text-[11px] font-bold text-neutral-600">
-                            <RefreshCw className="h-3 w-3 animate-spin" />
-                            분석 중
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <ChevronRight className="hidden h-5 w-5 shrink-0 self-center pr-0 text-neutral-300 transition group-hover:text-black md:mr-4 md:flex" />
-                  </button>
-                );
-              })}
+            <div className="px-4 py-4">
+              <ScanTimeline
+                emptyMessage="조건에 맞는 스캔이 없습니다."
+                getDisplayName={(item) => {
+                  const scan = filteredScans.find((s) => s.scanId === item.scanId);
+                  return scan?.projectName ?? null;
+                }}
+                isLoading={isLoading}
+                items={filteredScans.slice(0, 8).map((scan) => ({
+                  scanId: scan.scanId,
+                  status: scan.status,
+                  scanMode: scan.scanMode,
+                  scanType: scan.scanType,
+                  source: scan.source,
+                  requestedAt: scan.requestedAt,
+                  completedAt: scan.completedAt,
+                  projectId: scan.projectId,
+                  severity: scan.summary
+                    ? {
+                        critical: scan.summary.criticalCount,
+                        high: scan.summary.highCount,
+                        medium: scan.summary.mediumCount,
+                        low: scan.summary.lowCount,
+                      }
+                    : undefined,
+                }))}
+                onItemClick={(item) => {
+                  const scan = filteredScans.find((s) => s.scanId === item.scanId);
+                  if (scan) navigateToScan(scan);
+                }}
+                variant="compact"
+              />
             </div>
           )}
         </div>
 
         <aside className="space-y-4">
           <button
-            className="relative w-full overflow-hidden bg-[#111111] p-8 text-left text-white"
+            className="relative w-full overflow-hidden bg-[#111111] p-8 text-left text-white landing-card-radius"
             disabled={!highlightedScan}
             onClick={() => {
               if (highlightedScan) {
@@ -616,10 +495,10 @@ function DashboardPage() {
             <PixelGoose className="absolute bottom-8 right-8 opacity-90" mood="alert" size={64} />
           </button>
 
-          <div className="bg-white p-8">
+          <div className="border border-neutral-200 bg-white p-8 landing-card-radius">
             <div className="text-sm text-neutral-500">Local Agent</div>
             {monitorProjects.length === 0 ? (
-              <div className="mt-7 rounded-sm border border-dashed border-neutral-200 px-4 py-5 text-sm text-neutral-500">
+              <div className="mt-7 border border-dashed border-neutral-200 px-4 py-5 text-sm text-neutral-500 landing-inner-radius">
                 모니터링이 활성화된 프로젝트가 없습니다.
               </div>
             ) : (
@@ -651,7 +530,7 @@ function DashboardPage() {
           </div>
 
           <button
-            className="theme-accent-card flex w-full items-center justify-between bg-[#D4FC64] p-7 text-left text-black"
+            className="theme-accent-card flex w-full items-center justify-between bg-[#D4FC64] p-7 text-left text-black landing-card-radius"
             onClick={() => navigate(ROUTES.typingGame)}
             type="button"
           >

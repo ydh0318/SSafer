@@ -1,5 +1,36 @@
 @import 'tailwindcss';
 
+@theme {
+  --radius-landing-card: 20px;
+  --radius-landing-inner: 14px;
+  --radius-landing-badge: 6px;
+  --radius-landing-cta: 28px;
+}
+
+@layer utilities {
+  .landing-card-radius { border-radius: var(--radius-landing-card); }
+  .landing-inner-radius { border-radius: var(--radius-landing-inner); }
+  .landing-cta-radius { border-radius: var(--radius-landing-cta); }
+}
+
+@keyframes howCardPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+@keyframes gooseSleep {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-2px) scale(1.015); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-anim, .landing-anim * {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
 @layer base {
   *,
   *::before,

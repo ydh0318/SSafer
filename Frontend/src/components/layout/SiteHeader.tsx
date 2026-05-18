@@ -96,7 +96,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
     }`;
 
   return (
-    <header className="site-header-shell site-app-header-shell theme-surface-header border-b border-neutral-200 bg-[#f5f5f5]/95 backdrop-blur">
+    <header className="site-header-shell site-app-header-shell theme-surface-header border-b border-neutral-200 bg-[#FAFAFA]/95 backdrop-blur">
       <div className="site-header-inner mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <AppBrand
           className="shrink-0"

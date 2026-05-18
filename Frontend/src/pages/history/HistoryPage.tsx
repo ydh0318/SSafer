@@ -1,4 +1,4 @@
-import { ArrowRightLeft, ChevronRight, RefreshCw, ScanSearch, Terminal, Trash2, Upload } from 'lucide-react';
+import { ArrowRightLeft, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,23 +9,15 @@ import { hasStoredMemberSession, isStoredGuestSession } from '../../features/aut
 import { getHistoryScans } from '../../features/history/api/history';
 import { getScanCompare } from '../../features/results/api/results';
 import { deleteScanHistory } from '../../features/scans/api/scans';
-import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
+import ScanTimeline from '../../features/scans/components/ScanTimeline';
 import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
-import {
-  canDeleteScanHistory,
-  formatDateTime,
-  getDeleteBlockedReason,
-  getScanModeLabel,
-  getSafeScanType,
-} from '../../features/scans/utils/scanPresentation';
+import { getSafeScanType } from '../../features/scans/utils/scanPresentation';
 import { useAuthStore } from '../../store/authStore';
 import type {
-  HistoryScanListItemData,
   HistoryScanListResponseData,
   ScanCompareFindingData,
   ScanCompareResponseData,
   ScanMode,
-  ScanStatus,
 } from '../../types/scan';
 
 const HISTORY_PAGE_SIZE = 10;
@@ -47,43 +39,10 @@ const emptyHistoryData: HistoryScanListResponseData = {
   totalPages: 0,
 };
 
-function getScanStatusBarClass(status: ScanStatus) {
-  if (status === 'DONE') return 'bg-[#9FCC2E]';
-  if (['RUNNING', 'QUEUED', 'REQUESTED', 'RAW_UPLOADED'].includes(status)) return 'bg-neutral-400';
-  if (status === 'FAILED') return 'bg-rose-400';
-  return 'bg-neutral-200';
-}
-
-function getScanStatusChipClass(status: ScanStatus) {
-  if (status === 'DONE') return 'bg-[#EDFFC0] text-[#4A7A00]';
-  if (status === 'RUNNING' || status === 'RAW_UPLOADED') return 'bg-neutral-200 text-neutral-600';
-  if (status === 'QUEUED' || status === 'REQUESTED') return 'bg-neutral-100 text-neutral-500';
-  if (status === 'FAILED') return 'bg-rose-50 text-rose-600';
-  if (status === 'CANCELED') return 'bg-neutral-100 text-neutral-400';
-  return 'bg-neutral-100 text-neutral-500';
-}
-
-const severityPills = [
-  { key: 'critical' as const, label: 'C', countKey: 'criticalCount' as const, cls: 'border-red-200 bg-red-50 text-red-700',    dot: 'bg-red-500'    },
-  { key: 'high'     as const, label: 'H', countKey: 'highCount'     as const, cls: 'border-orange-200 bg-orange-50 text-orange-700', dot: 'bg-orange-400' },
-  { key: 'medium'   as const, label: 'M', countKey: 'mediumCount'   as const, cls: 'border-yellow-200 bg-yellow-50 text-yellow-700', dot: 'bg-yellow-400' },
-  { key: 'low'      as const, label: 'L', countKey: 'lowCount'      as const, cls: 'border-blue-200 bg-blue-50 text-blue-600',   dot: 'bg-blue-400'   },
-] as const;
-
-function ScanModeBadge({ scanMode, source }: { scanMode: ScanMode; source?: string | null }) {
-  const Icon = scanMode === 'CLI' ? Terminal : scanMode === 'UPLOAD' ? Upload : ScanSearch;
-  return (
-    <span className="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-600">
-      <Icon className="h-3 w-3" />
-      {getScanModeLabel(scanMode, source)}
-    </span>
-  );
-}
-
 function CompareFindingList({ items, emptyMessage }: { items: ScanCompareFindingData[]; emptyMessage: string }) {
   if (items.length === 0) {
     return (
-      <div className="border border-dashed border-neutral-200 bg-neutral-50 px-4 py-5 text-sm text-neutral-400">
+      <div className="border border-dashed border-neutral-200 bg-neutral-50 px-4 py-5 text-sm text-neutral-400 landing-inner-radius">
         {emptyMessage}
       </div>
     );
@@ -92,7 +51,7 @@ function CompareFindingList({ items, emptyMessage }: { items: ScanCompareFinding
   return (
     <div className="space-y-2">
       {items.map((item) => (
-        <article className="border border-neutral-100 bg-white p-4" key={`${item.scanId}-${item.findingId}-${item.comparisonKey}`}>
+        <article className="border border-neutral-100 bg-white p-4 landing-inner-radius" key={`${item.scanId}-${item.findingId}-${item.comparisonKey}`}>
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="font-mono text-xs font-bold text-neutral-400">#{item.findingId}</span>
             <span className="rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-600">{item.severity}</span>
@@ -142,7 +101,6 @@ function HistoryPage() {
     () => historyData.items.filter((item) => item.status === 'DONE' && getSafeScanType(item.scanType) === 'PROJECT_FILE'),
     [historyData.items],
   );
-  const hasHistoryItems = useMemo(() => historyData.items.length > 0, [historyData.items.length]);
 
   const loadHistory = async (params?: { scanMode?: ScanMode | ''; status?: 'DONE' | 'FAILED' | '' }) => {
     setIsLoading(true);
@@ -245,23 +203,23 @@ function HistoryPage() {
     () => { if (canAccessHistory) void handleRefresh(); },
   );
 
-  const handleDeleteScan = async (item: HistoryScanListItemData) => {
-    const shouldDelete = window.confirm(`스캔 #${item.scanId} 이력을 삭제하시겠습니까?`);
+  const handleDeleteScan = async (scanId: number) => {
+    const shouldDelete = window.confirm(`스캔 #${scanId} 이력을 삭제하시겠습니까?`);
     if (!shouldDelete) return;
 
-    setDeletingScanIds((current) => [...current, item.scanId]);
+    setDeletingScanIds((current) => [...current, scanId]);
     setErrorMessage(null);
     setNoticeMessage(null);
 
     try {
-      await deleteScanHistory(item.scanId);
-      setNoticeMessage(`스캔 #${item.scanId} 이력이 삭제되었습니다.`);
+      await deleteScanHistory(scanId);
+      setNoticeMessage(`스캔 #${scanId} 이력이 삭제되었습니다.`);
       await loadHistory();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '스캔 이력을 삭제하지 못했습니다.');
       setNoticeMessage(null);
     } finally {
-      setDeletingScanIds((current) => current.filter((scanId) => scanId !== item.scanId));
+      setDeletingScanIds((current) => current.filter((value) => value !== scanId));
     }
   };
 
@@ -302,14 +260,6 @@ function HistoryPage() {
       : errorMessage
     : null;
 
-  const navigateToScan = (item: HistoryScanListItemData) => {
-    navigate(
-      item.status === 'DONE'
-        ? ROUTES.resultDetail.replace(':scanId', String(item.scanId))
-        : ROUTES.scanDetail.replace(':scanId', String(item.scanId)),
-    );
-  };
-
   return (
     <section className="space-y-8">
       {/* ── 히어로 ── */}
@@ -319,7 +269,7 @@ function HistoryPage() {
             <p className="font-mono text-xs tracking-[0.32em] text-neutral-500 uppercase">History</p>
             <p className="mt-1 text-lg text-neutral-700">누적 스캔 수</p>
             <div className="mt-6 flex flex-wrap items-end gap-6">
-              <div className="bg-[#D4FC64] px-8 py-4 text-black">
+              <div className="bg-[#D4FC64] px-8 py-4 text-black landing-inner-radius">
                 <span className="text-8xl font-black leading-none tabular-nums md:text-[10rem]">
                   {historyData.summary.totalScanCount}
                 </span>
@@ -339,7 +289,7 @@ function HistoryPage() {
             </div>
             {canAccessHistory && (
               <button
-                className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+                className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition landing-inner-radius hover:border-black hover:text-black"
                 onClick={() => void handleRefresh()}
                 type="button"
               >
@@ -371,11 +321,11 @@ function HistoryPage() {
       </section>
 
       {!canAccessHistory ? (
-        <div className="border border-dashed border-neutral-300 bg-white p-10">
+        <div className="border border-dashed border-neutral-300 bg-white p-10 landing-card-radius">
           <h2 className="text-3xl font-black tracking-tight text-black">회원 로그인이 필요합니다</h2>
           <div className="mt-5">
             <button
-              className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
+              className="inline-flex items-center gap-2 bg-black px-5 py-3 text-sm font-bold text-white transition landing-inner-radius hover:bg-neutral-800"
               onClick={() => {
                 logout();
                 navigate(ROUTES.login);
@@ -391,7 +341,7 @@ function HistoryPage() {
           {displayErrorMessage ? <PageBanner message={displayErrorMessage} tone="error" /> : noticeMessage ? <PageBanner message={noticeMessage} tone="success" /> : null}
 
           {/* ── 스캔 비교 ── */}
-          <div className="border border-neutral-100 bg-white px-6 py-6">
+          <div className="border border-neutral-100 bg-white px-6 py-6 landing-card-radius">
             <div className="flex flex-col gap-4 border-b border-neutral-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">결과 비교</p>
@@ -404,7 +354,7 @@ function HistoryPage() {
                 <label className="space-y-1.5">
                   <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">기준 스캔</span>
                   <select
-                    className="w-full border border-neutral-200 bg-white px-3 py-2.5 text-sm text-black outline-none transition focus:border-black"
+                    className="w-full border border-neutral-200 bg-white px-3 py-2.5 text-sm text-black outline-none transition landing-inner-radius focus:border-black"
                     onChange={(event) => setSelectedBaseScanId(event.target.value)}
                     value={selectedBaseScanId}
                   >
@@ -419,7 +369,7 @@ function HistoryPage() {
                 <label className="space-y-1.5">
                   <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">비교 스캔</span>
                   <select
-                    className="w-full border border-neutral-200 bg-white px-3 py-2.5 text-sm text-black outline-none transition focus:border-black"
+                    className="w-full border border-neutral-200 bg-white px-3 py-2.5 text-sm text-black outline-none transition landing-inner-radius focus:border-black"
                     onChange={(event) => setSelectedTargetScanId(event.target.value)}
                     value={selectedTargetScanId}
                   >
@@ -436,7 +386,7 @@ function HistoryPage() {
                   </select>
                 </label>
                 <button
-                  className="mt-auto inline-flex items-center justify-center gap-2 bg-black px-4 py-2.5 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+                  className="mt-auto inline-flex items-center justify-center gap-2 bg-black px-4 py-2.5 text-sm font-bold text-white transition landing-inner-radius hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
                   disabled={
                     isCompareLoading ||
                     doneHistoryItems.length < 2 ||
@@ -454,7 +404,7 @@ function HistoryPage() {
             </div>
 
             {compareErrorMessage ? (
-              <div className="mt-5 border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{compareErrorMessage}</div>
+              <div className="mt-5 border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700 landing-inner-radius">{compareErrorMessage}</div>
             ) : null}
 
             {compareData ? (
@@ -501,14 +451,14 @@ function HistoryPage() {
                   <div className="space-y-3">
                     <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">심각도 변경</p>
                     {compareData.severityChangedFindings.length === 0 ? (
-                      <div className="border border-dashed border-neutral-200 bg-neutral-50 px-4 py-5 text-sm text-neutral-400">
+                      <div className="border border-dashed border-neutral-200 bg-neutral-50 px-4 py-5 text-sm text-neutral-400 landing-inner-radius">
                         심각도가 변경된 취약점이 없습니다.
                       </div>
                     ) : (
                       <div className="space-y-2">
                         {compareData.severityChangedFindings.map((item) => (
                           <article
-                            className="border border-neutral-100 bg-white p-4"
+                            className="border border-neutral-100 bg-white p-4 landing-inner-radius"
                             key={`${item.baseFinding.findingId}-${item.targetFinding.findingId}`}
                           >
                             <div className="flex flex-wrap items-center gap-1.5">
@@ -534,10 +484,9 @@ function HistoryPage() {
           </div>
 
           {/* ── 이력 목록 ── */}
-          <div className="bg-white">
-            {/* 필터 + 헤더 */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-neutral-100 px-6 py-5">
-              <h2 className="text-2xl font-black tracking-tight">스캔 이력</h2>
+          <section className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <h2 className="text-xl font-black tracking-tight md:text-2xl">스캔 이력</h2>
               <div className="flex flex-wrap items-center gap-4">
                 {/* 스캔 방식 */}
                 <div className="flex items-center gap-2">
@@ -549,7 +498,7 @@ function HistoryPage() {
                       { value: 'AGENT' as const, label: 'Agent' },
                     ] satisfies { value: ScanMode | ''; label: string }[]).map((opt) => (
                       <button
-                        className={`px-2.5 py-1 text-xs font-bold transition ${
+                        className={`px-2.5 py-1 text-xs font-bold transition landing-inner-radius ${
                           filterScanMode === opt.value
                             ? 'bg-black text-white'
                             : 'border border-neutral-200 bg-white text-neutral-500 hover:border-neutral-400 hover:text-black'
@@ -574,7 +523,7 @@ function HistoryPage() {
                       { value: 'FAILED' as const, label: '실패' },
                     ] satisfies { value: 'DONE' | 'FAILED' | ''; label: string }[]).map((opt) => (
                       <button
-                        className={`px-2.5 py-1 text-xs font-bold transition ${
+                        className={`px-2.5 py-1 text-xs font-bold transition landing-inner-radius ${
                           filterStatus === opt.value
                             ? 'bg-black text-white'
                             : 'border border-neutral-200 bg-white text-neutral-500 hover:border-neutral-400 hover:text-black'
@@ -591,110 +540,30 @@ function HistoryPage() {
               </div>
             </div>
 
-            {isLoading ? (
-              <div className="px-6 py-16 text-center text-sm text-neutral-500">히스토리를 불러오는 중입니다.</div>
-            ) : !hasHistoryItems ? (
-              <div className="px-6 py-16 text-center text-sm text-neutral-400">
-                아직 저장된 스캔 이력이 없습니다.
-              </div>
-            ) : (
-              <div>
-                {historyData.items.map((item) => {
-                  const isDeleting = deletingScanIds.includes(item.scanId);
-                  const isDeleteAllowed = canDeleteScanHistory(item.status);
-                  const deleteBlockedReason = getDeleteBlockedReason(item.status);
-                  const isActive = ['RUNNING', 'QUEUED', 'REQUESTED', 'RAW_UPLOADED'].includes(item.status);
-                  const totalSeverity = item.criticalCount + item.highCount + item.mediumCount + item.lowCount;
-
-                  return (
-                    <div
-                      className="group relative flex items-stretch border-b border-neutral-100 last:border-b-0 transition-colors hover:bg-[#FAFAF7]"
-                      key={item.scanId}
-                    >
-                      {/* 왼쪽 상태 컬러 바 */}
-                      <div className={`w-1 shrink-0 ${getScanStatusBarClass(item.status)}`} />
-
-                      {/* 클릭 가능한 본문 */}
-                      <button
-                        className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4 text-left"
-                        onClick={() => navigateToScan(item)}
-                        type="button"
-                      >
-                        {/* 왼쪽: 메타 */}
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider ${getScanStatusChipClass(item.status)} ${isActive ? 'animate-pulse' : ''}`}
-                            >
-                              {item.status}
-                            </span>
-                            <ScanTypeBadge scanType={item.scanType} />
-                            <ScanModeBadge scanMode={item.scanMode} source={item.source} />
-                            <span className="font-mono text-xs text-neutral-300">·</span>
-                            <span className="font-mono text-xs text-neutral-400">#{item.scanId}</span>
-                            <span className="font-mono text-xs text-neutral-300">·</span>
-                            <span className="font-mono text-xs text-neutral-400">프로젝트 #{item.projectId}</span>
-                          </div>
-                          <div className="mt-1.5 flex flex-wrap items-center gap-3 font-mono text-[11px] text-neutral-400">
-                            <span>요청 {formatDateTime(item.requestedAt)}</span>
-                            {item.completedAt ? <span>완료 {formatDateTime(item.completedAt)}</span> : null}
-                          </div>
-                        </div>
-
-                        {/* 오른쪽: 심각도 pills */}
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {item.status === 'DONE' ? (
-                            totalSeverity === 0 ? (
-                              <span className="rounded border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-bold text-neutral-400">
-                                이슈 없음
-                              </span>
-                            ) : (
-                              severityPills.map((pill) => {
-                                const count = item[pill.countKey];
-                                if (count === 0) return null;
-                                return (
-                                  <span
-                                    key={pill.key}
-                                    className={`flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] font-bold ${pill.cls}`}
-                                  >
-                                    <span className={`h-1.5 w-1.5 rounded-full ${pill.dot}`} />
-                                    {pill.label} {count}
-                                  </span>
-                                );
-                              })
-                            )
-                          ) : isActive ? (
-                            <span className="flex items-center gap-1.5 rounded border border-neutral-200 bg-neutral-100 px-2.5 py-1 text-[11px] font-bold text-neutral-600">
-                              <RefreshCw className="h-3 w-3 animate-spin" />
-                              분석 중
-                            </span>
-                          ) : null}
-                        </div>
-                      </button>
-
-                      {/* 삭제 버튼 */}
-                      <div className="flex shrink-0 items-center gap-1 pr-4">
-                        <button
-                          className={`rounded p-1.5 transition ${
-                            isDeleteAllowed && !isDeleting
-                              ? 'text-neutral-300 hover:bg-rose-50 hover:text-rose-500'
-                              : 'cursor-not-allowed text-neutral-200'
-                          }`}
-                          disabled={!isDeleteAllowed || isDeleting}
-                          onClick={() => void handleDeleteScan(item)}
-                          title={isDeleteAllowed ? '이력 삭제' : (deleteBlockedReason ?? undefined)}
-                          type="button"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                        <ChevronRight className="h-4 w-4 text-neutral-200 transition group-hover:text-neutral-400" />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+            <ScanTimeline
+              deletingScanIds={deletingScanIds}
+              emptyMessage="아직 저장된 스캔 이력이 없습니다."
+              isLoading={isLoading}
+              items={historyData.items.map((item) => ({
+                scanId: item.scanId,
+                status: item.status,
+                scanMode: item.scanMode,
+                scanType: item.scanType,
+                source: item.source,
+                requestedAt: item.requestedAt,
+                completedAt: item.completedAt,
+                projectId: item.projectId,
+                severity: {
+                  critical: item.criticalCount,
+                  high: item.highCount,
+                  medium: item.mediumCount,
+                  low: item.lowCount,
+                },
+              }))}
+              onDeleteScan={(scanId) => void handleDeleteScan(scanId)}
+              showProjectChip
+            />
+          </section>
         </div>
       )}
     </section>
