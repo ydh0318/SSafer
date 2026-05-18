@@ -75,6 +75,15 @@ MAX_FINDINGS_PER_BATCH = _get_int_env("MAX_FINDINGS_PER_BATCH", 10)
 S3_MAX_RETRIES = _get_int_env("S3_MAX_RETRIES", 2)
 S3_RETRY_BACKOFF_SECONDS = _get_float_env("S3_RETRY_BACKOFF_SECONDS", 1.0)
 
+HASDATA_API_KEY = os.getenv("HASDATA_API_KEY", "")
+HASDATA_SERP_ENDPOINT = os.getenv(
+    "HASDATA_SERP_ENDPOINT",
+    "https://api.hasdata.com/scrape/google",
+)
+HASDATA_TIMEOUT_SECONDS = _get_float_env("HASDATA_TIMEOUT_SECONDS", 30.0)
+HASDATA_MAX_RESULTS = _get_int_env("HASDATA_MAX_RESULTS", 5)
+HASDATA_ENABLED = _get_bool_env("HASDATA_ENABLED", True)
+
 
 class S3ConfigurationError(ValueError):
     pass

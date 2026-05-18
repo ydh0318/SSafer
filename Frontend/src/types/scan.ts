@@ -203,6 +203,12 @@ export interface FindingPatchData {
   expectedFileHash: string | null;
 }
 
+export interface FindingReferenceData {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
 export interface FindingFixData {
   summary: string | null;
   priority: string | null;
@@ -237,6 +243,7 @@ export interface ScanFindingDetailData {
   maskedEvidence?: string | null; // 새로 추가된 증거 필드
   attackScenario: string | null;
   remediationGuide: string | null;
+  references?: FindingReferenceData[] | null;
   targetFiles?: string[] | null; // 새로 추가된 연관 파일 목록
   rawSnippetJson: string | null;
   patchPayloadJson: string | null;

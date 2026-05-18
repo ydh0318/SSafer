@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Copy, Send, Trophy, Wand2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BookOpen, Copy, ExternalLink, Send, Trophy, Wand2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
@@ -329,6 +329,7 @@ function FindingDetailPage() {
                 { id: 'explain', label: '왜 위험한가', icon: AlertTriangle },
                 { id: 'fix', label: '어떻게 고치나', icon: Wand2 },
                 { id: 'apply', label: '패치 적용', icon: Send },
+                { id: 'references', label: '참고자료', icon: BookOpen },
               ].map((tab) => {
                 const Icon = tab.icon;
 
@@ -724,6 +725,42 @@ function FindingDetailPage() {
                       </div>
                     ) : null}
                   </>
+                )}
+              </div>
+            ) : null}
+
+            {view === 'references' ? (
+              <div className="mt-6 space-y-4">
+                {finding.references && finding.references.length > 0 ? (
+                  <>
+                    <p className="text-sm text-neutral-500">
+                      이 취약점과 관련된 보안 문서 및 최신 정보입니다.
+                    </p>
+                    {finding.references.map((ref, idx) => (
+                      <a
+                        className="block border border-neutral-200 bg-white p-5 transition hover:border-neutral-400 hover:shadow-sm"
+                        href={ref.url}
+                        key={idx}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold leading-6 text-black">{ref.title}</h4>
+                            {ref.snippet ? (
+                              <p className="mt-2 text-sm leading-6 text-neutral-600">{ref.snippet}</p>
+                            ) : null}
+                            <span className="mt-2 inline-block truncate font-mono text-xs text-neutral-400">{ref.url}</span>
+                          </div>
+                          <ExternalLink className="mt-1 h-4 w-4 shrink-0 text-neutral-300" />
+                        </div>
+                      </a>
+                    ))}
+                  </>
+                ) : (
+                  <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-6 py-8 text-center text-sm text-neutral-500">
+                    관련 보안 참고자료가 없습니다.
+                  </div>
                 )}
               </div>
             ) : null}
