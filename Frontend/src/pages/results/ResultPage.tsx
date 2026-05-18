@@ -288,16 +288,19 @@ function ResultPage() {
       .filter((group) => group.items.length > 0);
   }, [findingsData.items]);
 
+  const projectBackPath = routeState.projectId
+    ? ROUTES.projectDetail.replace(':projectId', routeState.projectId)
+    : ROUTES.projects;
+
   return (
     <section className="space-y-8">
       <div className="flex flex-wrap items-center gap-3">
         <Link
           className="inline-flex items-center gap-2 text-sm text-neutral-500 transition hover:text-black"
-          state={routeState}
-          to={ROUTES.scanDetail.replace(':scanId', scanId)}
+          to={projectBackPath}
         >
           <ArrowLeft className="h-4 w-4" />
-          스캔 진행 화면으로 돌아가기
+          프로젝트 화면으로 돌아가기
         </Link>
       </div>
 
