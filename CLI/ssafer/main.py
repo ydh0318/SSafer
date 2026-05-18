@@ -148,36 +148,41 @@ def status() -> None:
         except (TypeError, ValueError) as exc:
             backend_agent_error = str(exc)
 
+    if not token:
+        auth_status = "[red]로그인 안 됨[/red]"
+        auth_detail = "ssafer login 또는 ssafer guest로 먼저 로그인하세요."
+    elif auth_mode == "member":
+        auth_status = "[green]회원 로그인[/green]"
+        auth_detail = f"토큰 출처: {token_source}. CLI 업로드와 Local Agent 연결에 사용됩니다."
+    elif auth_mode == "guest":
+        auth_status = "[green]게스트 로그인[/green]"
+        auth_detail = f"토큰 출처: {token_source}. 같은 게스트 세션에서 만든 프로젝트/스캔에 사용됩니다."
+    else:
+        auth_status = "[yellow]로그인됨[/yellow]"
+        auth_detail = f"토큰 출처: {token_source}. 기존 토큰에는 계정 방식 정보가 없습니다. 다시 로그인하면 회원/게스트가 표시됩니다."
+
     table = Table(title="SSAfer 상태")
     table.add_column("항목")
     table.add_column("상태")
     table.add_column("설명", overflow="fold")
-    table.add_row("로그인", "[green]됨[/green]" if token else "[red]안 됨[/red]", "저장된 access token 기준")
-    table.add_row("토큰 출처", token_source, "환경변수 토큰이 저장된 로그인 토큰보다 우선됩니다")
-    if not token:
-        account_mode = "-"
-        account_mode_detail = "로그인되어 있지 않습니다."
-    elif auth_mode == "member":
-        account_mode = "회원"
-        account_mode_detail = "회원 계정 토큰으로 로그인되어 있습니다."
-    elif auth_mode == "guest":
-        account_mode = "게스트"
-        account_mode_detail = "게스트 토큰으로 로그인되어 있습니다."
-    elif token:
-        account_mode = "알 수 없음"
-        account_mode_detail = "기존 토큰에는 계정 방식 정보가 없습니다. 다시 로그인하면 표시됩니다."
-    table.add_row("계정 방식", account_mode, account_mode_detail)
+    table.add_row("인증 상태", auth_status, auth_detail)
     table.add_row("Endpoint", endpoint, "현재 사용할 백엔드 API")
     if _has_saved_agent_config(agent_config):
+        project_id = agent_config.get("projectId")
         detail = (
-            f"agentId={agent_config.get('agentId')}, projectId={agent_config.get('projectId')}\n"
-            f"설정 파일: {agent_config_path}"
+            f"agentId={agent_config.get('agentId')}, projectId={project_id}\n"
+            f"설정 파일: {agent_config_path}\n"
+            f"웹 프로젝트: {_web_project_url(endpoint, project_id)}"
         )
         status_label = "[green]설정됨[/green]"
         if backend_agent_status:
             status_value = str(backend_agent_status.get("status") or "UNKNOWN")
             status_label = "[green]ONLINE[/green]" if status_value == "ONLINE" else f"[yellow]{status_value}[/yellow]"
             detail_lines = [detail, f"백엔드 상태: {status_value}"]
+            if status_value == "ONLINE":
+                detail_lines.append("현재 이 프로젝트의 웹 스캔/수정 요청을 받을 수 있습니다.")
+            else:
+                detail_lines.append("조치: agent 터미널이 켜져 있는지 확인하고, 필요하면 프로젝트 루트에서 ssafer agent를 다시 실행하세요.")
             if backend_agent_status.get("lastSeenAt"):
                 detail_lines.append(f"마지막 확인: {backend_agent_status.get('lastSeenAt')}")
             if backend_agent_status.get("currentTaskType"):
@@ -185,10 +190,10 @@ def status() -> None:
             detail = "\n".join(detail_lines)
         elif backend_agent_error:
             status_label = "[yellow]확인 실패[/yellow]"
-            detail = f"{detail}\n백엔드 상태 확인 실패: {backend_agent_error}"
+            detail = f"{detail}\n백엔드 상태 확인 실패: {backend_agent_error}\n조치: 네트워크 또는 로그인 토큰을 확인하세요."
         table.add_row("Local Agent", status_label, detail)
     else:
-        table.add_row("Local Agent", "[yellow]미설정[/yellow]", "ssafer agent 실행 시 설정 가능")
+        table.add_row("Local Agent", "[yellow]연결 전[/yellow]", "웹에서 스캔/수정 요청을 보내려면 프로젝트 루트에서 ssafer agent를 실행하세요.")
     table.add_row("Config", str(CONFIG_PATH), "토큰 값은 출력하지 않음")
     console.print(table)
 
@@ -812,8 +817,9 @@ def _run_agent_watch(
     console.print(
         f"[green]Local Agent 실행 중[/green] projectId={effective_project_id}"
     )
+    console.print(f"웹 프로젝트: {_web_project_url(effective_url, effective_project_id)}")
     console.print(f"[dim]스캔 기준 경로: {project_root}[/dim]")
-    console.print("[dim]웹에서 스캔/수정 요청을 보내면 이 터미널에서 처리합니다. 종료하려면 Ctrl+C를 누르세요.[/dim]")
+    console.print("[dim]웹에서 이 프로젝트로 스캔/수정 요청을 보내면 이 터미널에서 처리합니다. 종료하려면 Ctrl+C를 누르세요.[/dim]")
     if project_root.name.lower() == "cli":
         console.print(
             "[yellow]현재 CLI 폴더에서 agent를 실행 중입니다. "
