@@ -968,15 +968,24 @@ def _run_agent_watch(
         if event_type == "task_step":
             task_id = "-"
             scan_id = "-"
+            task_type = "-"
             message = "-"
             if isinstance(payload, dict):
                 task_id = str(payload.get("taskId", "-"))
                 scan_id = str(payload.get("scanId", "-"))
+                task_type = str(payload.get("taskType", "-"))
                 message = str(payload.get("message", "-"))
+            action_label = "Agent apply" if task_type == "PATCH_APPLY" else "Agent scan"
             if verbose:
-                console.print(f"[cyan]Agent scan 진행 중[/cyan] taskId={task_id}, scanId={scan_id}: {message}")
+                if task_type == "PATCH_APPLY":
+                    console.print(f"[cyan]{action_label} 진행 중[/cyan] taskId={task_id}: {message}")
+                else:
+                    console.print(f"[cyan]{action_label} 진행 중[/cyan] taskId={task_id}, scanId={scan_id}: {message}")
             else:
-                _update_live_status(f"Agent scan 진행 중... scanId={scan_id} · {message}")
+                if task_type == "PATCH_APPLY":
+                    _update_live_status(f"{action_label} 진행 중... taskId={task_id} · {message}")
+                else:
+                    _update_live_status(f"{action_label} 진행 중... scanId={scan_id} · {message}")
             return
         if event_type == "analysis_wait_started":
             scan_id = str(payload.get("scanId", "-")) if isinstance(payload, dict) else "-"
@@ -1397,6 +1406,7 @@ def guest(
             console.print("[dim]웹에서 이어 보기 URL은 토큰이 포함되어 있어 기본 출력에서는 숨깁니다.[/dim]")
             console.print("[dim]원문 URL이 필요하면 [bold]ssafer guest --show-url[/bold]을 실행하세요.[/dim]")
         _print_guest_web_hint(effective_endpoint)
+        _prompt_start_agent_after_login()
         return
     login(endpoint=endpoint, logout=False, guest=True, guest_token=None, show_url=show_url)
 

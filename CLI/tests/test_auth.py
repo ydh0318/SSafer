@@ -968,11 +968,8 @@ def test_guest_command_show_url_reuses_saved_guest_token(monkeypatch, tmp_path):
         raise AssertionError("guest command should reuse saved guest token")
 
     monkeypatch.setattr(auth_module, "enter_guest_mode", fail_guest)
-    monkeypatch.setattr(
-        main_module,
-        "_prompt_start_agent_after_login",
-        lambda: (_ for _ in ()).throw(AssertionError("guest --show-url should not prompt agent start")),
-    )
+    prompted: dict[str, bool] = {}
+    monkeypatch.setattr(main_module, "_prompt_start_agent_after_login", lambda: prompted.update(called=True))
 
     result = CliRunner().invoke(app, ["guest", "--show-url"])
 
@@ -982,6 +979,7 @@ def test_guest_command_show_url_reuses_saved_guest_token(monkeypatch, tmp_path):
     assert "https://api.example.com/dashboard" in result.output
     assert "ssafer" in result.output
     assert "agent" in result.output
+    assert prompted == {"called": True}
 
 
 def test_login_command_guest_token_saves_web_guest_token(monkeypatch, tmp_path):
