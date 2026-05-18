@@ -597,7 +597,8 @@ def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
             finding.severity = "LOW"
             finding.title += " (방화벽 차단됨)"
         elif fw == "ALLOW":
-            finding.severity = "CRITICAL"
+            if port not in DEFAULT_ALLOWED_PORTS:
+                finding.severity = "CRITICAL"
             finding.title += " (방화벽 허용됨)"
         elif fw is None:
             finding.severity = "MEDIUM"
@@ -751,11 +752,16 @@ def _audit_docker_ports(
             docker_user_rules = parse_docker_user_rules(artifact.content.get("stdout", ""))
             break
 
+    seen: set[tuple[int, str]] = set()
     for port in published:
         if not port.public:
             continue
         if port.host_port in allowed_ports:
             continue
+        key = (port.host_port, port.container_name or port.container_id)
+        if key in seen:
+            continue
+        seen.add(key)
         du_actions = docker_user_rules.get(port.host_port, [])
         if any(a == "DENY" for a in du_actions):
             severity = "MEDIUM"
