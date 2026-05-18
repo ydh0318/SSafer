@@ -687,34 +687,69 @@ def parse_docker_inspect_ports(inspect_output: str) -> list[DockerPublishedPort]
     return ports
 
 
-_DOCKER_USER_DPORT_RE = re.compile(
-    r"-A\s+DOCKER-USER\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT|RETURN)"
-)
-_DOCKER_USER_MULTIPORT_RE = re.compile(
-    r"-A\s+DOCKER-USER\s+.*--dports\s+([0-9,:]+)\s+.*-j\s+(ACCEPT|DROP|REJECT|RETURN)"
-)
+_IPTABLES_CHAIN_RULE_RE = re.compile(r"^-A\s+(?P<chain>\S+)(?P<body>.*?)\s+-j\s+(?P<target>\S+)(?:\s|$)")
+_IPTABLES_DPORT_ANY_RE = re.compile(r"--dport\s+(\d+)")
+_IPTABLES_MULTIPORT_ANY_RE = re.compile(r"--dports\s+([0-9,:]+)")
 _FORWARD_DPORT_RE = re.compile(
     r"-A\s+FORWARD\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT)"
 )
 
 
 def parse_docker_user_rules(output: str) -> dict[int, list[str]]:
-    rules: dict[int, list[str]] = {}
+    return parse_docker_user_rules_with_chains(output, "")
+
+
+def parse_docker_user_rules_with_chains(docker_user_output: str, iptables_output: str = "") -> dict[int, list[str]]:
+    chain_rules = _iptables_rules_by_chain("\n".join([docker_user_output, iptables_output]))
+    return _resolve_iptables_chain_ports(chain_rules, "DOCKER-USER", set())
+
+
+def _iptables_rules_by_chain(output: str) -> dict[str, list[tuple[list[int], str]]]:
+    rules: dict[str, list[tuple[list[int], str]]] = {}
     for line in output.splitlines():
-        m = _DOCKER_USER_DPORT_RE.search(line)
-        if m:
-            port = int(m.group(1))
-            action = m.group(2)
-            normalized = "DENY" if action in {"DROP", "REJECT"} else "ALLOW"
-            rules.setdefault(port, []).append(normalized)
+        match = _IPTABLES_CHAIN_RULE_RE.search(line.strip())
+        if not match:
             continue
-        m = _DOCKER_USER_MULTIPORT_RE.search(line)
-        if m:
-            action = m.group(2)
-            normalized = "DENY" if action in {"DROP", "REJECT"} else "ALLOW"
-            for port in _parse_iptables_port_list(m.group(1)):
-                rules.setdefault(port, []).append(normalized)
+        chain = match.group("chain")
+        body = match.group("body")
+        target = match.group("target")
+        ports = _iptables_ports_from_rule_body(body)
+        rules.setdefault(chain, []).append((ports, target))
     return rules
+
+
+def _resolve_iptables_chain_ports(
+    chain_rules: dict[str, list[tuple[list[int], str]]],
+    chain: str,
+    visited: set[str],
+    inherited_ports: list[int] | None = None,
+) -> dict[int, list[str]]:
+    rules: dict[int, list[str]] = {}
+    if chain in visited:
+        return rules
+    visited = {*visited, chain}
+    for ports, target in chain_rules.get(chain, []):
+        effective_ports = ports or inherited_ports or []
+        if target in {"DROP", "REJECT", "ACCEPT"}:
+            normalized = "DENY" if target in {"DROP", "REJECT"} else "ALLOW"
+            for port in effective_ports:
+                rules.setdefault(port, []).append(normalized)
+            continue
+        if target == "RETURN":
+            continue
+        nested = _resolve_iptables_chain_ports(chain_rules, target, visited, effective_ports or None)
+        for port, actions in nested.items():
+            rules.setdefault(port, []).extend(actions)
+    return rules
+
+
+def _iptables_ports_from_rule_body(body: str) -> list[int]:
+    ports: list[int] = []
+    for match in _IPTABLES_DPORT_ANY_RE.finditer(body):
+        ports.append(int(match.group(1)))
+    for match in _IPTABLES_MULTIPORT_ANY_RE.finditer(body):
+        ports.extend(_parse_iptables_port_list(match.group(1)))
+    return list(dict.fromkeys(ports))
 
 
 def _parse_iptables_port_list(value: str) -> list[int]:
@@ -772,15 +807,25 @@ def _audit_docker_ports(
     ))
 
     docker_user_rules: dict[int, list[str]] = {}
+    docker_user_stdout = ""
+    iptables_stdout = ""
     for artifact in result.artifacts:
+        if (
+            artifact.type == "command-output"
+            and isinstance(artifact.content, dict)
+            and artifact.target == "iptables -S"
+            and artifact.content.get("exit_code") == 0
+        ):
+            iptables_stdout = artifact.content.get("stdout", "")
         if (
             artifact.type == "command-output"
             and isinstance(artifact.content, dict)
             and artifact.target == "iptables -S DOCKER-USER"
             and artifact.content.get("exit_code") == 0
         ):
-            docker_user_rules = parse_docker_user_rules(artifact.content.get("stdout", ""))
-            break
+            docker_user_stdout = artifact.content.get("stdout", "")
+    if docker_user_stdout or iptables_stdout:
+        docker_user_rules = parse_docker_user_rules_with_chains(docker_user_stdout, iptables_stdout)
 
     seen: set[tuple[int, str]] = set()
     for port in published:
