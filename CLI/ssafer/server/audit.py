@@ -515,12 +515,19 @@ def _short_command_error(result: CommandResult) -> str:
     return text.splitlines()[-1][:200]
 
 
-_UFW_RULE_RE = re.compile(r"^(\d+)(?:/\w+)?\s+(ALLOW|DENY|REJECT|LIMIT)\s+")
+_UFW_RULE_RE = re.compile(r"^(\d+)(?:/\w+)?\s+(ALLOW|DENY|REJECT|LIMIT)\s+(.*)")
 _IPTABLES_DPORT_RE = re.compile(r"-A\s+INPUT\s+.*--dport\s+(\d+)\s+.*-j\s+(ACCEPT|DROP|REJECT)")
+_IPTABLES_INPUT_SRC_RE = re.compile(r"-s\s+(\S+)")
+
+_ANYWHERE_SOURCES = frozenset({"anywhere", "anywhere (v6)", "0.0.0.0/0", "::/0"})
 
 
-def parse_ufw_rules(output: str) -> dict[int, list[str]]:
-    rules: dict[int, list[str]] = {}
+def _is_anywhere(source: str) -> bool:
+    return source.strip().lower() in _ANYWHERE_SOURCES or not source.strip()
+
+
+def parse_ufw_rules(output: str) -> dict[int, list[tuple[str, str]]]:
+    rules: dict[int, list[tuple[str, str]]] = {}
     if "Status: inactive" in output:
         return rules
     for line in output.splitlines():
@@ -528,7 +535,8 @@ def parse_ufw_rules(output: str) -> dict[int, list[str]]:
         if m:
             port = int(m.group(1))
             action = m.group(2)
-            rules.setdefault(port, []).append(action)
+            source = m.group(3).strip()
+            rules.setdefault(port, []).append((action, source))
     return rules
 
 
@@ -546,26 +554,41 @@ def parse_iptables_input_rules(output: str) -> dict[int, list[str]]:
     return rules
 
 
+@dataclass
+class FirewallPortState:
+    action: str
+    sources: list[str]
+
+    @property
+    def is_restricted(self) -> bool:
+        return self.action == "ALLOW" and self.sources and all(
+            not _is_anywhere(s) for s in self.sources
+        )
+
+
 def _resolve_firewall_state(
-    ufw_rules: dict[int, list[str]],
+    ufw_rules: dict[int, list[tuple[str, str]]],
     iptables_rules: dict[int, list[str]],
-) -> dict[int, str]:
+) -> dict[int, FirewallPortState]:
     all_ports = set(ufw_rules) | set(iptables_rules)
-    state: dict[int, str] = {}
+    state: dict[int, FirewallPortState] = {}
     for port in all_ports:
-        actions = ufw_rules.get(port, []) + iptables_rules.get(port, [])
+        ufw_entries = ufw_rules.get(port, [])
+        ipt_entries = iptables_rules.get(port, [])
+        all_actions = [a for a, _ in ufw_entries] + ipt_entries
         deny_actions = {"DENY", "REJECT"}
-        if any(a in deny_actions for a in actions):
-            state[port] = "DENY"
-        elif any(a == "ALLOW" for a in actions):
-            state[port] = "ALLOW"
+        if any(a in deny_actions for a in all_actions):
+            state[port] = FirewallPortState("DENY", [])
+        elif any(a == "ALLOW" for a in all_actions):
+            sources = [s for a, s in ufw_entries if a == "ALLOW" and s]
+            state[port] = FirewallPortState("ALLOW", sources)
         else:
-            state[port] = "UNKNOWN"
+            state[port] = FirewallPortState("UNKNOWN", [])
     return state
 
 
 def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
-    ufw_rules: dict[int, list[str]] = {}
+    ufw_rules: dict[int, list[tuple[str, str]]] = {}
     iptables_rules: dict[int, list[str]] = {}
     has_firewall_data = False
     for artifact in result.artifacts:
@@ -583,7 +606,10 @@ def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
         return
 
     firewall_state = _resolve_firewall_state(ufw_rules, iptables_rules)
-    result.artifacts.append(ServerArtifact("firewall-rules", "resolved", firewall_state))
+    result.artifacts.append(ServerArtifact(
+        "firewall-rules", "resolved",
+        {p: {"action": s.action, "sources": s.sources} for p, s in firewall_state.items()},
+    ))
 
     for finding in result.findings:
         if finding.ruleId != "SERVER_PUBLIC_SENSITIVE_PORT":
@@ -593,16 +619,21 @@ def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
             continue
         port = int(port_match.group(1))
         fw = firewall_state.get(port)
-        if fw == "DENY":
+        if fw is None:
+            finding.severity = "MEDIUM"
+            finding.title += " (방화벽 규칙 없음)"
+        elif fw.action == "DENY":
             finding.severity = "LOW"
             finding.title += " (방화벽 차단됨)"
-        elif fw == "ALLOW":
+        elif fw.is_restricted:
+            finding.severity = "LOW"
+            source_list = ", ".join(fw.sources)
+            finding.title += f" (방화벽 제한됨: {source_list})"
+            finding.evidence += f" [허용 IP: {source_list}]"
+        elif fw.action == "ALLOW":
             if port not in DEFAULT_ALLOWED_PORTS:
                 finding.severity = "CRITICAL"
             finding.title += " (방화벽 허용됨)"
-        elif fw is None:
-            finding.severity = "MEDIUM"
-            finding.title += " (방화벽 규칙 없음)"
 
 
 @dataclass(frozen=True)
