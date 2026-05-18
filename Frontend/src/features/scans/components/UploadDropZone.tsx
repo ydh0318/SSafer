@@ -7,6 +7,7 @@ import { SCAN_UPLOAD_FILE_COUNT_LIMIT } from '../utils/uploadValidation';
 type UploadDropZoneProps = {
   files: File[];
   onFilesChange: (files: File[] | null) => void;
+  onFileLimitExceeded?: () => void;
   isDragOver: boolean;
   onDragStateChange: (next: boolean) => void;
 };
@@ -43,12 +44,23 @@ function mergeFiles(currentFiles: File[], nextFiles: File[] | null) {
   ));
 }
 
-function UploadDropZone({ files, onFilesChange, isDragOver, onDragStateChange }: UploadDropZoneProps) {
+function UploadDropZone({ files, onFilesChange, onFileLimitExceeded, isDragOver, onDragStateChange }: UploadDropZoneProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const hasFiles = files.length > 0;
 
   const updateFiles = (nextFiles: File[] | null, options: { append?: boolean } = {}) => {
     const mergedFiles = options.append ? mergeFiles(files, nextFiles) : nextFiles;
+
+    if (mergedFiles && mergedFiles.length > SCAN_UPLOAD_FILE_COUNT_LIMIT) {
+      onFileLimitExceeded?.();
+
+      if (inputRef.current) {
+        inputRef.current.value = '';
+      }
+
+      return;
+    }
+
     onFilesChange(mergedFiles && mergedFiles.length > 0 ? mergedFiles : null);
 
     if (inputRef.current) {
@@ -62,7 +74,7 @@ function UploadDropZone({ files, onFilesChange, isDragOver, onDragStateChange }:
 
   return (
     <div
-      className={`group relative flex min-h-[340px] cursor-pointer flex-col items-center justify-center border-2 border-dashed px-8 py-12 text-center transition-all duration-300 landing-card-radius ${
+      className={`group relative flex min-h-[420px] cursor-pointer flex-col items-center justify-center border-2 border-dashed px-8 py-16 text-center transition-all duration-300 landing-card-radius ${
         isDragOver
           ? 'border-[#0F0F0F] bg-[#F7FFD9]'
           : 'border-neutral-300 bg-[#FAFAF7] hover:border-[#0F0F0F]/40'
@@ -122,7 +134,7 @@ function UploadDropZone({ files, onFilesChange, isDragOver, onDragStateChange }:
 
       {hasFiles ? (
         <div
-          className="mt-8 flex w-full max-w-4xl flex-col gap-4 bg-[#111111] px-5 py-5 text-left text-sm text-white landing-inner-radius md:px-6 md:py-6"
+          className="mt-10 flex w-full max-w-4xl flex-col gap-5 bg-[#111111] px-5 py-6 text-left text-sm text-white landing-inner-radius md:px-7 md:py-7"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
@@ -150,7 +162,7 @@ function UploadDropZone({ files, onFilesChange, isDragOver, onDragStateChange }:
 
             return (
               <div
-              className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-4 rounded-sm bg-white/5 px-4 py-3 font-mono"
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-4 rounded-sm bg-white/5 px-4 py-4 font-mono"
                 key={getFileIdentity(file)}
               >
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[11px] font-black text-white">

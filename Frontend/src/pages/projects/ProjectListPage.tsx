@@ -384,6 +384,9 @@ function ProjectListPage() {
     () => (selectedProjectId ? latestCompletedScans[selectedProjectId] ?? null : null),
     [latestCompletedScans, selectedProjectId],
   );
+  const selectedLatestProjectFileScan =
+    selectedLatestCompleted && selectedLatestCompleted.scan.scanType !== 'SERVER_AUDIT' ? selectedLatestCompleted : null;
+  const canApplyLatestProjectFileScan = selectedAgentScanType === 'PROJECT_FILE' && Boolean(selectedLatestProjectFileScan);
 
   const resetCreateForm = () => {
     setFormValues(initialProjectForm);
@@ -757,6 +760,11 @@ function ProjectListPage() {
           <UploadDropZone
             files={selectedUploadFiles}
             isDragOver={isDragOver}
+            onFileLimitExceeded={() => {
+              toast.warning(getUploadScanValidationToastMessage('FILE_COUNT_EXCEEDED') ?? '파일은 최대 3개까지 업로드할 수 있습니다.', {
+                durationMs: 3000,
+              });
+            }}
             onDragStateChange={setIsDragOver}
             onFilesChange={handleUploadFileChange}
           />
@@ -849,10 +857,9 @@ function ProjectListPage() {
                 {/* 수정 */}
                 <button
                   className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  disabled={!selectedProject || !(selectedProjectId && latestCompletedScans[selectedProjectId])}
+                  disabled={!selectedProject || !canApplyLatestProjectFileScan}
                   onClick={() => {
-                    if (!selectedProjectId) return;
-                    const latest = latestCompletedScans[selectedProjectId];
+                    const latest = selectedLatestProjectFileScan;
                     if (!latest?.scan?.scanId) return;
                     navigate(ROUTES.resultDetail.replace(':scanId', String(latest.scan.scanId)));
                   }}
@@ -864,9 +871,11 @@ function ProjectListPage() {
                   <div>
                     <p className="font-black">수정</p>
                     <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                      {selectedProject && selectedProjectId && latestCompletedScans[selectedProjectId]
-                        ? '최근 스캔 결과에서 패치를 확인하고 적용합니다.'
-                        : '완료된 스캔이 없습니다. 먼저 스캔을 실행해 주세요.'}
+                      {selectedAgentScanType === 'SERVER_AUDIT'
+                        ? '\uc11c\ubc84 \ub7f0\ud0c0\uc784 \uc810\uac80\uc740 \uc2e4\ud589 \uc911\uc778 \ud3ec\ud2b8, \ubc29\ud654\ubcbd, SSH, Docker \uc0c1\ud0dc\ub97c \ud655\uc778\ud558\ub294 \uc6b4\uc601 \uc870\uce58 \uacb0\uacfc\uc785\ub2c8\ub2e4. \ud30c\uc77c \ud328\uce58 \ub300\uc0c1\uc774 \uc544\ub2c8\ubbc0\ub85c, \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc744 \uc120\ud0dd\ud55c \ub4a4 \uc218\uc815\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.'
+                        : selectedLatestProjectFileScan
+                        ? '\ucd5c\uc2e0 \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94 \uacb0\uacfc\uc758 \uc218\uc815\uc548\uc744 \ud655\uc778\ud569\ub2c8\ub2e4.'
+                        : '\uc644\ub8cc\ub41c \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc774 \uc5c6\uc2b5\ub2c8\ub2e4. \uba3c\uc800 \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc744 \uc2e4\ud589\ud558\uc138\uc694.'}
                     </p>
                   </div>
                 </button>
