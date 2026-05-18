@@ -248,7 +248,7 @@ function ScanProgressPanel({
               ? 'bg-rose-100 text-rose-700'
               : statusData.status === 'CANCELED'
               ? 'bg-neutral-100 text-neutral-500'
-              : 'bg-[#EDFFC0] text-[#5A8A00] animate-pulse'
+              : 'bg-blue-50 text-blue-700 ring-1 ring-blue-200 shadow-[0_0_0_3px_rgba(37,99,235,0.08)] animate-pulse'
           }`}>
             {statusData.status}
           </span>
@@ -272,15 +272,15 @@ function ScanProgressPanel({
                 <div className="relative flex h-8 w-8 items-center justify-center">
                   {isActive ? (
                     <>
-                      <span className="absolute h-6 w-6 rounded-full bg-[#D4FC64]/45 animate-ping" />
-                      <span className="absolute h-8 w-8 rounded-full border border-[#D4FC64]/70 animate-pulse" />
+                      <span className="absolute h-8 w-8 rounded-full bg-blue-500/25 animate-ping" />
+                      <span className="absolute h-9 w-9 rounded-full border-2 border-blue-500/45 animate-pulse" />
                     </>
                   ) : null}
                   <div className={`relative z-10 flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
                     isDone
                       ? 'bg-black text-white'
-                      : isActive
-                      ? 'bg-[#D4FC64] text-black shadow-[0_0_0_6px_rgba(212,252,100,0.18),0_0_28px_rgba(212,252,100,0.65)]'
+                    : isActive
+                      ? 'bg-blue-600 text-white shadow-[0_0_0_6px_rgba(37,99,235,0.16),0_0_28px_rgba(37,99,235,0.45)] ring-2 ring-white'
                       : 'bg-neutral-100 text-neutral-400'
                   }`}>
                     {isDone ? <Check className="h-3 w-3" /> : idx + 1}
@@ -318,13 +318,13 @@ function ScanProgressPanel({
               <li
                 key={i}
                 className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition ${
-                  isTerminal ? 'text-neutral-600' : 'bg-[#F8FFE8] text-neutral-800 shadow-[inset_3px_0_0_#D4FC64]'
+                  isTerminal ? 'text-neutral-600' : 'bg-blue-50 text-neutral-900 shadow-[inset_3px_0_0_#2563EB]'
                 }`}
                 style={!isTerminal ? { animationDelay: `${i * 120}ms` } : undefined}
               >
                 <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
-                  {!isTerminal ? <span className="absolute h-3 w-3 rounded-full bg-[#D4FC64]/50 animate-ping" /> : null}
-                  <span className={`relative h-1.5 w-1.5 rounded-full ${isTerminal ? 'bg-[#9FCC2E]' : 'bg-[#6FA400]'}`} />
+                  {!isTerminal ? <span className="absolute h-3 w-3 rounded-full bg-blue-500/40 animate-ping" /> : null}
+                  <span className={`relative h-1.5 w-1.5 rounded-full ${isTerminal ? 'bg-[#9FCC2E]' : 'bg-blue-600'}`} />
                 </span>
                 {check}
               </li>

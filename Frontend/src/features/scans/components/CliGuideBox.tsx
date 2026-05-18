@@ -21,13 +21,15 @@ export default function CliGuideBox({ mode }: CliGuideBoxProps) {
 
   const commands = isAgent
     ? [
-        { label: 'SSAfer 설치 (개발/검증)', cmd: 'cd CLI && python -m pip install -e .' },
+        { label: 'SSAfer 설치', cmd: 'pip install ssafer' },
+        { label: '프로젝트 루트로 이동', cmd: 'cd <프로젝트 루트>' },
         { label: '백엔드 인증 로그인', cmd: 'ssafer login' },
         { label: '스캔 도구 설치 (Trivy 등)', cmd: 'ssafer tools' },
         { label: '에이전트 실행', cmd: 'ssafer agent' },
       ]
     : [
-        { label: 'SSAfer 설치 (개발/검증)', cmd: 'cd CLI && python -m pip install -e .' },
+        { label: 'SSAfer 설치', cmd: 'pip install ssafer' },
+        { label: '프로젝트 루트로 이동', cmd: 'cd <프로젝트 루트>' },
         { label: '백엔드 인증 로그인', cmd: 'ssafer login' },
         { label: '스캔 도구 설치 (Trivy 등)', cmd: 'ssafer tools' },
         { label: '스캔 실행 및 업로드', cmd: 'ssafer run --upload' },
@@ -99,7 +101,7 @@ export default function CliGuideBox({ mode }: CliGuideBoxProps) {
               sudo apt install -y python3-venv<br />
               python3 -m venv ~/.ssafer-venv<br />
               source ~/.ssafer-venv/bin/activate<br />
-              cd CLI && pip install -e .
+              pip install ssafer
             </code>
           </div>
         )}
