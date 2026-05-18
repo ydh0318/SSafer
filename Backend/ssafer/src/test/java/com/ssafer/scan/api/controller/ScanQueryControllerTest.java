@@ -438,6 +438,11 @@ class ScanQueryControllerTest {
                     "sha256:abc"
                 ))
             ),
+            List.of(new com.ssafer.scan.api.dto.ScanFindingReferenceResponse(
+                "CVE-2024-21626 - NVD",
+                "https://nvd.nist.gov/vuln/detail/CVE-2024-21626",
+                "A container escape vulnerability"
+            )),
             List.of("Dockerfile"),
             "{\"line\":2}",
             "{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}",
@@ -473,6 +478,8 @@ class ScanQueryControllerTest {
         .andExpect(jsonPath("$.data.fix.summary").value("수정 요약"))
         .andExpect(jsonPath("$.data.fix.priority").value("high"))
         .andExpect(jsonPath("$.data.fix.patches[0].patchId").value("PATCH-0001"))
+        .andExpect(jsonPath("$.data.references[0].title").value("CVE-2024-21626 - NVD"))
+        .andExpect(jsonPath("$.data.references[0].url").value("https://nvd.nist.gov/vuln/detail/CVE-2024-21626"))
         .andExpect(jsonPath("$.data.targetFiles[0]").value("Dockerfile"))
         .andExpect(jsonPath("$.data.patchPayloadJson").value("{\"patches\":[{\"patchId\":\"PATCH-0001\"}]}"))
         .andExpect(jsonPath("$.data.patchApprovedActorType").value("USER"))
