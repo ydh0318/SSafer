@@ -496,6 +496,7 @@ def apply_fix(
             selected_candidates,
             patch_id=selected_patch_id,
             dry_run=dry_run,
+            allow_hash_mismatch_if_text_matches=True,
         )
     except (OSError, ValueError, PatchError, RuntimeError) as exc:
         console.print(f"[red]수정 적용 실패:[/red] {exc}")
@@ -975,6 +976,10 @@ def _run_agent_watch(
                 scan_id = str(payload.get("scanId", "-"))
                 task_type = str(payload.get("taskType", "-"))
                 message = str(payload.get("message", "-"))
+            if task_type == "PATCH_APPLY":
+                _stop_live_status()
+                console.print(f"[cyan]Agent apply 진행 중...[/cyan] taskId={task_id}: {message}")
+                return
             action_label = "Agent apply" if task_type == "PATCH_APPLY" else "Agent scan"
             if verbose:
                 if task_type == "PATCH_APPLY":

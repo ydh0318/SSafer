@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ssafer"
-version = "0.3.7"
+version = "0.3.8"
 description = "Security copilot CLI — scan Docker Compose, .env, Dockerfile, and server runtime for misconfigurations."
 readme = "README.md"
 requires-python = ">=3.10"
