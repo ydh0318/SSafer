@@ -19,6 +19,7 @@ from app.services.explain_service import (
     generate_findings_explanation_batch,
 )
 from app.services.fix_service import generate_finding_fix, generate_findings_fix_batch
+from app.services.reference_service import fetch_findings_references
 from app.services.result_service import (
     DEFAULT_ANALYSIS_RESULT_PATH,
     build_analysis_result_from_results,
@@ -759,6 +760,30 @@ def run_analysis_pipeline_from_scan_result(
             invalid_findings=context.invalid_findings,
             message=str(exc),
         )
+
+    refs_started_ms = monotonic_ms()
+    try:
+        refs_by_id = fetch_findings_references(context.valid_findings)
+        for result in structured_results:
+            fid = result.get("findingId", "")
+            result["references"] = refs_by_id.get(fid, [])
+        log_analysis_step(
+            "HasData references fetched.",
+            stage="FETCH_REFERENCES",
+            started_ms=refs_started_ms,
+            log_fields=log_fields,
+            findingCount=len(context.valid_findings),
+        )
+    except Exception:
+        log_analysis_step(
+            "HasData references fetch failed, continuing without references.",
+            stage="FETCH_REFERENCES",
+            started_ms=refs_started_ms,
+            level=logging.WARNING,
+            log_fields=log_fields,
+        )
+        for result in structured_results:
+            result.setdefault("references", [])
 
     save_started_ms = monotonic_ms()
     try:
