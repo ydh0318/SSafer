@@ -38,6 +38,21 @@ async def process_message(
             await message.nack(requeue=False)
             return
 
+        attempts = processor.redelivery_tracker.record(scan_msg.task_id)
+        if attempts > processor.redelivery_tracker.cap:
+            logger.warning(
+                "Redelivery cap exceeded. taskId=%s scanId=%s attempts=%d cap=%d",
+                scan_msg.task_id,
+                scan_msg.scan_id,
+                attempts,
+                processor.redelivery_tracker.cap,
+            )
+            try:
+                await message.nack(requeue=False)
+            except Exception:
+                logger.exception("Failed to nack message after redelivery cap.")
+            return
+
         try:
             logger.info(
                 "Processing scan task taskId=%s scanId=%s rawResultPath=%s deliveryTag=%s redelivered=%s",

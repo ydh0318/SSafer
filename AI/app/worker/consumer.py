@@ -90,6 +90,18 @@ def run() -> None:
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
 
+        attempts = processor.redelivery_tracker.record(message.task_id)
+        if attempts > processor.redelivery_tracker.cap:
+            logger.warning(
+                "Redelivery cap exceeded. taskId=%s scanId=%s attempts=%d cap=%d",
+                message.task_id,
+                message.scan_id,
+                attempts,
+                processor.redelivery_tracker.cap,
+            )
+            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            return
+
         try:
             logger.info(
                 "Processing scan task taskId=%s scanId=%s rawResultPath=%s",

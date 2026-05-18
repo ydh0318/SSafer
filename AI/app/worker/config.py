@@ -40,6 +40,7 @@ class WorkerSettings:
     http_timeout_seconds: int
     max_concurrency: int
     shutdown_timeout_seconds: int
+    redelivery_cap: int
 
 
 def load_worker_settings(env: Mapping[str, str] | None = None) -> WorkerSettings:
@@ -69,4 +70,5 @@ def load_worker_settings(env: Mapping[str, str] | None = None) -> WorkerSettings
         shutdown_timeout_seconds=_get_positive_int_env(
             env, "WORKER_SHUTDOWN_TIMEOUT_SECONDS", 1800
         ),
+        redelivery_cap=_get_positive_int_env(env, "WORKER_REDELIVERY_CAP", 5),
     )

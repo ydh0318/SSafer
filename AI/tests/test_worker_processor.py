@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from app.worker.config import WorkerSettings
 from app.worker.processor import (
     build_analysis_result_path,
+    ProcessOutcome,
+    RedeliveryTracker,
     ScanTaskProcessor,
     TaskIdempotencyRegistry,
 )
@@ -26,6 +28,7 @@ def build_settings() -> WorkerSettings:
         http_timeout_seconds=120,
         max_concurrency=5,
         shutdown_timeout_seconds=1800,
+        redelivery_cap=5,
     )
 
 
@@ -398,6 +401,113 @@ class WorkerProcessorIdempotencyTest(unittest.TestCase):
         self.assertIn("Skipping duplicate scan task delivery.", output)
         self.assertIn("taskId=123", output)
         self.assertIn("status=SKIPPED_DUPLICATE", output)
+
+    def test_process_returns_processed_outcome_on_success(self):
+        processor, _spring, _fastapi = self._build_processor()
+
+        outcome = processor.process(build_message())
+
+        self.assertEqual(outcome, ProcessOutcome.PROCESSED)
+
+    def test_process_returns_skipped_duplicate_outcome(self):
+        registry = TaskIdempotencyRegistry()
+        processor, _spring, _fastapi = self._build_processor(registry=registry)
+        registry.claim(123)
+
+        outcome = processor.process(build_message())
+
+        self.assertEqual(outcome, ProcessOutcome.SKIPPED_DUPLICATE)
+
+
+class RedeliveryTrackerTest(unittest.TestCase):
+    def test_record_increments_per_task_id(self):
+        tracker = RedeliveryTracker(cap=5)
+
+        self.assertEqual(tracker.record(101), 1)
+        self.assertEqual(tracker.record(101), 2)
+        self.assertEqual(tracker.record(102), 1)
+
+    def test_clear_resets_counter(self):
+        tracker = RedeliveryTracker(cap=5)
+        tracker.record(101)
+        tracker.record(101)
+
+        tracker.clear(101)
+
+        self.assertEqual(tracker.current(101), 0)
+        self.assertEqual(tracker.record(101), 1)
+
+    def test_current_reads_without_increment(self):
+        tracker = RedeliveryTracker(cap=5)
+        tracker.record(101)
+
+        self.assertEqual(tracker.current(101), 1)
+        self.assertEqual(tracker.current(101), 1)
+        self.assertEqual(tracker.current(999), 0)
+
+    def test_concurrent_record_counts_every_call(self):
+        tracker = RedeliveryTracker(cap=100)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(lambda _: tracker.record(42), range(50)))
+
+        self.assertEqual(tracker.current(42), 50)
+
+
+class WorkerProcessorRedeliveryTest(unittest.TestCase):
+    def test_successful_process_clears_redelivery_tracker(self):
+        spring_client = FakeSpringClient()
+        fastapi_client = FakeFastApiClient(
+            FastApiAnalyzeResponse(
+                status="completed",
+                scan_result_path="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
+                analysis_result_path=(
+                    "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+                ),
+            )
+        )
+        tracker = RedeliveryTracker(cap=5)
+        tracker.record(123)
+        tracker.record(123)
+        processor = ScanTaskProcessor(
+            spring_client=spring_client,
+            fastapi_client=fastapi_client,
+            settings=build_settings(),
+            redelivery_tracker=tracker,
+        )
+
+        processor.process(build_message())
+
+        self.assertEqual(tracker.current(123), 0)
+
+    def test_failed_process_keeps_redelivery_tracker(self):
+        class ExplodingSpringClient:
+            def send_analysis_result_callback(self, scan_id, request):
+                raise RuntimeError("Spring down")
+
+        fastapi_client = FakeFastApiClient(
+            FastApiAnalyzeResponse(
+                status="completed",
+                scan_result_path="s3://ssafer-scan-storage-dev/raw/5/scan_result.json",
+                analysis_result_path=(
+                    "s3://ssafer-scan-storage-dev/analysis/5/analysis_result.json"
+                ),
+            )
+        )
+        tracker = RedeliveryTracker(cap=5)
+        tracker.record(123)
+        tracker.record(123)
+        processor = ScanTaskProcessor(
+            spring_client=ExplodingSpringClient(),
+            fastapi_client=fastapi_client,
+            settings=build_settings(),
+            redelivery_tracker=tracker,
+        )
+
+        with self.assertRaises(RuntimeError):
+            processor.process(build_message())
+
+        self.assertEqual(tracker.current(123), 2)
 
 
 if __name__ == "__main__":

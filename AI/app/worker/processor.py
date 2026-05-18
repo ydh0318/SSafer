@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from datetime import datetime, timezone
+from enum import Enum
 import logging
 import threading
 
@@ -65,6 +66,38 @@ class TaskIdempotencyRegistry:
                 self._completed.popitem(last=False)
 
 
+class ProcessOutcome(Enum):
+    PROCESSED = "processed"
+    SKIPPED_DUPLICATE = "skipped_duplicate"
+
+
+class RedeliveryTracker:
+    """Per-process redelivery counter keyed by taskId.
+
+    Each broker delivery increments. Cleared on successful processing.
+    When count exceeds cap, consumer should nack(requeue=False) so the
+    broker can dead-letter the message instead of looping forever.
+    """
+
+    def __init__(self, cap: int = 5):
+        self._lock = threading.Lock()
+        self._counts: dict[int, int] = {}
+        self.cap = cap
+
+    def record(self, task_id: int) -> int:
+        with self._lock:
+            self._counts[task_id] = self._counts.get(task_id, 0) + 1
+            return self._counts[task_id]
+
+    def clear(self, task_id: int) -> None:
+        with self._lock:
+            self._counts.pop(task_id, None)
+
+    def current(self, task_id: int) -> int:
+        with self._lock:
+            return self._counts.get(task_id, 0)
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
 
@@ -96,6 +129,7 @@ class ScanTaskProcessor:
         fastapi_client: FastApiClient,
         settings: WorkerSettings,
         idempotency_registry: TaskIdempotencyRegistry | None = None,
+        redelivery_tracker: RedeliveryTracker | None = None,
     ):
         self.spring_client = spring_client
         self.fastapi_client = fastapi_client
@@ -103,8 +137,11 @@ class ScanTaskProcessor:
         self.idempotency_registry = (
             idempotency_registry or TaskIdempotencyRegistry()
         )
+        self.redelivery_tracker = (
+            redelivery_tracker or RedeliveryTracker(cap=settings.redelivery_cap)
+        )
 
-    def process(self, message: ScanRequestMessage) -> None:
+    def process(self, message: ScanRequestMessage) -> ProcessOutcome:
         if not self.idempotency_registry.claim(message.task_id):
             log_with_fields(
                 logger,
@@ -115,12 +152,14 @@ class ScanTaskProcessor:
                 stage="MESSAGE_CONSUMED",
                 status="SKIPPED_DUPLICATE",
             )
-            return
+            return ProcessOutcome.SKIPPED_DUPLICATE
 
         completed = False
         try:
             self._process_inner(message)
             completed = True
+            self.redelivery_tracker.clear(message.task_id)
+            return ProcessOutcome.PROCESSED
         finally:
             self.idempotency_registry.release(
                 message.task_id,

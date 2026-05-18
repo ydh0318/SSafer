@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from app.worker.async_consumer import process_message
 from app.worker.http_client import JsonHttpClientError
+from app.worker.processor import RedeliveryTracker
 
 
 VALID_MESSAGE_PAYLOAD = {
@@ -37,6 +38,7 @@ class AsyncConsumerProcessMessageTest(unittest.IsolatedAsyncioTestCase):
     async def test_valid_message_calls_processor_and_acks(self):
         processor = MagicMock()
         processor.process = MagicMock()
+        processor.redelivery_tracker = RedeliveryTracker(cap=5)
         message = _make_aio_message(VALID_MESSAGE_PAYLOAD)
         semaphore = asyncio.Semaphore(5)
 
@@ -45,6 +47,27 @@ class AsyncConsumerProcessMessageTest(unittest.IsolatedAsyncioTestCase):
         processor.process.assert_called_once()
         message.ack.assert_called_once()
         message.nack.assert_not_called()
+
+    async def test_redelivery_cap_exceeded_nacks_without_requeue(self):
+        processor = MagicMock()
+        processor.process = MagicMock()
+        processor.redelivery_tracker = RedeliveryTracker(cap=2)
+        # Pre-fill tracker so the next record() exceeds cap.
+        for _ in range(processor.redelivery_tracker.cap):
+            processor.redelivery_tracker.record(
+                VALID_MESSAGE_PAYLOAD["taskId"],
+            )
+
+        message = _make_aio_message(VALID_MESSAGE_PAYLOAD)
+        await process_message(
+            message,
+            processor=processor,
+            semaphore=asyncio.Semaphore(5),
+        )
+
+        processor.process.assert_not_called()
+        message.nack.assert_called_once_with(requeue=False)
+        message.ack.assert_not_called()
 
     async def test_invalid_json_nacks_without_requeue(self):
         processor = MagicMock()
@@ -80,6 +103,7 @@ class AsyncConsumerProcessMessageTest(unittest.IsolatedAsyncioTestCase):
         processor.process = MagicMock(
             side_effect=JsonHttpClientError("HTTP 500", status_code=500)
         )
+        processor.redelivery_tracker = RedeliveryTracker(cap=5)
         message = _make_aio_message(VALID_MESSAGE_PAYLOAD)
 
         await process_message(
@@ -96,6 +120,7 @@ class AsyncConsumerProcessMessageTest(unittest.IsolatedAsyncioTestCase):
         processor.process = MagicMock(
             side_effect=JsonHttpClientError("HTTP 400", status_code=400)
         )
+        processor.redelivery_tracker = RedeliveryTracker(cap=5)
         message = _make_aio_message(VALID_MESSAGE_PAYLOAD)
 
         await process_message(
