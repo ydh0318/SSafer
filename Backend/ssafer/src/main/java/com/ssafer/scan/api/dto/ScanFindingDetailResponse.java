@@ -47,6 +47,8 @@ public record ScanFindingDetailResponse(
     String remediationGuide,
     @Schema(description = "구조화된 수정 가이드")
     ScanFindingFixResponse fix,
+    @Schema(description = "보안 참고자료 목록")
+    List<ScanFindingReferenceResponse> references,
     @Schema(description = "연관 파일 경로 목록")
     List<String> targetFiles,
     @Schema(description = "원본 결과 일부 JSON")
