@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic as _monotonic
+from time import sleep as _sleep
 from typing import Any, Callable
 from urllib.parse import urlparse, urlunparse
 
@@ -18,6 +19,9 @@ from ssafer.core.upload import upload_scan_result_to_registered_scan
 from ssafer.server.audit import run_server_audit
 
 AGENT_FALLBACK_POLL_INTERVAL_SECONDS = 30.0
+AGENT_ANALYSIS_POLL_INTERVAL_SECONDS = 3.0
+AGENT_ANALYSIS_WAIT_TIMEOUT_SECONDS = 600.0
+AGENT_ANALYSIS_STATUS_MAX_FAILURES = 5
 
 
 @dataclass(frozen=True)
@@ -89,6 +93,17 @@ def report_agent_task_result(
         response.raise_for_status()
     data = response.json()
     return data if isinstance(data, dict) else {}
+
+
+def fetch_scan_status(api_url: str, scan_id: int, token: str) -> dict[str, Any]:
+    endpoint = f"{normalize_api_url(api_url)}/api/v1/scans/{scan_id}/status"
+    headers = {"Authorization": f"Bearer {token}"}
+    with httpx.Client(timeout=10, follow_redirects=True) as client:
+        response = client.get(endpoint, headers=headers)
+        response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data") if isinstance(payload, dict) else None
+    return data if isinstance(data, dict) else payload
 
 
 def handle_agent_task(
@@ -526,6 +541,58 @@ def _process_agent_tasks(
                         "task_result_reported",
                         {"taskId": task.task_id, "taskType": task.task_type, "count": 1},
                     )
+                if task.task_type == "SCAN_REQUEST" and result.status == "SUCCESS" and result.scan_id and upload_token:
+                    _wait_for_scan_analysis(
+                        api_url=api_url,
+                        scan_id=result.scan_id,
+                        token=upload_token,
+                        on_event=on_event,
+                    )
+
+
+def _wait_for_scan_analysis(
+    *,
+    api_url: str,
+    scan_id: int,
+    token: str,
+    on_event,
+    timeout_seconds: float = AGENT_ANALYSIS_WAIT_TIMEOUT_SECONDS,
+    interval_seconds: float = AGENT_ANALYSIS_POLL_INTERVAL_SECONDS,
+    max_status_failures: int = AGENT_ANALYSIS_STATUS_MAX_FAILURES,
+) -> dict[str, Any] | None:
+    deadline = _monotonic() + timeout_seconds
+    failures = 0
+    on_event("analysis_wait_started", {"scanId": scan_id})
+    while _monotonic() < deadline:
+        try:
+            status_data = fetch_scan_status(api_url, scan_id, token)
+            failures = 0
+        except httpx.HTTPError as exc:
+            failures += 1
+            on_event("analysis_status_retry", {"scanId": scan_id, "error": str(exc), "count": failures})
+            if failures >= max_status_failures:
+                on_event("analysis_status_failed", {"scanId": scan_id, "error": str(exc)})
+                return None
+            _sleep(interval_seconds)
+            continue
+
+        current_status = str(status_data.get("status") or "UNKNOWN").upper()
+        payload: dict[str, Any] = {
+            "scanId": scan_id,
+            "status": current_status,
+            "progressStep": status_data.get("progressStep"),
+        }
+        if current_status == "DONE":
+            on_event("analysis_done", payload)
+            return status_data
+        if current_status in {"FAILED", "CANCELED"}:
+            payload["errorMessage"] = status_data.get("errorMessage")
+            on_event("analysis_failed", payload)
+            return status_data
+        on_event("analysis_status", payload)
+        _sleep(interval_seconds)
+    on_event("analysis_timeout", {"scanId": scan_id})
+    return None
 
 
 def _tasks_from_ws_message(message: Any) -> list[AgentTask] | None:
