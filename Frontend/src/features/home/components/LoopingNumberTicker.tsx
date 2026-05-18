@@ -7,6 +7,7 @@ type LoopingNumberTickerProps = {
   edgeHoldMs?: number;
   className?: string;
   formatter?: (value: number) => string;
+  paused?: boolean;
 };
 
 function LoopingNumberTicker({
@@ -16,6 +17,7 @@ function LoopingNumberTicker({
   edgeHoldMs = 170,
   className = '',
   formatter,
+  paused = false,
 }: LoopingNumberTickerProps) {
   const resolvedFormatter = useMemo(
     () => formatter ?? ((value: number) => new Intl.NumberFormat('ko-KR').format(value)),
@@ -24,6 +26,10 @@ function LoopingNumberTicker({
   const [value, setValue] = useState(from);
 
   useEffect(() => {
+    if (paused) {
+      return undefined;
+    }
+
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     if (reducedMotion.matches) {
@@ -64,7 +70,7 @@ function LoopingNumberTicker({
     animationFrameId = window.requestAnimationFrame(tick);
 
     return () => window.cancelAnimationFrame(animationFrameId);
-  }, [durationMs, edgeHoldMs, from, to]);
+  }, [durationMs, edgeHoldMs, from, to, paused]);
 
   return (
     <span

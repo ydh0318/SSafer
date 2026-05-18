@@ -1,6 +1,6 @@
-import { ArrowRight, Clock, FolderPlus, Lock, Plus, ScanSearch, Server, Terminal, Trash2, Upload, Wrench, X } from 'lucide-react';
+import { ArrowRight, Clock, FolderPlus, Plus, ScanSearch, Trash2, Upload, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import ModalFrame from '../../components/common/ModalFrame';
 import PageBanner from '../../components/common/PageBanner';
@@ -19,10 +19,14 @@ import {
   requestAgentScan,
   requestUploadScan,
 } from '../../features/scans/api/scans';
+import EstimatedDurationCard from '../../features/scans/components/EstimatedDurationCard';
+import ScanModePicker from '../../features/scans/components/ScanModePicker';
+import SecretMaskingCard from '../../features/scans/components/SecretMaskingCard';
+import UploadDropZone from '../../features/scans/components/UploadDropZone';
+import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import { formatCompactDateTime, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
 import { getUploadScanToastFeedback, getUploadScanValidationToastMessage } from '../../features/scans/utils/uploadScanFeedback';
 import { getScanUploadValidationIssue } from '../../features/scans/utils/uploadValidation';
-import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import { useProjectStore } from '../../store/projectStore';
 import type { CreateProjectFormValues, ProjectSummary } from '../../types/project';
 import type { AgentStatusResponseData, ProjectScanListItemData, ProjectScanOptionsData, ScanType } from '../../types/scan';
@@ -44,32 +48,6 @@ const initialProjectForm: CreateProjectFormValues = {
   defaultScanMode: 'AGENT',
   monitorEnabled: true,
 };
-
-const modeCards: Array<{
-  description: string;
-  icon: typeof Upload;
-  id: ScanModeOption;
-  title: string;
-}> = [
-  {
-    id: 'UPLOAD',
-    icon: Upload,
-    title: '파일 업로드',
-    description: '설정 파일을 바로 올려 빠르게 결과를 확인하고 싶을 때 적합합니다.',
-  },
-  {
-    id: 'CLI',
-    icon: Terminal,
-    title: 'CLI',
-    description: '로컬 또는 CI 환경에서 명령어 기반으로 스캔을 실행하고 싶을 때 사용합니다.',
-  },
-  {
-    id: 'AGENT',
-    icon: Server,
-    title: 'Agent',
-    description: '연결된 Local Agent를 통해 실제 서버나 실행 환경 기준으로 점검합니다.',
-  },
-];
 
 function normalizeProjectName(value: string) {
   return value.trim();
@@ -114,20 +92,10 @@ function getAgentDisplay(
   };
 }
 
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-
-  if (bytes < 1024 * 1024) {
-    return `${Math.ceil(bytes / 1024)} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
 function ProjectListPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const focusProjectId = (location.state as { focusProjectId?: string } | null)?.focusProjectId;
   const projects = useProjectStore((state) => state.projects);
   const setProjectsFromList = useProjectStore((state) => state.setProjectsFromList);
   const addProject = useProjectStore((state) => state.addProject);
@@ -261,10 +229,16 @@ function ProjectListPage() {
       return;
     }
 
+    // ProjectDetailPage 등에서 focusProjectId state로 넘겨준 경우 우선 적용
+    if (focusProjectId && projects.some((project) => project.id === focusProjectId)) {
+      setSelectedProjectId((current) => current ?? focusProjectId);
+      return;
+    }
+
     if (!selectedProjectId || !projects.some((project) => project.id === selectedProjectId)) {
       setSelectedProjectId(projects[0].id);
     }
-  }, [projects, selectedProjectId]);
+  }, [projects, selectedProjectId, focusProjectId]);
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -399,16 +373,6 @@ function ProjectListPage() {
         }),
     [latestCompletedScans, projects],
   );
-
-  const uploadStats = useMemo(() => {
-    const totalBytes = selectedUploadFiles.reduce((sum, file) => sum + file.size, 0);
-    return {
-      count: selectedUploadFiles.length,
-      totalBytes,
-      remainingCount: Math.max(3 - selectedUploadFiles.length, 0),
-      remainingBytes: Math.max(1024 * 1024 - totalBytes, 0),
-    };
-  }, [selectedUploadFiles]);
 
   const resetCreateForm = () => {
     setFormValues(initialProjectForm);
@@ -575,23 +539,23 @@ function ProjectListPage() {
   };
 
   return (
-    <section className="space-y-10">
-      <header className="flex items-start justify-between gap-6 pt-4">
+    <section className="space-y-8">
+      <header className="flex items-end justify-between gap-6 pt-2">
         <div className="min-w-0">
-          <h1 className="text-[clamp(3.5rem,8vw,7rem)] font-black leading-[0.9] tracking-[-0.06em] text-[#080B16]">
+          <h1 className="text-4xl font-black leading-[0.95] tracking-[-0.03em] text-[#080B16] md:text-5xl xl:text-6xl">
             뭘 스캔할까요?
           </h1>
         </div>
         <div className="shrink-0">
-          <PixelGoose mood="idle" size={92} />
+          <PixelGoose mood="idle" size={64} />
         </div>
       </header>
 
-      <section className="space-y-4 pt-12">
+      <section className="space-y-3 pt-6">
         <div className="text-sm text-neutral-500">프로젝트</div>
 
         {isLoading ? (
-          <div className="bg-white px-5 py-4 text-sm text-neutral-500">프로젝트 목록을 불러오는 중입니다.</div>
+          <div className="bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">프로젝트 목록을 불러오는 중입니다.</div>
         ) : loadError ? (
           <PageBanner message={loadError} tone="error" />
         ) : (
@@ -601,7 +565,7 @@ function ProjectListPage() {
 
               return (
                 <button
-                  className={`inline-flex min-h-[98px] min-w-[260px] items-center gap-3 px-8 text-left text-base font-black transition ${
+                  className={`inline-flex min-h-[72px] min-w-[220px] items-center gap-3 px-6 text-left text-base font-black transition landing-card-radius ${
                     isSelected ? 'bg-[#111111] text-white' : 'bg-white text-black hover:bg-neutral-50'
                   }`}
                   key={project.id}
@@ -615,7 +579,7 @@ function ProjectListPage() {
                   }}
                   type="button"
                 >
-                  <span className="truncate text-[clamp(1.35rem,2vw,1.85rem)]">{project.name}</span>
+                  <span className="truncate text-lg md:text-xl">{project.name}</span>
                   {(() => {
                     const agentDisplay = getAgentDisplay(project, agentStatusMap[project.id] ?? null, isSelected);
                     return (
@@ -629,11 +593,11 @@ function ProjectListPage() {
             })}
 
             <button
-              className="inline-flex min-h-[98px] min-w-[160px] items-center justify-center gap-2 border border-dashed border-neutral-300 bg-white px-8 text-[1.9rem] font-black text-[#111111] transition hover:border-black"
+              className="inline-flex min-h-[72px] min-w-[120px] items-center justify-center gap-2 border border-dashed border-neutral-300 bg-white px-6 text-xl font-black text-[#111111] transition landing-card-radius hover:border-black"
               onClick={() => setIsCreateOpen(true)}
               type="button"
             >
-              <Plus className="h-7 w-7" />
+              <Plus className="h-5 w-5" />
               추가
             </button>
           </div>
@@ -642,7 +606,7 @@ function ProjectListPage() {
         {selectedProject ? (
           <div className="flex flex-wrap items-center gap-3">
             <button
-              className="inline-flex items-center gap-2 rounded-full border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+              className="inline-flex items-center gap-2 rounded-full border border-neutral-300 px-3.5 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:text-black"
               onClick={() => navigate(ROUTES.projectDetail.replace(':projectId', selectedProject.id))}
               type="button"
             >
@@ -650,7 +614,7 @@ function ProjectListPage() {
               <ArrowRight className="h-4 w-4" />
             </button>
             <button
-              className="inline-flex items-center gap-2 rounded-full border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
+              className="inline-flex items-center gap-2 rounded-full border border-rose-200 px-3.5 py-1.5 text-xs font-bold text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
               onClick={() => openDeleteModal({ id: selectedProject.id, name: selectedProject.name })}
               type="button"
             >
@@ -661,19 +625,19 @@ function ProjectListPage() {
         ) : null}
       </section>
 
-      <section className="space-y-5">
+      <section className="space-y-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-sm text-neutral-500">최근 결과</div>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-[#080B16]">가장 최근에 완료된 스캔</h2>
+            <h2 className="mt-1.5 text-xl font-black tracking-tight text-[#080B16] md:text-2xl">가장 최근에 완료된 스캔</h2>
           </div>
           <p className="text-sm text-neutral-500">프로젝트별 최신 완료 결과를 바로 열어볼 수 있습니다.</p>
         </div>
 
         {isLoadingCompletedScans ? (
-          <div className="border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500">최신 완료 결과를 불러오는 중입니다.</div>
+          <div className="border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">최신 완료 결과를 불러오는 중입니다.</div>
         ) : completedProjectEntries.length === 0 ? (
-          <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600">
+          <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600 landing-card-radius">
             아직 완료된 스캔이 없습니다.
           </div>
         ) : (
@@ -684,36 +648,36 @@ function ProjectListPage() {
 
               return (
                 <button
-                  className="flex flex-col gap-5 border border-black/5 bg-white p-6 text-left transition hover:-translate-y-0.5 hover:border-black/15"
+                  className="flex flex-col gap-4 border border-black/5 bg-white p-5 text-left transition landing-card-radius hover:-translate-y-0.5 hover:border-black/15 hover:shadow-[0_18px_40px_rgba(15,23,42,0.06)]"
                   key={project.id}
                   onClick={() => navigate(resultPath, { state: { projectId: project.id } })}
                   type="button"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">Latest Result</div>
-                      <h3 className="mt-2 text-2xl font-black tracking-tight text-black">{project.name}</h3>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Latest Result</div>
+                      <h3 className="mt-1.5 text-xl font-black tracking-tight text-black">{project.name}</h3>
                     </div>
-                    <span className="rounded-full bg-black px-2.5 py-1 text-xs font-bold text-white">Scan #{latestCompleted.scan.scanId}</span>
+                    <span className="rounded-full bg-black px-2.5 py-1 text-[11px] font-bold text-white">Scan #{latestCompleted.scan.scanId}</span>
                   </div>
 
-                  <div className="grid gap-3 text-sm text-neutral-600 md:grid-cols-2">
+                  <div className="grid gap-3 text-xs text-neutral-600 md:grid-cols-2">
                     <div>
-                      <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Completed</div>
-                      <div className="mt-1 font-semibold text-black">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Completed</div>
+                      <div className="mt-1 text-sm font-semibold text-black">
                         {formatCompactDateTime(latestCompleted.scan.completedAt ?? latestCompleted.scan.requestedAt)}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Mode</div>
-                      <div className="mt-1 font-semibold text-black">{getScanModeLabel(latestCompleted.scan.scanMode)}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Mode</div>
+                      <div className="mt-1 text-sm font-semibold text-black">{getScanModeLabel(latestCompleted.scan.scanMode)}</div>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center bg-[#D4FC64] px-3 py-2 text-sm font-bold text-black">결과 바로 보기</span>
+                    <span className="inline-flex items-center bg-[#D4FC64] px-3 py-1.5 text-xs font-bold text-black landing-inner-radius">결과 바로 보기</span>
                     <button
-                      className="border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 transition hover:border-black hover:text-black"
+                      className="border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition landing-inner-radius hover:border-black hover:text-black"
                       onClick={(event) => {
                         event.stopPropagation();
                         navigate(detailPath);
@@ -723,7 +687,7 @@ function ProjectListPage() {
                       프로젝트 상세
                     </button>
                     <button
-                      className="border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
+                      className="border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition landing-inner-radius hover:border-rose-300 hover:bg-rose-50"
                       onClick={(event) => {
                         event.stopPropagation();
                         openDeleteModal({ id: project.id, name: project.name });
@@ -740,113 +704,50 @@ function ProjectListPage() {
         )}
       </section>
 
-      <section>
-        <div className="mb-5 text-sm text-neutral-500">스캔 방식 선택</div>
-        <div className="grid gap-3 lg:grid-cols-3">
-          {modeCards.map((mode) => {
-            const Icon = mode.icon;
-            const isSelected = mode.id === selectedMode;
-            const isAgentDisabled =
-              mode.id === 'AGENT' && selectedProject
-                ? !selectedProjectScanOptions?.availableScanModes.includes('AGENT')
-                : false;
+      <ScanModePicker
+        isAgentAvailable={
+          selectedProject
+            ? Boolean(selectedProjectScanOptions?.availableScanModes.includes('AGENT'))
+            : false
+        }
+        onSelect={setSelectedMode}
+        selectedMode={selectedMode}
+      />
 
-            return (
-              <button
-                className={`min-h-32 p-8 text-left transition ${
-                  isSelected ? 'bg-[#111111] text-white' : 'bg-white text-black hover:bg-neutral-50'
-                } ${isAgentDisabled ? 'cursor-not-allowed opacity-40' : ''}`}
-                disabled={isAgentDisabled}
-                key={mode.id}
-                onClick={() => setSelectedMode(mode.id)}
-                type="button"
-              >
-                <div className="flex items-center gap-4">
-                  <Icon className="h-7 w-7" />
-                  <span className="text-3xl font-black tracking-tight">{mode.title}</span>
-                </div>
-                <p className={`mt-6 text-sm ${isSelected ? 'text-neutral-300' : 'text-neutral-500'}`}>{mode.description}</p>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] landing-anim">
         {selectedMode === 'UPLOAD' ? (
-          <div
-            className={`flex min-h-[360px] flex-col items-center justify-center border-2 border-dashed bg-white px-8 py-12 text-center transition ${
-              isDragOver ? 'border-black bg-[#F0FFD0]' : 'border-neutral-200'
-            }`}
-            onDragLeave={() => setIsDragOver(false)}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragOver(true);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              setIsDragOver(false);
-              handleUploadFileChange(Array.from(event.dataTransfer.files));
-            }}
-          >
-            <PixelGoose mood={isDragOver ? 'alert' : 'idle'} size={72} />
-            <h2 className="mt-8 text-3xl font-black tracking-tight">파일을 드래그하거나 직접 선택해 업로드하세요</h2>
-            <p className="mt-3 text-sm text-neutral-500">
-              지원 파일: .env, .env.local, .env.*, Dockerfile, Containerfile, docker-compose*.yml/.yaml, compose*.yml/.yaml
-            </p>
-            <label className="mt-8 cursor-pointer text-base text-neutral-700 underline underline-offset-4 hover:text-black">
-              파일 선택
-              <input
-                className="sr-only"
-                multiple
-                onChange={(event) => handleUploadFileChange(Array.from(event.target.files ?? []))}
-                type="file"
-              />
-            </label>
-            <div className="mt-6 flex flex-wrap justify-center gap-3 text-xs text-neutral-500">
-              <span>파일 {uploadStats.count}/3개</span>
-              <span>현재 용량 {formatFileSize(uploadStats.totalBytes)}</span>
-              <span>남은 용량 {formatFileSize(uploadStats.remainingBytes)}</span>
-            </div>
-            {selectedUploadFiles.length > 0 ? (
-              <div className="mt-8 flex w-full max-w-xl flex-col gap-3 bg-[#111111] px-4 py-3 text-left text-sm text-white">
-                {selectedUploadFiles.map((file) => (
-                  <div className="flex items-center justify-between gap-3 font-mono" key={`${file.name}-${file.size}-${file.lastModified}`}>
-                    <span className="truncate">{file.name}</span>
-                    <span className="shrink-0 text-xs text-neutral-300">{formatFileSize(file.size)}</span>
-                  </div>
-                ))}
-                <button
-                  aria-label="선택한 파일 비우기"
-                  className="inline-flex items-center gap-2 self-end text-xs text-neutral-300 hover:text-white"
-                  onClick={() => handleUploadFileChange(null)}
-                  type="button"
-                >
-                  <X className="h-4 w-4" />
-                  파일 비우기
-                </button>
-              </div>
-            ) : null}
-          </div>
+          <UploadDropZone
+            files={selectedUploadFiles}
+            isDragOver={isDragOver}
+            onDragStateChange={setIsDragOver}
+            onFilesChange={handleUploadFileChange}
+          />
         ) : (
-          <div className="min-h-[360px] bg-white p-10">
+          <div className="min-h-[340px] bg-white p-7 landing-card-radius md:p-8">
             <p className="font-mono text-[11px] tracking-[0.24em] text-neutral-400">{selectedMode}</p>
-            <h2 className="mt-4 text-3xl font-black tracking-tight">
+            <h2 className="mt-3 text-xl font-black tracking-tight md:text-2xl">
               {selectedMode === 'CLI' ? '터미널에서 스캔하고 결과를 올립니다' : 'Agent가 연결된 환경에서 스캔을 시작합니다'}
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-7 text-neutral-500">
               원하는 동작을 바로 눌러 시작하세요.
             </p>
 
+            {selectedMode === 'CLI' ? (
+              <div className="mt-7 flex items-center gap-3 border border-white/10 bg-[#0F0F0F] px-5 py-3.5 font-mono text-sm text-white/85 landing-inner-radius">
+                <span className="text-[#D4FC64]">$</span>
+                <span className="flex-1 truncate">pip install ssafer && ssafer run --upload</span>
+              </div>
+            ) : null}
+
             {selectedMode === 'AGENT' && (
               <div className="mt-6">
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">스캔 유형 선택</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    className={`border p-4 text-left transition ${
+                    className={`border p-4 text-left transition landing-inner-radius ${
                       selectedAgentScanType === 'PROJECT_FILE'
                         ? 'border-black bg-[#111111] text-white'
-                        : 'border-neutral-200 bg-white text-black hover:border-black hover:bg-neutral-50'
+                        : 'border-neutral-200 bg-white text-black hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50'
                     }`}
                     onClick={() => setSelectedAgentScanType('PROJECT_FILE')}
                     type="button"
@@ -857,10 +758,10 @@ function ProjectListPage() {
                     </p>
                   </button>
                   <button
-                    className={`border p-4 text-left transition ${
+                    className={`border p-4 text-left transition landing-inner-radius ${
                       selectedAgentScanType === 'SERVER_AUDIT'
                         ? 'border-black bg-[#111111] text-white'
-                        : 'border-neutral-200 bg-white text-black hover:border-black hover:bg-neutral-50'
+                        : 'border-neutral-200 bg-white text-black hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50'
                     }`}
                     onClick={() => setSelectedAgentScanType('SERVER_AUDIT')}
                     type="button"
@@ -877,12 +778,12 @@ function ProjectListPage() {
             <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
               {/* 스캔 */}
               <button
-                className="flex flex-col gap-3 border border-neutral-200 p-6 text-left transition hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={isStartingScan || !selectedProject}
                 onClick={() => void handleStartScan()}
                 type="button"
               >
-                <div className="flex h-10 w-10 items-center justify-center bg-black">
+                <div className="flex h-10 w-10 items-center justify-center bg-black landing-inner-radius">
                   <ScanSearch className="h-5 w-5 text-white" />
                 </div>
                 <div>
@@ -895,11 +796,11 @@ function ProjectListPage() {
 
               {/* 업로드 */}
               <button
-                className="flex flex-col gap-3 border border-neutral-200 p-6 text-left transition hover:border-black hover:bg-neutral-50"
+                className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50"
                 onClick={() => setSelectedMode('UPLOAD')}
                 type="button"
               >
-                <div className="flex h-10 w-10 items-center justify-center bg-neutral-100">
+                <div className="flex h-10 w-10 items-center justify-center bg-neutral-100 landing-inner-radius">
                   <Upload className="h-5 w-5 text-black" />
                 </div>
                 <div>
@@ -910,7 +811,7 @@ function ProjectListPage() {
 
               {/* 수정 */}
               <button
-                className="flex flex-col gap-3 border border-neutral-200 p-6 text-left transition hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!selectedProject || !(selectedProjectId && latestCompletedScans[selectedProjectId])}
                 onClick={() => {
                   if (!selectedProjectId) return;
@@ -920,7 +821,7 @@ function ProjectListPage() {
                 }}
                 type="button"
               >
-                <div className="flex h-10 w-10 items-center justify-center bg-neutral-100">
+                <div className="flex h-10 w-10 items-center justify-center bg-neutral-100 landing-inner-radius">
                   <Wrench className="h-5 w-5 text-black" />
                 </div>
                 <div>
@@ -937,20 +838,10 @@ function ProjectListPage() {
         )}
 
         <aside className="space-y-4">
-          <div className="bg-white p-8">
-            <Lock className="h-6 w-6" />
-            <h3 className="mt-7 text-xl font-black">업로드 전에 한 번 더 확인해 주세요</h3>
-            <p className="mt-4 text-sm leading-7 text-neutral-500">
-              파일 형식과 프로젝트 선택 상태를 확인한 뒤 스캔을 시작하면 더 안정적으로 결과를 확인할 수 있습니다.
-            </p>
-          </div>
-          <div className="bg-[#111111] p-8 text-white">
-            <p className="font-mono text-[11px] tracking-[0.24em] text-[#D4FC64]">예상 결과 확인 시간</p>
-            <div className="mt-6 text-5xl font-black tracking-tight">~30초</div>
-            <p className="mt-4 text-sm text-neutral-500">파일 업로드 스캔 기준</p>
-          </div>
+          <SecretMaskingCard />
+          <EstimatedDurationCard />
           <button
-            className="inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-6 py-4 text-sm font-black text-black transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-5 py-3.5 text-sm font-black text-black transition landing-inner-radius hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(212,252,100,0.45)] hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
             disabled={
               isStartingScan ||
               !selectedProject ||
@@ -1009,7 +900,7 @@ function ProjectListPage() {
       ) : null}
 
       <button
-        className="fixed bottom-6 right-6 hidden items-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-bold text-white shadow-2xl xl:inline-flex"
+        className="fixed bottom-6 right-6 z-20 inline-flex items-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-bold text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-[#111111]"
         onClick={() => setIsCreateOpen(true)}
         type="button"
       >
