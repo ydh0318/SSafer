@@ -953,6 +953,33 @@ def test_agent_watch_command_prints_pending_task_count(monkeypatch, tmp_path: Pa
     assert "PATCH_APPLY" in result.output
 
 
+def test_agent_watch_command_prints_patch_apply_step(monkeypatch, tmp_path: Path):
+    async def fake_watch_agent(**kwargs):
+        kwargs["on_event"](
+            "task_step",
+            {
+                "taskId": 10,
+                "taskType": "PATCH_APPLY",
+                "scanId": 2,
+                "message": "validating patch payload",
+            },
+        )
+
+    monkeypatch.setenv("SSAFER_AGENT_ID", "7")
+    monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
+    monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
+
+    assert result.exit_code == 0
+    assert "Agent apply" in result.output
+    assert "taskId=10" in result.output
+    assert "validating patch payload" in result.output
+
+
 def test_agent_watch_command_summarizes_repeated_pending_task_types(monkeypatch, tmp_path: Path):
     tasks = [
         agent.AgentTask(

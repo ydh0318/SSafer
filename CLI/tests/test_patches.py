@@ -374,6 +374,57 @@ def test_apply_command_applies_analysis_result_patch(tmp_path: Path):
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
 
 
+def test_apply_command_allows_stale_hash_when_old_text_is_unique(tmp_path: Path):
+    target = tmp_path / "docker-compose.yml"
+    target.write_text(
+        "services:\n"
+        "  postgres:\n"
+        "    ports:\n"
+        "      - \"5432:5432\"\n"
+        "  redis:\n"
+        "    ports:\n"
+        "      - \"6379:6379\"\n",
+        encoding="utf-8",
+    )
+    expected_hash = hash_file(target)
+    target.write_text(
+        "services:\n"
+        "  postgres:\n"
+        "    ports:\n"
+        "      - \"127.0.0.1:5432:5432\"\n"
+        "  redis:\n"
+        "    ports:\n"
+        "      - \"6379:6379\"\n",
+        encoding="utf-8",
+    )
+    analysis_result = tmp_path / "analysis_result.json"
+    analysis_result.write_text(
+        json.dumps(
+            {
+                "patches": [
+                    {
+                        "patchId": "P2",
+                        "filePath": "docker-compose.yml",
+                        "oldText": "    ports:\n      - \"6379:6379\"",
+                        "newText": "    ports:\n      - \"127.0.0.1:6379:6379\"",
+                        "expectedFileHash": expected_hash,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["apply", "--path", str(tmp_path), "--analysis-result", str(analysis_result), "--yes"],
+    )
+
+    assert result.exit_code == 0
+    assert "SUCCESS" in result.output
+    assert "127.0.0.1:6379:6379" in target.read_text(encoding="utf-8")
+
+
 def test_apply_command_dry_run_does_not_modify_file(tmp_path: Path):
     target = tmp_path / "Dockerfile"
     target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
