@@ -1178,6 +1178,29 @@ def test_select_agent_project_id_creates_project_when_no_projects(monkeypatch, t
     assert project_id == 77
 
 
+def test_select_agent_project_id_can_create_project_from_existing_list(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        auth_module,
+        "list_projects",
+        lambda endpoint, token: [{"projectId": 15, "name": "S14P31B105"}],
+    )
+    answers = iter(["2", "new-project"])
+    monkeypatch.setattr(main_module.typer, "prompt", lambda *args, **kwargs: next(answers))
+
+    def fake_create_project(endpoint: str, access_token: str, *, name: str, **kwargs: object) -> dict[str, int]:
+        assert endpoint == "https://api.example.com"
+        assert access_token == "access-token"
+        assert name == "new-project"
+        return {"projectId": 88}
+
+    monkeypatch.setattr(auth_module, "create_project", fake_create_project)
+
+    project_id = main_module._select_agent_project_id("https://api.example.com", "access-token")
+
+    assert project_id == 88
+
+
 def test_project_create_command_creates_project(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     monkeypatch.setattr(auth_module, "CONFIG_PATH", config_path)

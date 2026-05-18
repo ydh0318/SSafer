@@ -703,6 +703,28 @@ def _issue_and_save_agent_token(
 def _select_agent_project_id(endpoint: str, access_token: str) -> int:
     from ssafer.core.auth import create_project, list_projects
 
+    def create_agent_project() -> int:
+        console.print("[cyan]새 프로젝트 이름을 입력하세요. 그냥 Enter를 누르면 현재 폴더명을 사용합니다.[/cyan]")
+        name = typer.prompt("프로젝트 이름", default=Path.cwd().name)
+        if not name.strip():
+            console.print("[red]프로젝트 이름을 입력해야 합니다.[/red]")
+            raise typer.Exit(code=1)
+        try:
+            project = create_project(endpoint, access_token, name=name.strip())
+        except httpx.HTTPStatusError as exc:
+            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_error(exc)}")
+            raise typer.Exit(code=1) from exc
+        except httpx.HTTPError as exc:
+            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_transport_error(exc)}")
+            raise typer.Exit(code=1) from exc
+        project_id = project.get("projectId") or project.get("id")
+        if project_id is None:
+            console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
+            raise typer.Exit(code=1)
+        console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
+        _print_project_web_link(endpoint, project_id)
+        return int(project_id)
+
     try:
         projects = list_projects(endpoint, access_token)
     except httpx.HTTPStatusError as exc:
@@ -726,26 +748,7 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
                 "[bold]ssafer agent[/bold]를 다시 실행하세요.[/yellow]"
             )
             raise typer.Exit(code=1)
-        console.print("[cyan]새 프로젝트 이름을 입력하세요. 그냥 Enter를 누르면 현재 폴더명을 사용합니다.[/cyan]")
-        name = typer.prompt("프로젝트 이름", default=Path.cwd().name)
-        if not name.strip():
-            console.print("[red]프로젝트 이름을 입력해야 합니다.[/red]")
-            raise typer.Exit(code=1)
-        try:
-            project = create_project(endpoint, access_token, name=name.strip())
-        except httpx.HTTPStatusError as exc:
-            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_error(exc)}")
-            raise typer.Exit(code=1) from exc
-        except httpx.HTTPError as exc:
-            console.print(f"[red]프로젝트 생성 실패:[/red] {_format_http_transport_error(exc)}")
-            raise typer.Exit(code=1) from exc
-        project_id = project.get("projectId") or project.get("id")
-        if project_id is None:
-            console.print("[red]프로젝트 생성 실패:[/red] 백엔드 응답에 projectId가 없습니다.")
-            raise typer.Exit(code=1)
-        console.print(f"[green]프로젝트 생성 완료.[/green] projectId={project_id}")
-        _print_project_web_link(endpoint, project_id)
-        return int(project_id)
+        return create_agent_project()
 
     console.print("[cyan]Local Agent를 연결할 프로젝트를 선택하세요.[/cyan]")
     console.print("[dim]웹에서 이 프로젝트로 보낸 스캔/수정 요청을 현재 PC 또는 서버의 agent가 처리합니다.[/dim]")
@@ -758,6 +761,8 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
         project_id = project.get("projectId") or project.get("id")
         name = project.get("name") or "(unnamed)"
         project_table.add_row(str(index), str(name), str(project_id or "-"))
+    create_index = len(projects) + 1
+    project_table.add_row(str(create_index), "새 프로젝트 만들기", "-")
     console.print(project_table)
 
     while True:
@@ -769,7 +774,9 @@ def _select_agent_project_id(endpoint: str, access_token: str) -> int:
                 project_id = project.get("projectId") or project.get("id")
                 if project_id is not None:
                     return int(project_id)
-        console.print("[red]목록 왼쪽의 선택 번호를 입력해 주세요. 예: 1[/red]")
+            if index == create_index:
+                return create_agent_project()
+        console.print(f"[red]목록 왼쪽의 선택 번호를 입력해 주세요. 예: 1 또는 {create_index}[/red]")
 
 
 def _run_agent_watch(
