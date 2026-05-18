@@ -42,7 +42,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
   void showSessionBar;
 
   useEffect(() => {
-    if (!isMemberSession || isGuestSession || user?.email || user?.name) {
+    if (!isMemberSession || isGuestSession || user?.name) {
       return;
     }
 
@@ -72,7 +72,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
     return () => {
       isMounted = false;
     };
-  }, [isGuestSession, isMemberSession, setUser, user?.email, user?.name, user?.role]);
+  }, [isGuestSession, isMemberSession, setUser, user?.name, user?.role]);
 
   const handleLogout = async () => {
     try {
