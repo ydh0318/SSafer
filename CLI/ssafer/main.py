@@ -945,6 +945,16 @@ def _run_agent_watch(
                 error = str(payload.get("error", "-"))
             console.print(f"[yellow]Agent task 결과 보고 실패.[/yellow] taskId={task_id}, error={error}")
             return
+        if event_type == "task_step":
+            task_id = "-"
+            scan_id = "-"
+            message = "-"
+            if isinstance(payload, dict):
+                task_id = str(payload.get("taskId", "-"))
+                scan_id = str(payload.get("scanId", "-"))
+                message = str(payload.get("message", "-"))
+            console.print(f"[cyan]Agent scan 진행 중[/cyan] taskId={task_id}, scanId={scan_id}: {message}")
+            return
         if isinstance(payload, AgentTaskResult):
             _print_agent_task_result(payload)
 
@@ -2351,8 +2361,10 @@ def _upload_server_audit_or_exit(path: Path, api_url: str | None, on_step=None) 
     effective_url = api_url or project_config.upload.endpoint or load_endpoint()
     if token is None:
         console.print(
-            "[yellow]?氇勳瑔 ?膦応矙???雴侂捒?雿堧枎. 鐧掛嚤? [bold]ssafer login[/bold]???銋诫痪?靹嶊祬??n"
-            "  ?靹嶊紞韫偮€??SSAFER_TOKEN???銋检牂?靹応江??[/yellow]"
+            "[yellow]\uc11c\ubc84 \uc810\uac80 \uacb0\uacfc\ub97c \uc5c5\ub85c\ub4dc\ud558\ub824\uba74 \ub85c\uadf8\uc778\uc774 \ud544\uc694\ud569\ub2c8\ub2e4. "
+            "\uba3c\uc800 [bold]ssafer login[/bold]\uc744 \uc2e4\ud589\ud558\uc138\uc694.\n"
+            "  \uac8c\uc2a4\ud2b8 \uc138\uc158\uc744 \uc0ac\uc6a9\ud55c\ub2e4\uba74 [bold]ssafer login --guest-token <token>[/bold]\uc744 \uc2e4\ud589\ud558\uc138\uc694.\n"
+            "  \ub610\ub294 \ud658\uacbd\ubcc0\uc218 SSAFER_TOKEN\uc744 \uc124\uc815\ud558\uc138\uc694.[/yellow]"
         )
         raise typer.Exit(code=1)
     try:
