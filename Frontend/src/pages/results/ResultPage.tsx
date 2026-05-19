@@ -596,37 +596,60 @@ function ResultPage() {
             ) : groupedFindings.length === 0 ? (
               <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">조건에 맞는 탐지 항목이 없습니다.</div>
             ) : (
-              groupedFindings.map((group) => (
-                <section className="border border-neutral-200 bg-white" key={group.severity}>
-                  <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="px-2 py-1 text-[10px] font-bold tracking-[0.22em]"
-                        style={{ background: severityMeta[group.severity].bg, color: severityMeta[group.severity].fg }}
-                      >
-                        {group.severity}
-                      </span>
-                      <span className="text-sm font-bold">{group.severity} 그룹 · {group.items.length}건</span>
-                    </div>
-                    <span className="text-xs text-neutral-500">위험도가 높은 항목부터 먼저 확인해 보세요.</span>
-                  </div>
+              groupedFindings.map((group) => {
+                const severityGroupKey = `severity:${group.severity}`;
+                const shouldCollapseSeverity = group.items.length > 1;
+                const severityExpanded = !shouldCollapseSeverity || expandedFindingGroups.has(severityGroupKey);
+                const shouldGroupByTitle = group.titleGroups.length > 1;
 
-                  {group.titleGroups.map((titleGroup) => {
-                    const groupKey = `${group.severity}:${titleGroup.title}`;
-                    const hasMultiple = titleGroup.items.length > 1;
-                    const expanded = expandedFindingGroups.has(groupKey);
-                    const visibleItems = hasMultiple && !expanded ? [] : titleGroup.items;
+                return (
+                  <section className="border border-neutral-200 bg-white" key={group.severity}>
+                    <button
+                      aria-expanded={severityExpanded}
+                      className={`flex w-full items-center justify-between border-b border-neutral-100 px-5 py-4 text-left ${
+                        shouldCollapseSeverity ? 'transition hover:bg-neutral-50' : 'cursor-default'
+                      }`}
+                      disabled={!shouldCollapseSeverity}
+                      onClick={() => {
+                        if (shouldCollapseSeverity) {
+                          toggleFindingGroup(severityGroupKey);
+                        }
+                      }}
+                      type="button"
+                    >
+                      <div className="flex items-center gap-3">
+                        {shouldCollapseSeverity ? (
+                          <ChevronDown className={`h-4 w-4 shrink-0 text-neutral-500 transition ${severityExpanded ? 'rotate-180' : ''}`} />
+                        ) : null}
+                        <span
+                          className="px-2 py-1 text-[10px] font-bold tracking-[0.22em]"
+                          style={{ background: severityMeta[group.severity].bg, color: severityMeta[group.severity].fg }}
+                        >
+                          {group.severity}
+                        </span>
+                        <span className="text-sm font-bold">{group.severity} · {group.items.length}건</span>
+                      </div>
+                      <span className="text-xs text-neutral-500">
+                        {shouldCollapseSeverity ? (severityExpanded ? '접기' : '펼쳐보기') : '위험도가 높은 항목부터 확인해 보세요.'}
+                      </span>
+                    </button>
+
+                    {severityExpanded ? group.titleGroups.map((titleGroup) => {
+                      const groupKey = `${group.severity}:${titleGroup.title}`;
+                      const shouldCollapseTitle = shouldGroupByTitle && titleGroup.items.length > 1;
+                      const titleExpanded = !shouldCollapseTitle || expandedFindingGroups.has(groupKey);
+                      const visibleItems = titleExpanded ? titleGroup.items : [];
 
                     return (
                       <div className="border-b border-neutral-100 last:border-b-0" key={groupKey}>
-                        {hasMultiple ? (
+                        {shouldCollapseTitle ? (
                           <button
-                            aria-expanded={expanded}
+                            aria-expanded={titleExpanded}
                             className="flex w-full items-center gap-4 bg-neutral-50 px-5 py-4 text-left transition hover:bg-neutral-100"
                             onClick={() => toggleFindingGroup(groupKey)}
                             type="button"
                           >
-                            <ChevronDown className={`h-4 w-4 shrink-0 text-neutral-500 transition ${expanded ? 'rotate-180' : ''}`} />
+                            <ChevronDown className={`h-4 w-4 shrink-0 text-neutral-500 transition ${titleExpanded ? 'rotate-180' : ''}`} />
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="rounded-full bg-black px-2.5 py-1 text-xs font-black text-white">동일 유형 {titleGroup.items.length}건</span>
@@ -637,7 +660,7 @@ function ResultPage() {
                               <div className="mt-2 truncate text-base font-black text-black">{titleGroup.title}</div>
                             </div>
                             <span className="hidden text-xs font-bold text-neutral-500 sm:inline">
-                              {expanded ? '접기' : '펼쳐보기'}
+                              {titleExpanded ? '접기' : '펼쳐보기'}
                             </span>
                           </button>
                         ) : null}
@@ -740,9 +763,10 @@ function ResultPage() {
                         })}
                       </div>
                     );
-                  })}
-                </section>
-              ))
+                    }) : null}
+                  </section>
+                );
+              })
             )}
           </div>
 
