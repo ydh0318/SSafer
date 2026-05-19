@@ -414,19 +414,22 @@ function DashboardPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="overflow-hidden border border-neutral-200 bg-white landing-card-radius">
-          <div className="flex flex-col gap-4 border-b border-neutral-200 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
-            <h2 className="shrink-0 whitespace-nowrap text-2xl font-black tracking-tight md:text-3xl">프로젝트별 스캔 현황</h2>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-4 border-b border-neutral-200 px-6 py-5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="shrink-0">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">PROJECT SCANS</p>
+              <h2 className="mt-1 whitespace-nowrap text-2xl font-black tracking-tight md:text-3xl">프로젝트별 최신 스캔</h2>
+            </div>
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center xl:flex-nowrap">
               <label className="relative min-w-0 flex-1 sm:flex-none">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
                 <input
-                  className="w-full border border-neutral-200 py-2 pl-8 pr-3 text-sm sm:w-56 landing-inner-radius"
+                  className="w-full border border-neutral-200 py-2 pl-8 pr-3 text-sm sm:w-72 landing-inner-radius"
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="프로젝트 이름 또는 scanId"
                   value={searchTerm}
                 />
               </label>
-              <label className="inline-flex items-center gap-2 border border-neutral-200 px-3 py-2 text-sm text-neutral-700 landing-inner-radius">
+              <label className="inline-flex items-center gap-2 border border-neutral-200 px-3 py-2 text-sm text-neutral-700 sm:w-44 landing-inner-radius">
                 <Filter className="h-3.5 w-3.5" />
                 <select
                   className="bg-transparent outline-none"

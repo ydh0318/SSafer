@@ -606,7 +606,7 @@ function ResultPage() {
                       >
                         {group.severity}
                       </span>
-                      <span className="text-sm font-bold">{group.items.length}건</span>
+                      <span className="text-sm font-bold">{group.severity} 그룹 · {group.items.length}건</span>
                     </div>
                     <span className="text-xs text-neutral-500">위험도가 높은 항목부터 먼저 확인해 보세요.</span>
                   </div>
@@ -629,7 +629,7 @@ function ResultPage() {
                             <ChevronDown className={`h-4 w-4 shrink-0 text-neutral-500 transition ${expanded ? 'rotate-180' : ''}`} />
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full bg-black px-2.5 py-1 text-xs font-black text-white">{titleGroup.items.length}건</span>
+                                <span className="rounded-full bg-black px-2.5 py-1 text-xs font-black text-white">동일 유형 {titleGroup.items.length}건</span>
                                 <span className="font-mono text-[11px] text-neutral-500">
                                   findingId #{titleGroup.items.map((item) => item.findingId).join(', #')}
                                 </span>
