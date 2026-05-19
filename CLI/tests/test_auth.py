@@ -119,6 +119,7 @@ def test_help_shows_user_facing_commands_only():
     assert "로컬 점검" in result.output
     assert "수정 적용" in result.output
     assert "로컬 Agent" in result.output
+    assert "guide" in result.output
     assert "status" in result.output
     assert "login" in result.output
     assert "guest" in result.output
@@ -147,6 +148,21 @@ def test_help_shows_user_facing_commands_only():
     assert "verify-email" not in result.output
     assert "install-completion" not in result.output
     assert "show-completion" not in result.output
+
+
+def test_guide_command_prints_quick_start_flow():
+    result = CliRunner().invoke(app, ["guide"])
+
+    assert result.exit_code == 0
+    assert "SSAfer CLI 빠른 시작" in result.output
+    assert "pip install ssafer" in result.output
+    assert "ssafer signup" in result.output
+    assert "ssafer run --upload" in result.output
+    assert "ssafer apply" in result.output
+    assert "ssafer server --upload" in result.output
+    assert "ssafer agent" in result.output
+    assert "pip uninstall ssafer" in result.output
+    assert "AquaSecurity.Trivy" in result.output
 
 
 def test_status_command_prints_saved_login_and_agent_config(monkeypatch, tmp_path):
