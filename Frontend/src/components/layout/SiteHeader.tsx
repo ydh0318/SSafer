@@ -20,6 +20,7 @@ import ThemeToggleButton from '../common/ThemeToggleButton';
 
 type SiteHeaderProps = {
   showSessionBar?: boolean;
+  variant?: 'default' | 'transparent';
 };
 
 function getProfileInitial(name?: string, email?: string, fallback = 'U') {
@@ -27,7 +28,8 @@ function getProfileInitial(name?: string, email?: string, fallback = 'U') {
   return source.toUpperCase();
 }
 
-function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
+function SiteHeader({ showSessionBar = true, variant = 'default' }: SiteHeaderProps) {
+  const isTransparent = variant === 'transparent';
   const location = useLocation();
   const navigate = useNavigate();
   const refreshToken = useAuthStore((state) => state.refreshToken);
@@ -127,16 +129,32 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
 
   const linkClass = (active: boolean) =>
     `site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 font-bold tracking-wide transition lg:h-auto lg:w-auto lg:gap-2 lg:rounded-sm lg:px-4 lg:py-2 ${
-      active ? 'bg-black text-white' : 'text-neutral-600 hover:text-black'
+      active
+        ? isTransparent
+          ? 'bg-white text-black'
+          : 'bg-black text-white'
+        : isTransparent
+          ? 'text-white/85 hover:text-white'
+          : 'text-neutral-600 hover:text-black'
     }`;
 
+  const headerShellClass = isTransparent
+    ? 'site-header-shell site-app-header-shell'
+    : 'site-header-shell site-app-header-shell theme-surface-header border-b border-neutral-200 bg-[#FAFAFA]/95 backdrop-blur';
+
   return (
-    <header className="site-header-shell site-app-header-shell theme-surface-header border-b border-neutral-200 bg-[#FAFAFA]/95 backdrop-blur">
+    <header className={headerShellClass}>
       <div className="site-header-inner mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <AppBrand
           className="shrink-0"
+          linkClassName={isTransparent ? 'text-white' : 'text-black'}
+          subtitleClassName={
+            isTransparent
+              ? 'block text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60'
+              : undefined
+          }
           textClassName="hidden lg:block"
-          titleClassName="text-lg font-black tracking-tight text-black"
+          titleClassName={`text-lg font-black tracking-tight ${isTransparent ? 'text-white' : 'text-black'}`}
           to={ROUTES.landing}
         />
 
@@ -157,13 +175,15 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
             <span className="site-header-link-label hidden lg:inline">모니터링</span>
           </Link>
 
-          <ThemeToggleButton />
+          <ThemeToggleButton className={isTransparent ? 'text-white/85 hover:text-white' : ''} />
 
           {isMemberSession ? (
             <>
               <button
                 aria-label="설정"
-                className="site-header-link inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-sm font-black text-white transition hover:opacity-85"
+                className={`site-header-link inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black transition hover:opacity-85 ${
+                  isTransparent ? 'bg-white text-black' : 'bg-black text-white'
+                }`}
                 onClick={() => navigate(ROUTES.settings)}
                 type="button"
               >
@@ -172,7 +192,9 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
 
               <button
                 aria-label="로그아웃"
-                className="site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
+                className={`site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 transition ${
+                  isTransparent ? 'text-white/85 hover:text-white' : 'text-neutral-600 hover:text-black'
+                }`}
                 onClick={() => void handleLogout()}
                 type="button"
               >
@@ -183,7 +205,9 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
             <>
               <button
                 aria-label="게스트 설정"
-                className="site-header-link inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-[11px] font-black uppercase tracking-[0.14em] text-white transition hover:opacity-85"
+                className={`site-header-link inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-black uppercase tracking-[0.14em] transition hover:opacity-85 ${
+                  isTransparent ? 'bg-white text-black' : 'bg-black text-white'
+                }`}
                 onClick={() => navigate(ROUTES.settings)}
                 type="button"
               >
@@ -192,7 +216,9 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
 
               <button
                 aria-label="게스트 로그아웃"
-                className="site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 text-neutral-600 transition hover:text-black"
+                className={`site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 transition ${
+                  isTransparent ? 'text-white/85 hover:text-white' : 'text-neutral-600 hover:text-black'
+                }`}
                 onClick={() => void handleLogout()}
                 type="button"
               >
@@ -201,7 +227,9 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
             </>
           ) : (
             <button
-              className="site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 font-bold tracking-wide text-black transition hover:opacity-70 lg:h-auto lg:w-auto lg:gap-2 lg:rounded-sm lg:px-4 lg:py-2"
+              className={`site-header-link inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 font-bold tracking-wide transition hover:opacity-70 lg:h-auto lg:w-auto lg:gap-2 lg:rounded-sm lg:px-4 lg:py-2 ${
+                isTransparent ? 'text-white' : 'text-black'
+              }`}
               onClick={() => navigate(ROUTES.welcome)}
               type="button"
             >

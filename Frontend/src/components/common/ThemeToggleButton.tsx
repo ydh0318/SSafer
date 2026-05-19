@@ -14,10 +14,12 @@ function ThemeToggleButton({ className = '' }: ThemeToggleButtonProps) {
   const Icon = isLight ? Moon : Sun;
   const label = isLight ? '다크모드' : '라이트모드';
 
+  const toneClass = className ? className : 'text-neutral-700 hover:text-black';
+
   return (
     <button
       aria-label={label}
-      className={`site-header-link theme-toggle-button inline-flex items-center justify-center px-3 py-2 text-neutral-700 transition hover:text-black ${className}`.trim()}
+      className={`site-header-link theme-toggle-button inline-flex items-center justify-center px-3 py-2 transition ${toneClass}`.trim()}
       onClick={toggleTheme}
       type="button"
     >
