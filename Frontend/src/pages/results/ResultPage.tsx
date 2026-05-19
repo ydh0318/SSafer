@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, GitBranch, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, GitBranch, RefreshCw, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
@@ -583,6 +583,18 @@ function ResultPage() {
                               ) : null}
                             </div>
                           </Link>
+                          {currentScanType !== 'SERVER_AUDIT' ? (
+                            <div className="flex shrink-0 items-center border-l border-neutral-100 px-4">
+                              <Link
+                                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:bg-black hover:text-white"
+                                state={{ ...routeState, initialView: 'apply' }}
+                                to={findingUrl}
+                              >
+                                <Wrench className="h-3.5 w-3.5" />
+                                고치기
+                              </Link>
+                            </div>
+                          ) : null}
                         </div>
                       );
                     }

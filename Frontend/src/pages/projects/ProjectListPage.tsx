@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, ChevronDown, Clock, FolderPlus, Plus, ScanSearch, Search, Trash2, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ChevronDown, Clock, FolderPlus, ScanSearch, Search, Trash2, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -584,7 +584,21 @@ function ProjectListPage() {
       </header>
 
       <section className="space-y-3 pt-6">
-        <div className="text-sm text-neutral-500">프로젝트</div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-neutral-500">프로젝트</div>
+          <button
+            className="inline-flex items-center gap-2 rounded-full bg-black px-4 py-2 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800"
+            onClick={() => {
+              setIsProjectDropdownOpen(false);
+              setProjectSearchTerm('');
+              setIsCreateOpen(true);
+            }}
+            type="button"
+          >
+            <FolderPlus className="h-4 w-4" />
+            새 프로젝트 만들기
+          </button>
+        </div>
 
         {isLoading ? (
           <div className="bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">프로젝트 목록을 불러오는 중입니다.</div>
@@ -671,19 +685,6 @@ function ProjectListPage() {
                     <div className="px-3 py-5 text-center text-sm text-neutral-500">검색 결과가 없습니다.</div>
                   )}
                 </div>
-
-                <button
-                  className="flex w-full items-center gap-2 border-t border-dashed border-neutral-200 px-4 py-3 text-sm font-black text-black transition hover:bg-[#F8FFE8]"
-                  onClick={() => {
-                    setIsProjectDropdownOpen(false);
-                    setProjectSearchTerm('');
-                    setIsCreateOpen(true);
-                  }}
-                  type="button"
-                >
-                  <Plus className="h-4 w-4" />
-                  새 프로젝트 만들기
-                </button>
               </div>
             ) : null}
           </div>
@@ -970,13 +971,6 @@ function ProjectListPage() {
         />
       ) : null}
 
-      <button
-        className="fixed bottom-6 right-6 z-20 inline-flex items-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-bold text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-[#111111]"
-        onClick={() => setIsCreateOpen(true)}
-        type="button"
-      >
-        <FolderPlus className="h-4 w-4" /> 새 프로젝트 만들기
-      </button>
     </section>
   );
 }
