@@ -339,6 +339,7 @@ function ProjectDetailPage() {
           }
         }}
         onStartScan={handleStartNewScan}
+        projectId={projectId}
         projectName={projectDetail?.name ?? null}
       />
 

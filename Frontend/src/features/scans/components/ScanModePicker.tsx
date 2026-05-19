@@ -73,7 +73,7 @@ function ScanModePicker({ selectedMode, onSelect, isAgentAvailable }: ScanModePi
               aria-pressed={isSelected}
               className={`group relative flex min-h-[240px] flex-col overflow-hidden border p-6 text-left transition-all duration-300 ease-out landing-card-radius ${
                 isDisabled
-                  ? 'cursor-not-allowed border-neutral-200/80 bg-white opacity-50'
+                  ? 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-400 opacity-35 grayscale'
                   : isSelected
                     ? 'border-[#0F0F0F] bg-[#0F0F0F] text-white shadow-[0_24px_50px_rgba(15,23,42,0.18)]'
                     : 'border-neutral-200/80 bg-white hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-[0_14px_32px_rgba(15,23,42,0.06)]'
@@ -86,7 +86,7 @@ function ScanModePicker({ selectedMode, onSelect, isAgentAvailable }: ScanModePi
             >
               <div
                 className={`inline-flex h-10 w-10 items-center justify-center transition-colors duration-300 landing-inner-radius ${
-                  isSelected ? 'bg-[#D4FC64]' : 'bg-[#F5F4EF]'
+                  isDisabled ? 'bg-neutral-200' : isSelected ? 'bg-[#D4FC64]' : 'bg-[#F5F4EF]'
                 }`}
               >
                 <Icon
@@ -98,14 +98,14 @@ function ScanModePicker({ selectedMode, onSelect, isAgentAvailable }: ScanModePi
 
               <h3
                 className={`mt-7 text-xl font-black tracking-tight transition-colors duration-300 ${
-                  isSelected ? 'text-white' : 'text-[#0F0F0F]'
+                  isDisabled ? 'text-neutral-500' : isSelected ? 'text-white' : 'text-[#0F0F0F]'
                 }`}
               >
                 {mode.title}
               </h3>
               <p
                 className={`mt-2 text-sm leading-relaxed transition-colors duration-300 ${
-                  isSelected ? 'text-white/60' : 'text-neutral-500'
+                  isDisabled ? 'text-neutral-500' : isSelected ? 'text-white/60' : 'text-neutral-500'
                 }`}
               >
                 {isDisabled ? '이 프로젝트에서는 사용 불가' : mode.description}
