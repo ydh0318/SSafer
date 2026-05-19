@@ -71,17 +71,24 @@ function formatFindingLocation(finding: ScanFindingListItemData) {
   return target;
 }
 
+function getFindingTitleGroupKey(title: string) {
+  return (title.trim() || '제목 없는 취약점')
+    .replace(/포트\(\d+\)/g, '포트(*)')
+    .replace(/\(\d+\)/g, '(*)')
+    .replace(/\b\d{2,5}\b/g, '*');
+}
+
 function groupFindingsByTitle(findings: ScanFindingListItemData[]) {
-  const groups = new Map<string, ScanFindingListItemData[]>();
+  const groups = new Map<string, { title: string; items: ScanFindingListItemData[] }>();
 
   findings.forEach((finding) => {
-    const key = finding.title.trim() || `finding-${finding.findingId}`;
-    const items = groups.get(key) ?? [];
-    items.push(finding);
-    groups.set(key, items);
+    const key = getFindingTitleGroupKey(finding.title);
+    const group = groups.get(key) ?? { title: key, items: [] };
+    group.items.push(finding);
+    groups.set(key, group);
   });
 
-  return Array.from(groups.entries()).map(([title, items]) => ({ title, items }));
+  return Array.from(groups.values());
 }
 
 function ResultPage() {
@@ -699,21 +706,24 @@ function ResultPage() {
                                 </div>
                               </Link>
                               <div className="flex shrink-0 flex-col items-center justify-center gap-2 border-l border-neutral-100 px-4">
-                                <select
-                                  className="w-28 rounded-full border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-700 disabled:cursor-wait disabled:opacity-50"
-                                  disabled={updatingStatusFindingIds.includes(finding.findingId)}
-                                  onChange={(event) => {
-                                    void handleResolutionStatusChange(finding, event.target.value as FindingResolutionStatus);
-                                  }}
-                                  onClick={(event) => event.stopPropagation()}
-                                  value={finding.resolutionStatus}
-                                >
-                                  {resolutionValues.map((value) => (
-                                    <option key={value} value={value}>
-                                      {resolutionMeta[value].label}
-                                    </option>
-                                  ))}
-                                </select>
+                                <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">
+                                  상태
+                                  <select
+                                    className="w-28 rounded-full border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold normal-case tracking-normal text-neutral-700 disabled:cursor-wait disabled:opacity-50"
+                                    disabled={updatingStatusFindingIds.includes(finding.findingId)}
+                                    onChange={(event) => {
+                                      void handleResolutionStatusChange(finding, event.target.value as FindingResolutionStatus);
+                                    }}
+                                    onClick={(event) => event.stopPropagation()}
+                                    value={finding.resolutionStatus}
+                                  >
+                                    {resolutionValues.map((value) => (
+                                      <option key={value} value={value}>
+                                        {resolutionMeta[value].label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
                                 {hasApplicablePatch ? (
                                   <Link
                                     className="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:bg-black hover:text-white"

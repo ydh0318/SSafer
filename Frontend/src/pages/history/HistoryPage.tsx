@@ -120,18 +120,20 @@ function HistoryPage() {
     () => {
       const projects = new Map<number, string>();
 
-      Object.entries(projectNameMap).forEach(([projectId, projectName]) => {
-        projects.set(Number(projectId), projectName);
+      historyData.items.forEach((item) => {
+        projects.set(item.projectId, projectNameMap[item.projectId] ?? `프로젝트 ${item.projectId}`);
       });
 
-      historyData.items.forEach((item) => {
-        if (!projects.has(item.projectId)) {
-          projects.set(item.projectId, `프로젝트 ${item.projectId}`);
-        }
-      });
+      const nameCounts = Array.from(projects.values()).reduce<Record<string, number>>((accumulator, projectName) => {
+        accumulator[projectName] = (accumulator[projectName] ?? 0) + 1;
+        return accumulator;
+      }, {});
 
       return Array.from(projects.entries())
-        .map(([projectId, projectName]) => ({ projectId: String(projectId), projectName }))
+        .map(([projectId, projectName]) => ({
+          projectId: String(projectId),
+          projectName: nameCounts[projectName] > 1 ? `${projectName} (#${projectId})` : projectName,
+        }))
         .sort((left, right) => left.projectName.localeCompare(right.projectName));
     },
     [historyData.items, projectNameMap],
