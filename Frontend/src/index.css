@@ -714,3 +714,72 @@ html.theme-dark .theme-cli-modal .hover\:border-neutral-300:hover {
 html.theme-dark .theme-cli-scroll {
   scrollbar-color: rgba(90, 90, 90, 0.6) transparent;
 }
+
+/* ── Dark mode readability fixes for bright utility cards ── */
+html.theme-dark .bg-\[\#F5F4EF\] {
+  background: #242424 !important;
+}
+
+html.theme-dark .bg-\[\#FFF9DB\] {
+  background: #2d260f !important;
+  border-color: #8a6d1d !important;
+  color: #fef3c7 !important;
+}
+
+html.theme-dark .bg-\[\#FFF9DB\] p,
+html.theme-dark .bg-\[\#FFF9DB\] div,
+html.theme-dark .bg-\[\#FFF9DB\] span,
+html.theme-dark .bg-\[\#FFF9DB\] h1,
+html.theme-dark .bg-\[\#FFF9DB\] h2,
+html.theme-dark .bg-\[\#FFF9DB\] h3,
+html.theme-dark .bg-\[\#FFF9DB\] h4,
+html.theme-dark .bg-\[\#FFF9DB\] .text-neutral-400,
+html.theme-dark .bg-\[\#FFF9DB\] .text-neutral-500,
+html.theme-dark .bg-\[\#FFF9DB\] .text-neutral-600,
+html.theme-dark .bg-\[\#FFF9DB\] .text-neutral-700,
+html.theme-dark .bg-\[\#FFF9DB\] .text-neutral-800,
+html.theme-dark .bg-\[\#FFF9DB\] .text-white {
+  color: #fef3c7 !important;
+}
+
+html.theme-dark .bg-\[\#EDFFC0\] p,
+html.theme-dark .bg-\[\#EDFFC0\] div,
+html.theme-dark .bg-\[\#EDFFC0\] span,
+html.theme-dark .bg-\[\#EDFFC0\] h1,
+html.theme-dark .bg-\[\#EDFFC0\] h2,
+html.theme-dark .bg-\[\#EDFFC0\] h3,
+html.theme-dark .bg-\[\#EDFFC0\] h4,
+html.theme-dark .bg-\[\#EDFFC0\] .text-neutral-400,
+html.theme-dark .bg-\[\#EDFFC0\] .text-neutral-500,
+html.theme-dark .bg-\[\#EDFFC0\] .text-neutral-600,
+html.theme-dark .bg-\[\#EDFFC0\] .text-neutral-700,
+html.theme-dark .bg-\[\#EDFFC0\] .text-neutral-800,
+html.theme-dark .bg-\[\#EDFFC0\] .text-white,
+html.theme-dark .bg-\[\#F4FFD9\] p,
+html.theme-dark .bg-\[\#F4FFD9\] div,
+html.theme-dark .bg-\[\#F4FFD9\] span,
+html.theme-dark .bg-\[\#F4FFD9\] h1,
+html.theme-dark .bg-\[\#F4FFD9\] h2,
+html.theme-dark .bg-\[\#F4FFD9\] h3,
+html.theme-dark .bg-\[\#F4FFD9\] h4,
+html.theme-dark .bg-\[\#F4FFD9\] .text-neutral-400,
+html.theme-dark .bg-\[\#F4FFD9\] .text-neutral-500,
+html.theme-dark .bg-\[\#F4FFD9\] .text-neutral-600,
+html.theme-dark .bg-\[\#F4FFD9\] .text-neutral-700,
+html.theme-dark .bg-\[\#F4FFD9\] .text-neutral-800,
+html.theme-dark .bg-\[\#F4FFD9\] .text-white,
+html.theme-dark .bg-\[\#E2F9A0\] p,
+html.theme-dark .bg-\[\#E2F9A0\] div,
+html.theme-dark .bg-\[\#E2F9A0\] span,
+html.theme-dark .bg-\[\#E2F9A0\] h1,
+html.theme-dark .bg-\[\#E2F9A0\] h2,
+html.theme-dark .bg-\[\#E2F9A0\] h3,
+html.theme-dark .bg-\[\#E2F9A0\] h4,
+html.theme-dark .bg-\[\#E2F9A0\] .text-neutral-400,
+html.theme-dark .bg-\[\#E2F9A0\] .text-neutral-500,
+html.theme-dark .bg-\[\#E2F9A0\] .text-neutral-600,
+html.theme-dark .bg-\[\#E2F9A0\] .text-neutral-700,
+html.theme-dark .bg-\[\#E2F9A0\] .text-neutral-800,
+html.theme-dark .bg-\[\#E2F9A0\] .text-white {
+  color: #111111 !important;
+}
