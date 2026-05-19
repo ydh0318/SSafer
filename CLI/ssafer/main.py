@@ -480,7 +480,7 @@ def apply_fix(
         if not selected:
             raise PatchError(f"patchId를 찾지 못했습니다: {patch_id}")
 
-        selected = _select_patch_candidates(selected, patch_id=patch_id, yes=yes)
+        selected = _select_patch_candidates(selected, project_root=project_root, patch_id=patch_id, yes=yes)
         _print_patch_preview(selected)
 
         if not dry_run and not yes:
@@ -1214,25 +1214,28 @@ def _format_agent_task_message(result: "AgentTaskResult") -> str:
 def _select_patch_candidates(
     candidates: list["PatchCandidate"],
     *,
+    project_root: Path,
     patch_id: str | None,
     yes: bool,
 ) -> list["PatchCandidate"]:
     table = Table(title="Applicable patch candidates")
     table.add_column("No.", justify="right")
-    table.add_column("Patch ID")
     table.add_column("Finding ID")
     table.add_column("File", overflow="fold")
+    table.add_column("Line", justify="right")
+    table.add_column("Change", overflow="fold")
     table.add_column("Operation")
     for index, candidate in enumerate(candidates, start=1):
         table.add_row(
             str(index),
-            candidate.patch_id,
             candidate.finding_id or "-",
             candidate.file_path,
+            _find_patch_candidate_line(project_root, candidate),
+            _format_patch_candidate_change(candidate),
             candidate.operation,
         )
     if len(candidates) > 1 and patch_id is None:
-        table.add_row(str(len(candidates) + 1), "ALL", "-", "Apply all patch candidates", "-")
+        table.add_row(str(len(candidates) + 1), "-", "Apply all patch candidates", "-", "-", "-")
     console.print(table)
 
     if patch_id is not None or yes or len(candidates) == 1:
@@ -1249,6 +1252,45 @@ def _select_patch_candidates(
     if selected < 1 or selected > len(candidates):
         raise PatchError(f"Patch selection is out of range: {selected}")
     return [candidates[selected - 1]]
+
+
+def _find_patch_candidate_line(project_root: Path, candidate: "PatchCandidate") -> str:
+    if candidate.operation == "append":
+        return "EOF"
+    if not candidate.old_text:
+        return "-"
+
+    try:
+        root = project_root.resolve()
+        target = (root / candidate.file_path).resolve()
+        target.relative_to(root)
+        content = target.read_text(encoding="utf-8")
+    except (OSError, ValueError, UnicodeDecodeError):
+        return "-"
+
+    index = content.find(candidate.old_text)
+    if index < 0:
+        return "-"
+    return str(content.count("\n", 0, index) + 1)
+
+
+def _format_patch_candidate_change(candidate: "PatchCandidate") -> str:
+    if candidate.operation == "append":
+        return f"+ {_first_patch_line(candidate.new_text)}"
+    if candidate.old_text is None:
+        return f"+ {_first_patch_line(candidate.new_text)}"
+    return f"- {_first_patch_line(candidate.old_text)}\n+ {_first_patch_line(candidate.new_text)}"
+
+
+def _first_patch_line(value: str, *, max_length: int = 90) -> str:
+    compact = " ".join(line.strip() for line in value.splitlines() if line.strip())
+    if not compact:
+        compact = value.strip().replace("\n", " ")
+    if not compact:
+        return ""
+    if len(compact) <= max_length:
+        return compact
+    return compact[: max_length - 3] + "..."
 
 
 def _print_patch_preview(candidates: list["PatchCandidate"]) -> None:

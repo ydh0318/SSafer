@@ -833,8 +833,11 @@ def test_apply_command_uses_explicit_analysis_result_and_interactive_selection(t
 
     assert result.exit_code == 0
     assert "analysis_result.json" in result.output
-    assert "P1" in result.output
+    assert "Line" in result.output
+    assert "FND-0001" in result.output
     assert "P2" in result.output
+    assert "- TOKEN=secret" in result.output
+    assert "+ TOKEN=your_token_here" in result.output
     assert first.read_text(encoding="utf-8") == "USER root\n"
     assert second.read_text(encoding="utf-8") == "TOKEN=your_token_here\n"
 
