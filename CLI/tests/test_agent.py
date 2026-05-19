@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from ssafer.core import agent
 from ssafer.core.hashing import hash_file
+from ssafer.core.patches import PatchApplyResult
 from ssafer.main import app
 from ssafer.server.audit import ServerAuditResult
 
@@ -1039,6 +1040,42 @@ def test_agent_watch_command_prints_dry_run_and_task_result_table(monkeypatch, t
     assert "Agent task #10 result" in result.output
     assert "PATCH_APPLY" in result.output
     assert "DRY_RUN" in result.output
+
+
+def test_agent_watch_command_prints_patch_apply_completion_summary(monkeypatch, tmp_path: Path):
+    async def fake_watch_agent(**kwargs):
+        kwargs["on_event"](
+            "task",
+            agent.AgentTaskResult(
+                task_id=10,
+                task_type="PATCH_APPLY",
+                status="SUCCESS",
+                message="Applied 1 patch candidate(s).",
+                patch_results=[
+                    PatchApplyResult(
+                        patch_id="PATCH-FND-0001",
+                        finding_id="FND-0001",
+                        file_path="docker-compose.yml",
+                        status="SUCCESS",
+                        message="Patch applied successfully.",
+                    )
+                ],
+            ),
+        )
+
+    monkeypatch.setenv("SSAFER_AGENT_ID", "7")
+    monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
+    monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
+
+    assert result.exit_code == 0
+    assert "PATCH_APPLY" in result.output
+    assert "패치 적용 완료" in result.output
+    assert "applied=1" in result.output
 
 
 def test_agent_watch_command_summarizes_scan_request_raw_results_conflict(monkeypatch, tmp_path: Path):
