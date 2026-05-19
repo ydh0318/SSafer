@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -11,10 +12,13 @@ import { getHistoryScans } from '../../features/history/api/history';
 import AppleHeroSection from '../../features/home/components/AppleHeroSection';
 import LandingEntryModal from '../../features/home/components/LandingEntryModal';
 import LoopingNumberTicker from '../../features/home/components/LoopingNumberTicker';
+import ElevatorSection from '../../features/home/components/sections/ElevatorSection';
 import FinalCtaCard from '../../features/home/components/sections/FinalCtaCard';
+import FloorsSection from '../../features/home/components/sections/FloorsSection';
 import HowItWorksSection from '../../features/home/components/sections/HowItWorksSection';
 import MeetSsaferGrid from '../../features/home/components/sections/MeetSsaferGrid';
 import WhySsaferSection from '../../features/home/components/sections/WhySsaferSection';
+import { useForceLightTheme } from '../../features/home/hooks/useForceLightTheme';
 import { useEasterEggStore } from '../../store/easterEggStore';
 
 const landingStyle = {
@@ -37,6 +41,8 @@ const initialStats: LandingStats = {
 };
 
 function LandingPage() {
+  useForceLightTheme();
+
   const navigate = useNavigate();
   const [stats, setStats] = useState<LandingStats>(initialStats);
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
@@ -114,38 +120,84 @@ function LandingPage() {
   return (
     <>
       {/* 최상단 — LandingPage2의 Section 1 (사과) 복제 */}
-      <AppleHeroSection />
+      <AppleHeroSection bottomFadeColor="#FAFAF7" />
 
       <div className="site-shell-with-nav theme-landing-page min-h-screen bg-[#FAFAF7] text-black" style={landingStyle}>
         <main className="site-shell-main min-w-0 flex-1 bg-[#FAFAF7]">
         {/* ---------- HERO (고정) ---------- */}
         <section>
           <div className="mx-auto max-w-[1160px] px-5 pb-14 pt-8 md:px-7 md:pb-16 md:pt-11">
-            <div className="text-[10px] font-mono tracking-[0.42em] text-neutral-400">MEET SSAFER</div>
+            <motion.div
+              className="text-[10px] font-mono tracking-[0.42em] text-neutral-400"
+              initial={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+              viewport={{ amount: 0.4, once: false }}
+              whileInView={{ opacity: 1, y: 0 }}
+            >
+              MEET SSAFER
+            </motion.div>
 
             <div className="mt-6">
-              <h1 className="text-5xl font-black leading-[0.9] text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]">
+              <motion.h1
+                className="text-5xl font-black leading-[0.9] text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]"
+                initial={{ opacity: 0, y: -48 }}
+                transition={{ delay: 0.08, type: 'spring', stiffness: 90, damping: 14 }}
+                viewport={{ amount: 0.3, once: false }}
+                whileInView={{ opacity: 1, y: 0 }}
+              >
                 취약점,
-              </h1>
+              </motion.h1>
 
               <div className="mt-2 grid gap-2 xl:grid-cols-[auto_auto_minmax(0,1fr)] xl:items-end xl:gap-6">
-                <div className="text-5xl font-black leading-[0.9] text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]">
+                <motion.div
+                  className="text-5xl font-black leading-[0.9] text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]"
+                  initial={{ opacity: 0, x: -32 }}
+                  transition={{ delay: 0.22, type: 'spring', stiffness: 110, damping: 18 }}
+                  viewport={{ amount: 0.3, once: false }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                >
                   지금
-                </div>
-                <div className="landing-inner-radius inline-flex h-[0.9em] w-[4.8ch] items-center justify-center bg-[var(--landing-accent)] px-3 text-5xl font-black leading-none text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]">
+                </motion.div>
+                <motion.div
+                  className="landing-inner-radius inline-flex h-[0.9em] w-[4.8ch] items-center justify-center bg-[var(--landing-accent)] px-3 text-5xl font-black leading-none text-[var(--landing-ink)] md:text-7xl xl:text-[6.4rem]"
+                  initial={{ opacity: 0, scale: 0.6, rotate: -6 }}
+                  transition={{ delay: 0.34, type: 'spring', stiffness: 220, damping: 12 }}
+                  viewport={{ amount: 0.3, once: false }}
+                  whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
+                >
                   <LoopingNumberTicker durationMs={6500} edgeHoldMs={800} paused={isTickerPaused} to={5000} />
-                </div>
-                <div className="text-4xl font-black leading-none text-neutral-500 md:text-6xl xl:text-[4.5rem]">개 발견됨</div>
+                </motion.div>
+                <motion.div
+                  className="text-4xl font-black leading-none text-neutral-500 md:text-6xl xl:text-[4.5rem]"
+                  initial={{ opacity: 0, x: 32 }}
+                  transition={{ delay: 0.48, type: 'spring', stiffness: 110, damping: 18 }}
+                  viewport={{ amount: 0.3, once: false }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                >
+                  개 발견됨
+                </motion.div>
               </div>
             </div>
 
-            <p className="mt-7 max-w-md text-sm leading-relaxed text-neutral-700 md:text-base">
+            <motion.p
+              className="mt-7 max-w-md text-sm leading-relaxed text-neutral-700 md:text-base"
+              initial={{ opacity: 0, y: 12 }}
+              transition={{ delay: 0.6, duration: 0.45, ease: 'easeOut' }}
+              viewport={{ amount: 0.3, once: false }}
+              whileInView={{ opacity: 1, y: 0 }}
+            >
               docker-compose, .env, sshd_config.
               <br />
               올리면 알려드려요. 30초 안에.
-            </p>
+            </motion.p>
 
-            <div className="mt-7 flex flex-wrap items-center gap-3">
+            <motion.div
+              className="mt-7 flex flex-wrap items-center gap-3"
+              initial={{ opacity: 0, y: 12 }}
+              transition={{ delay: 0.72, duration: 0.45, ease: 'easeOut' }}
+              viewport={{ amount: 0.3, once: false }}
+              whileInView={{ opacity: 1, y: 0 }}
+            >
               <button
                 className="landing-inner-radius inline-flex h-11 items-center gap-2 bg-[#111111] px-5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:opacity-90 hover:shadow-[0_14px_30px_rgba(0,0,0,0.18)] active:translate-y-0"
                 onClick={openEntryModal}
@@ -157,7 +209,7 @@ function LandingPage() {
               <Link className="inline-flex h-11 items-center gap-2 px-3 text-sm text-neutral-600 transition hover:text-black" to={ROUTES.guide}>
                 CLI 깔기 →
               </Link>
-            </div>
+            </motion.div>
           </div>
         </section>
 
@@ -168,6 +220,10 @@ function LandingPage() {
           findingCount={formattedStats.findingCount}
           scanCount={formattedStats.scanCount}
         />
+
+        {/* 풀-블리드 스토리 신: 엘리베이터 + 4개 층 소개 */}
+        <ElevatorSection />
+        <FloorsSection />
 
         <WhySsaferSection />
 
