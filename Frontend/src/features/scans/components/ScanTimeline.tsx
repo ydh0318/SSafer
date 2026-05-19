@@ -22,6 +22,7 @@ export type ScanTimelineItem = {
   completedAt: string | null;
   /** 히스토리 페이지에서 표시되는 프로젝트 ID */
   projectId?: number;
+  projectName?: string;
   /** 히스토리 페이지에서 표시되는 심각도 카운트 */
   severity?: {
     critical: number;
@@ -246,7 +247,7 @@ function ScanTimeline({
                       </span>
                       {showProjectChip && scan.projectId !== undefined ? (
                         <span className="inline-flex items-center border border-neutral-200 bg-white px-2.5 py-1 font-mono text-[11px] font-bold text-neutral-600 landing-inner-radius">
-                          프로젝트 #{scan.projectId}
+                          {scan.projectName ?? `프로젝트 #${scan.projectId}`}
                         </span>
                       ) : null}
                       <span className="text-[11px] text-neutral-500">

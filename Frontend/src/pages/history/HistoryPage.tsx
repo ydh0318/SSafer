@@ -15,6 +15,7 @@ import ScanTimeline from '../../features/scans/components/ScanTimeline';
 import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import { getSafeScanType } from '../../features/scans/utils/scanPresentation';
 import { useAuthStore } from '../../store/authStore';
+import { useProjectStore } from '../../store/projectStore';
 import type {
   HistoryScanListResponseData,
   ScanCompareFindingData,
@@ -79,6 +80,7 @@ function HistoryPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const user = useAuthStore((state) => state.user);
+  const storedProjects = useProjectStore((state) => state.projects);
   const toast = useToast();
 
   const isGuestSession = user?.role === 'GUEST' || isStoredGuestSession();
@@ -167,26 +169,56 @@ function HistoryPage() {
       return;
     }
 
+    if (storedProjects.length > 0) {
+      setProjectNameMap((current) => ({
+        ...current,
+        ...storedProjects.reduce<Record<number, string>>((accumulator, project) => {
+          accumulator[Number(project.id)] = project.name;
+          return accumulator;
+        }, {}),
+      }));
+    }
+  }, [canAccessHistory, storedProjects]);
+
+  useEffect(() => {
+    if (!canAccessHistory) {
+      return;
+    }
+
     let isMounted = true;
 
-    void getProjects({ page: 0, size: 100 })
-      .then((data) => {
+    const loadProjectOptions = async () => {
+      const pageSize = 100;
+      const firstPage = await getProjects({ page: 0, size: pageSize });
+      const allProjects = [...firstPage.items];
+
+      for (let page = 1; page < firstPage.totalPages; page += 1) {
+        const pageData = await getProjects({ page, size: pageSize });
+        allProjects.push(...pageData.items);
+      }
+
+      return allProjects;
+    };
+
+    void loadProjectOptions()
+      .then((projects) => {
         if (!isMounted) return;
-        setProjectNameMap(
-          data.items.reduce<Record<number, string>>((accumulator, project) => {
+        setProjectNameMap((current) => ({
+          ...current,
+          ...projects.reduce<Record<number, string>>((accumulator, project) => {
             accumulator[Number(project.id)] = project.name;
             return accumulator;
           }, {}),
-        );
+        }));
       })
       .catch(() => {
-        if (isMounted) setProjectNameMap({});
+        if (isMounted && storedProjects.length === 0) setProjectNameMap({});
       });
 
     return () => {
       isMounted = false;
     };
-  }, [canAccessHistory]);
+  }, [canAccessHistory, storedProjects.length]);
 
   useEffect(() => {
     if (!canAccessHistory) {
@@ -306,7 +338,13 @@ function HistoryPage() {
     } catch (error) {
       setCompareData(null);
       const message = error instanceof Error ? error.message : '스캔 비교 결과를 불러오지 못했습니다.';
-      toast.error(message || '비교 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', { durationMs: 3500 });
+      const normalizedMessage = message.toLowerCase();
+      toast.error(
+        normalizedMessage.includes('internal server error') || normalizedMessage.includes('500')
+          ? '스캔 비교 기능을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
+          : message || '비교 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        { durationMs: 3500 },
+      );
     } finally {
       setIsCompareLoading(false);
     }
@@ -628,6 +666,7 @@ function HistoryPage() {
                 requestedAt: item.requestedAt,
                 completedAt: item.completedAt,
                 projectId: item.projectId,
+                projectName: projectNameMap[item.projectId],
                 severity: {
                   critical: item.criticalCount,
                   high: item.highCount,
