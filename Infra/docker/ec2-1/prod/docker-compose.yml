@@ -134,6 +134,8 @@ services:
       APP_SCAN_RAW_S3_BUCKET: ${APP_SCAN_RAW_S3_BUCKET}
       APP_SCAN_RAW_S3_REGION: ${APP_SCAN_RAW_S3_REGION:-ap-northeast-2}
       SPRING_PROFILES_ACTIVE: prod
+      TZ: UTC
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
     # EC2 #2 콜백을 위해 호스트 전체 바인딩 (UFW로 접근 제어)
     ports:
       - "8080:8080"
