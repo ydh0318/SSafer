@@ -102,13 +102,6 @@ function LatestResultCard({ scan, summary, isLoading, projectId }: LatestResultC
           결과 체크리스트 보기
           <ArrowRight className="h-4 w-4" />
         </Link>
-        <Link
-          className="inline-flex items-center gap-2 border border-neutral-200 bg-white px-5 py-2.5 text-sm font-bold text-neutral-700 transition landing-inner-radius hover:border-neutral-400 hover:text-black"
-          state={{ projectId }}
-          to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
-        >
-          진행 상태 보기
-        </Link>
       </div>
     </motion.article>
   );

@@ -135,7 +135,9 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
       <div className="site-header-inner mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <AppBrand
           className="shrink-0"
+          showSubtitle={false}
           textClassName="hidden lg:block"
+          title="SSAFER"
           titleClassName="text-lg font-black tracking-tight text-black"
           to={ROUTES.landing}
         />

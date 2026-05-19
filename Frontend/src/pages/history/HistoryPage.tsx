@@ -141,6 +141,25 @@ function HistoryPage() {
     return `${projectNameMap[item.projectId] ?? `프로젝트 ${item.projectId}`} / #${item.scanId}`;
   };
 
+  const getCompareFailureMessage = (error: unknown) => {
+    const message = error instanceof Error ? error.message : '';
+    const normalizedMessage = message.toLowerCase();
+
+    if (normalizedMessage.includes('not found') || normalizedMessage.includes('404')) {
+      return '비교 생성에 실패했습니다. 선택한 스캔을 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 선택해 주세요.';
+    }
+
+    if (normalizedMessage.includes('unauthorized') || normalizedMessage.includes('forbidden') || normalizedMessage.includes('401') || normalizedMessage.includes('403')) {
+      return '비교 생성에 실패했습니다. 접근 권한을 확인한 뒤 다시 시도해 주세요.';
+    }
+
+    if (normalizedMessage.includes('internal server error') || normalizedMessage.includes('500')) {
+      return '비교 생성에 실패했습니다. 서버에서 비교 결과를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    }
+
+    return '비교 생성에 실패했습니다. 완료된 프로젝트 파일 스캔 2개를 선택했는지 확인해 주세요.';
+  };
+
   const loadHistory = async (params?: { scanMode?: ScanMode | ''; status?: 'DONE' | 'FAILED' | '' }) => {
     setIsLoading(true);
     setErrorMessage(null);
@@ -337,14 +356,8 @@ function HistoryPage() {
       setCompareData(data);
     } catch (error) {
       setCompareData(null);
-      const message = error instanceof Error ? error.message : '스캔 비교 결과를 불러오지 못했습니다.';
-      const normalizedMessage = message.toLowerCase();
-      toast.error(
-        normalizedMessage.includes('internal server error') || normalizedMessage.includes('500')
-          ? '스캔 비교 기능을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
-          : message || '비교 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
-        { durationMs: 3500 },
-      );
+      console.error('Failed to compare scans.', error);
+      toast.error(getCompareFailureMessage(error), { durationMs: 3500 });
     } finally {
       setIsCompareLoading(false);
     }

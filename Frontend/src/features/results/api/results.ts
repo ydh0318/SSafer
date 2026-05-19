@@ -2,6 +2,9 @@ import { apiClient } from '../../../api/client';
 import { getApiErrorMessage } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
+  FindingOpenSummaryData,
+  FindingResolutionStatus,
+  FindingResolutionStatusUpdateResponseData,
   ScanBasicData,
   ScanCompareResponseData,
   ScanFindingDetailData,
@@ -15,6 +18,8 @@ const GET_SCAN_SUMMARY_ERROR = '스캔 요약 정보를 불러오지 못했습�
 const GET_SCAN_FINDINGS_ERROR = '스캔 취약점 목록을 불러오지 못했습니다.';
 const GET_SCAN_FINDING_DETAIL_ERROR = '취약점 상세 정보를 불러오지 못했습니다.';
 const GET_SCAN_COMPARE_ERROR = '스캔 비교 결과를 불러오지 못했습니다.';
+const UPDATE_FINDING_RESOLUTION_STATUS_ERROR = '탐지 결과 상태를 변경하지 못했습니다.';
+const GET_OPEN_FINDING_SUMMARY_ERROR = '조치 필요 취약점 집계를 불러오지 못했습니다.';
 
 export async function getScanBasic(scanId: string | number) {
   try {
@@ -95,5 +100,31 @@ export async function getScanCompare(baseScanId: string | number, targetScanId: 
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, GET_SCAN_COMPARE_ERROR));
+  }
+}
+
+export async function updateFindingResolutionStatus(
+  findingId: string | number,
+  status: FindingResolutionStatus,
+) {
+  try {
+    const response = await apiClient.patch<ApiSuccessResponse<FindingResolutionStatusUpdateResponseData>>(
+      `/findings/${findingId}/resolution-status`,
+      { status },
+    );
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, UPDATE_FINDING_RESOLUTION_STATUS_ERROR));
+  }
+}
+
+export async function getOpenFindingSummary(projectId?: string | number) {
+  try {
+    const response = await apiClient.get<ApiSuccessResponse<FindingOpenSummaryData>>('/findings/open-summary', {
+      params: projectId === undefined ? undefined : { projectId },
+    });
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, GET_OPEN_FINDING_SUMMARY_ERROR));
   }
 }
