@@ -74,6 +74,9 @@ html.theme-dark body {
 html.theme-dark .bg-\[\#F5F5F5\],
 html.theme-dark .bg-\[\#f5f5f5\],
 html.theme-dark .bg-\[\#f4f4f4\],
+html.theme-dark .bg-\[\#FAFAFA\],
+html.theme-dark .bg-\[\#fafafa\],
+html.theme-dark .bg-\[\#F7F7F5\],
 html.theme-dark .bg-\[\#FAFAF7\],
 html.theme-dark .bg-\[\#fafaf7\] {
   background: #2b2b2b !important;
@@ -82,6 +85,8 @@ html.theme-dark .bg-\[\#fafaf7\] {
 html.theme-dark .bg-\[\#F5F5F5\]\/95,
 html.theme-dark .bg-\[\#f5f5f5\]\/95,
 html.theme-dark .bg-\[\#f4f4f4\]\/95,
+html.theme-dark .bg-\[\#FAFAFA\]\/95,
+html.theme-dark .bg-\[\#fafafa\]\/95,
 html.theme-dark .theme-surface-header {
   background: rgba(43, 43, 43, 0.96) !important;
 }
@@ -361,6 +366,8 @@ html.theme-dark .auth-body-text,
 html.theme-dark .auth-social-text,
 html.theme-dark .auth-heading,
 html.theme-dark input,
+html.theme-dark select,
+html.theme-dark textarea,
 html.theme-dark button,
 html.theme-dark a,
 html.theme-dark p,
@@ -373,6 +380,14 @@ html.theme-dark h6,
 html.theme-dark span,
 html.theme-dark label {
   color: inherit;
+}
+
+html.theme-dark input,
+html.theme-dark select,
+html.theme-dark textarea {
+  background-color: #121212;
+  border-color: #424242;
+  color: #f9fafb;
 }
 
 @layer components {

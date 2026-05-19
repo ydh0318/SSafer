@@ -8,13 +8,14 @@ import PixelGoose from '../../components/common/PixelGoose';
 import TypingBox from '../../components/common/TypingBox';
 import { ROUTES } from '../../constants/routes';
 import { useToast } from '../../features/feedback/useToast';
-import { getScanBasic, getScanFindingDetail, getScanFindings } from '../../features/results/api/results';
+import { getScanBasic, getScanFindingDetail, getScanFindings, updateFindingResolutionStatus } from '../../features/results/api/results';
 import { approveFindingPatch } from '../../features/scans/api/scans';
 import PatchAvailabilityBadge from '../../features/scans/components/PatchAvailabilityBadge';
 import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import { formatDateTime } from '../../features/scans/utils/scanPresentation';
 import type {
   FindingSeverity,
+  FindingResolutionStatus,
   ScanBasicData,
   ScanFindingDetailData,
   ScanFindingListItemData,
@@ -39,6 +40,8 @@ const resolutionDisplayMeta: Record<string, { label: string; cls: string; dot: s
   RESOLVED:    { label: '해결 완료', cls: 'bg-[#EDFFC0] text-[#4A7A00]',                            dot: 'bg-[#9FCC2E]'   },
   IGNORED:     { label: '무시됨',   cls: 'bg-neutral-100 text-neutral-400',                         dot: 'bg-neutral-300' },
 };
+
+const resolutionValues = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'IGNORED'] as const;
 
 function prettyJsonText(value: string | null) {
   if (!value) {
@@ -116,6 +119,7 @@ function FindingDetailPage() {
   const [isApprovingPatch, setIsApprovingPatch] = useState(false);
   const [approveErrorMessage, setApproveErrorMessage] = useState<string | null>(null);
   const [isPollingPatch, setIsPollingPatch] = useState(false);
+  const [isUpdatingResolutionStatus, setIsUpdatingResolutionStatus] = useState(false);
 
   useEffect(() => {
     if (!scanId || !findingId) {
@@ -249,6 +253,30 @@ function FindingDetailPage() {
     }
   }, [finding, findingId, scanId, toast]);
 
+  const handleResolutionStatusChange = useCallback(async (nextStatus: FindingResolutionStatus) => {
+    if (!scanId || !findingId || !finding || finding.resolutionStatus === nextStatus || isUpdatingResolutionStatus) {
+      return;
+    }
+
+    setIsUpdatingResolutionStatus(true);
+
+    try {
+      await updateFindingResolutionStatus(findingId, nextStatus);
+      const [refreshedFinding, refreshedFindingList] = await Promise.all([
+        getScanFindingDetail(scanId, findingId),
+        getScanFindings(scanId, { page: 0, size: 100 }),
+      ]);
+      setFinding(refreshedFinding);
+      setRelatedFindings(refreshedFindingList.items);
+      toast.success('탐지 결과 상태를 변경했습니다.', { durationMs: 2000 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '탐지 결과 상태를 변경하지 못했습니다.';
+      toast.error(message, { durationMs: 2500 });
+    } finally {
+      setIsUpdatingResolutionStatus(false);
+    }
+  }, [finding, findingId, isUpdatingResolutionStatus, scanId, toast]);
+
   return (
     <section className="space-y-6">
       <Link
@@ -295,15 +323,31 @@ function FindingDetailPage() {
                   {scanBasic?.scanMode ? <ScanModeBadge scanMode={scanBasic.scanMode} source={scanBasic.source} /> : null}
                   <PatchAvailabilityBadge hasPatches={hasPatches} scanMode={scanBasic?.scanMode} />
                 </div>
-                {(() => {
-                  const rm = resolutionDisplayMeta[finding.resolutionStatus] ?? resolutionDisplayMeta['OPEN'];
-                  return (
-                    <span className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-bold ${rm.cls}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${rm.dot}`} />
-                      {rm.label}
-                    </span>
-                  );
-                })()}
+                <div className="flex flex-wrap items-center gap-2">
+                  {(() => {
+                    const rm = resolutionDisplayMeta[finding.resolutionStatus] ?? resolutionDisplayMeta['OPEN'];
+                    return (
+                      <span className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-bold ${rm.cls}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${rm.dot}`} />
+                        {rm.label}
+                      </span>
+                    );
+                  })()}
+                  <select
+                    className="rounded-full border border-neutral-300 bg-white px-2.5 py-1 text-xs font-bold text-neutral-700 disabled:cursor-wait disabled:opacity-50"
+                    disabled={isUpdatingResolutionStatus}
+                    onChange={(event) => {
+                      void handleResolutionStatusChange(event.target.value as FindingResolutionStatus);
+                    }}
+                    value={finding.resolutionStatus}
+                  >
+                    {resolutionValues.map((value) => (
+                      <option key={value} value={value}>
+                        {resolutionDisplayMeta[value].label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <h1 className="mt-5 text-3xl font-black tracking-tight">{finding.title}</h1>
               <div className="mt-3 flex flex-col gap-2 text-sm text-neutral-500">

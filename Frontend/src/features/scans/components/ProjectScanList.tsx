@@ -148,13 +148,6 @@ function ProjectScanList({
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <Link
-                      className="border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:border-black hover:text-black"
-                      state={{ projectId }}
-                      to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
-                    >
-                      진행 상태 보기
-                    </Link>
                     {scan.status === 'DONE' ? (
                       <>
                         <Link
@@ -174,12 +167,21 @@ function ProjectScanList({
                         </button>
                       </>
                     ) : (
-                      <span
-                        className="inline-flex cursor-not-allowed items-center bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-500"
-                        title="스캔이 완료되어야 결과를 확인할 수 있습니다."
-                      >
-                        결과 없음
-                      </span>
+                      <>
+                        <Link
+                          className="border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:border-black hover:text-black"
+                          state={{ projectId }}
+                          to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
+                        >
+                          진행 상태 보기
+                        </Link>
+                        <span
+                          className="inline-flex cursor-not-allowed items-center bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-500"
+                          title="스캔이 완료되어야 결과를 확인할 수 있습니다."
+                        >
+                          결과 없음
+                        </span>
+                      </>
                     )}
                     <button
                       className={

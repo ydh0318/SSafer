@@ -293,13 +293,6 @@ function ScanTimeline({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      className="inline-flex items-center gap-1 border border-neutral-200 bg-white px-3 py-1.5 text-xs font-bold text-neutral-700 transition landing-inner-radius hover:border-black hover:text-black"
-                      state={linkState}
-                      to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
-                    >
-                      진행 상태
-                    </Link>
                     {scan.status === 'DONE' ? (
                       <Link
                         className="inline-flex items-center gap-1.5 bg-[#0F0F0F] px-3 py-1.5 text-xs font-bold text-white transition landing-inner-radius hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(0,0,0,0.18)]"
@@ -309,7 +302,15 @@ function ScanTimeline({
                         결과 보기
                         <ArrowRight className="h-3 w-3" />
                       </Link>
-                    ) : null}
+                    ) : (
+                      <Link
+                        className="inline-flex items-center gap-1 border border-neutral-200 bg-white px-3 py-1.5 text-xs font-bold text-neutral-700 transition landing-inner-radius hover:border-black hover:text-black"
+                        state={linkState}
+                        to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
+                      >
+                        진행 상태
+                      </Link>
+                    )}
                     {onDeleteScan && isDeleteAllowed ? (
                       <button
                         className="inline-flex items-center gap-1 border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-400 transition landing-inner-radius hover:border-rose-300 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
