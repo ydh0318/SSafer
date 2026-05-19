@@ -472,11 +472,13 @@ def analyze_finding(
             verifyRetries=verify_result.retries,
         )
 
+    reasoning_steps = (enriched_context or {}).get("reasoning_steps")
     result = build_structured_analysis_result(
         finding=finding,
         explanation=explanation,
         fix=fix,
         verified=verified_payload,
+        reasoning_steps=reasoning_steps,
     )
     log_analysis_step(
         "FastAPI finding analysis completed.",

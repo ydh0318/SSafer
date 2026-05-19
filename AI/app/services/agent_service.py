@@ -17,6 +17,7 @@ from app.tools.code_context_tool import (
 logger = logging.getLogger(__name__)
 
 _CVE_PATTERN = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
+_AGENT_TRIGGER_SEVERITIES = {"HIGH", "CRITICAL"}
 _MAX_WEB_REFS = 5
 _STEPS_PER_ITERATION = 3  # AIMessage + ToolMessage + 다음 AIMessage 정도
 _DESCRIPTION_PREVIEW = 200
@@ -75,9 +76,17 @@ def format_enriched_context_for_prompt(enriched: dict[str, Any] | None) -> str:
 
 
 def should_use_agent(finding: dict[str, Any]) -> bool:
-    """agent 경로로 보낼지 결정. 보수적: CVE 식별자가 명시된 finding만 v1 대상."""
+    """agent 경로로 보낼지 결정.
+
+    트리거 조건 (둘 중 하나라도 만족):
+      1) ruleId/title/maskedEvidence에 CVE-YYYY-NNNN 식별자 → NVD 조회로 풍부한 분석
+      2) severity가 HIGH/CRITICAL → 코드 컨텍스트 + 웹 검색으로 보강
+
+    LOW/MEDIUM의 단순 misconfig는 기존 batch 경로로 빠르게 처리한다.
+    """
     if not AGENT_ENABLED:
         return False
+
     haystack = " ".join(
         str(value)
         for value in (
@@ -87,7 +96,14 @@ def should_use_agent(finding: dict[str, Any]) -> bool:
         )
         if isinstance(value, str)
     )
-    return bool(_CVE_PATTERN.search(haystack))
+    if _CVE_PATTERN.search(haystack):
+        return True
+
+    severity = (finding.get("severity") or "").upper()
+    if severity in _AGENT_TRIGGER_SEVERITIES:
+        return True
+
+    return False
 
 
 def _extract_message_text(content: Any) -> str:
@@ -115,6 +131,63 @@ def _parse_tool_result(raw: Any) -> Any:
         return json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return raw
+
+
+def _build_reasoning_steps_from_messages(
+    messages: list[Any],
+) -> list[dict[str, Any]]:
+    """agent의 messages에서 ReAct 스타일 reasoning steps를 추출.
+
+    한 step:
+      {step, thought?, action?, actionInput?, observation?, final?}
+
+    AIMessage(tool_calls) + 직후 ToolMessage(tool_call_id) 매칭으로 묶고,
+    마지막 AIMessage(tool_calls 없음, content 있음)은 final=true로 표기.
+    """
+    steps: list[dict[str, Any]] = []
+    pending_by_id: dict[str, dict[str, Any]] = {}
+    step_no = 0
+
+    for msg in messages:
+        if isinstance(msg, AIMessage):
+            text = _extract_message_text(msg.content)
+            tool_calls = getattr(msg, "tool_calls", None) or []
+
+            if tool_calls:
+                thought = text or None
+                for tool_call in tool_calls:
+                    step_no += 1
+                    step: dict[str, Any] = {
+                        "step": step_no,
+                        "thought": thought,
+                        "action": tool_call.get("name"),
+                        "actionInput": tool_call.get("args"),
+                    }
+                    steps.append(step)
+                    call_id = tool_call.get("id")
+                    if call_id:
+                        pending_by_id[call_id] = step
+                    # 같은 AIMessage에 여러 tool_calls가 있어도
+                    # thought는 첫 step에만 붙임 (중복 방지)
+                    thought = None
+            elif text:
+                step_no += 1
+                steps.append(
+                    {"step": step_no, "thought": text, "final": True}
+                )
+        elif isinstance(msg, ToolMessage):
+            call_id = getattr(msg, "tool_call_id", None)
+            step = pending_by_id.pop(call_id, None) if call_id else None
+            if step is None and steps:
+                # fallback: 마지막 tool-step에 붙임
+                for candidate in reversed(steps):
+                    if candidate.get("action") and "observation" not in candidate:
+                        step = candidate
+                        break
+            if step is not None:
+                step["observation"] = _parse_tool_result(msg.content)
+
+    return steps
 
 
 def _build_enriched_from_messages(messages: list[Any]) -> dict[str, Any]:
@@ -173,6 +246,7 @@ def _build_enriched_from_messages(messages: list[Any]) -> dict[str, Any]:
     if web_refs:
         enriched["web_refs"] = web_refs[:_MAX_WEB_REFS]
     enriched["agent_summary"] = last_ai_summary
+    enriched["reasoning_steps"] = _build_reasoning_steps_from_messages(messages)
     return enriched
 
 
