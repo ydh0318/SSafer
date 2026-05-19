@@ -26,6 +26,7 @@ function ScanDetailPage() {
   const toast = useToast();
   const hasShownSuccessToastRef = useRef(false);
   const hasAutoNavigatedRef = useRef(false);
+  const hasSeenNonTerminalScanStatusRef = useRef(false);
 
   const [statusData, setStatusData] = useState<ScanProgressStatusData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -116,8 +117,17 @@ function ScanDetailPage() {
   }, [refreshNotice, toast]);
 
   useEffect(() => {
+    if (statusData && !isTerminalScanStatus(statusData.status)) {
+      hasSeenNonTerminalScanStatusRef.current = true;
+    }
+  }, [statusData]);
+
+  useEffect(() => {
+    const shouldOpenResultAutomatically =
+      routeState.autoOpenedFromScanRequest || hasSeenNonTerminalScanStatusRef.current;
+
     if (
-      !routeState.autoOpenedFromScanRequest ||
+      !shouldOpenResultAutomatically ||
       !statusData ||
       statusData.status !== 'DONE' ||
       hasAutoNavigatedRef.current
