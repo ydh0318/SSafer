@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   Filter,
-  Plus,
   Search,
   Trophy,
 } from 'lucide-react';
@@ -16,7 +15,7 @@ import { getProjects } from '../../features/projects/api/projects';
 import { getScanSummary } from '../../features/results/api/results';
 import { getProjectScans } from '../../features/scans/api/scans';
 import ScanTimeline from '../../features/scans/components/ScanTimeline';
-import { formatDateTime } from '../../features/scans/utils/scanPresentation';
+import { formatDateTime, isTerminalScanStatus } from '../../features/scans/utils/scanPresentation';
 import { useAuthStore } from '../../store/authStore';
 import type { ProjectListItemData } from '../../types/project';
 import type { AgentStatusResponseData, ProjectScanListItemData, ScanStatus, ScanSummaryData } from '../../types/scan';
@@ -34,6 +33,12 @@ type DashboardMonitorProject = {
   projectName: string;
   status: DashboardMonitorStatus;
   lastSeenAt: string | null;
+};
+
+type DashboardProjectScan = {
+  project: ProjectListItemData;
+  scan: DashboardScan;
+  scans: DashboardScan[];
 };
 
 const severityColors = {
@@ -182,20 +187,53 @@ function DashboardPage() {
     };
   }, []);
 
-  const filteredScans = useMemo(
+  const dashboardProjectScans = useMemo<DashboardProjectScan[]>(
     () =>
-      scans.filter((scan) => {
+      projects
+        .map((project) => {
+          const projectScans = scans.filter((scan) => scan.projectId === project.projectId);
+          const representativeScan =
+            projectScans.find((scan) => !isTerminalScanStatus(scan.status)) ?? projectScans[0] ?? null;
+
+          if (!representativeScan) {
+            return null;
+          }
+
+          return {
+            project,
+            scan: representativeScan,
+            scans: projectScans,
+          };
+        })
+        .filter((item): item is DashboardProjectScan => item !== null),
+    [projects, scans],
+  );
+
+  const filteredProjectScans = useMemo(
+    () =>
+      dashboardProjectScans.filter(({ project, scan, scans: projectScans }) => {
         const query = searchTerm.trim().toLowerCase();
-        const matchesSearch = query.length === 0 || scan.projectName.toLowerCase().includes(query) || String(scan.scanId).includes(query);
+        const matchesSearch =
+          query.length === 0 ||
+          project.name.toLowerCase().includes(query) ||
+          projectScans.some((projectScan) => String(projectScan.scanId).includes(query));
         const matchesStatus = statusFilter === 'ALL' || scan.status === statusFilter;
         return matchesSearch && matchesStatus;
       }),
-    [scans, searchTerm, statusFilter],
+    [dashboardProjectScans, searchTerm, statusFilter],
+  );
+
+  const latestDoneScansByProject = useMemo(
+    () =>
+      dashboardProjectScans
+        .map(({ scans: projectScans }) => projectScans.find((scan) => scan.status === 'DONE') ?? null)
+        .filter((scan): scan is DashboardScan => scan !== null),
+    [dashboardProjectScans],
   );
 
   const totals = useMemo(
     () =>
-      scans.reduce(
+      latestDoneScansByProject.reduce(
         (acc, scan) => ({
           critical: acc.critical + (scan.summary?.criticalCount ?? 0),
           high: acc.high + (scan.summary?.highCount ?? 0),
@@ -205,14 +243,14 @@ function DashboardPage() {
         }),
         { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
       ),
-    [scans],
+    [latestDoneScansByProject],
   );
 
   const unresolvedCount = totals.critical + totals.high + totals.medium + totals.low + totals.info;
-  const recentDoneScan = useMemo(() => scans.find((scan) => scan.status === 'DONE'), [scans]);
+  const recentDoneScan = useMemo(() => latestDoneScansByProject[0] ?? null, [latestDoneScansByProject]);
   const highlightedScan = useMemo(
-    () => scans.find((scan) => (scan.summary?.criticalCount ?? 0) > 0) ?? recentDoneScan,
-    [recentDoneScan, scans],
+    () => latestDoneScansByProject.find((scan) => (scan.summary?.criticalCount ?? 0) > 0) ?? recentDoneScan,
+    [latestDoneScansByProject, recentDoneScan],
   );
   // 모니터링 활성화된 프로젝트의 실제 Agent 연결 상태를 fetch (ProjectListPage와 동일 패턴).
   // 백엔드 API(`/projects/{id}/agent/status`)는 ONLINE 상태일 때만 데이터를 반환하고
@@ -368,7 +406,7 @@ function DashboardPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="overflow-hidden border border-neutral-200 bg-white landing-card-radius">
           <div className="flex flex-col gap-4 border-b border-neutral-200 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
-            <h2 className="shrink-0 whitespace-nowrap text-2xl font-black tracking-tight md:text-3xl">최근 스캔</h2>
+            <h2 className="shrink-0 whitespace-nowrap text-2xl font-black tracking-tight md:text-3xl">프로젝트별 스캔 현황</h2>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <label className="relative min-w-0 flex-1 sm:flex-none">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
@@ -394,18 +432,10 @@ function DashboardPage() {
                   ))}
                 </select>
               </label>
-              <button
-                className="inline-flex shrink-0 items-center gap-2 px-3 py-2 text-sm font-bold text-black landing-inner-radius hover:bg-[#F5F5F5]"
-                onClick={() => navigate(ROUTES.projects)}
-                type="button"
-              >
-                프로젝트 보기
-                <Plus className="h-4 w-4" />
-              </button>
             </div>
           </div>
 
-          {filteredScans.length === 0 && isGuestSession && !isLoading ? (
+          {filteredProjectScans.length === 0 && isGuestSession && !isLoading ? (
             <div className="px-6 py-16">
               <div className="mx-auto max-w-2xl border border-dashed border-neutral-300 bg-[#FCFCF8] px-6 py-10 text-center landing-card-radius">
                 <p className="text-sm font-black tracking-[0.18em] text-neutral-500">NO SAVED HISTORY</p>
@@ -428,11 +458,11 @@ function DashboardPage() {
               <ScanTimeline
                 emptyMessage="조건에 맞는 스캔이 없습니다."
                 getDisplayName={(item) => {
-                  const scan = filteredScans.find((s) => s.scanId === item.scanId);
-                  return scan?.projectName ?? null;
+                  const projectItem = filteredProjectScans.find(({ scan }) => scan.scanId === item.scanId);
+                  return projectItem?.project.name ?? null;
                 }}
                 isLoading={isLoading}
-                items={filteredScans.slice(0, 8).map((scan) => ({
+                items={filteredProjectScans.slice(0, 8).map(({ scan }) => ({
                   scanId: scan.scanId,
                   status: scan.status,
                   scanMode: scan.scanMode,
@@ -451,7 +481,7 @@ function DashboardPage() {
                     : undefined,
                 }))}
                 onItemClick={(item) => {
-                  const scan = filteredScans.find((s) => s.scanId === item.scanId);
+                  const scan = filteredProjectScans.find((projectItem) => projectItem.scan.scanId === item.scanId)?.scan;
                   if (scan) navigateToScan(scan);
                 }}
                 variant="compact"

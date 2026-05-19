@@ -153,7 +153,8 @@ function ScanTimeline({
         // Compact 모드: 카드가 button 또는 div 로 동작
         const compactContent = (
           <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-2 lg:flex-nowrap">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               {displayName ? (
                 <span className="truncate text-base font-black text-[#0F0F0F]">{displayName}</span>
               ) : null}
@@ -171,8 +172,8 @@ function ScanTimeline({
                   <span className="hidden shrink-0 text-[11px] text-neutral-500 lg:inline">{typeLabel}</span>
                 </>
               ) : null}
-              <span className="hidden text-neutral-200 lg:inline">·</span>
-              <span className="hidden shrink-0 font-mono text-[11px] text-neutral-400 lg:inline">
+              </div>
+              <span className="font-mono text-[11px] text-neutral-400">
                 {formatCompactDateTime(scan.completedAt ?? scan.requestedAt)}
               </span>
             </div>
