@@ -63,6 +63,15 @@ LLM_VERIFY_MAX_TOKENS = _get_int_env("LLM_VERIFY_MAX_TOKENS", 200)
 VERIFY_ENABLED = _get_bool_env("VERIFY_ENABLED", False)
 VERIFY_LLM_ENABLED = _get_bool_env("VERIFY_LLM_ENABLED", True)
 MAX_VERIFY_RETRIES = _get_int_env("MAX_VERIFY_RETRIES", 1)
+AGENT_ENABLED = _get_bool_env("AGENT_ENABLED", False)
+AGENT_MAX_ITERATIONS = _get_positive_int_env("AGENT_MAX_ITERATIONS", 3)
+NVD_API_KEY = os.getenv("NVD_API_KEY", "")
+NVD_API_ENDPOINT = os.getenv(
+    "NVD_API_ENDPOINT",
+    "https://services.nvd.nist.gov/rest/json/cves/2.0",
+)
+NVD_TIMEOUT_SECONDS = _get_float_env("NVD_TIMEOUT_SECONDS", 10.0)
+NVD_CACHE_MAX_SIZE = _get_positive_int_env("NVD_CACHE_MAX_SIZE", 512)
 MAX_LLM_CONCURRENCY = _get_positive_int_env("MAX_LLM_CONCURRENCY", 10)
 MAX_FINDING_CONCURRENCY = _get_positive_int_env("MAX_FINDING_CONCURRENCY", 5)
 MAX_BATCH_EXPLAIN_RETRIES = _get_int_env("MAX_BATCH_EXPLAIN_RETRIES", 2)

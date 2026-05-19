@@ -118,9 +118,17 @@ def _validate_explanation_sections(explanation: Any) -> None:
         validate_korean_natural_text(value, f"explanation.{field}")
 
 
-def generate_finding_explanation(finding: dict[str, Any]) -> dict[str, Any]:
+def generate_finding_explanation(
+    finding: dict[str, Any],
+    enriched_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from app.services.agent_service import format_enriched_context_for_prompt
+
     chain = create_explain_chain()
     finding_input = format_finding_for_explanation_llm(finding)
+    enriched_text = format_enriched_context_for_prompt(enriched_context)
+    if enriched_text:
+        finding_input = finding_input + enriched_text
     finding_id = finding.get("id")
     last_disallowed_scripts = ""
 

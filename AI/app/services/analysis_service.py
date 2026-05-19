@@ -34,6 +34,7 @@ from app.services.s3_service import (
     download_scan_result_json_data,
     upload_analysis_result_json_data,
 )
+from app.services.agent_service import run_agent_for_finding, should_use_agent
 from app.services.verify_service import verify_and_maybe_regenerate
 
 
@@ -284,6 +285,7 @@ def run_s3_analysis_pipeline(
 def analyze_finding(
     finding: dict[str, Any],
     *,
+    scan_result: dict[str, Any] | None = None,
     log_fields: dict[str, Any] | None = None,
     finding_index: int | None = None,
     finding_total: int | None = None,
@@ -303,9 +305,26 @@ def analyze_finding(
         findingTotal=finding_total,
     )
 
+    enriched_context: dict[str, Any] | None = None
+    if should_use_agent(finding):
+        agent_started_ms = monotonic_ms()
+        enriched_context = run_agent_for_finding(finding, scan_result=scan_result)
+        log_analysis_step(
+            "FastAPI agent enrichment completed.",
+            stage="AGENT",
+            started_ms=agent_started_ms,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+            agentToolCalls=len((enriched_context or {}).get("tool_calls") or []),
+            agentHasCveInfo="cve_info" in (enriched_context or {}),
+            agentHasCodeContext="code_context" in (enriched_context or {}),
+        )
+
     explain_started_ms = monotonic_ms()
     try:
-        explanation = generate_finding_explanation(finding)
+        explanation = generate_finding_explanation(finding, enriched_context=enriched_context)
         log_analysis_step(
             "FastAPI finding explanation completed.",
             stage="EXPLAIN",
@@ -370,7 +389,7 @@ def analyze_finding(
 
     fix_started_ms = monotonic_ms()
     try:
-        fix = generate_finding_fix(finding)
+        fix = generate_finding_fix(finding, enriched_context=enriched_context)
         if scan_type == "SERVER_AUDIT":
             fix.pop("patch", None)
             fix.pop("patches", None)
@@ -474,6 +493,7 @@ def analyze_finding(
 def analyze_findings(
     findings: list[dict[str, Any]],
     *,
+    scan_result: dict[str, Any] | None = None,
     log_fields: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     finding_total = len(findings)
@@ -482,6 +502,7 @@ def analyze_findings(
         return [
             analyze_finding(
                 finding,
+                scan_result=scan_result,
                 log_fields=log_fields,
                 finding_index=index,
                 finding_total=finding_total,
@@ -494,7 +515,9 @@ def analyze_findings(
     batches = _chunk_findings(findings, MAX_FINDINGS_PER_BATCH)
     all_results: list[dict[str, Any]] = []
     for batch in batches:
-        batch_results = _analyze_findings_batch(batch, log_fields=log_fields)
+        batch_results = _analyze_findings_batch(
+            batch, scan_result=scan_result, log_fields=log_fields
+        )
         all_results.extend(batch_results)
     return all_results
 
@@ -514,6 +537,7 @@ def _chunk_findings(
 def _analyze_findings_batch(
     findings: list[dict[str, Any]],
     *,
+    scan_result: dict[str, Any] | None = None,
     log_fields: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     finding_total = len(findings)
@@ -537,7 +561,9 @@ def _analyze_findings_batch(
             log_fields=log_fields,
             findingCount=finding_total,
         )
-        return _analyze_findings_sequential(findings, log_fields=log_fields)
+        return _analyze_findings_sequential(
+            findings, scan_result=scan_result, log_fields=log_fields
+        )
 
     fix_started_ms = monotonic_ms()
     try:
@@ -558,7 +584,9 @@ def _analyze_findings_batch(
             log_fields=log_fields,
             findingCount=finding_total,
         )
-        return _analyze_findings_sequential(findings, log_fields=log_fields)
+        return _analyze_findings_sequential(
+            findings, scan_result=scan_result, log_fields=log_fields
+        )
 
     results = []
     for finding in findings:
@@ -587,12 +615,14 @@ def _analyze_findings_batch(
 def _analyze_findings_sequential(
     findings: list[dict[str, Any]],
     *,
+    scan_result: dict[str, Any] | None = None,
     log_fields: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     finding_total = len(findings)
     return [
         analyze_finding(
             finding,
+            scan_result=scan_result,
             log_fields=log_fields,
             finding_index=index,
             finding_total=finding_total,
@@ -732,6 +762,7 @@ def run_analysis_pipeline_from_scan_result(
     try:
         structured_results = analyze_findings(
             context.valid_findings,
+            scan_result=normalized_scan_result,
             log_fields=log_fields,
         )
         log_analysis_step(
