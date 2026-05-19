@@ -17,6 +17,7 @@ from app.tools.code_context_tool import (
 logger = logging.getLogger(__name__)
 
 _CVE_PATTERN = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
+_AGENT_TRIGGER_SEVERITIES = {"HIGH", "CRITICAL"}
 _MAX_WEB_REFS = 5
 _STEPS_PER_ITERATION = 3  # AIMessage + ToolMessage + 다음 AIMessage 정도
 _DESCRIPTION_PREVIEW = 200
@@ -75,9 +76,17 @@ def format_enriched_context_for_prompt(enriched: dict[str, Any] | None) -> str:
 
 
 def should_use_agent(finding: dict[str, Any]) -> bool:
-    """agent 경로로 보낼지 결정. 보수적: CVE 식별자가 명시된 finding만 v1 대상."""
+    """agent 경로로 보낼지 결정.
+
+    트리거 조건 (둘 중 하나라도 만족):
+      1) ruleId/title/maskedEvidence에 CVE-YYYY-NNNN 식별자 → NVD 조회로 풍부한 분석
+      2) severity가 HIGH/CRITICAL → 코드 컨텍스트 + 웹 검색으로 보강
+
+    LOW/MEDIUM의 단순 misconfig는 기존 batch 경로로 빠르게 처리한다.
+    """
     if not AGENT_ENABLED:
         return False
+
     haystack = " ".join(
         str(value)
         for value in (
@@ -87,7 +96,14 @@ def should_use_agent(finding: dict[str, Any]) -> bool:
         )
         if isinstance(value, str)
     )
-    return bool(_CVE_PATTERN.search(haystack))
+    if _CVE_PATTERN.search(haystack):
+        return True
+
+    severity = (finding.get("severity") or "").upper()
+    if severity in _AGENT_TRIGGER_SEVERITIES:
+        return True
+
+    return False
 
 
 def _extract_message_text(content: Any) -> str:

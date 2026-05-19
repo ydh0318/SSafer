@@ -59,6 +59,36 @@ class ShouldUseAgentTest(unittest.TestCase):
         with patch.object(agent_service, "AGENT_ENABLED", True):
             self.assertTrue(should_use_agent(finding))
 
+    def test_non_cve_high_severity_routed_to_agent(self):
+        finding = build_non_cve_finding()
+        finding["severity"] = "HIGH"
+        with patch.object(agent_service, "AGENT_ENABLED", True):
+            self.assertTrue(should_use_agent(finding))
+
+    def test_non_cve_critical_severity_routed_to_agent(self):
+        finding = build_non_cve_finding()
+        finding["severity"] = "CRITICAL"
+        with patch.object(agent_service, "AGENT_ENABLED", True):
+            self.assertTrue(should_use_agent(finding))
+
+    def test_non_cve_low_severity_skipped(self):
+        finding = build_non_cve_finding()
+        finding["severity"] = "LOW"
+        with patch.object(agent_service, "AGENT_ENABLED", True):
+            self.assertFalse(should_use_agent(finding))
+
+    def test_non_cve_high_severity_with_agent_disabled_skipped(self):
+        finding = build_non_cve_finding()
+        finding["severity"] = "HIGH"
+        with patch.object(agent_service, "AGENT_ENABLED", False):
+            self.assertFalse(should_use_agent(finding))
+
+    def test_severity_match_is_case_insensitive(self):
+        finding = build_non_cve_finding()
+        finding["severity"] = "high"
+        with patch.object(agent_service, "AGENT_ENABLED", True):
+            self.assertTrue(should_use_agent(finding))
+
 
 class BuildEnrichedFromMessagesTest(unittest.TestCase):
     def test_empty_messages(self):
