@@ -101,24 +101,45 @@ function HistoryPage() {
   const [isCompareLoading, setIsCompareLoading] = useState(false);
   const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
 
+  const visibleHistoryItems = useMemo(
+    () =>
+      filterProjectId
+        ? historyData.items.filter((item) => String(item.projectId) === filterProjectId)
+        : historyData.items,
+    [filterProjectId, historyData.items],
+  );
+
   const doneHistoryItems = useMemo(
-    () => historyData.items.filter((item) => item.status === 'DONE' && getSafeScanType(item.scanType) === 'PROJECT_FILE'),
-    [historyData.items],
+    () => visibleHistoryItems.filter((item) => item.status === 'DONE' && getSafeScanType(item.scanType) === 'PROJECT_FILE'),
+    [visibleHistoryItems],
   );
 
   const projectFilterOptions = useMemo(
-    () =>
-      Object.entries(projectNameMap)
-        .map(([projectId, projectName]) => ({ projectId, projectName }))
-        .sort((left, right) => left.projectName.localeCompare(right.projectName)),
-    [projectNameMap],
+    () => {
+      const projects = new Map<number, string>();
+
+      Object.entries(projectNameMap).forEach(([projectId, projectName]) => {
+        projects.set(Number(projectId), projectName);
+      });
+
+      historyData.items.forEach((item) => {
+        if (!projects.has(item.projectId)) {
+          projects.set(item.projectId, `프로젝트 ${item.projectId}`);
+        }
+      });
+
+      return Array.from(projects.entries())
+        .map(([projectId, projectName]) => ({ projectId: String(projectId), projectName }))
+        .sort((left, right) => left.projectName.localeCompare(right.projectName));
+    },
+    [historyData.items, projectNameMap],
   );
 
   const formatScanOptionLabel = (item: { scanId: number; projectId: number }) => {
     return `${projectNameMap[item.projectId] ?? `프로젝트 ${item.projectId}`} / #${item.scanId}`;
   };
 
-  const loadHistory = async (params?: { scanMode?: ScanMode | ''; status?: 'DONE' | 'FAILED' | ''; projectId?: string }) => {
+  const loadHistory = async (params?: { scanMode?: ScanMode | ''; status?: 'DONE' | 'FAILED' | '' }) => {
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -128,7 +149,6 @@ function HistoryPage() {
         size: HISTORY_PAGE_SIZE,
         ...(params?.scanMode && { scanMode: params.scanMode }),
         ...(params?.status && { status: params.status }),
-        ...(params?.projectId && { projectId: Number(params.projectId) }),
       });
       setHistoryData(data);
       return data;
@@ -231,13 +251,13 @@ function HistoryPage() {
     setFilterScanMode(scanMode);
     setFilterStatus(status);
     setFilterProjectId(projectId);
-    void loadHistory({ scanMode, status, projectId });
+    void loadHistory({ scanMode, status });
   };
 
   const handleRefresh = async () => {
     if (!canAccessHistory) return;
     setNoticeMessage(null);
-    await loadHistory({ scanMode: filterScanMode, status: filterStatus, projectId: filterProjectId });
+    await loadHistory({ scanMode: filterScanMode, status: filterStatus });
   };
 
   useScanEventSubscription(
@@ -256,7 +276,7 @@ function HistoryPage() {
     try {
       await deleteScanHistory(scanId);
       setNoticeMessage(`스캔 #${scanId} 이력이 삭제되었습니다.`);
-      await loadHistory();
+      await loadHistory({ scanMode: filterScanMode, status: filterStatus });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '스캔 이력을 삭제하지 못했습니다.');
       setNoticeMessage(null);
@@ -599,7 +619,7 @@ function HistoryPage() {
               deletingScanIds={deletingScanIds}
               emptyMessage="아직 저장된 스캔 이력이 없습니다."
               isLoading={isLoading}
-              items={historyData.items.map((item) => ({
+              items={visibleHistoryItems.map((item) => ({
                 scanId: item.scanId,
                 status: item.status,
                 scanMode: item.scanMode,
