@@ -1137,6 +1137,21 @@ def _print_agent_task_result(result: "AgentTaskResult") -> None:
                 patch_result.message,
             )
     console.print(table)
+    _print_patch_apply_summary(result)
+
+
+def _print_patch_apply_summary(result: "AgentTaskResult") -> None:
+    if result.task_type != "PATCH_APPLY" or result.status == "DRY_RUN":
+        return
+
+    success_count = sum(1 for patch_result in result.patch_results if patch_result.status == "SUCCESS")
+    failed_count = sum(1 for patch_result in result.patch_results if patch_result.status == "FAILED")
+
+    if result.status == "SUCCESS":
+        console.print(f"[green]\ud328\uce58 \uc801\uc6a9 \uc644\ub8cc.[/green] applied={success_count}")
+        return
+    if result.status == "FAILED":
+        console.print(f"[red]\ud328\uce58 \uc801\uc6a9 \uc2e4\ud328.[/red] failed={failed_count or '-'}")
 
 
 def _print_scan_request_task_result(result: "AgentTaskResult") -> None:
@@ -1403,6 +1418,11 @@ def guest(
     current_token = load_token()
     if load_auth_mode() == "guest" and current_token:
         console.print("[green]저장된 게스트 세션을 사용합니다.[/green]")
+        console.print(
+            "[dim]\uc774 URL\uc740 \uc800\uc7a5\ub41c \uac8c\uc2a4\ud2b8 \uc138\uc158\uc744 \uadf8\ub300\ub85c \uc774\uc5b4\uc11c \uc5fd\ub2c8\ub2e4. "
+            "\uae30\uc874 \ud504\ub85c\uc81d\ud2b8/\uc2a4\uce94 \uc774\ub825\ub3c4 \uac19\uc774 \ubcf4\uc785\ub2c8\ub2e4. "
+            "\uc0c8 \ube48 \uac8c\uc2a4\ud2b8 \uc138\uc158\uc774 \ud544\uc694\ud558\uba74 [bold]ssafer logout[/bold] \ud6c4 \ub2e4\uc2dc \uc2e4\ud589\ud558\uc138\uc694.[/dim]"
+        )
         if show_url:
             continue_url = _guest_continue_url(effective_endpoint, current_token)
             console.print(f"웹에서 이어 보기: [link={escape(continue_url)}]{escape(continue_url)}[/link]")
