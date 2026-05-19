@@ -120,9 +120,17 @@ def build_fix_retry_prompt(finding_input: str, error_message: str) -> str:
     )
 
 
-def generate_finding_fix(finding: dict[str, Any]) -> dict[str, Any]:
+def generate_finding_fix(
+    finding: dict[str, Any],
+    enriched_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from app.services.agent_service import format_enriched_context_for_prompt
+
     chain = create_fix_chain()
     finding_input = format_finding_for_fix_llm(finding)
+    enriched_text = format_enriched_context_for_prompt(enriched_context)
+    if enriched_text:
+        finding_input = finding_input + enriched_text
     finding_id = finding.get("id")
     last_error: ValueError | None = None
 
