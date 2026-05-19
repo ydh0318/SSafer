@@ -11,7 +11,10 @@ import com.ssafer.global.error.ErrorCode;
 import com.ssafer.global.error.GlobalExceptionHandler;
 import com.ssafer.scan.api.dto.FindingResolutionStatusUpdateResponseData;
 import com.ssafer.scan.application.service.FindingResolutionStatusUpdateService;
+import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
+import com.ssafer.scan.domain.enums.ResolutionStatusSource;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,21 +37,23 @@ class FindingResolutionStatusControllerTest {
   void updateResolutionStatusReturnsOkResponse() throws Exception {
     when(findingResolutionStatusUpdateService.updateStatus(
         eq(2001L),
-        eq(ResolutionStatus.RESOLVED),
-        eq("운영 설정에서 수동 조치 완료 확인")
+        eq(ResolutionStatus.RESOLVED)
     )).thenReturn(new FindingResolutionStatusUpdateResponseData(
         2001L,
         1001L,
         ResolutionStatus.OPEN,
-        ResolutionStatus.RESOLVED
+        ResolutionStatus.RESOLVED,
+        ResolutionStatusSource.MANUAL,
+        RequestActorType.USER,
+        1L,
+        LocalDateTime.of(2026, 5, 19, 11, 10)
     ));
 
     buildMockMvc().perform(patch("/api/v1/findings/2001/resolution-status")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
                 {
-                  "status": "RESOLVED",
-                  "reason": "  운영 설정에서 수동 조치 완료 확인  "
+                  "status": "RESOLVED"
                 }
                 """))
         .andExpect(status().isOk())
@@ -56,12 +61,16 @@ class FindingResolutionStatusControllerTest {
         .andExpect(jsonPath("$.data.findingId").value(2001))
         .andExpect(jsonPath("$.data.scanId").value(1001))
         .andExpect(jsonPath("$.data.previousStatus").value("OPEN"))
-        .andExpect(jsonPath("$.data.resolutionStatus").value("RESOLVED"));
+        .andExpect(jsonPath("$.data.resolutionStatus").value("RESOLVED"))
+        .andExpect(jsonPath("$.data.resolutionStatusSource").value("MANUAL"))
+        .andExpect(jsonPath("$.data.resolutionStatusChangedActorType").value("USER"))
+        .andExpect(jsonPath("$.data.resolutionStatusChangedByUserId").value(1))
+        .andExpect(jsonPath("$.data.resolutionStatusChangedAt").value("2026-05-19T11:10:00"));
   }
 
   @Test
   void updateResolutionStatusWhenFindingMissingReturnsNotFound() throws Exception {
-    when(findingResolutionStatusUpdateService.updateStatus(2001L, ResolutionStatus.IGNORED, null))
+    when(findingResolutionStatusUpdateService.updateStatus(2001L, ResolutionStatus.IGNORED))
         .thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
 
     buildMockMvc().perform(patch("/api/v1/findings/2001/resolution-status")
@@ -76,19 +85,14 @@ class FindingResolutionStatusControllerTest {
   }
 
   @Test
-  void updateResolutionStatusWhenReasonTooLongReturnsBadRequest() throws Exception {
-    String reason = "a".repeat(1001);
-    when(findingResolutionStatusUpdateService.updateStatus(2001L, ResolutionStatus.RESOLVED, reason))
-        .thenThrow(new BusinessException(ErrorCode.INVALID_PARAMETER));
-
+  void updateResolutionStatusWhenStatusMissingReturnsBadRequest() throws Exception {
     buildMockMvc().perform(patch("/api/v1/findings/2001/resolution-status")
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
                 {
-                  "status": "RESOLVED",
-                  "reason": "%s"
+                  "status": null
                 }
-                """.formatted(reason)))
+                """))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
   }

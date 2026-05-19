@@ -38,8 +38,7 @@ public class FindingResolutionStatusController {
   ) {
     FindingResolutionStatusUpdateResponseData data = findingResolutionStatusUpdateService.updateStatus(
         findingId,
-        request.status(),
-        request.normalizedReason()
+        request.status()
     );
     return ResponseEntity.ok(ApiResponse.success(UPDATE_RESOLUTION_STATUS_SUCCESS_MESSAGE, data));
   }

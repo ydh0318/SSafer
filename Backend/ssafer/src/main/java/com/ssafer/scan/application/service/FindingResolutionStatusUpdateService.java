@@ -11,6 +11,7 @@ import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.repository.ScanFindingRepository;
 import com.ssafer.scan.domain.repository.ScanRepository;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,8 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class FindingResolutionStatusUpdateService {
-
-  private static final int MAX_REASON_LENGTH = 1000;
 
   private final ScanRepository scanRepository;
   private final ScanFindingRepository scanFindingRepository;
@@ -29,10 +28,9 @@ public class FindingResolutionStatusUpdateService {
   @Transactional
   public FindingResolutionStatusUpdateResponseData updateStatus(
       Long findingId,
-      ResolutionStatus status,
-      String reason
+      ResolutionStatus status
   ) {
-    if (status == null || normalizedReason(reason).length() > MAX_REASON_LENGTH) {
+    if (status == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
 
@@ -45,17 +43,17 @@ public class FindingResolutionStatusUpdateService {
     projectAuthorizationService.loadAuthorizedProjectOrThrow(scan.getProjectId(), actor);
 
     ResolutionStatus previousStatus = finding.getResolutionStatus();
-    finding.changeResolutionStatus(status);
+    finding.changeResolutionStatusManually(status, actor, LocalDateTime.now());
 
     return new FindingResolutionStatusUpdateResponseData(
         finding.getId(),
         finding.getScanId(),
         previousStatus,
-        finding.getResolutionStatus()
+        finding.getResolutionStatus(),
+        finding.getResolutionStatusSource(),
+        finding.getResolutionStatusChangedActorType(),
+        finding.getResolutionStatusChangedByUserId(),
+        finding.getResolutionStatusChangedAt()
     );
-  }
-
-  private String normalizedReason(String reason) {
-    return reason == null ? "" : reason.trim();
   }
 }

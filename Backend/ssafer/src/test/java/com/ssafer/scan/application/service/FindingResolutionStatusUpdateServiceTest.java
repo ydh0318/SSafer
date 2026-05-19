@@ -18,6 +18,7 @@ import com.ssafer.scan.domain.entity.ScanFinding;
 import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
+import com.ssafer.scan.domain.enums.ResolutionStatusSource;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.enums.ScanType;
 import com.ssafer.scan.domain.enums.Severity;
@@ -61,15 +62,23 @@ class FindingResolutionStatusUpdateServiceTest {
 
     FindingResolutionStatusUpdateResponseData result = findingResolutionStatusUpdateService.updateStatus(
         finding.getId(),
-        ResolutionStatus.RESOLVED,
-        "  운영 설정에서 수동 조치 완료 확인  "
+        ResolutionStatus.RESOLVED
     );
 
     assertThat(result.findingId()).isEqualTo(finding.getId());
     assertThat(result.scanId()).isEqualTo(scan.getId());
     assertThat(result.previousStatus()).isEqualTo(ResolutionStatus.OPEN);
     assertThat(result.resolutionStatus()).isEqualTo(ResolutionStatus.RESOLVED);
+    assertThat(result.resolutionStatusSource()).isEqualTo(ResolutionStatusSource.MANUAL);
+    assertThat(result.resolutionStatusChangedActorType()).isEqualTo(RequestActorType.USER);
+    assertThat(result.resolutionStatusChangedByUserId()).isEqualTo(1L);
+    assertThat(result.resolutionStatusChangedAt()).isNotNull();
     assertThat(finding.getResolutionStatus()).isEqualTo(ResolutionStatus.RESOLVED);
+    assertThat(finding.getResolutionStatusSource()).isEqualTo(ResolutionStatusSource.MANUAL);
+    assertThat(finding.getResolutionStatusChangedActorType()).isEqualTo(RequestActorType.USER);
+    assertThat(finding.getResolutionStatusChangedByUserId()).isEqualTo(1L);
+    assertThat(finding.getResolutionStatusChangedByGuestOwnerKeyHash()).isNull();
+    assertThat(finding.getResolutionStatusChangedAt()).isNotNull();
     verify(projectAuthorizationService).loadAuthorizedProjectOrThrow(project.getId(), actor);
   }
 
@@ -87,13 +96,38 @@ class FindingResolutionStatusUpdateServiceTest {
 
     FindingResolutionStatusUpdateResponseData result = findingResolutionStatusUpdateService.updateStatus(
         finding.getId(),
-        ResolutionStatus.OPEN,
-        null
+        ResolutionStatus.OPEN
     );
 
     assertThat(result.previousStatus()).isEqualTo(ResolutionStatus.RESOLVED);
     assertThat(result.resolutionStatus()).isEqualTo(ResolutionStatus.OPEN);
     assertThat(finding.getResolutionStatus()).isEqualTo(ResolutionStatus.OPEN);
+    assertThat(finding.getResolutionStatusSource()).isEqualTo(ResolutionStatusSource.MANUAL);
+  }
+
+  @Test
+  void updateStatusForGuestStoresGuestMetadata() {
+    AuthenticatedActor actor = AuthenticatedActor.guest("guest-owner");
+    Project project = new Project(null, "guest-owner", "project", null, com.ssafer.project.domain.enums.ScanMode.AGENT, false);
+    ReflectionTestUtils.setField(project, "id", 101L);
+    Scan scan = scan(project.getId());
+    ScanFinding finding = finding(scan.getId(), ResolutionStatus.OPEN);
+
+    when(currentActorProvider.getCurrentActor()).thenReturn(actor);
+    when(scanFindingRepository.findByIdForUpdate(finding.getId())).thenReturn(Optional.of(finding));
+    when(scanRepository.findByIdAndDeletedAtIsNull(scan.getId())).thenReturn(Optional.of(scan));
+    when(projectAuthorizationService.loadAuthorizedProjectOrThrow(project.getId(), actor)).thenReturn(project);
+
+    findingResolutionStatusUpdateService.updateStatus(
+        finding.getId(),
+        ResolutionStatus.IGNORED
+    );
+
+    assertThat(finding.getResolutionStatus()).isEqualTo(ResolutionStatus.IGNORED);
+    assertThat(finding.getResolutionStatusSource()).isEqualTo(ResolutionStatusSource.MANUAL);
+    assertThat(finding.getResolutionStatusChangedActorType()).isEqualTo(RequestActorType.GUEST);
+    assertThat(finding.getResolutionStatusChangedByUserId()).isNull();
+    assertThat(finding.getResolutionStatusChangedByGuestOwnerKeyHash()).isEqualTo("guest-owner");
   }
 
   @Test
@@ -103,8 +137,7 @@ class FindingResolutionStatusUpdateServiceTest {
 
     assertThatThrownBy(() -> findingResolutionStatusUpdateService.updateStatus(
         2001L,
-        ResolutionStatus.IGNORED,
-        null
+        ResolutionStatus.IGNORED
     ))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
@@ -124,8 +157,7 @@ class FindingResolutionStatusUpdateServiceTest {
 
     assertThatThrownBy(() -> findingResolutionStatusUpdateService.updateStatus(
         finding.getId(),
-        ResolutionStatus.IGNORED,
-        null
+        ResolutionStatus.IGNORED
     ))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
@@ -136,11 +168,10 @@ class FindingResolutionStatusUpdateServiceTest {
   }
 
   @Test
-  void updateStatusWhenReasonTooLongAfterTrimThrowsInvalidParameter() {
+  void updateStatusWhenStatusMissingThrowsInvalidParameter() {
     assertThatThrownBy(() -> findingResolutionStatusUpdateService.updateStatus(
         2001L,
-        ResolutionStatus.RESOLVED,
-        " " + "a".repeat(1001) + " "
+        null
     ))
         .isInstanceOf(BusinessException.class)
         .extracting(ex -> ((BusinessException) ex).getErrorCode())
