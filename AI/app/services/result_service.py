@@ -154,6 +154,7 @@ def build_structured_analysis_result(
     finding: dict[str, Any],
     explanation: str | dict[str, Any],
     fix: dict[str, Any],
+    verified: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     explanation_sections, impact_text = normalize_explanation_payload(explanation)
     result = {
@@ -177,6 +178,8 @@ def build_structured_analysis_result(
         result["target"] = finding["target"]
     if finding.get("evidence"):
         result["evidence"] = finding["evidence"]
+    if verified is not None:
+        result["verified"] = verified
     return result
 
 

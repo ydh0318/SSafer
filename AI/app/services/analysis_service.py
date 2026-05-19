@@ -34,6 +34,7 @@ from app.services.s3_service import (
     download_scan_result_json_data,
     upload_analysis_result_json_data,
 )
+from app.services.verify_service import verify_and_maybe_regenerate
 
 
 logger = logging.getLogger(__name__)
@@ -435,10 +436,28 @@ def analyze_finding(
             message=str(exc),
         ) from exc
 
+    verify_started_ms = monotonic_ms()
+    fix, verify_result = verify_and_maybe_regenerate(finding, fix)
+    verified_payload = None if verify_result.stage == "skipped" else verify_result.to_dict()
+    if verified_payload is not None:
+        log_analysis_step(
+            "FastAPI finding verify completed.",
+            stage="VERIFY",
+            started_ms=verify_started_ms,
+            log_fields=log_fields,
+            findingId=finding_id,
+            findingIndex=finding_index,
+            findingTotal=finding_total,
+            verifyPassed=verify_result.passed,
+            verifyStage=verify_result.stage,
+            verifyRetries=verify_result.retries,
+        )
+
     result = build_structured_analysis_result(
         finding=finding,
         explanation=explanation,
         fix=fix,
+        verified=verified_payload,
     )
     log_analysis_step(
         "FastAPI finding analysis completed.",
@@ -550,11 +569,16 @@ def _analyze_findings_batch(
         if scan_type == "SERVER_AUDIT":
             fix.pop("patch", None)
             fix.pop("patches", None)
+        fix, verify_result = verify_and_maybe_regenerate(finding, fix)
+        verified_payload = (
+            None if verify_result.stage == "skipped" else verify_result.to_dict()
+        )
         results.append(
             build_structured_analysis_result(
                 finding=finding,
                 explanation=explanation,
                 fix=fix,
+                verified=verified_payload,
             )
         )
     return results
