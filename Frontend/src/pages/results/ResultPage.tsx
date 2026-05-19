@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, FileText, GitBranch, RefreshCw, Wand2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, GitBranch, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
@@ -8,7 +8,6 @@ import { ROUTES } from '../../constants/routes';
 import { getProjectDetail } from '../../features/projects/api/projects';
 import { getScanBasic, getScanFindingDetail, getScanFindings, getScanSummary } from '../../features/results/api/results';
 import ScanScopeInfo from '../../features/results/components/ScanScopeInfo';
-import ServerAuditResultView from '../../features/results/components/ServerAuditResultView';
 import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
@@ -21,7 +20,6 @@ import type {
   ScanFindingListItemData,
   ScanFindingListResponseData,
   ScanSummaryData,
-  ServerAuditResultViewModel,
 } from '../../types/scan';
 
 type ResultRouteState = {
@@ -243,42 +241,6 @@ function ResultPage() {
   const currentProjectId = scanBasic?.projectId ?? routeProjectId;
   const currentScanType = getSafeScanType(scanBasic?.scanType);
 
-  const serverAuditViewModel = useMemo<ServerAuditResultViewModel | null>(() => {
-    if (currentScanType !== 'SERVER_AUDIT' || !scanBasic) {
-      return null;
-    }
-    return {
-      scanId: scanBasic.scanId,
-      projectId: scanBasic.projectId,
-      scanType: 'SERVER_AUDIT',
-      status: scanBasic.status,
-      targetLabel: 'Agent 서버',
-      hostLabel: '',
-      generatedAt: scanBasic.completedAt ?? scanBasic.requestedAt,
-      findings: findingsData.items.map((f) => {
-        const detail = serverAuditDetails.get(f.findingId);
-        return {
-          findingId: f.findingId,
-          title: f.title,
-          severity: f.severity,
-          category: f.category,
-          target: f.filePath ?? f.resourceName ?? '-',
-          summary: detail?.explanation?.summary ?? detail?.description ?? f.title,
-          evidence: detail?.maskedEvidence ?? null,
-          observedAt: f.createdAt,
-          recommendation: detail?.fix?.summary ?? (detail?.fix?.recommendedActions?.join(' ') ?? null) ?? detail?.remediationGuide ?? '',
-          relatedWarnings: [],
-          relatedArtifacts: [],
-          actions: [],
-        };
-      }),
-      // warnings/artifacts/actions는 백엔드 server-audit 전용 API 미지원 상태
-      warnings: [],
-      artifacts: [],
-      actions: [],
-    };
-  }, [currentScanType, scanBasic, findingsData.items, serverAuditDetails]);
-
   const groupedFindings = useMemo(() => {
     return severityOrder
       .map((severity) => ({
@@ -402,15 +364,26 @@ function ResultPage() {
         <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">스캔 결과를 불러오는 중입니다.</div>
       ) : null}
 
-      {!isInitialLoading && currentScanType === 'SERVER_AUDIT' && serverAuditViewModel ? (
+      {!isInitialLoading && summary ? (
         <>
-          <ServerAuditResultView result={serverAuditViewModel} routeState={routeState} />
-          <ScanScopeInfo />
-        </>
-      ) : null}
+          {currentScanType === 'SERVER_AUDIT' ? (
+            <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-900">
+              <AlertTriangle className="mt-1 h-4 w-4 shrink-0 text-amber-600" />
+              <div>
+                <p className="font-black text-amber-950">서버 런타임 점검 결과입니다.</p>
+                <p>
+                  실행 중인 서버의 포트, Docker publish, 방화벽, SSH, nginx, 프로세스 상태를 기준으로 판단합니다.
+                  sudo 권한이나 OS package scan 옵션에 따라 일부 점검은 제한될 수 있습니다.
+                </p>
+                <p className="mt-2 font-bold text-amber-950">
+                  {
+                    '\uc11c\ubc84 \uc810\uac80\uc740 \uc6b4\uc601 \ud658\uacbd\uc758 \ud604\uc7ac \uc0c1\ud0dc\ub97c \ubcf4\ub294 \uac83\uc774\ub77c \uc6d0\uc778\uc774 \uc18c\uc2a4 \ud30c\uc77c, \uc11c\ubc84 \uc124\uc815, \ubc29\ud654\ubcbd \uc911 \uc5b4\ub514\uc778\uc9c0 \ub2e8\uc815\ud558\uae30 \uc5b4\ub835\uc2b5\ub2c8\ub2e4. \uc790\ub3d9 \ud328\uce58\ub294 \uc811\uadfc \ucc28\ub2e8\uc774\ub098 \uc11c\ube44\uc2a4 \uc911\ub2e8\uc73c\ub85c \uc774\uc5b4\uc9c8 \uc218 \uc788\uc5b4, \uad8c\uc7a5 \uc870\uce58\ub97c \ud655\uc778\ud55c \ub4a4 \uc6b4\uc601 \ud658\uacbd\uc5d0 \ub9de\uac8c \uc801\uc6a9\ud574\uc57c \ud569\ub2c8\ub2e4.'
+                  }
+                </p>
+              </div>
+            </div>
+          ) : null}
 
-      {!isInitialLoading && currentScanType === 'PROJECT_FILE' && summary ? (
-        <>
           {/* ── Severity 카드 ── */}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {severityOrder.map((severity) => {
@@ -554,6 +527,12 @@ function ResultPage() {
 
                   {group.items.map((finding) => {
                     const dimmed = finding.resolutionStatus === 'RESOLVED' || finding.resolutionStatus === 'IGNORED';
+                    const serverDetail = currentScanType === 'SERVER_AUDIT' ? serverAuditDetails.get(finding.findingId) : null;
+                    const serverRecommendation =
+                      serverDetail?.fix?.summary ??
+                      serverDetail?.fix?.recommendedActions?.join(' ') ??
+                      serverDetail?.remediationGuide ??
+                      null;
 
                     {
                       const findingUrl = ROUTES.resultFindingDetail
@@ -566,8 +545,6 @@ function ResultPage() {
                         >
                           <Link
                             className="flex flex-1 items-start gap-4 p-5 hover:bg-[#F5F5F5]"
-                            // 박스 자체를 누르면 항상 "왜 위험한가" 탭으로 진입한다.
-                            // 옆에 있는 "고치기" 버튼만 'apply' 탭으로 직접 진입한다.
                             state={{ ...routeState, initialView: 'explain' }}
                             to={findingUrl}
                           >
@@ -590,18 +567,22 @@ function ResultPage() {
                               </div>
                               <h3 className={`mt-3 text-base font-bold ${dimmed ? 'line-through' : ''}`}>{finding.title}</h3>
                               <div className="mt-2 font-mono text-xs text-neutral-500">{formatFindingLocation(finding)}</div>
+                              {currentScanType === 'SERVER_AUDIT' ? (
+                                <div className="mt-3 space-y-2">
+                                  <div className="rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs leading-6 text-neutral-700">
+                                    <span className="mr-2 font-bold uppercase tracking-[0.16em] text-neutral-400">Evidence</span>
+                                    <span className="font-mono">{serverDetail?.maskedEvidence ?? formatFindingLocation(finding)}</span>
+                                  </div>
+                                  {serverRecommendation ? (
+                                    <div className="rounded border border-neutral-200 bg-white px-3 py-2 text-xs leading-6 text-neutral-700">
+                                      <span className="mr-2 font-bold uppercase tracking-[0.16em] text-neutral-400">Recommendation</span>
+                                      {serverRecommendation}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
                           </Link>
-                          {!dimmed ? (
-                            <Link
-                              className="self-center mr-5 shrink-0 inline-flex items-center gap-1.5 rounded border border-neutral-200 px-3 py-1.5 text-[11px] font-bold text-neutral-600 transition hover:border-neutral-800 hover:bg-neutral-900 hover:text-white"
-                              state={{ ...routeState, initialView: 'apply' }}
-                              to={findingUrl}
-                            >
-                              <Wand2 className="h-3 w-3" />
-                              고치기
-                            </Link>
-                          ) : null}
                         </div>
                       );
                     }

@@ -43,6 +43,14 @@ function ScanRequestForm({
 
   const isAgentMode = scanRequestMethod === 'AGENT';
   const agentOnline = agentStatus?.status === 'ONLINE';
+  const agentCardDisabled = !agentAvailable || (!isAgentLoading && !agentOnline);
+  const agentCardReason = isAgentLoading
+    ? null
+    : !agentStatus
+    ? '\u0041gent \uc0c1\ud0dc\ub97c \ud655\uc778\ud558\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.'
+    : !agentOnline
+    ? '\u0041gent\uac00 ONLINE \uc0c1\ud0dc\uc77c \ub54c\ub9cc \uc120\ud0dd\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.'
+    : null;
   // 로딩 중에는 차단하지 않음: agentStatus가 null인 것이 "없음"이 아닌 "아직 확인 안 됨"일 수 있기 때문
   const isAgentSubmitBlocked = isAgentMode && !isAgentLoading && !agentOnline;
   const agentBlockReason = !isAgentMode
@@ -61,20 +69,51 @@ function ScanRequestForm({
         <button
           className={`border px-4 py-4 text-left transition ${
             scanRequestMethod === 'AGENT'
-              ? 'border-black bg-black text-white'
+              ? agentCardDisabled
+                ? 'border-amber-200 bg-amber-50 text-amber-950'
+                : 'border-black bg-black text-white'
+              : agentCardDisabled
+              ? 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-400 opacity-70 grayscale'
               : 'border-neutral-300 bg-white text-black hover:border-black'
-          } ${agentAvailable ? '' : 'cursor-not-allowed opacity-40'}`}
-          disabled={!agentAvailable}
-          onClick={() => onMethodChange('AGENT')}
+          }`}
+          disabled={agentCardDisabled}
+          onClick={() => {
+            if (!agentCardDisabled) {
+              onMethodChange('AGENT');
+            }
+          }}
+          title={agentCardReason ?? undefined}
           type="button"
         >
-          <div className="flex items-center gap-2">
-            <Terminal className="h-4 w-4" />
-            <p className="text-sm font-black">에이전트 기반 스캔</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4" />
+              <p className="text-sm font-black">에이전트 기반 스캔</p>
+            </div>
+            {agentCardDisabled ? (
+              <span className="rounded-full border border-neutral-300 bg-white px-2 py-0.5 text-[10px] font-black tracking-[0.16em] text-neutral-400">
+                OFFLINE
+              </span>
+            ) : (
+              <span className="rounded-full bg-[#D4FC64] px-2 py-0.5 text-[10px] font-black tracking-[0.16em] text-black">
+                ONLINE
+              </span>
+            )}
           </div>
-          <p className={`mt-2 text-xs leading-6 ${scanRequestMethod === 'AGENT' ? 'text-neutral-300' : 'text-neutral-500'}`}>
+          <p
+            className={`mt-2 text-xs leading-6 ${
+              agentCardDisabled
+                ? scanRequestMethod === 'AGENT'
+                  ? 'text-amber-800'
+                  : 'text-neutral-400'
+                : scanRequestMethod === 'AGENT'
+                ? 'text-neutral-300'
+                : 'text-neutral-500'
+            }`}
+          >
             프로젝트에 연결된 Local Agent를 통해 서버 정보를 수집하고 점검을 이어서 진행할 수 있습니다.
           </p>
+          {agentCardReason ? <p className="mt-2 text-xs font-bold text-amber-700">{agentCardReason}</p> : null}
         </button>
         <button
           className={`border px-4 py-4 text-left transition ${

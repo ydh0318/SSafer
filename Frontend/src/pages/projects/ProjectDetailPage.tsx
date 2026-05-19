@@ -310,7 +310,7 @@ function ProjectDetailPage() {
   }
 
   const agentIsOnline = agentStatus?.status === 'ONLINE';
-  const latestScan = completedScans[0] ?? scans[0] ?? null;
+  const latestScan = completedScans[0] ?? null;
 
   const handleStartNewScan = () => {
     navigate(ROUTES.projects, { state: { focusProjectId: projectId } });
@@ -339,6 +339,7 @@ function ProjectDetailPage() {
           }
         }}
         onStartScan={handleStartNewScan}
+        projectId={projectId}
         projectName={projectDetail?.name ?? null}
       />
 

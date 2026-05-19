@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, FolderPlus, Plus, ScanSearch, Trash2, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ChevronDown, Clock, FolderPlus, Plus, ScanSearch, Search, Trash2, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -49,6 +49,8 @@ const initialProjectForm: CreateProjectFormValues = {
   monitorEnabled: true,
 };
 
+const SELECTED_PROJECT_STORAGE_KEY = 'ssafer:selected-project-id';
+
 function normalizeProjectName(value: string) {
   return value.trim();
 }
@@ -63,7 +65,7 @@ function getAgentDisplay(
     if (agentStatus.status === 'ONLINE') {
       return {
         label: 'Agent 연결됨',
-        className: isSelected ? 'text-[#D4FC64]' : 'text-[#8CC319]',
+        className: isSelected ? 'text-emerald-300' : 'text-emerald-700',
       };
     }
     if (agentStatus.status === 'ERROR') {
@@ -107,6 +109,8 @@ function ProjectListPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [projectSearchTerm, setProjectSearchTerm] = useState('');
+  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
   const [selectedMode, setSelectedMode] = useState<ScanModeOption>('UPLOAD');
   const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
   const [createUploadFiles, setCreateUploadFiles] = useState<File[]>([]);
@@ -120,6 +124,7 @@ function ProjectListPage() {
   const [completedScansRefreshKey, setCompletedScansRefreshKey] = useState(0);
   const [selectedAgentScanType, setSelectedAgentScanType] = useState<ScanType>('PROJECT_FILE');
   const [agentStatusMap, setAgentStatusMap] = useState<Record<string, AgentStatusResponseData | null>>({});
+  const projectSelectRef = useRef<HTMLDivElement | null>(null);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useScanEventSubscription(
@@ -142,6 +147,19 @@ function ProjectListPage() {
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isProjectDropdownOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!projectSelectRef.current?.contains(event.target as Node)) {
+        setIsProjectDropdownOpen(false);
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [isProjectDropdownOpen]);
 
   const {
     closeDeleteModal,
@@ -229,16 +247,27 @@ function ProjectListPage() {
       return;
     }
 
-    // ProjectDetailPage 등에서 focusProjectId state로 넘겨준 경우 우선 적용
     if (focusProjectId && projects.some((project) => project.id === focusProjectId)) {
-      setSelectedProjectId((current) => current ?? focusProjectId);
+      setSelectedProjectId(focusProjectId);
       return;
     }
 
     if (!selectedProjectId || !projects.some((project) => project.id === selectedProjectId)) {
-      setSelectedProjectId(projects[0].id);
+      const storedProjectId = window.sessionStorage.getItem(SELECTED_PROJECT_STORAGE_KEY);
+      const nextProjectId =
+        storedProjectId && projects.some((project) => project.id === storedProjectId)
+          ? storedProjectId
+          : projects[0].id;
+
+      setSelectedProjectId(nextProjectId);
     }
   }, [projects, selectedProjectId, focusProjectId]);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      window.sessionStorage.setItem(SELECTED_PROJECT_STORAGE_KEY, selectedProjectId);
+    }
+  }, [selectedProjectId]);
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -313,6 +342,20 @@ function ProjectListPage() {
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
+  const selectedProjectAgentOnline = selectedProject
+    ? agentStatusMap[selectedProject.id]?.status === 'ONLINE'
+    : false;
+
+  const filteredProjects = useMemo(() => {
+    const keyword = projectSearchTerm.trim().toLowerCase();
+    if (!keyword) return projects;
+
+    return projects.filter((project) => {
+      const name = project.name.toLowerCase();
+      const id = project.id.toLowerCase();
+      return name.includes(keyword) || id.includes(keyword);
+    });
+  }, [projectSearchTerm, projects]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -353,26 +396,19 @@ function ProjectListPage() {
     };
   }, [selectedProject]);
 
-  const completedProjectEntries = useMemo(
-    () =>
-      projects
-        .map((project) => {
-          const latestCompleted = latestCompletedScans[project.id];
+  useEffect(() => {
+    if (selectedMode === 'AGENT' && selectedProjectScanOptions && !selectedProjectAgentOnline) {
+      setSelectedMode('UPLOAD');
+    }
+  }, [selectedMode, selectedProjectScanOptions, selectedProjectAgentOnline]);
 
-          if (!latestCompleted) {
-            return null;
-          }
-
-          return { latestCompleted, project };
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null)
-        .sort((left, right) => {
-          const leftTime = new Date(left.latestCompleted.scan.completedAt ?? left.latestCompleted.scan.requestedAt).getTime();
-          const rightTime = new Date(right.latestCompleted.scan.completedAt ?? right.latestCompleted.scan.requestedAt).getTime();
-          return rightTime - leftTime;
-        }),
-    [latestCompletedScans, projects],
+  const selectedLatestCompleted = useMemo(
+    () => (selectedProjectId ? latestCompletedScans[selectedProjectId] ?? null : null),
+    [latestCompletedScans, selectedProjectId],
   );
+  const selectedLatestProjectFileScan =
+    selectedLatestCompleted && selectedLatestCompleted.scan.scanType !== 'SERVER_AUDIT' ? selectedLatestCompleted : null;
+  const canApplyLatestProjectFileScan = selectedAgentScanType === 'PROJECT_FILE' && Boolean(selectedLatestProjectFileScan);
 
   const resetCreateForm = () => {
     setFormValues(initialProjectForm);
@@ -472,7 +508,7 @@ function ProjectListPage() {
       return;
     }
 
-    if (selectedMode === 'AGENT' && !selectedProjectScanOptions?.availableScanModes.includes('AGENT')) {
+    if (selectedMode === 'AGENT' && (!selectedProjectScanOptions?.availableScanModes.includes('AGENT') || !selectedProjectAgentOnline)) {
       setScanError('이 프로젝트에서는 아직 Agent 스캔을 사용할 수 없습니다.');
       return;
     }
@@ -555,47 +591,101 @@ function ProjectListPage() {
         ) : loadError ? (
           <PageBanner message={loadError} tone="error" />
         ) : (
-          <div className="flex flex-wrap items-stretch gap-3">
-            {projects.map((project) => {
-              const isSelected = project.id === selectedProjectId;
+          <div className="relative max-w-2xl" ref={projectSelectRef}>
+            <button
+              className="flex min-h-[76px] w-full items-center justify-between gap-4 border border-neutral-200 bg-white px-5 text-left transition landing-card-radius hover:border-black"
+              onClick={() => setIsProjectDropdownOpen((current) => !current)}
+              type="button"
+            >
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Selected Project</p>
+                <p className="mt-1 truncate text-xl font-black text-black">
+                  {selectedProject ? selectedProject.name : '프로젝트를 선택하세요'}
+                </p>
+                {selectedProject ? (
+                  <p className="mt-1 text-xs font-semibold text-neutral-500">
+                    projectId #{selectedProject.id}
+                    {selectedProjectId && latestCompletedScans[selectedProjectId]
+                      ? ` · 최근 스캔 #${latestCompletedScans[selectedProjectId].scan.scanId}`
+                      : ''}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                {selectedProject ? (() => {
+                  const agentDisplay = getAgentDisplay(selectedProject, agentStatusMap[selectedProject.id] ?? null, true);
+                  return <span className={`hidden text-sm font-bold sm:inline ${agentDisplay.className}`}>{agentDisplay.label}</span>;
+                })() : null}
+                <ChevronDown className={`h-5 w-5 text-neutral-400 transition ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
 
-              return (
+            {isProjectDropdownOpen ? (
+              <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden border border-neutral-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.16)] landing-card-radius">
+                <div className="border-b border-neutral-100 p-3">
+                  <label className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm focus-within:border-black focus-within:bg-white">
+                    <Search className="h-4 w-4 text-neutral-400" />
+                    <input
+                      autoFocus
+                      className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-black outline-none placeholder:text-neutral-400"
+                      onChange={(event) => setProjectSearchTerm(event.target.value)}
+                      placeholder="프로젝트 이름 또는 ID 검색"
+                      type="text"
+                      value={projectSearchTerm}
+                    />
+                  </label>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto p-2">
+                  {filteredProjects.length > 0 ? (
+                    filteredProjects.map((project) => {
+                      const isSelected = project.id === selectedProjectId;
+                      const agentDisplay = getAgentDisplay(project, agentStatusMap[project.id] ?? null, isSelected);
+                      const latest = latestCompletedScans[project.id];
+
+                      return (
+                        <button
+                          className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition ${
+                            isSelected ? 'bg-black text-white' : 'text-black hover:bg-neutral-50'
+                          }`}
+                          key={project.id}
+                          onClick={() => {
+                            setSelectedProjectId(project.id);
+                            setProjectSearchTerm('');
+                            setIsProjectDropdownOpen(false);
+                          }}
+                          type="button"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black">{project.name}</p>
+                            <p className={`mt-0.5 text-xs ${isSelected ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                              projectId #{project.id}
+                              {latest ? ` · 최근 스캔 #${latest.scan.scanId}` : ''}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 text-xs font-bold ${agentDisplay.className}`}>{agentDisplay.label}</span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="px-3 py-5 text-center text-sm text-neutral-500">검색 결과가 없습니다.</div>
+                  )}
+                </div>
+
                 <button
-                  className={`inline-flex min-h-[72px] min-w-[220px] items-center gap-3 px-6 text-left text-base font-black transition landing-card-radius ${
-                    isSelected ? 'bg-[#111111] text-white' : 'bg-white text-black hover:bg-neutral-50'
-                  }`}
-                  key={project.id}
+                  className="flex w-full items-center gap-2 border-t border-dashed border-neutral-200 px-4 py-3 text-sm font-black text-black transition hover:bg-[#F8FFE8]"
                   onClick={() => {
-                    if (isSelected) {
-                      navigate(ROUTES.projectDetail.replace(':projectId', project.id));
-                      return;
-                    }
-
-                    setSelectedProjectId(project.id);
+                    setIsProjectDropdownOpen(false);
+                    setProjectSearchTerm('');
+                    setIsCreateOpen(true);
                   }}
                   type="button"
                 >
-                  <span className="truncate text-lg md:text-xl">{project.name}</span>
-                  {(() => {
-                    const agentDisplay = getAgentDisplay(project, agentStatusMap[project.id] ?? null, isSelected);
-                    return (
-                      <span className={`shrink-0 text-sm font-bold ${agentDisplay.className}`}>
-                        {agentDisplay.label}
-                      </span>
-                    );
-                  })()}
+                  <Plus className="h-4 w-4" />
+                  새 프로젝트 만들기
                 </button>
-              );
-            })}
-
-            <button
-              className="inline-flex min-h-[72px] min-w-[120px] items-center justify-center gap-2 border border-dashed border-neutral-300 bg-white px-6 text-xl font-black text-[#111111] transition landing-card-radius hover:border-black"
-              onClick={() => setIsCreateOpen(true)}
-              type="button"
-            >
-              <Plus className="h-5 w-5" />
-              추가
-            </button>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -625,85 +715,62 @@ function ProjectListPage() {
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-sm text-neutral-500">최근 결과</div>
-            <h2 className="mt-1.5 text-xl font-black tracking-tight text-[#080B16] md:text-2xl">가장 최근에 완료된 스캔</h2>
+            <h2 className="mt-1.5 text-xl font-black tracking-tight text-[#080B16] md:text-2xl">선택한 프로젝트의 최신 완료 스캔</h2>
           </div>
-          <p className="text-sm text-neutral-500">프로젝트별 최신 완료 결과를 바로 열어볼 수 있습니다.</p>
+          <p className="text-sm text-neutral-500">현재 선택한 프로젝트의 가장 최근 완료 결과만 보여줍니다.</p>
         </div>
 
         {isLoadingCompletedScans ? (
           <div className="border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">최신 완료 결과를 불러오는 중입니다.</div>
-        ) : completedProjectEntries.length === 0 ? (
+        ) : !selectedProject ? (
           <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600 landing-card-radius">
-            아직 완료된 스캔이 없습니다.
+            먼저 프로젝트를 선택하면 최신 완료 스캔을 확인할 수 있습니다.
+          </div>
+        ) : !selectedLatestCompleted ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600 landing-card-radius">
+            <span>선택한 프로젝트에 아직 완료된 스캔이 없습니다.</span>
+            <button
+              className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white transition hover:bg-neutral-800"
+              onClick={() => setSelectedMode('UPLOAD')}
+              type="button"
+            >
+              스캔 시작하기
+            </button>
           </div>
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {completedProjectEntries.map(({ project, latestCompleted }) => {
-              const detailPath = ROUTES.projectDetail.replace(':projectId', project.id);
-              const resultPath = ROUTES.resultDetail.replace(':scanId', String(latestCompleted.scan.scanId));
-
-              return (
-                <button
-                  className="flex flex-col gap-4 border border-black/5 bg-white p-5 text-left transition landing-card-radius hover:-translate-y-0.5 hover:border-black/15 hover:shadow-[0_18px_40px_rgba(15,23,42,0.06)]"
-                  key={project.id}
-                  onClick={() => navigate(resultPath, { state: { projectId: project.id } })}
-                  type="button"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Latest Result</div>
-                      <h3 className="mt-1.5 text-xl font-black tracking-tight text-black">{project.name}</h3>
-                    </div>
-                    <span className="rounded-full bg-black px-2.5 py-1 text-[11px] font-bold text-white">Scan #{latestCompleted.scan.scanId}</span>
-                  </div>
-
-                  <div className="grid gap-3 text-xs text-neutral-600 md:grid-cols-2">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Completed</div>
-                      <div className="mt-1 text-sm font-semibold text-black">
-                        {formatCompactDateTime(latestCompleted.scan.completedAt ?? latestCompleted.scan.requestedAt)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Mode</div>
-                      <div className="mt-1 text-sm font-semibold text-black">{getScanModeLabel(latestCompleted.scan.scanMode)}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center bg-[#D4FC64] px-3 py-1.5 text-xs font-bold text-black landing-inner-radius">결과 바로 보기</span>
-                    <button
-                      className="border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition landing-inner-radius hover:border-black hover:text-black"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        navigate(detailPath);
-                      }}
-                      type="button"
-                    >
-                      프로젝트 상세
-                    </button>
-                    <button
-                      className="border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition landing-inner-radius hover:border-rose-300 hover:bg-rose-50"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openDeleteModal({ id: project.id, name: project.name });
-                      }}
-                      type="button"
-                    >
-                      프로젝트 삭제
-                    </button>
-                  </div>
-                </button>
-              );
+          <button
+            className="flex w-full flex-col gap-4 border border-black/5 bg-white p-5 text-left transition landing-card-radius hover:-translate-y-0.5 hover:border-black/15 hover:shadow-[0_18px_40px_rgba(15,23,42,0.06)] md:flex-row md:items-center md:justify-between"
+            onClick={() => navigate(ROUTES.resultDetail.replace(':scanId', String(selectedLatestCompleted.scan.scanId)), {
+              state: { projectId: selectedLatestCompleted.projectId },
             })}
-          </div>
+            type="button"
+          >
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Latest Result</div>
+              <h3 className="mt-1.5 truncate text-xl font-black tracking-tight text-black">{selectedLatestCompleted.projectName}</h3>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-600">
+                <span>
+                  <span className="font-bold uppercase tracking-[0.18em] text-neutral-400">Completed</span>{' '}
+                  <span className="font-semibold text-black">{formatCompactDateTime(selectedLatestCompleted.scan.completedAt ?? selectedLatestCompleted.scan.requestedAt)}</span>
+                </span>
+                <span>
+                  <span className="font-bold uppercase tracking-[0.18em] text-neutral-400">Mode</span>{' '}
+                  <span className="font-semibold text-black">{getScanModeLabel(selectedLatestCompleted.scan.scanMode)}</span>
+                </span>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <span className="rounded-full bg-black px-2.5 py-1 text-[11px] font-bold text-white">Scan #{selectedLatestCompleted.scan.scanId}</span>
+              <span className="inline-flex items-center bg-[#D4FC64] px-3 py-1.5 text-xs font-bold text-black landing-inner-radius">결과 바로 보기</span>
+            </div>
+          </button>
         )}
       </section>
 
       <ScanModePicker
         isAgentAvailable={
           selectedProject
-            ? Boolean(selectedProjectScanOptions?.availableScanModes.includes('AGENT'))
+            ? Boolean(selectedProjectScanOptions?.availableScanModes.includes('AGENT') && selectedProjectAgentOnline)
             : false
         }
         onSelect={setSelectedMode}
@@ -715,6 +782,11 @@ function ProjectListPage() {
           <UploadDropZone
             files={selectedUploadFiles}
             isDragOver={isDragOver}
+            onFileLimitExceeded={() => {
+              toast.warning(getUploadScanValidationToastMessage('FILE_COUNT_EXCEEDED') ?? '파일은 최대 3개까지 업로드할 수 있습니다.', {
+                durationMs: 3000,
+              });
+            }}
             onDragStateChange={setIsDragOver}
             onFilesChange={handleUploadFileChange}
           />
@@ -769,6 +841,18 @@ function ProjectListPage() {
                     </p>
                   </button>
                 </div>
+                {selectedAgentScanType === 'SERVER_AUDIT' ? (
+                  <div className="mt-3 flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900 landing-inner-radius">
+                    <AlertTriangle className="mt-1 h-4 w-4 shrink-0" />
+                    <div>
+                      <p className="font-black text-amber-950">Agent 서버 점검은 비대화형으로 실행됩니다.</p>
+                      <p className="mt-1">
+                        비밀번호 입력이 필요한 sudo 명령은 실행할 수 없어 DOCKER-USER, iptables, 일부 방화벽 상세 점검 결과가 제한될 수 있습니다.
+                        더 완전한 점검이 필요하면 서버 터미널에서 <code className="rounded bg-amber-100 px-1 font-mono">ssafer server --upload</code>를 직접 실행하세요.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -776,7 +860,7 @@ function ProjectListPage() {
               <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {/* 스캔 */}
                 <button
-                  className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isStartingScan || !selectedProject}
                   onClick={() => void handleStartScan()}
                   type="button"
@@ -795,10 +879,9 @@ function ProjectListPage() {
                 {/* 수정 */}
                 <button
                   className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  disabled={!selectedProject || !(selectedProjectId && latestCompletedScans[selectedProjectId])}
+                  disabled={!selectedProject || !canApplyLatestProjectFileScan}
                   onClick={() => {
-                    if (!selectedProjectId) return;
-                    const latest = latestCompletedScans[selectedProjectId];
+                    const latest = selectedLatestProjectFileScan;
                     if (!latest?.scan?.scanId) return;
                     navigate(ROUTES.resultDetail.replace(':scanId', String(latest.scan.scanId)));
                   }}
@@ -810,9 +893,11 @@ function ProjectListPage() {
                   <div>
                     <p className="font-black">수정</p>
                     <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                      {selectedProject && selectedProjectId && latestCompletedScans[selectedProjectId]
-                        ? '최근 스캔 결과에서 패치를 확인하고 적용합니다.'
-                        : '완료된 스캔이 없습니다. 먼저 스캔을 실행해 주세요.'}
+                      {selectedAgentScanType === 'SERVER_AUDIT'
+                        ? '\uc11c\ubc84 \uc810\uac80\uc740 \uc2e4\ud589 \uc911\uc778 \ud3ec\ud2b8, \ubc29\ud654\ubcbd, SSH, Docker \uc0c1\ud0dc\ucc98\ub7fc \uc6b4\uc601 \ud658\uacbd\uc744 \ud655\uc778\ud569\ub2c8\ub2e4. \uc6d0\uc778\uc774 \uc18c\uc2a4 \ud30c\uc77c, \uc11c\ubc84 \uc124\uc815, \ubc29\ud654\ubcbd \uc911 \uc5b4\ub514\uc778\uc9c0 \ub2e8\uc815\ud558\uae30 \uc5b4\ub824\uc6cc \uc790\ub3d9 \ud328\uce58 \uc2dc \uc11c\ube44\uc2a4 \uc7a5\uc560\uac00 \ub0a0 \uc218 \uc788\uc73c\ubbc0\ub85c, \uc218\uc815 \uae30\ub2a5\uc740 \uc81c\uacf5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.'
+                        : selectedLatestProjectFileScan
+                        ? '\ucd5c\uc2e0 \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94 \uacb0\uacfc\uc758 \uc218\uc815\uc548\uc744 \ud655\uc778\ud569\ub2c8\ub2e4.'
+                        : '\uc644\ub8cc\ub41c \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc774 \uc5c6\uc2b5\ub2c8\ub2e4. \uba3c\uc800 \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc744 \uc2e4\ud589\ud558\uc138\uc694.'}
                     </p>
                   </div>
                 </button>
@@ -824,7 +909,7 @@ function ProjectListPage() {
         <aside className="space-y-4">
           <SecretMaskingCard />
           <EstimatedDurationCard />
-          {selectedMode !== 'CLI' ? (
+          {selectedMode === 'UPLOAD' ? (
             <button
               className="inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-5 py-3.5 text-sm font-black text-black transition landing-inner-radius hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(212,252,100,0.45)] hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
               disabled={

@@ -31,7 +31,7 @@ export function formatDateTime(value: string | null | undefined) {
     return '-';
   }
 
-  const date = new Date(value);
+  const date = parseBackendDateTime(value);
 
   if (Number.isNaN(date.getTime())) {
     return value;
@@ -51,7 +51,7 @@ export function formatCompactDateTime(value: string | null | undefined) {
     return '-';
   }
 
-  const date = new Date(value);
+  const date = parseBackendDateTime(value);
 
   if (Number.isNaN(date.getTime())) {
     return value;
@@ -63,6 +63,13 @@ export function formatCompactDateTime(value: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function parseBackendDateTime(value: string) {
+  const normalized = /^\d{4}-\d{2}-\d{2}T/.test(value) && !/(Z|[+-]\d{2}:\d{2})$/.test(value)
+    ? `${value}Z`
+    : value;
+  return new Date(normalized);
 }
 
 export function formatBooleanLabel(value: boolean) {

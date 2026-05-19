@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from ssafer.core import agent
 from ssafer.core.hashing import hash_file
+from ssafer.core.patches import PatchApplyResult
 from ssafer.main import app
 from ssafer.server.audit import ServerAuditResult
 
@@ -299,6 +300,40 @@ def test_handle_agent_task_applies_patch_payload(tmp_path: Path):
     assert result.status == "SUCCESS"
     assert result.patch_results[0].patch_id == "PATCH-1"
     assert target.read_text(encoding="utf-8") == "FROM alpine\nUSER appuser\n"
+
+
+def test_handle_agent_task_emits_patch_apply_steps(tmp_path: Path):
+    target = tmp_path / "Dockerfile"
+    target.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+    task = agent.AgentTask(
+        task_id=12,
+        task_type="PATCH_APPLY",
+        task_status="PENDING",
+        project_id=1,
+        scan_id=2,
+        finding_id=3,
+        payload={
+            "patches": [
+                {
+                    "patchId": "PATCH-1",
+                    "filePath": "Dockerfile",
+                    "oldText": "USER root",
+                    "newText": "USER appuser",
+                    "expectedFileHash": hash_file(target),
+                }
+            ]
+        },
+    )
+    steps: list[str] = []
+
+    result = agent.handle_agent_task(tmp_path, task, on_step=steps.append)
+
+    assert result.status == "SUCCESS"
+    assert steps == [
+        "수정안 payload를 검증하는 중...",
+        "수정안 1개를 적용하는 중...",
+        "수정안 적용 결과를 정리하는 중...",
+    ]
 
 
 def test_handle_agent_task_fails_invalid_patch_apply_payload(tmp_path: Path):
@@ -919,6 +954,33 @@ def test_agent_watch_command_prints_pending_task_count(monkeypatch, tmp_path: Pa
     assert "PATCH_APPLY" in result.output
 
 
+def test_agent_watch_command_prints_patch_apply_step(monkeypatch, tmp_path: Path):
+    async def fake_watch_agent(**kwargs):
+        kwargs["on_event"](
+            "task_step",
+            {
+                "taskId": 10,
+                "taskType": "PATCH_APPLY",
+                "scanId": 2,
+                "message": "validating patch payload",
+            },
+        )
+
+    monkeypatch.setenv("SSAFER_AGENT_ID", "7")
+    monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
+    monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
+
+    assert result.exit_code == 0
+    assert "Agent apply" in result.output
+    assert "taskId=10" in result.output
+    assert "validating patch payload" in result.output
+
+
 def test_agent_watch_command_summarizes_repeated_pending_task_types(monkeypatch, tmp_path: Path):
     tasks = [
         agent.AgentTask(
@@ -978,6 +1040,42 @@ def test_agent_watch_command_prints_dry_run_and_task_result_table(monkeypatch, t
     assert "Agent task #10 result" in result.output
     assert "PATCH_APPLY" in result.output
     assert "DRY_RUN" in result.output
+
+
+def test_agent_watch_command_prints_patch_apply_completion_summary(monkeypatch, tmp_path: Path):
+    async def fake_watch_agent(**kwargs):
+        kwargs["on_event"](
+            "task",
+            agent.AgentTaskResult(
+                task_id=10,
+                task_type="PATCH_APPLY",
+                status="SUCCESS",
+                message="Applied 1 patch candidate(s).",
+                patch_results=[
+                    PatchApplyResult(
+                        patch_id="PATCH-FND-0001",
+                        finding_id="FND-0001",
+                        file_path="docker-compose.yml",
+                        status="SUCCESS",
+                        message="Patch applied successfully.",
+                    )
+                ],
+            ),
+        )
+
+    monkeypatch.setenv("SSAFER_AGENT_ID", "7")
+    monkeypatch.setenv("SSAFER_PROJECT_ID", "3")
+    monkeypatch.setenv("SSAFER_AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr("ssafer.core.auth.load_agent_config", lambda *args, **kwargs: {})
+    monkeypatch.setattr("ssafer.core.auth.load_endpoint", lambda: "https://example.com")
+    monkeypatch.setattr("ssafer.core.agent.watch_agent", fake_watch_agent)
+
+    result = CliRunner().invoke(app, ["agent-watch", "--path", str(tmp_path), "--once"])
+
+    assert result.exit_code == 0
+    assert "PATCH_APPLY" in result.output
+    assert "패치 적용 완료" in result.output
+    assert "applied=1" in result.output
 
 
 def test_agent_watch_command_summarizes_scan_request_raw_results_conflict(monkeypatch, tmp_path: Path):

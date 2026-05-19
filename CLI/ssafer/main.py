@@ -496,6 +496,7 @@ def apply_fix(
             selected_candidates,
             patch_id=selected_patch_id,
             dry_run=dry_run,
+            allow_hash_mismatch_if_text_matches=True,
         )
     except (OSError, ValueError, PatchError, RuntimeError) as exc:
         console.print(f"[red]수정 적용 실패:[/red] {exc}")
@@ -858,6 +859,25 @@ def _run_agent_watch(
     if dry_run:
         console.print("[yellow]Dry-run 모드입니다. 파일은 변경하지 않습니다.[/yellow]")
 
+    live_status = None
+
+    def _update_live_status(message: str) -> None:
+        nonlocal live_status
+        if verbose:
+            return
+        if live_status is None:
+            live_status = console.status(f"[cyan]{message}[/cyan]", spinner="dots")
+            live_status.start()
+            return
+        live_status.update(f"[cyan]{message}[/cyan]")
+
+    def _stop_live_status() -> None:
+        nonlocal live_status
+        if live_status is None:
+            return
+        live_status.stop()
+        live_status = None
+
     def on_event(event_type: str, payload: object) -> None:
         if event_type == "connected":
             if verbose:
@@ -935,7 +955,8 @@ def _run_agent_watch(
             if isinstance(payload, dict):
                 task_id = str(payload.get("taskId", "-"))
                 count = str(payload.get("count", "-"))
-            console.print(f"[green]Agent task 결과 보고 완료.[/green] taskId={task_id}, count={count}")
+            if verbose:
+                console.print(f"[green]Agent task 결과 보고 완료.[/green] taskId={task_id}, count={count}")
             return
         if event_type == "task_result_report_failed":
             task_id = "-"
@@ -948,32 +969,57 @@ def _run_agent_watch(
         if event_type == "task_step":
             task_id = "-"
             scan_id = "-"
+            task_type = "-"
             message = "-"
             if isinstance(payload, dict):
                 task_id = str(payload.get("taskId", "-"))
                 scan_id = str(payload.get("scanId", "-"))
+                task_type = str(payload.get("taskType", "-"))
                 message = str(payload.get("message", "-"))
-            console.print(f"[cyan]Agent scan 진행 중[/cyan] taskId={task_id}, scanId={scan_id}: {message}")
+            if task_type == "PATCH_APPLY":
+                _stop_live_status()
+                console.print(f"[cyan]Agent apply 진행 중...[/cyan] taskId={task_id}: {message}")
+                return
+            action_label = "Agent apply" if task_type == "PATCH_APPLY" else "Agent scan"
+            if verbose:
+                if task_type == "PATCH_APPLY":
+                    console.print(f"[cyan]{action_label} 진행 중[/cyan] taskId={task_id}: {message}")
+                else:
+                    console.print(f"[cyan]{action_label} 진행 중[/cyan] taskId={task_id}, scanId={scan_id}: {message}")
+            else:
+                if task_type == "PATCH_APPLY":
+                    _update_live_status(f"{action_label} 진행 중... taskId={task_id} · {message}")
+                else:
+                    _update_live_status(f"{action_label} 진행 중... scanId={scan_id} · {message}")
             return
         if event_type == "analysis_wait_started":
             scan_id = str(payload.get("scanId", "-")) if isinstance(payload, dict) else "-"
-            console.print(f"[cyan]AI 분석 완료를 기다리는 중...[/cyan] scanId={scan_id}")
+            if verbose:
+                console.print(f"[cyan]AI 분석 완료를 기다리는 중...[/cyan] scanId={scan_id}")
+            else:
+                _update_live_status(f"AI 분석 완료를 기다리는 중... scanId={scan_id}")
             return
         if event_type == "analysis_status":
             if isinstance(payload, dict):
-                console.print(
-                    f"[cyan]AI 분석 진행 중...[/cyan] "
-                    f"scanId={payload.get('scanId', '-')}, 상태={payload.get('status', '-')}, 단계={payload.get('progressStep') or '-'}"
+                message = (
+                    f"AI 분석 진행 중... scanId={payload.get('scanId', '-')}, "
+                    f"상태={payload.get('status', '-')}, 단계={payload.get('progressStep') or '-'}"
                 )
+                if verbose:
+                    console.print(f"[cyan]{message}[/cyan]")
+                else:
+                    _update_live_status(message)
             return
         if event_type == "analysis_status_retry":
             if isinstance(payload, dict):
-                console.print(
-                    f"[yellow]AI 분석 상태 조회 재시도 중...[/yellow] "
-                    f"scanId={payload.get('scanId', '-')}, count={payload.get('count', '-')}"
-                )
+                message = f"AI 분석 상태 조회 재시도 중... scanId={payload.get('scanId', '-')}, count={payload.get('count', '-')}"
+                if verbose:
+                    console.print(f"[yellow]{message}[/yellow]")
+                else:
+                    _update_live_status(message)
             return
         if event_type == "analysis_status_failed":
+            _stop_live_status()
             error = "-"
             scan_id = "-"
             if isinstance(payload, dict):
@@ -982,10 +1028,12 @@ def _run_agent_watch(
             console.print(f"[yellow]AI 분석 상태를 확인하지 못했습니다.[/yellow] scanId={scan_id}, error={error}")
             return
         if event_type == "analysis_done":
+            _stop_live_status()
             scan_id = str(payload.get("scanId", "-")) if isinstance(payload, dict) else "-"
             console.print(f"[green]AI 분석 완료.[/green] 결과: {_web_url(effective_url, f'/scans/{scan_id}')}")
             return
         if event_type == "analysis_failed":
+            _stop_live_status()
             scan_id = "-"
             status_value = "-"
             error_message = None
@@ -998,10 +1046,21 @@ def _run_agent_watch(
                 console.print(f"[yellow]{error_message}[/yellow]")
             return
         if event_type == "analysis_timeout":
+            _stop_live_status()
             scan_id = str(payload.get("scanId", "-")) if isinstance(payload, dict) else "-"
             console.print(f"[yellow]AI 분석 대기 시간이 초과되었습니다.[/yellow] 결과: {_web_url(effective_url, f'/scans/{scan_id}')}")
             return
         if isinstance(payload, AgentTaskResult):
+            _stop_live_status()
+            if (
+                not verbose
+                and payload.task_type == "SCAN_REQUEST"
+                and payload.status.upper() == "SUCCESS"
+            ):
+                scan_id = payload.scan_id if payload.scan_id is not None else "-"
+                scan_type = payload.scan_type or "-"
+                console.print(f"[green]Agent scan 업로드 완료.[/green] scanId={scan_id}, scanType={scan_type}")
+                return
             _print_agent_task_result(payload)
 
     try:
@@ -1027,6 +1086,8 @@ def _run_agent_watch(
     except Exception as exc:  # noqa: BLE001
         console.print(f"[red]Agent watch failed:[/red] {exc}")
         raise typer.Exit(code=1) from exc
+    finally:
+        _stop_live_status()
 
 
 def _load_int_env(name: str, label: str) -> int:
@@ -1076,6 +1137,21 @@ def _print_agent_task_result(result: "AgentTaskResult") -> None:
                 patch_result.message,
             )
     console.print(table)
+    _print_patch_apply_summary(result)
+
+
+def _print_patch_apply_summary(result: "AgentTaskResult") -> None:
+    if result.task_type != "PATCH_APPLY" or result.status == "DRY_RUN":
+        return
+
+    success_count = sum(1 for patch_result in result.patch_results if patch_result.status == "SUCCESS")
+    failed_count = sum(1 for patch_result in result.patch_results if patch_result.status == "FAILED")
+
+    if result.status == "SUCCESS":
+        console.print(f"[green]\ud328\uce58 \uc801\uc6a9 \uc644\ub8cc.[/green] applied={success_count}")
+        return
+    if result.status == "FAILED":
+        console.print(f"[red]\ud328\uce58 \uc801\uc6a9 \uc2e4\ud328.[/red] failed={failed_count or '-'}")
 
 
 def _print_scan_request_task_result(result: "AgentTaskResult") -> None:
@@ -1342,6 +1418,11 @@ def guest(
     current_token = load_token()
     if load_auth_mode() == "guest" and current_token:
         console.print("[green]저장된 게스트 세션을 사용합니다.[/green]")
+        console.print(
+            "[dim]\uc774 URL\uc740 \uc800\uc7a5\ub41c \uac8c\uc2a4\ud2b8 \uc138\uc158\uc744 \uadf8\ub300\ub85c \uc774\uc5b4\uc11c \uc5fd\ub2c8\ub2e4. "
+            "\uae30\uc874 \ud504\ub85c\uc81d\ud2b8/\uc2a4\uce94 \uc774\ub825\ub3c4 \uac19\uc774 \ubcf4\uc785\ub2c8\ub2e4. "
+            "\uc0c8 \ube48 \uac8c\uc2a4\ud2b8 \uc138\uc158\uc774 \ud544\uc694\ud558\uba74 [bold]ssafer logout[/bold] \ud6c4 \ub2e4\uc2dc \uc2e4\ud589\ud558\uc138\uc694.[/dim]"
+        )
         if show_url:
             continue_url = _guest_continue_url(effective_endpoint, current_token)
             console.print(f"웹에서 이어 보기: [link={escape(continue_url)}]{escape(continue_url)}[/link]")
@@ -1350,6 +1431,7 @@ def guest(
             console.print("[dim]웹에서 이어 보기 URL은 토큰이 포함되어 있어 기본 출력에서는 숨깁니다.[/dim]")
             console.print("[dim]원문 URL이 필요하면 [bold]ssafer guest --show-url[/bold]을 실행하세요.[/dim]")
         _print_guest_web_hint(effective_endpoint)
+        _prompt_start_agent_after_login()
         return
     login(endpoint=endpoint, logout=False, guest=True, guest_token=None, show_url=show_url)
 
