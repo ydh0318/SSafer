@@ -22,9 +22,7 @@ function AuthTopNav() {
     <header className="site-header-shell theme-surface-header fixed inset-x-0 top-0 z-30 border-b border-black/10 bg-[#f4f4f4]/95 backdrop-blur">
       <div className="site-header-inner mx-auto flex h-20 max-w-[1500px] items-center justify-between px-4 sm:px-6 md:px-10">
         <AppBrand
-          showSubtitle={false}
           textClassName="hidden sm:block"
-          title="SSAFER"
           titleClassName="text-xl font-black tracking-normal"
           to={ROUTES.root}
         />

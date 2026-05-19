@@ -102,7 +102,12 @@ function TerminalLine({ code, dangerRange }: { code: string; dangerRange: readon
   );
 }
 
-function AppleHeroSection() {
+type AppleHeroSectionProps = {
+  /** 섹션 하단 그라데이션 페이드 색상. 다음 섹션 bg와 매치시키면 스크롤 전환이 자연스러워짐. */
+  bottomFadeColor?: string;
+};
+
+function AppleHeroSection({ bottomFadeColor }: AppleHeroSectionProps = {}) {
   const [bitten, setBitten] = useState<[boolean, boolean, boolean]>([false, false, false]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
@@ -122,11 +127,27 @@ function AppleHeroSection() {
     }
   };
 
-  return (
-    <section className="relative h-screen w-full overflow-hidden bg-black text-white">
-      <SiteHeader showSessionBar={false} variant="transparent" />
+  const hasFade = !!bottomFadeColor;
 
-      <main className="flex h-[calc(100vh-4rem)] flex-col items-center px-8 pt-2 md:pt-4">
+  return (
+    <section
+      className={`relative w-full overflow-hidden bg-black text-white ${
+        hasFade ? 'h-[160vh]' : 'h-screen'
+      }`}
+    >
+      {/* Fade는 DOM에서 sticky 콘텐츠보다 먼저 둠 — sticky inner가 투명이라 페이드가 뒤로 비침 */}
+      {hasFade ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[60vh]"
+          style={{ background: `linear-gradient(to bottom, transparent, ${bottomFadeColor})` }}
+        />
+      ) : null}
+
+      <div className={hasFade ? 'sticky top-0 h-screen' : 'h-full'}>
+        <SiteHeader showSessionBar={false} variant="transparent" />
+
+      <main className="relative z-10 flex h-[calc(100vh-4rem)] flex-col items-center px-8 pt-2 md:pt-4">
         <div className="grid w-full max-w-6xl grid-cols-3 gap-x-6">
           {APPLES.map((apple, index) => {
             const isBitten = bitten[index];
@@ -253,15 +274,16 @@ function AppleHeroSection() {
           })}
         </div>
 
-        {/* 스크롤 힌트 */}
+        {/* 스크롤 힌트 — fade 영역(아래쪽 ~40)보다 위에 두어 어떤 페이드 색에서도 가독성 유지 */}
         <motion.div
           animate={{ y: [0, 8, 0], opacity: [0.55, 1, 0.55] }}
-          className="mt-auto pb-6 text-xs font-light tracking-[0.4em] text-white/60"
+          className="mt-auto pb-44 text-xs font-light tracking-[0.4em] text-white/60"
           transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
         >
           SCROLL ↓
         </motion.div>
       </main>
+      </div>{/* /sticky-or-static wrapper */}
 
       {/* Local CSS — Apple Hero 전용 스타일 */}
       <style>{`

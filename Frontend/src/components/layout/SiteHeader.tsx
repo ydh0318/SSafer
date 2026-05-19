@@ -144,8 +144,10 @@ function SiteHeader({ showSessionBar = true, variant = 'default' }: SiteHeaderPr
       <div className="site-header-inner mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <AppBrand
           className="shrink-0"
+          iconWrapperClassName={isTransparent ? 'h-10 w-10 shrink-0' : undefined}
+          linkClassName={isTransparent ? 'text-white' : 'text-black'}
           textClassName="hidden lg:block"
-          titleClassName="text-lg font-black tracking-tight text-black"
+          titleClassName={`text-lg font-black tracking-tight ${isTransparent ? 'text-white' : 'text-black'}`}
           to={ROUTES.landing}
         />
 
