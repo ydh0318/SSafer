@@ -3,12 +3,12 @@ import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import SiteHeader from '../../components/layout/SiteHeader';
 import { FEATURE_THEME } from '../../constants/featureTheme';
 import { ROUTES } from '../../constants/routes';
 import useGuestEntry from '../../features/auth/hooks/useGuestEntry';
 import { hasStoredMemberSession } from '../../features/auth/utils/session';
 import { getHistoryScans } from '../../features/history/api/history';
+import AppleHeroSection from '../../features/home/components/AppleHeroSection';
 import LandingEntryModal from '../../features/home/components/LandingEntryModal';
 import LoopingNumberTicker from '../../features/home/components/LoopingNumberTicker';
 import FinalCtaCard from '../../features/home/components/sections/FinalCtaCard';
@@ -112,10 +112,12 @@ function LandingPage() {
   };
 
   return (
-    <div className="site-shell-with-nav theme-landing-page min-h-screen bg-[#FAFAF7] text-black" style={landingStyle}>
-      <SiteHeader showSessionBar={false} />
+    <>
+      {/* 최상단 — LandingPage2의 Section 1 (사과) 복제 */}
+      <AppleHeroSection />
 
-      <main className="site-shell-main min-w-0 flex-1 bg-[#FAFAF7]">
+      <div className="site-shell-with-nav theme-landing-page min-h-screen bg-[#FAFAF7] text-black" style={landingStyle}>
+        <main className="site-shell-main min-w-0 flex-1 bg-[#FAFAF7]">
         {/* ---------- HERO (고정) ---------- */}
         <section>
           <div className="mx-auto max-w-[1160px] px-5 pb-14 pt-8 md:px-7 md:pb-16 md:pt-11">
@@ -174,16 +176,17 @@ function LandingPage() {
         <FinalCtaCard onOpenEntry={openEntryModal} />
       </main>
 
-      {isEntryModalOpen ? (
-        <LandingEntryModal
-          errorMessage={errorMessage}
-          isGuestPending={isPending}
-          onClose={closeEntryModal}
-          onContinueAsGuest={() => void handleGuestStart()}
-          onLogin={() => navigate(ROUTES.welcome)}
-        />
-      ) : null}
-    </div>
+        {isEntryModalOpen ? (
+          <LandingEntryModal
+            errorMessage={errorMessage}
+            isGuestPending={isPending}
+            onClose={closeEntryModal}
+            onContinueAsGuest={() => void handleGuestStart()}
+            onLogin={() => navigate(ROUTES.welcome)}
+          />
+        ) : null}
+      </div>
+    </>
   );
 }
 
