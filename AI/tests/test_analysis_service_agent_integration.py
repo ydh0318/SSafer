@@ -113,6 +113,16 @@ class AgentIntegrationTest(unittest.TestCase):
                 "severity": "HIGH",
             },
             "agent_summary": "CVSS 8.6 HIGH",
+            "reasoning_steps": [
+                {
+                    "step": 1,
+                    "thought": "CVE 조회",
+                    "action": "search_cve",
+                    "actionInput": {"cve_id": "CVE-2024-21626"},
+                    "observation": {"available": True},
+                },
+                {"step": 2, "thought": "최종 정리", "final": True},
+            ],
         }
         captured = {}
 
@@ -138,6 +148,21 @@ class AgentIntegrationTest(unittest.TestCase):
         self.assertIs(captured["explain_enriched"], fake_enriched)
         self.assertIs(captured["fix_enriched"], fake_enriched)
         self.assertEqual(result["findingId"], "FND-AGENT-INT-001")
+        # reasoningSteps가 결과 JSON에 첨부됐는지
+        self.assertIn("reasoningSteps", result)
+        self.assertEqual(len(result["reasoningSteps"]), 2)
+        self.assertEqual(result["reasoningSteps"][0]["action"], "search_cve")
+
+    def test_non_agent_path_does_not_include_reasoning_steps(self):
+        with patch.object(agent_service, "AGENT_ENABLED", False), patch.object(
+            analysis_service, "generate_finding_explanation", return_value=GOOD_EXPLAIN
+        ), patch.object(
+            analysis_service, "generate_finding_fix", return_value=GOOD_FIX
+        ):
+            result = analysis_service.analyze_finding(
+                build_cve_finding(), scan_result=SAMPLE_SCAN_RESULT
+            )
+        self.assertNotIn("reasoningSteps", result)
 
     def test_agent_failure_falls_back_to_no_enrichment(self):
         captured = {}

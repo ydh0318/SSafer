@@ -133,6 +133,63 @@ def _parse_tool_result(raw: Any) -> Any:
         return raw
 
 
+def _build_reasoning_steps_from_messages(
+    messages: list[Any],
+) -> list[dict[str, Any]]:
+    """agent의 messages에서 ReAct 스타일 reasoning steps를 추출.
+
+    한 step:
+      {step, thought?, action?, actionInput?, observation?, final?}
+
+    AIMessage(tool_calls) + 직후 ToolMessage(tool_call_id) 매칭으로 묶고,
+    마지막 AIMessage(tool_calls 없음, content 있음)은 final=true로 표기.
+    """
+    steps: list[dict[str, Any]] = []
+    pending_by_id: dict[str, dict[str, Any]] = {}
+    step_no = 0
+
+    for msg in messages:
+        if isinstance(msg, AIMessage):
+            text = _extract_message_text(msg.content)
+            tool_calls = getattr(msg, "tool_calls", None) or []
+
+            if tool_calls:
+                thought = text or None
+                for tool_call in tool_calls:
+                    step_no += 1
+                    step: dict[str, Any] = {
+                        "step": step_no,
+                        "thought": thought,
+                        "action": tool_call.get("name"),
+                        "actionInput": tool_call.get("args"),
+                    }
+                    steps.append(step)
+                    call_id = tool_call.get("id")
+                    if call_id:
+                        pending_by_id[call_id] = step
+                    # 같은 AIMessage에 여러 tool_calls가 있어도
+                    # thought는 첫 step에만 붙임 (중복 방지)
+                    thought = None
+            elif text:
+                step_no += 1
+                steps.append(
+                    {"step": step_no, "thought": text, "final": True}
+                )
+        elif isinstance(msg, ToolMessage):
+            call_id = getattr(msg, "tool_call_id", None)
+            step = pending_by_id.pop(call_id, None) if call_id else None
+            if step is None and steps:
+                # fallback: 마지막 tool-step에 붙임
+                for candidate in reversed(steps):
+                    if candidate.get("action") and "observation" not in candidate:
+                        step = candidate
+                        break
+            if step is not None:
+                step["observation"] = _parse_tool_result(msg.content)
+
+    return steps
+
+
 def _build_enriched_from_messages(messages: list[Any]) -> dict[str, Any]:
     """agent의 messages 리스트에서 tool 호출/결과/최종 요약을 enriched_context로 변환.
 
@@ -189,6 +246,7 @@ def _build_enriched_from_messages(messages: list[Any]) -> dict[str, Any]:
     if web_refs:
         enriched["web_refs"] = web_refs[:_MAX_WEB_REFS]
     enriched["agent_summary"] = last_ai_summary
+    enriched["reasoning_steps"] = _build_reasoning_steps_from_messages(messages)
     return enriched
 
 
