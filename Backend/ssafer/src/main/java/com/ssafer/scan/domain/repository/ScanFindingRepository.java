@@ -104,6 +104,14 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
       select f
       from ScanFinding f
       where f.id = :findingId
+      """)
+  Optional<ScanFinding> findByIdForUpdate(@Param("findingId") Long findingId);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("""
+      select f
+      from ScanFinding f
+      where f.id = :findingId
         and f.scanId = :scanId
       """)
   Optional<ScanFinding> findByIdAndScanIdForUpdate(

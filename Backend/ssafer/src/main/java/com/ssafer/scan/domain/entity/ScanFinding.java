@@ -172,6 +172,13 @@ public class ScanFinding {
     this.resolutionStatus = ResolutionStatus.IN_PROGRESS;
   }
 
+  public void changeResolutionStatus(ResolutionStatus resolutionStatus) {
+    if (resolutionStatus == null) {
+      throw new IllegalArgumentException("resolutionStatus is required");
+    }
+    this.resolutionStatus = resolutionStatus;
+  }
+
   public void markPatchResolved(
       String patchResultMessage,
       String backupFileName,
