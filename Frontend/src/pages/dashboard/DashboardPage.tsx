@@ -12,13 +12,19 @@ import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import { getProjectAgentStatus } from '../../features/agents/api/agents';
 import { getProjects } from '../../features/projects/api/projects';
-import { getScanSummary } from '../../features/results/api/results';
+import { getOpenFindingSummary, getScanSummary } from '../../features/results/api/results';
 import { getProjectScans } from '../../features/scans/api/scans';
 import ScanTimeline from '../../features/scans/components/ScanTimeline';
 import { formatDateTime, isTerminalScanStatus } from '../../features/scans/utils/scanPresentation';
 import { useAuthStore } from '../../store/authStore';
 import type { ProjectListItemData } from '../../types/project';
-import type { AgentStatusResponseData, ProjectScanListItemData, ScanStatus, ScanSummaryData } from '../../types/scan';
+import type {
+  AgentStatusResponseData,
+  FindingOpenSummaryData,
+  ProjectScanListItemData,
+  ScanStatus,
+  ScanSummaryData,
+} from '../../types/scan';
 
 type DashboardScan = ProjectScanListItemData & {
   projectId: number;
@@ -141,6 +147,7 @@ function DashboardPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectListItemData[]>([]);
   const [scans, setScans] = useState<DashboardScan[]>([]);
+  const [openSummary, setOpenSummary] = useState<FindingOpenSummaryData | null>(null);
   const [agentStatusMap, setAgentStatusMap] = useState<Record<number, AgentStatusResponseData | null>>({});
   const [isAgentStatusLoaded, setIsAgentStatusLoaded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -154,7 +161,10 @@ function DashboardPage() {
       setErrorMessage(null);
 
       try {
-        const projectData = await getProjects({ page: 0, size: 20 });
+        const [projectData, nextOpenSummary] = await Promise.all([
+          getProjects({ page: 0, size: 20 }),
+          getOpenFindingSummary(),
+        ]);
         const nextProjects = projectData.items;
         const nextScans = await buildDashboardScans(nextProjects);
 
@@ -164,6 +174,7 @@ function DashboardPage() {
 
         setProjects(nextProjects);
         setScans(nextScans);
+        setOpenSummary(nextOpenSummary);
       } catch (error) {
         if (!isMounted) {
           return;
@@ -173,6 +184,7 @@ function DashboardPage() {
         setErrorMessage(error instanceof Error ? error.message : '대시보드 정보를 불러오지 못했습니다.');
         setProjects([]);
         setScans([]);
+        setOpenSummary(null);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -205,7 +217,8 @@ function DashboardPage() {
             scans: projectScans,
           };
         })
-        .filter((item): item is DashboardProjectScan => item !== null),
+        .filter((item): item is DashboardProjectScan => item !== null)
+        .sort((left, right) => new Date(right.scan.requestedAt).getTime() - new Date(left.scan.requestedAt).getTime()),
     [projects, scans],
   );
 
@@ -232,21 +245,17 @@ function DashboardPage() {
   );
 
   const totals = useMemo(
-    () =>
-      latestDoneScansByProject.reduce(
-        (acc, scan) => ({
-          critical: acc.critical + (scan.summary?.criticalCount ?? 0),
-          high: acc.high + (scan.summary?.highCount ?? 0),
-          medium: acc.medium + (scan.summary?.mediumCount ?? 0),
-          low: acc.low + (scan.summary?.lowCount ?? 0),
-          info: acc.info + (scan.summary?.infoCount ?? 0),
-        }),
-        { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
-      ),
-    [latestDoneScansByProject],
+    () => ({
+      critical: openSummary?.bySeverity.CRITICAL ?? 0,
+      high: openSummary?.bySeverity.HIGH ?? 0,
+      medium: openSummary?.bySeverity.MEDIUM ?? 0,
+      low: openSummary?.bySeverity.LOW ?? 0,
+      info: openSummary?.bySeverity.INFO ?? 0,
+    }),
+    [openSummary],
   );
 
-  const unresolvedCount = totals.critical + totals.high + totals.medium + totals.low + totals.info;
+  const unresolvedCount = openSummary?.openCount ?? 0;
   const recentDoneScan = useMemo(() => latestDoneScansByProject[0] ?? null, [latestDoneScansByProject]);
   const highlightedScan = useMemo(
     () => latestDoneScansByProject.find((scan) => (scan.summary?.criticalCount ?? 0) > 0) ?? recentDoneScan,
@@ -356,14 +365,14 @@ function DashboardPage() {
       <section className="border-b border-neutral-200 pb-12">
         <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-lg text-neutral-700">현재 열려 있는 취약점 수</p>
+            <p className="text-lg text-neutral-700">조치 필요 취약점</p>
             <div className="mt-6 flex flex-wrap items-end gap-6">
               <div className="theme-accent-card bg-[#D4FC64] px-8 py-4 text-black landing-inner-radius">
                 <span className="text-8xl font-black leading-none tabular-nums text-black md:text-[10rem]">{unresolvedCount}</span>
               </div>
               <div className="pb-2">
                 <div className="text-4xl font-black text-neutral-400">건</div>
-                <div className="mt-5 font-mono text-xs tracking-[0.32em] text-neutral-500">LIVE SNAPSHOT</div>
+                <div className="mt-5 font-mono text-xs tracking-[0.32em] text-neutral-500">최신 완료 탐지 기준</div>
               </div>
             </div>
           </div>

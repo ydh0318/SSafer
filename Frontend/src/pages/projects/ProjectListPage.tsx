@@ -24,7 +24,6 @@ import ScanModePicker from '../../features/scans/components/ScanModePicker';
 import SecretMaskingCard from '../../features/scans/components/SecretMaskingCard';
 import UploadDropZone from '../../features/scans/components/UploadDropZone';
 import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
-import { formatCompactDateTime, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
 import { getUploadScanToastFeedback, getUploadScanValidationToastMessage } from '../../features/scans/utils/uploadScanFeedback';
 import { getScanUploadValidationIssue } from '../../features/scans/utils/uploadValidation';
 import { useProjectStore } from '../../store/projectStore';
@@ -119,7 +118,6 @@ function ProjectListPage() {
   const [isStartingScan, setIsStartingScan] = useState(false);
   const [formValues, setFormValues] = useState<CreateProjectFormValues>(initialProjectForm);
   const [latestCompletedScans, setLatestCompletedScans] = useState<LatestCompletedScanMap>({});
-  const [isLoadingCompletedScans, setIsLoadingCompletedScans] = useState(false);
   const [selectedProjectScanOptions, setSelectedProjectScanOptions] = useState<ProjectScanOptionsData | null>(null);
   const [completedScansRefreshKey, setCompletedScansRefreshKey] = useState(0);
   const [selectedAgentScanType, setSelectedAgentScanType] = useState<ScanType>('PROJECT_FILE');
@@ -272,15 +270,12 @@ function ProjectListPage() {
   useEffect(() => {
     if (projects.length === 0) {
       setLatestCompletedScans({});
-      setIsLoadingCompletedScans(false);
       return;
     }
 
     let isMounted = true;
 
     const loadCompletedScans = async () => {
-      setIsLoadingCompletedScans(true);
-
       try {
         const scanResponses = await Promise.all(
           projects.map(async (project) => {
@@ -323,10 +318,6 @@ function ProjectListPage() {
 
         if (isMounted) {
           setLatestCompletedScans({});
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingCompletedScans(false);
         }
       }
     };
@@ -578,7 +569,7 @@ function ProjectListPage() {
       <header className="flex items-end justify-between gap-6 pt-2">
         <div className="min-w-0">
           <h1 className="text-4xl font-black leading-[0.95] tracking-[-0.03em] text-[#080B16] md:text-5xl xl:text-6xl">
-            뭘 스캔할까요?
+            {projects.length === 0 ? '프로젝트를 생성해주세요' : '뭘 스캔할까요?'}
           </h1>
         </div>
         <div className="shrink-0">
@@ -608,24 +599,19 @@ function ProjectListPage() {
         ) : loadError ? (
           <PageBanner message={loadError} tone="error" />
         ) : (
-          <div className="relative max-w-2xl" ref={projectSelectRef}>
+          <div className="relative max-w-xl" ref={projectSelectRef}>
             <button
-              className="flex min-h-[76px] w-full items-center justify-between gap-4 border border-neutral-200 bg-white px-5 text-left transition landing-card-radius hover:border-black"
+              className="flex min-h-[112px] w-full items-center justify-between gap-4 border border-neutral-200 bg-white px-6 py-5 text-left transition landing-card-radius hover:border-black"
               onClick={() => setIsProjectDropdownOpen((current) => !current)}
               type="button"
             >
               <div className="min-w-0">
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Selected Project</p>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Project</p>
                 <p className="mt-1 truncate text-xl font-black text-black">
                   {selectedProject ? selectedProject.name : '프로젝트를 선택하세요'}
                 </p>
                 {selectedProject ? (
-                  <p className="mt-1 text-xs font-semibold text-neutral-500">
-                    projectId #{selectedProject.id}
-                    {selectedProjectId && latestCompletedScans[selectedProjectId]
-                      ? ` · 최근 스캔 #${latestCompletedScans[selectedProjectId].scan.scanId}`
-                      : ''}
-                  </p>
+                  <p className="mt-2 text-xs font-bold text-neutral-500">projectId #{selectedProject.id}</p>
                 ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-3">
@@ -658,7 +644,6 @@ function ProjectListPage() {
                     filteredProjects.map((project) => {
                       const isSelected = project.id === selectedProjectId;
                       const agentDisplay = getAgentDisplay(project, agentStatusMap[project.id] ?? null, isSelected);
-                      const latest = latestCompletedScans[project.id];
 
                       return (
                         <button
@@ -675,10 +660,6 @@ function ProjectListPage() {
                         >
                           <div className="min-w-0">
                             <p className="truncate text-sm font-black">{project.name}</p>
-                            <p className={`mt-0.5 text-xs ${isSelected ? 'text-neutral-300' : 'text-neutral-500'}`}>
-                              projectId #{project.id}
-                              {latest ? ` · 최근 스캔 #${latest.scan.scanId}` : ''}
-                            </p>
                           </div>
                           <span className={`shrink-0 text-xs font-bold ${agentDisplay.className}`}>{agentDisplay.label}</span>
                         </button>
@@ -715,82 +696,11 @@ function ProjectListPage() {
         ) : null}
       </section>
 
-      <section className="space-y-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="text-sm text-neutral-500">최근 결과</div>
-            <h2 className="mt-1.5 text-xl font-black tracking-tight text-[#080B16] md:text-2xl">선택한 프로젝트의 최신 완료 스캔</h2>
-          </div>
-          <p className="text-sm text-neutral-500">현재 선택한 프로젝트의 가장 최근 완료 결과만 보여줍니다.</p>
-        </div>
-
-        {isLoadingCompletedScans ? (
-          <div className="border border-black/5 bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">최신 완료 결과를 불러오는 중입니다.</div>
-        ) : !selectedProject ? (
-          <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600 landing-card-radius">
-            먼저 프로젝트를 선택하면 최신 완료 스캔을 확인할 수 있습니다.
-          </div>
-        ) : !selectedLatestCompleted ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-5 text-sm text-neutral-600 landing-card-radius">
-            <span>선택한 프로젝트에 아직 완료된 스캔이 없습니다.</span>
-            <button
-              className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white transition hover:bg-neutral-800"
-              onClick={() => setSelectedMode('UPLOAD')}
-              type="button"
-            >
-              스캔 시작하기
-            </button>
-          </div>
-        ) : (
-          <button
-            className="flex w-full flex-col gap-4 border border-black/5 bg-white p-5 text-left transition landing-card-radius hover:-translate-y-0.5 hover:border-black/15 hover:shadow-[0_18px_40px_rgba(15,23,42,0.06)] md:flex-row md:items-center md:justify-between"
-            onClick={() => navigate(ROUTES.resultDetail.replace(':scanId', String(selectedLatestCompleted.scan.scanId)), {
-              state: { projectId: selectedLatestCompleted.projectId },
-            })}
-            type="button"
-          >
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-neutral-400">Latest Result</div>
-              <h3 className="mt-1.5 truncate text-xl font-black tracking-tight text-black">{selectedLatestCompleted.projectName}</h3>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-600">
-                <span>
-                  <span className="font-bold uppercase tracking-[0.18em] text-neutral-400">Completed</span>{' '}
-                  <span className="font-semibold text-black">{formatCompactDateTime(selectedLatestCompleted.scan.completedAt ?? selectedLatestCompleted.scan.requestedAt)}</span>
-                </span>
-                <span>
-                  <span className="font-bold uppercase tracking-[0.18em] text-neutral-400">Mode</span>{' '}
-                  <span className="font-semibold text-black">{getScanModeLabel(selectedLatestCompleted.scan.scanMode)}</span>
-                </span>
-              </div>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <span className="rounded-full bg-black px-2.5 py-1 text-[11px] font-bold text-white">Scan #{selectedLatestCompleted.scan.scanId}</span>
-              <span className="inline-flex items-center bg-[#D4FC64] px-3 py-1.5 text-xs font-bold text-black landing-inner-radius">결과 바로 보기</span>
-            </div>
-          </button>
-        )}
-      </section>
-
       <ScanModePicker
         isAgentAvailable={selectedProjectAgentAvailable}
         onSelect={setSelectedMode}
         selectedMode={selectedMode}
       />
-
-      {selectedProject && selectedProjectScanOptions && !selectedProjectAgentAvailable ? (
-        <div className="flex flex-col gap-3 border border-dashed border-neutral-300 bg-white px-5 py-4 text-sm leading-7 text-neutral-700 landing-card-radius md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="font-black text-black">이 프로젝트는 아직 Local Agent가 연결되어 있지 않습니다.</p>
-            <p className="mt-1">
-              웹에서는 Agent를 직접 켤 수 없습니다. 스캔할 PC 또는 서버의 프로젝트 루트에서 아래 명령을 실행하면 이 프로젝트의 Agent 스캔과 수정 요청을 처리할 수 있습니다.
-            </p>
-          </div>
-          <div className="shrink-0 rounded-lg bg-black px-4 py-3 font-mono text-xs leading-6 text-[#D4FC64]">
-            <div>ssafer login</div>
-            <div>ssafer agent</div>
-          </div>
-        </div>
-      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] landing-anim">
         {selectedMode === 'UPLOAD' ? (

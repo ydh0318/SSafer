@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 type AppBrandProps = {
   className?: string;
+  showSubtitle?: boolean;
   to: string;
   subtitle?: string;
   title?: string;
@@ -14,6 +15,7 @@ type AppBrandProps = {
 
 function AppBrand({
   className = '',
+  showSubtitle = true,
   to,
   subtitle = 'SSAFER',
   title = 'SSAFER.io',
@@ -28,7 +30,7 @@ function AppBrand({
         <Shield className="h-5 w-5" />
       </span>
       <span className={`site-brand-copy min-w-0 ${textClassName}`.trim()}>
-        <span className={subtitleClassName}>{subtitle}</span>
+        <span className="block text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8b7f6a]">{subtitle}</span>
         <span className={titleClassName}>{title}</span>
       </span>
     </Link>
