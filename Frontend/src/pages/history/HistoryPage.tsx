@@ -133,9 +133,29 @@ function HistoryPage() {
         ? doneHistoryItems.filter(
             (item) => item.projectId === selectedBaseScan.projectId && String(item.scanId) !== selectedBaseScanId,
           )
-        : doneHistoryItems,
+        : [],
     [doneHistoryItems, selectedBaseScan, selectedBaseScanId],
   );
+
+  const compareGuideMessage = useMemo(() => {
+    if (visibleHistoryItems.length === 0) {
+      return '현재 조건에 해당하는 스캔 이력이 없습니다.';
+    }
+
+    if (doneHistoryItems.length === 0) {
+      return '비교는 같은 프로젝트의 완료된 프로젝트 파일 스캔끼리만 가능합니다. 서버 점검 결과는 운영 상태 스냅샷이라 비교 대상에서 제외됩니다.';
+    }
+
+    if (!selectedBaseScan) {
+      return '기준 스캔을 먼저 선택하면 같은 프로젝트의 비교 가능한 스캔만 표시됩니다.';
+    }
+
+    if (comparableTargetItems.length === 0) {
+      return '선택한 기준 스캔과 같은 프로젝트의 다른 완료 스캔이 없습니다.';
+    }
+
+    return '비교 스캔 목록에는 기준 스캔과 같은 프로젝트의 완료된 프로젝트 파일 스캔만 표시됩니다.';
+  }, [comparableTargetItems.length, doneHistoryItems.length, selectedBaseScan, visibleHistoryItems.length]);
 
   const projectFilterOptions = useMemo(
     () => {
@@ -526,16 +546,20 @@ function HistoryPage() {
                 <p className="mt-1 text-xs font-bold text-neutral-500">
                   같은 프로젝트에서 완료된 프로젝트 파일 스캔끼리만 비교할 수 있습니다.
                 </p>
+                <p className="mt-2 max-w-2xl rounded-full bg-neutral-50 px-3 py-1.5 text-xs font-bold text-neutral-500">
+                  {compareGuideMessage}
+                </p>
               </div>
               <div className="grid gap-3 md:grid-cols-[minmax(0,180px)_minmax(0,180px)_auto]">
                 <label className="space-y-1.5">
                   <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">기준 스캔</span>
                   <select
                     className="w-full border border-neutral-200 bg-white px-3 py-2.5 text-sm text-black outline-none transition landing-inner-radius focus:border-black"
+                    disabled={doneHistoryItems.length === 0}
                     onChange={(event) => setSelectedBaseScanId(event.target.value)}
                     value={selectedBaseScanId}
                   >
-                    <option value="">스캔 선택</option>
+                    <option value="">{doneHistoryItems.length === 0 ? '비교 가능한 스캔 없음' : '스캔 선택'}</option>
                     {doneHistoryItems.map((item) => (
                       <option key={`base-${item.scanId}`} value={item.scanId}>
                         {formatScanOptionLabel(item)}
@@ -547,10 +571,17 @@ function HistoryPage() {
                   <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">비교 스캔</span>
                   <select
                     className="w-full border border-neutral-200 bg-white px-3 py-2.5 text-sm text-black outline-none transition landing-inner-radius focus:border-black"
+                    disabled={!selectedBaseScan || comparableTargetItems.length === 0}
                     onChange={(event) => setSelectedTargetScanId(event.target.value)}
                     value={selectedTargetScanId}
                   >
-                    <option value="">스캔 선택</option>
+                    <option value="">
+                      {!selectedBaseScan
+                        ? '기준 스캔 먼저 선택'
+                        : comparableTargetItems.length === 0
+                          ? '같은 프로젝트 스캔 없음'
+                          : '비교 스캔 선택'}
+                    </option>
                     {comparableTargetItems.map((item) => (
                       <option
                         disabled={String(item.scanId) === selectedBaseScanId}

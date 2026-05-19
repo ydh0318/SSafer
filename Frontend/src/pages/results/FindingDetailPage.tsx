@@ -34,6 +34,8 @@ const severityMeta: Record<FindingSeverity, { bg: string; fg: string; soft: stri
   INFO:     { bg: '#9CA3AF', fg: '#FFFFFF', soft: '#F3F4F6' },
 };
 
+const severityOrder: FindingSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
+
 const resolutionDisplayMeta: Record<string, { label: string; cls: string; dot: string }> = {
   OPEN:        { label: '미해결',   cls: 'bg-neutral-100 text-neutral-600',                         dot: 'bg-neutral-400' },
   IN_PROGRESS: { label: '처리 중',  cls: 'border border-amber-200 bg-amber-50 text-amber-700',      dot: 'bg-amber-400'   },
@@ -178,6 +180,22 @@ function FindingDetailPage() {
   const practiceSnippet = useMemo(() => getPracticeSnippet(finding), [finding]);
   const rawSnippetText = useMemo(() => prettyJsonText(finding?.rawSnippetJson ?? null), [finding?.rawSnippetJson]);
   const hasPatches = Boolean(finding?.fix?.patches?.length);
+  const relatedFindingGroups = useMemo(
+    () =>
+      severityOrder
+        .map((severity) => ({
+          severity,
+          items: relatedFindings
+            .filter((item) => item.severity === severity)
+            .sort((left, right) => {
+              const titleCompare = left.title.localeCompare(right.title);
+              if (titleCompare !== 0) return titleCompare;
+              return left.findingId - right.findingId;
+            }),
+        }))
+        .filter((group) => group.items.length > 0),
+    [relatedFindings],
+  );
 
   useEffect(() => {
     if (!finding || finding.resolutionStatus !== 'IN_PROGRESS' || !scanId || !findingId) {
@@ -820,55 +838,59 @@ function FindingDetailPage() {
 
             {/* 목록 */}
             <div className="max-h-[560px] overflow-y-auto">
-              {relatedFindings.map((item) => {
-                const active = item.findingId === finding.findingId;
-                const dimmed = item.resolutionStatus === 'RESOLVED' || item.resolutionStatus === 'IGNORED';
-                const rm = resolutionDisplayMeta[item.resolutionStatus] ?? resolutionDisplayMeta['OPEN'];
+              {relatedFindingGroups.map((group) => (
+                <div className="border-b border-neutral-100 last:border-b-0" key={group.severity}>
+                  <div className="flex items-center gap-2 bg-neutral-50 px-3 py-2">
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+                      style={{ background: severityMeta[group.severity].bg, color: severityMeta[group.severity].fg }}
+                    >
+                      {group.severity}
+                    </span>
+                    <span className="font-mono text-[10px] text-neutral-400">{group.items.length}건</span>
+                  </div>
+                  {group.items.map((item) => {
+                    const active = item.findingId === finding.findingId;
+                    const dimmed = item.resolutionStatus === 'RESOLVED' || item.resolutionStatus === 'IGNORED';
+                    const rm = resolutionDisplayMeta[item.resolutionStatus] ?? resolutionDisplayMeta['OPEN'];
 
-                return (
-                  <Link
-                    className={`group relative flex items-stretch gap-0 border-b border-neutral-100 last:border-b-0 transition-colors ${
-                      active ? 'bg-[#F4FFD9]' : dimmed ? 'bg-neutral-50 hover:bg-neutral-100' : 'hover:bg-[#FAFAF7]'
-                    }`}
-                    key={item.findingId}
-                    // 관련 finding 사이드바 진입도 항상 "왜 위험한가" 탭부터 (현재 페이지의 initialView가 묻어가지 않도록 명시)
-                    state={{ ...routeState, initialView: 'explain' }}
-                    to={ROUTES.resultFindingDetail
-                      .replace(':scanId', String(item.scanId))
-                      .replace(':findingId', String(item.findingId))}
-                  >
-                    {/* 심각도 컬러 바 */}
-                    <div
-                      className="w-1 shrink-0"
-                      style={{ background: active ? '#9FCC2E' : severityMeta[item.severity].bg }}
-                    />
+                    return (
+                      <Link
+                        className={`group relative flex items-stretch gap-0 border-b border-neutral-100 last:border-b-0 transition-colors ${
+                          active ? 'bg-[#F4FFD9]' : dimmed ? 'bg-neutral-50 hover:bg-neutral-100' : 'hover:bg-[#FAFAF7]'
+                        }`}
+                        key={item.findingId}
+                        // 관련 finding 사이드바 진입도 항상 "왜 위험한가" 탭부터 (현재 페이지의 initialView가 묻어가지 않도록 명시)
+                        state={{ ...routeState, initialView: 'explain' }}
+                        to={ROUTES.resultFindingDetail
+                          .replace(':scanId', String(item.scanId))
+                          .replace(':findingId', String(item.findingId))}
+                      >
+                        <div
+                          className="w-1 shrink-0"
+                          style={{ background: active ? '#9FCC2E' : severityMeta[item.severity].bg }}
+                        />
 
-                    <div className={`min-w-0 flex-1 px-3 py-3 ${dimmed ? 'opacity-50' : ''}`}>
-                      {/* 심각도 배지 + ID + 해결 상태 */}
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
-                          style={{ background: severityMeta[item.severity].soft, color: severityMeta[item.severity].bg }}
-                        >
-                          {item.severity}
-                        </span>
-                        <span className="font-mono text-[10px] text-neutral-400">#{item.findingId}</span>
-                        <span className={`ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold ${rm.cls}`}>
-                          <span className={`h-1 w-1 rounded-full ${rm.dot}`} />
-                          {rm.label}
-                        </span>
-                      </div>
+                        <div className={`min-w-0 flex-1 px-3 py-3 ${dimmed ? 'opacity-50' : ''}`}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-[10px] text-neutral-400">#{item.findingId}</span>
+                            <span className={`ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold ${rm.cls}`}>
+                              <span className={`h-1 w-1 rounded-full ${rm.dot}`} />
+                              {rm.label}
+                            </span>
+                          </div>
 
-                      {/* 제목 */}
-                      <p className={`mt-1.5 line-clamp-2 text-xs font-medium leading-snug ${
-                        active ? 'text-black' : dimmed ? 'text-neutral-400 line-through' : 'text-neutral-700 group-hover:text-black'
-                      }`}>
-                        {item.title}
-                      </p>
-                    </div>
-                  </Link>
-                );
-              })}
+                          <p className={`mt-1.5 line-clamp-2 text-xs font-medium leading-snug ${
+                            active ? 'text-black' : dimmed ? 'text-neutral-400 line-through' : 'text-neutral-700 group-hover:text-black'
+                          }`}>
+                            {item.title}
+                          </p>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
 
             {/* 푸터 */}

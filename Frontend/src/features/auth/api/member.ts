@@ -1,3 +1,5 @@
+import type { AxiosRequestConfig } from 'axios';
+
 import { apiClient, publicApiClient } from '../../../api/client';
 import { tokenStorage } from '../../../api/tokenStorage';
 import type { ApiSuccessResponse } from '../../../types/api';
@@ -82,7 +84,9 @@ export async function logoutCurrentUser() {
   }
 
   const payload: LogoutRequest = { refreshToken };
-  await apiClient.post<ApiSuccessResponse<null>>('/auth/logout', payload);
+  await apiClient.post<ApiSuccessResponse<null>>('/auth/logout', payload, {
+    skipAuth: true,
+  } as AxiosRequestConfig & { skipAuth: boolean });
 }
 
 export async function checkEmailAvailability(email: string) {
