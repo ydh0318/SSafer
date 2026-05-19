@@ -601,7 +601,7 @@ function ProjectListPage() {
         ) : (
           <div className="relative max-w-xl" ref={projectSelectRef}>
             <button
-              className="flex min-h-[64px] w-full items-center justify-between gap-4 border border-neutral-200 bg-white px-5 text-left transition landing-card-radius hover:border-black"
+              className="flex min-h-[112px] w-full items-center justify-between gap-4 border border-neutral-200 bg-white px-6 py-5 text-left transition landing-card-radius hover:border-black"
               onClick={() => setIsProjectDropdownOpen((current) => !current)}
               type="button"
             >
@@ -610,6 +610,9 @@ function ProjectListPage() {
                 <p className="mt-1 truncate text-xl font-black text-black">
                   {selectedProject ? selectedProject.name : '프로젝트를 선택하세요'}
                 </p>
+                {selectedProject ? (
+                  <p className="mt-2 text-xs font-bold text-neutral-500">projectId #{selectedProject.id}</p>
+                ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 {selectedProject ? (() => {
@@ -698,21 +701,6 @@ function ProjectListPage() {
         onSelect={setSelectedMode}
         selectedMode={selectedMode}
       />
-
-      {selectedProject && selectedProjectScanOptions && !selectedProjectAgentAvailable ? (
-        <div className="grid max-w-4xl gap-3 border border-dashed border-neutral-300 bg-[#fafafa] px-5 py-4 text-sm text-neutral-700 landing-card-radius md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-          <div className="min-w-0">
-            <p className="font-black text-black">Local Agent 연결이 필요합니다.</p>
-            <p className="mt-1 leading-6">
-              스캔할 PC 또는 서버의 프로젝트 루트에서 명령어를 실행하면 이 프로젝트의 Agent 스캔과 수정 요청을 처리합니다.
-            </p>
-          </div>
-          <div className="shrink-0 rounded-lg bg-black px-4 py-3 font-mono text-xs leading-6 text-[#D4FC64]">
-            <div>ssafer login</div>
-            <div>ssafer agent</div>
-          </div>
-        </div>
-      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] landing-anim">
         {selectedMode === 'UPLOAD' ? (

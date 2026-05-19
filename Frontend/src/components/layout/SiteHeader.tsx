@@ -94,9 +94,7 @@ function SiteHeader({ showSessionBar = true }: SiteHeaderProps) {
       icon: FolderKanban,
       active:
         location.pathname === ROUTES.projects ||
-        location.pathname.startsWith('/projects/') ||
-        location.pathname.startsWith('/results/') ||
-        location.pathname.startsWith('/scans/'),
+        location.pathname.startsWith('/projects/'),
     },
     {
       label: '대시보드',
