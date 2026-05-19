@@ -143,18 +143,18 @@ function HistoryPage() {
     }
 
     if (doneHistoryItems.length === 0) {
-      return '비교는 같은 프로젝트의 완료된 프로젝트 파일 스캔끼리만 가능합니다. 서버 점검 결과는 운영 상태 스냅샷이라 비교 대상에서 제외됩니다.';
+      return '비교 가능한 프로젝트 파일 스캔이 없습니다.';
     }
 
     if (!selectedBaseScan) {
-      return '기준 스캔을 먼저 선택하면 같은 프로젝트의 비교 가능한 스캔만 표시됩니다.';
+      return '기준 스캔을 먼저 선택하세요.';
     }
 
     if (comparableTargetItems.length === 0) {
       return '선택한 기준 스캔과 같은 프로젝트의 다른 완료 스캔이 없습니다.';
     }
 
-    return '비교 스캔 목록에는 기준 스캔과 같은 프로젝트의 완료된 프로젝트 파일 스캔만 표시됩니다.';
+    return '서버 점검 결과는 비교 대상에서 제외됩니다.';
   }, [comparableTargetItems.length, doneHistoryItems.length, selectedBaseScan, visibleHistoryItems.length]);
 
   const projectFilterOptions = useMemo(
@@ -539,18 +539,15 @@ function HistoryPage() {
             <div className="flex flex-col gap-4 border-b border-neutral-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">결과 비교</p>
-                <h2 className="mt-2 text-2xl font-black tracking-tight text-black">완료된 스캔 비교</h2>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-black">스캔 비교</h2>
                 <p className="mt-2 text-sm leading-7 text-neutral-500">
-                  기준 스캔 1개와 비교 스캔 1개를 선택해주세요. 기준 스캔은 이전 시점, 비교 스캔은 이후 시점으로 간주합니다.
+                  같은 프로젝트의 완료된 프로젝트 파일 스캔 2개를 비교합니다.
                 </p>
-                <p className="mt-1 text-xs font-bold text-neutral-500">
-                  같은 프로젝트에서 완료된 프로젝트 파일 스캔끼리만 비교할 수 있습니다.
-                </p>
-                <p className="mt-2 max-w-2xl rounded-full bg-neutral-50 px-3 py-1.5 text-xs font-bold text-neutral-500">
+                <p className="mt-2 max-w-xl rounded-full bg-neutral-50 px-3 py-1.5 text-xs font-bold text-neutral-500">
                   {compareGuideMessage}
                 </p>
               </div>
-              <div className="grid gap-3 md:grid-cols-[minmax(0,180px)_minmax(0,180px)_auto]">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,220px)_auto]">
                 <label className="space-y-1.5">
                   <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">기준 스캔</span>
                   <select
@@ -559,7 +556,7 @@ function HistoryPage() {
                     onChange={(event) => setSelectedBaseScanId(event.target.value)}
                     value={selectedBaseScanId}
                   >
-                    <option value="">{doneHistoryItems.length === 0 ? '비교 가능한 스캔 없음' : '스캔 선택'}</option>
+                    <option value="">{doneHistoryItems.length === 0 ? '선택 없음' : '스캔 선택'}</option>
                     {doneHistoryItems.map((item) => (
                       <option key={`base-${item.scanId}`} value={item.scanId}>
                         {formatScanOptionLabel(item)}
@@ -577,10 +574,10 @@ function HistoryPage() {
                   >
                     <option value="">
                       {!selectedBaseScan
-                        ? '기준 스캔 먼저 선택'
+                        ? '기준 선택'
                         : comparableTargetItems.length === 0
-                          ? '같은 프로젝트 스캔 없음'
-                          : '비교 스캔 선택'}
+                          ? '선택 없음'
+                          : '스캔 선택'}
                     </option>
                     {comparableTargetItems.map((item) => (
                       <option

@@ -74,7 +74,7 @@ function ScanModePicker({ selectedMode, onSelect, isAgentAvailable }: ScanModePi
               aria-describedby={isDisabled ? `scan-mode-${mode.id}-reason` : undefined}
               className={`group relative flex min-h-[240px] flex-col overflow-hidden border p-6 text-left transition-all duration-300 ease-out landing-card-radius ${
                 isDisabled
-                  ? 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-500 opacity-60 grayscale'
+                  ? 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-500 opacity-85 grayscale'
                   : isSelected
                     ? 'border-[#0F0F0F] bg-[#0F0F0F] text-white shadow-[0_24px_50px_rgba(15,23,42,0.18)]'
                     : 'border-neutral-200/80 bg-white hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-[0_14px_32px_rgba(15,23,42,0.06)]'
@@ -109,16 +109,11 @@ function ScanModePicker({ selectedMode, onSelect, isAgentAvailable }: ScanModePi
                   isDisabled ? 'text-neutral-500' : isSelected ? 'text-white/60' : 'text-neutral-500'
                 }`}
               >
-                {isDisabled
-                  ? '아직 Local Agent가 연결되지 않았습니다. 스캔할 PC 또는 서버의 프로젝트 루트에서 CLI 명령어를 먼저 실행하세요.'
-                  : mode.description}
+                {isDisabled ? '아래 명령으로 Agent를 연결하세요.' : mode.description}
               </p>
 
               {isDisabled && mode.id === 'AGENT' ? (
-                <div className="mt-4 space-y-2" id={`scan-mode-${mode.id}-reason`}>
-                  <p className="text-xs leading-5 text-neutral-600">
-                    아래 명령으로 이 프로젝트에 Agent를 연결하면 웹에서 스캔과 수정 요청을 보낼 수 있습니다.
-                  </p>
+                <div className="mt-4" id={`scan-mode-${mode.id}-reason`}>
                   <div className="rounded-xl bg-black px-4 py-3 font-mono text-xs leading-6 text-[#D4FC64]">
                     <div>ssafer login</div>
                     <div>ssafer agent</div>
