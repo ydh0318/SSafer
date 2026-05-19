@@ -15,6 +15,7 @@ import ScanTimeline from '../../features/scans/components/ScanTimeline';
 import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import { getSafeScanType } from '../../features/scans/utils/scanPresentation';
 import { useAuthStore } from '../../store/authStore';
+import { useProjectStore } from '../../store/projectStore';
 import type {
   HistoryScanListResponseData,
   ScanCompareFindingData,
@@ -23,6 +24,12 @@ import type {
 } from '../../types/scan';
 
 const HISTORY_PAGE_SIZE = 10;
+
+type HistoryFilters = {
+  scanMode?: ScanMode | '';
+  status?: 'DONE' | 'FAILED' | '';
+  projectId?: string;
+};
 
 const emptyHistoryData: HistoryScanListResponseData = {
   summary: {
@@ -79,6 +86,7 @@ function HistoryPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const user = useAuthStore((state) => state.user);
+  const storedProjects = useProjectStore((state) => state.projects);
   const toast = useToast();
 
   const isGuestSession = user?.role === 'GUEST' || isStoredGuestSession();
@@ -101,34 +109,105 @@ function HistoryPage() {
   const [isCompareLoading, setIsCompareLoading] = useState(false);
   const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
 
+  const visibleHistoryItems = useMemo(
+    () =>
+      filterProjectId
+        ? historyData.items.filter((item) => String(item.projectId) === filterProjectId)
+        : historyData.items,
+    [filterProjectId, historyData.items],
+  );
+
   const doneHistoryItems = useMemo(
-    () => historyData.items.filter((item) => item.status === 'DONE' && getSafeScanType(item.scanType) === 'PROJECT_FILE'),
-    [historyData.items],
+    () => visibleHistoryItems.filter((item) => item.status === 'DONE' && getSafeScanType(item.scanType) === 'PROJECT_FILE'),
+    [visibleHistoryItems],
+  );
+
+  const selectedBaseScan = useMemo(
+    () => doneHistoryItems.find((item) => String(item.scanId) === selectedBaseScanId) ?? null,
+    [doneHistoryItems, selectedBaseScanId],
+  );
+
+  const comparableTargetItems = useMemo(
+    () =>
+      selectedBaseScan
+        ? doneHistoryItems.filter(
+            (item) => item.projectId === selectedBaseScan.projectId && String(item.scanId) !== selectedBaseScanId,
+          )
+        : doneHistoryItems,
+    [doneHistoryItems, selectedBaseScan, selectedBaseScanId],
   );
 
   const projectFilterOptions = useMemo(
-    () =>
-      Object.entries(projectNameMap)
-        .map(([projectId, projectName]) => ({ projectId, projectName }))
-        .sort((left, right) => left.projectName.localeCompare(right.projectName)),
-    [projectNameMap],
+    () => {
+      const projects = new Map<number, string>();
+
+      Object.entries(projectNameMap).forEach(([projectId, projectName]) => {
+        const numericProjectId = Number(projectId);
+        if (Number.isFinite(numericProjectId)) {
+          projects.set(numericProjectId, projectName);
+        }
+      });
+
+      historyData.items.forEach((item) => {
+        projects.set(item.projectId, projectNameMap[item.projectId] ?? `프로젝트 ${item.projectId}`);
+      });
+
+      const nameCounts = Array.from(projects.values()).reduce<Record<string, number>>((accumulator, projectName) => {
+        accumulator[projectName] = (accumulator[projectName] ?? 0) + 1;
+        return accumulator;
+      }, {});
+
+      return Array.from(projects.entries())
+        .map(([projectId, projectName]) => ({
+          projectId: String(projectId),
+          projectName: nameCounts[projectName] > 1 ? `${projectName} (#${projectId})` : projectName,
+        }))
+        .sort((left, right) => left.projectName.localeCompare(right.projectName));
+    },
+    [historyData.items, projectNameMap],
   );
 
   const formatScanOptionLabel = (item: { scanId: number; projectId: number }) => {
     return `${projectNameMap[item.projectId] ?? `프로젝트 ${item.projectId}`} / #${item.scanId}`;
   };
 
-  const loadHistory = async (params?: { scanMode?: ScanMode | ''; status?: 'DONE' | 'FAILED' | ''; projectId?: string }) => {
+  const getCompareFailureMessage = (error: unknown) => {
+    const message = error instanceof Error ? error.message : '';
+    const normalizedMessage = message.toLowerCase();
+
+    if (normalizedMessage.includes('not found') || normalizedMessage.includes('404')) {
+      return '비교 생성에 실패했습니다. 선택한 스캔을 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 선택해 주세요.';
+    }
+
+    if (normalizedMessage.includes('unauthorized') || normalizedMessage.includes('forbidden') || normalizedMessage.includes('401') || normalizedMessage.includes('403')) {
+      return '비교 생성에 실패했습니다. 접근 권한을 확인한 뒤 다시 시도해 주세요.';
+    }
+
+    if (normalizedMessage.includes('internal server error') || normalizedMessage.includes('500')) {
+      return '비교 생성에 실패했습니다. 서버에서 비교 결과를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    }
+
+    return '비교 생성에 실패했습니다. 완료된 프로젝트 파일 스캔 2개를 선택했는지 확인해 주세요.';
+  };
+
+  const toHistoryProjectId = (projectId?: string) => {
+    if (!projectId) return undefined;
+    const parsedProjectId = Number(projectId);
+    return Number.isFinite(parsedProjectId) ? parsedProjectId : undefined;
+  };
+
+  const loadHistory = async (params?: HistoryFilters) => {
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
+      const projectId = toHistoryProjectId(params?.projectId);
       const data = await getHistoryScans({
         page: 0,
         size: HISTORY_PAGE_SIZE,
         ...(params?.scanMode && { scanMode: params.scanMode }),
         ...(params?.status && { status: params.status }),
-        ...(params?.projectId && { projectId: Number(params.projectId) }),
+        ...(typeof projectId === 'number' && { projectId }),
       });
       setHistoryData(data);
       return data;
@@ -147,26 +226,56 @@ function HistoryPage() {
       return;
     }
 
+    if (storedProjects.length > 0) {
+      setProjectNameMap((current) => ({
+        ...current,
+        ...storedProjects.reduce<Record<number, string>>((accumulator, project) => {
+          accumulator[Number(project.id)] = project.name;
+          return accumulator;
+        }, {}),
+      }));
+    }
+  }, [canAccessHistory, storedProjects]);
+
+  useEffect(() => {
+    if (!canAccessHistory) {
+      return;
+    }
+
     let isMounted = true;
 
-    void getProjects({ page: 0, size: 100 })
-      .then((data) => {
+    const loadProjectOptions = async () => {
+      const pageSize = 100;
+      const firstPage = await getProjects({ page: 0, size: pageSize });
+      const allProjects = [...firstPage.items];
+
+      for (let page = 1; page < firstPage.totalPages; page += 1) {
+        const pageData = await getProjects({ page, size: pageSize });
+        allProjects.push(...pageData.items);
+      }
+
+      return allProjects;
+    };
+
+    void loadProjectOptions()
+      .then((projects) => {
         if (!isMounted) return;
-        setProjectNameMap(
-          data.items.reduce<Record<number, string>>((accumulator, project) => {
+        setProjectNameMap((current) => ({
+          ...current,
+          ...projects.reduce<Record<number, string>>((accumulator, project) => {
             accumulator[Number(project.id)] = project.name;
             return accumulator;
           }, {}),
-        );
+        }));
       })
       .catch(() => {
-        if (isMounted) setProjectNameMap({});
+        if (isMounted && storedProjects.length === 0) setProjectNameMap({});
       });
 
     return () => {
       isMounted = false;
     };
-  }, [canAccessHistory]);
+  }, [canAccessHistory, storedProjects.length]);
 
   useEffect(() => {
     if (!canAccessHistory) {
@@ -204,20 +313,34 @@ function HistoryPage() {
   }, [canAccessHistory]);
 
   useEffect(() => {
-    const availableIds = doneHistoryItems.map((item) => String(item.scanId));
+    const comparableBaseScanIds = new Set(
+      doneHistoryItems
+        .filter((item) => doneHistoryItems.some((other) => other.projectId === item.projectId && other.scanId !== item.scanId))
+        .map((item) => String(item.scanId)),
+    );
+    const availableBaseIds = doneHistoryItems.map((item) => String(item.scanId));
 
-    if (availableIds.length < 2) {
+    if (availableBaseIds.length < 2 || comparableBaseScanIds.size === 0) {
       if (selectedBaseScanId !== '') setSelectedBaseScanId('');
       if (selectedTargetScanId !== '') setSelectedTargetScanId('');
       setCompareData(null);
       return;
     }
 
-    const nextBaseScanId = availableIds.includes(selectedBaseScanId) ? selectedBaseScanId : availableIds[0];
+    const nextBaseScanId =
+      selectedBaseScanId && comparableBaseScanIds.has(selectedBaseScanId)
+        ? selectedBaseScanId
+        : (availableBaseIds.find((scanId) => comparableBaseScanIds.has(scanId)) ?? '');
+    const nextBaseScan = doneHistoryItems.find((item) => String(item.scanId) === nextBaseScanId);
+    const availableTargetIds = nextBaseScan
+      ? doneHistoryItems
+          .filter((item) => item.projectId === nextBaseScan.projectId && String(item.scanId) !== nextBaseScanId)
+          .map((item) => String(item.scanId))
+      : [];
     const nextTargetScanId =
-      availableIds.includes(selectedTargetScanId) && selectedTargetScanId !== nextBaseScanId
+      availableTargetIds.includes(selectedTargetScanId)
         ? selectedTargetScanId
-        : (availableIds.find((scanId) => scanId !== nextBaseScanId) ?? '');
+        : (availableTargetIds[0] ?? '');
 
     if (nextBaseScanId !== selectedBaseScanId) setSelectedBaseScanId(nextBaseScanId);
     if (nextTargetScanId !== selectedTargetScanId) setSelectedTargetScanId(nextTargetScanId);
@@ -256,7 +379,7 @@ function HistoryPage() {
     try {
       await deleteScanHistory(scanId);
       setNoticeMessage(`스캔 #${scanId} 이력이 삭제되었습니다.`);
-      await loadHistory();
+      await loadHistory({ scanMode: filterScanMode, status: filterStatus, projectId: filterProjectId });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '스캔 이력을 삭제하지 못했습니다.');
       setNoticeMessage(null);
@@ -278,6 +401,15 @@ function HistoryPage() {
       return;
     }
 
+    const baseScan = doneHistoryItems.find((item) => String(item.scanId) === selectedBaseScanId);
+    const targetScan = doneHistoryItems.find((item) => String(item.scanId) === selectedTargetScanId);
+
+    if (!baseScan || !targetScan || baseScan.projectId !== targetScan.projectId) {
+      toast.warning('같은 프로젝트에서 완료된 프로젝트 파일 스캔끼리만 비교할 수 있습니다.', { durationMs: 2500 });
+      setCompareData(null);
+      return;
+    }
+
     setIsCompareLoading(true);
 
     try {
@@ -285,8 +417,8 @@ function HistoryPage() {
       setCompareData(data);
     } catch (error) {
       setCompareData(null);
-      const message = error instanceof Error ? error.message : '스캔 비교 결과를 불러오지 못했습니다.';
-      toast.error(message || '비교 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', { durationMs: 3500 });
+      console.error('Failed to compare scans.', error);
+      toast.error(getCompareFailureMessage(error), { durationMs: 3500 });
     } finally {
       setIsCompareLoading(false);
     }
@@ -391,6 +523,9 @@ function HistoryPage() {
                 <p className="mt-2 text-sm leading-7 text-neutral-500">
                   기준 스캔 1개와 비교 스캔 1개를 선택해주세요. 기준 스캔은 이전 시점, 비교 스캔은 이후 시점으로 간주합니다.
                 </p>
+                <p className="mt-1 text-xs font-bold text-neutral-500">
+                  같은 프로젝트에서 완료된 프로젝트 파일 스캔끼리만 비교할 수 있습니다.
+                </p>
               </div>
               <div className="grid gap-3 md:grid-cols-[minmax(0,180px)_minmax(0,180px)_auto]">
                 <label className="space-y-1.5">
@@ -416,7 +551,7 @@ function HistoryPage() {
                     value={selectedTargetScanId}
                   >
                     <option value="">스캔 선택</option>
-                    {doneHistoryItems.map((item) => (
+                    {comparableTargetItems.map((item) => (
                       <option
                         disabled={String(item.scanId) === selectedBaseScanId}
                         key={`target-${item.scanId}`}
@@ -432,6 +567,7 @@ function HistoryPage() {
                   disabled={
                     isCompareLoading ||
                     doneHistoryItems.length < 2 ||
+                    comparableTargetItems.length < 1 ||
                     selectedBaseScanId === '' ||
                     selectedTargetScanId === '' ||
                     selectedBaseScanId === selectedTargetScanId
@@ -599,7 +735,7 @@ function HistoryPage() {
               deletingScanIds={deletingScanIds}
               emptyMessage="아직 저장된 스캔 이력이 없습니다."
               isLoading={isLoading}
-              items={historyData.items.map((item) => ({
+              items={visibleHistoryItems.map((item) => ({
                 scanId: item.scanId,
                 status: item.status,
                 scanMode: item.scanMode,
@@ -608,6 +744,7 @@ function HistoryPage() {
                 requestedAt: item.requestedAt,
                 completedAt: item.completedAt,
                 projectId: item.projectId,
+                projectName: projectNameMap[item.projectId],
                 severity: {
                   critical: item.criticalCount,
                   high: item.highCount,

@@ -25,6 +25,32 @@ public interface ScanRepository extends JpaRepository<Scan, Long>, JpaSpecificat
 
   List<Scan> findByProjectIdAndDeletedAtIsNull(Long projectId);
 
+  @Query("""
+      select s
+      from Scan s
+      where s.projectId in :projectIds
+        and s.status = :status
+        and s.deletedAt is null
+        and s.completedAt is not null
+        and not exists (
+          select newer.id
+          from Scan newer
+          where newer.projectId = s.projectId
+            and newer.status = :status
+            and newer.deletedAt is null
+            and newer.completedAt is not null
+            and (
+              newer.completedAt > s.completedAt
+              or (newer.completedAt = s.completedAt and newer.id > s.id)
+            )
+        )
+      order by s.projectId asc
+      """)
+  List<Scan> findLatestScansByProjectIdsAndStatus(
+      @Param("projectIds") List<Long> projectIds,
+      @Param("status") ScanStatus status
+  );
+
   List<Scan> findByRequestedByUserIdOrderByRequestedAtDescIdDesc(Long requestedByUserId);
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)

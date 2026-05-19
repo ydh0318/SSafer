@@ -2,6 +2,7 @@ package com.ssafer.scan.domain.repository;
 
 import com.ssafer.scan.domain.entity.Scan;
 import com.ssafer.scan.domain.entity.ScanFinding;
+import com.ssafer.scan.domain.enums.ResolutionStatus;
 import com.ssafer.scan.domain.enums.ScanMode;
 import com.ssafer.scan.domain.enums.ScanStatus;
 import com.ssafer.scan.domain.enums.Severity;
@@ -36,6 +37,18 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
       group by f.scanId, f.severity
       """)
   List<Object[]> countSeverityByScanIds(@Param("scanIds") List<Long> scanIds);
+
+  @Query("""
+      select f.severity, count(f)
+      from ScanFinding f
+      where f.scanId in :scanIds
+        and f.resolutionStatus in :resolutionStatuses
+      group by f.severity
+      """)
+  List<Object[]> countSeverityByScanIdsAndResolutionStatuses(
+      @Param("scanIds") List<Long> scanIds,
+      @Param("resolutionStatuses") List<ResolutionStatus> resolutionStatuses
+  );
 
   // 히스토리 summary는 페이지 item과 별개로 현재 필터 전체 결과 기준의 위험도 통계가 필요하다.
   // 그래서 Scan 엔티티 전체를 메모리로 읽지 않고 DB에서 바로 severity별 aggregate 결과만 가져온다.
@@ -98,6 +111,14 @@ public interface ScanFindingRepository extends JpaRepository<ScanFinding, Long>,
   List<ScanFinding> findByScanIdAndScanNodeId(Long scanId, Long scanNodeId);
 
   Optional<ScanFinding> findByIdAndScanId(Long id, Long scanId);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("""
+      select f
+      from ScanFinding f
+      where f.id = :findingId
+      """)
+  Optional<ScanFinding> findByIdForUpdate(@Param("findingId") Long findingId);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("""

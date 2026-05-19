@@ -4,6 +4,7 @@ import com.ssafer.global.security.AuthenticatedActor;
 import com.ssafer.scan.domain.enums.FindingSourceType;
 import com.ssafer.scan.domain.enums.RequestActorType;
 import com.ssafer.scan.domain.enums.ResolutionStatus;
+import com.ssafer.scan.domain.enums.ResolutionStatusSource;
 import com.ssafer.scan.domain.enums.Severity;
 
 import jakarta.persistence.Column;
@@ -120,6 +121,23 @@ public class ScanFinding {
   @Column(name = "patched_at")
   private LocalDateTime patchedAt;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "resolution_status_source", length = 20)
+  private ResolutionStatusSource resolutionStatusSource;
+
+  @Column(name = "resolution_status_changed_at")
+  private LocalDateTime resolutionStatusChangedAt;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "resolution_status_changed_actor_type", length = 20)
+  private RequestActorType resolutionStatusChangedActorType;
+
+  @Column(name = "resolution_status_changed_by_user_id")
+  private Long resolutionStatusChangedByUserId;
+
+  @Column(name = "resolution_status_changed_by_guest_owner_key_hash", length = 255)
+  private String resolutionStatusChangedByGuestOwnerKeyHash;
+
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
 
@@ -172,6 +190,31 @@ public class ScanFinding {
     this.resolutionStatus = ResolutionStatus.IN_PROGRESS;
   }
 
+  public void changeResolutionStatus(ResolutionStatus resolutionStatus) {
+    if (resolutionStatus == null) {
+      throw new IllegalArgumentException("resolutionStatus is required");
+    }
+    this.resolutionStatus = resolutionStatus;
+  }
+
+  public void changeResolutionStatusManually(
+      ResolutionStatus resolutionStatus,
+      AuthenticatedActor actor,
+      LocalDateTime changedAt
+  ) {
+    if (actor == null) {
+      throw new IllegalArgumentException("actor is required");
+    }
+    changeResolutionStatus(resolutionStatus);
+    recordResolutionStatusMetadata(
+        ResolutionStatusSource.MANUAL,
+        actor.isMember() ? RequestActorType.USER : RequestActorType.GUEST,
+        actor.isMember() ? actor.userId() : null,
+        actor.isGuest() ? actor.guestOwnerKeyHash() : null,
+        changedAt
+    );
+  }
+
   public void markPatchResolved(
       String patchResultMessage,
       String backupFileName,
@@ -186,9 +229,16 @@ public class ScanFinding {
     this.backupFilePath = backupFilePath;
     this.backupMetadataJson = backupMetadataJson;
     this.patchedAt = patchedAt;
+    recordResolutionStatusMetadata(
+        ResolutionStatusSource.PATCH,
+        RequestActorType.SYSTEM,
+        null,
+        null,
+        patchedAt
+    );
   }
 
-  public void markPatchFailed(String patchResultMessage, String backupMetadataJson) {
+  public void markPatchFailed(String patchResultMessage, String backupMetadataJson, LocalDateTime failedAt) {
     // 패치 실패 시에는 다시 승인/재시도할 수 있도록 OPEN 상태로 되돌린다.
     this.resolutionStatus = ResolutionStatus.OPEN;
     this.patchResultMessage = patchResultMessage;
@@ -196,5 +246,26 @@ public class ScanFinding {
     this.backupFilePath = null;
     this.backupMetadataJson = backupMetadataJson;
     this.patchedAt = null;
+    recordResolutionStatusMetadata(
+        ResolutionStatusSource.PATCH,
+        RequestActorType.SYSTEM,
+        null,
+        null,
+        failedAt
+    );
+  }
+
+  private void recordResolutionStatusMetadata(
+      ResolutionStatusSource source,
+      RequestActorType actorType,
+      Long userId,
+      String guestOwnerKeyHash,
+      LocalDateTime changedAt
+  ) {
+    this.resolutionStatusSource = source;
+    this.resolutionStatusChangedActorType = actorType;
+    this.resolutionStatusChangedByUserId = userId;
+    this.resolutionStatusChangedByGuestOwnerKeyHash = guestOwnerKeyHash;
+    this.resolutionStatusChangedAt = changedAt;
   }
 }

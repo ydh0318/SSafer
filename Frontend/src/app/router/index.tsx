@@ -10,6 +10,7 @@ import DashboardPage from '../../pages/dashboard/DashboardPage';
 import GuidePage from '../../pages/guide/GuidePage';
 import HistoryPage from '../../pages/history/HistoryPage';
 import LandingPage from '../../pages/home/LandingPage';
+import LandingPage2 from '../../pages/home/LandingPage2';
 import MonitorPage from '../../pages/monitor/MonitorPage';
 import NotFoundPage from '../../pages/NotFoundPage';
 import ProjectDetailPage from '../../pages/projects/ProjectDetailPage';
@@ -28,6 +29,7 @@ function AppRouter() {
       <Routes>
         <Route element={<WelcomePage />} path={ROUTES.root} />
         <Route element={<LandingPage />} path={ROUTES.landing} />
+        <Route element={<LandingPage2 />} path={ROUTES.landing2} />
         <Route element={<WelcomePage />} path={ROUTES.welcome} />
         <Route element={<GuidePage />} path={ROUTES.guide} />
         <Route element={<TypingGamePage />} path={ROUTES.typingGame} />

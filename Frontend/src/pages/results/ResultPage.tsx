@@ -1,12 +1,13 @@
-import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, GitBranch, RefreshCw, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileText, GitBranch, RefreshCw, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import PageBanner from '../../components/common/PageBanner';
 import PageHero from '../../components/common/PageHero';
 import { ROUTES } from '../../constants/routes';
+import { useToast } from '../../features/feedback/useToast';
 import { getProjectDetail } from '../../features/projects/api/projects';
-import { getScanBasic, getScanFindingDetail, getScanFindings, getScanSummary } from '../../features/results/api/results';
+import { getScanBasic, getScanFindingDetail, getScanFindings, getScanSummary, updateFindingResolutionStatus } from '../../features/results/api/results';
 import ScanScopeInfo from '../../features/results/components/ScanScopeInfo';
 import ScanModeBadge from '../../features/scans/components/ScanModeBadge';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
@@ -70,10 +71,31 @@ function formatFindingLocation(finding: ScanFindingListItemData) {
   return target;
 }
 
+function getFindingTitleGroupKey(title: string) {
+  return (title.trim() || '제목 없는 취약점')
+    .replace(/포트\(\d+\)/g, '포트(*)')
+    .replace(/\(\d+\)/g, '(*)')
+    .replace(/\b\d{2,5}\b/g, '*');
+}
+
+function groupFindingsByTitle(findings: ScanFindingListItemData[]) {
+  const groups = new Map<string, { title: string; items: ScanFindingListItemData[] }>();
+
+  findings.forEach((finding) => {
+    const key = getFindingTitleGroupKey(finding.title);
+    const group = groups.get(key) ?? { title: key, items: [] };
+    group.items.push(finding);
+    groups.set(key, group);
+  });
+
+  return Array.from(groups.values());
+}
+
 function ResultPage() {
   const { scanId = '' } = useParams<{ scanId: string }>();
   const location = useLocation();
   const routeState = (location.state ?? {}) as ResultRouteState;
+  const toast = useToast();
 
   const [scanBasic, setScanBasic] = useState<ScanBasicData | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
@@ -86,10 +108,16 @@ function ResultPage() {
   const [resolutionFilter, setResolutionFilter] = useState<'all' | FindingResolutionStatus>('all');
   const [page, setPage] = useState(0);
   const [serverAuditDetails, setServerAuditDetails] = useState<Map<number, ScanFindingDetailData>>(new Map());
+  const [expandedFindingGroups, setExpandedFindingGroups] = useState<Set<string>>(new Set());
+  const [updatingStatusFindingIds, setUpdatingStatusFindingIds] = useState<number[]>([]);
 
   useEffect(() => {
     setPage(0);
   }, [severityFilter, resolutionFilter, scanId]);
+
+  useEffect(() => {
+    setExpandedFindingGroups(new Set());
+  }, [scanId, page, severityFilter, resolutionFilter]);
 
   useEffect(() => {
     if (!scanId) {
@@ -189,9 +217,10 @@ function ResultPage() {
     };
   }, [page, resolutionFilter, scanBasic?.scanType, scanId, severityFilter]);
 
-  // SERVER_AUDIT 전용: 각 finding 상세를 병렬 fetch해서 summary/evidence/recommendation 보강
+  // Finding 상세를 병렬 fetch해서 서버 점검 evidence와 자동 패치 가능 여부를 보강한다.
   useEffect(() => {
-    if (!scanId || getSafeScanType(scanBasic?.scanType) !== 'SERVER_AUDIT' || findingsData.items.length === 0) {
+    if (!scanId || findingsData.items.length === 0) {
+      setServerAuditDetails(new Map());
       return;
     }
 
@@ -247,8 +276,65 @@ function ResultPage() {
         severity,
         items: findingsData.items.filter((finding) => finding.severity === severity),
       }))
+      .map((group) => ({
+        ...group,
+        titleGroups: groupFindingsByTitle(group.items),
+      }))
       .filter((group) => group.items.length > 0);
   }, [findingsData.items]);
+
+  const toggleFindingGroup = (groupKey: string) => {
+    setExpandedFindingGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
+
+  const handleResolutionStatusChange = async (
+    finding: ScanFindingListItemData,
+    nextStatus: FindingResolutionStatus,
+  ) => {
+    if (finding.resolutionStatus === nextStatus || updatingStatusFindingIds.includes(finding.findingId)) {
+      return;
+    }
+
+    const previousStatus = finding.resolutionStatus;
+    setUpdatingStatusFindingIds((current) => [...current, finding.findingId]);
+
+    try {
+      await updateFindingResolutionStatus(finding.findingId, nextStatus);
+      setFindingsData((current) => ({
+        ...current,
+        items: current.items
+          .map((item) =>
+            item.findingId === finding.findingId ? { ...item, resolutionStatus: nextStatus } : item,
+          )
+          .filter((item) => resolutionFilter === 'all' || item.resolutionStatus === resolutionFilter),
+      }));
+      setSummary((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          resolutionCounts: {
+            ...current.resolutionCounts,
+            [previousStatus]: Math.max((current.resolutionCounts?.[previousStatus] ?? 0) - 1, 0),
+            [nextStatus]: (current.resolutionCounts?.[nextStatus] ?? 0) + 1,
+          },
+        };
+      });
+      toast.success('탐지 결과 상태를 변경했습니다.', { durationMs: 2000 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '탐지 결과 상태를 변경하지 못했습니다.';
+      toast.error(message, { durationMs: 2500 });
+    } finally {
+      setUpdatingStatusFindingIds((current) => current.filter((id) => id !== finding.findingId));
+    }
+  };
 
   const projectBackPath = routeState.projectId
     ? ROUTES.projectDetail.replace(':projectId', routeState.projectId)
@@ -525,79 +611,135 @@ function ResultPage() {
                     <span className="text-xs text-neutral-500">위험도가 높은 항목부터 먼저 확인해 보세요.</span>
                   </div>
 
-                  {group.items.map((finding) => {
-                    const dimmed = finding.resolutionStatus === 'RESOLVED' || finding.resolutionStatus === 'IGNORED';
-                    const serverDetail = currentScanType === 'SERVER_AUDIT' ? serverAuditDetails.get(finding.findingId) : null;
-                    const serverRecommendation =
-                      serverDetail?.fix?.summary ??
-                      serverDetail?.fix?.recommendedActions?.join(' ') ??
-                      serverDetail?.remediationGuide ??
-                      null;
+                  {group.titleGroups.map((titleGroup) => {
+                    const groupKey = `${group.severity}:${titleGroup.title}`;
+                    const hasMultiple = titleGroup.items.length > 1;
+                    const expanded = expandedFindingGroups.has(groupKey);
+                    const visibleItems = hasMultiple && !expanded ? [] : titleGroup.items;
 
-                    {
-                      const findingUrl = ROUTES.resultFindingDetail
-                        .replace(':scanId', String(finding.scanId))
-                        .replace(':findingId', String(finding.findingId));
-                      return (
-                        <div
-                          className={`group flex items-stretch border-b border-neutral-100 last:border-b-0 ${dimmed ? 'opacity-60' : ''}`}
-                          key={finding.findingId}
-                        >
-                          <Link
-                            className="flex flex-1 items-start gap-4 p-5 hover:bg-[#F5F5F5]"
-                            state={{ ...routeState, initialView: 'explain' }}
-                            to={findingUrl}
+                    return (
+                      <div className="border-b border-neutral-100 last:border-b-0" key={groupKey}>
+                        {hasMultiple ? (
+                          <button
+                            aria-expanded={expanded}
+                            className="flex w-full items-center gap-4 bg-neutral-50 px-5 py-4 text-left transition hover:bg-neutral-100"
+                            onClick={() => toggleFindingGroup(groupKey)}
+                            type="button"
                           >
-                            <div className="flex shrink-0 items-start pt-1">
-                              <CheckCircle2 className={`h-5 w-5 ${dimmed ? 'text-emerald-500' : 'text-neutral-300'}`} />
-                            </div>
-                            <div className="w-1 self-stretch" style={{ background: severityMeta[finding.severity].bg }} />
+                            <ChevronDown className={`h-4 w-4 shrink-0 text-neutral-500 transition ${expanded ? 'rotate-180' : ''}`} />
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-mono text-[11px] text-neutral-500">findingId #{finding.findingId}</span>
-                                <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.category}</span>
-                                {finding.sourceType && finding.sourceType !== finding.category ? (
-                                  <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.sourceType}</span>
-                                ) : null}
-                                <span className="font-mono text-[10px] text-neutral-600">{finding.ruleCode}</span>
-                                <span className={`ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold ${resolutionMeta[finding.resolutionStatus].cls}`}>
-                                  <span className={`h-1.5 w-1.5 rounded-full ${resolutionMeta[finding.resolutionStatus].dot}`} />
-                                  {resolutionMeta[finding.resolutionStatus].label}
+                                <span className="rounded-full bg-black px-2.5 py-1 text-xs font-black text-white">{titleGroup.items.length}건</span>
+                                <span className="font-mono text-[11px] text-neutral-500">
+                                  findingId #{titleGroup.items.map((item) => item.findingId).join(', #')}
                                 </span>
                               </div>
-                              <h3 className={`mt-3 text-base font-bold ${dimmed ? 'line-through' : ''}`}>{finding.title}</h3>
-                              <div className="mt-2 font-mono text-xs text-neutral-500">{formatFindingLocation(finding)}</div>
-                              {currentScanType === 'SERVER_AUDIT' ? (
-                                <div className="mt-3 space-y-2">
-                                  <div className="rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs leading-6 text-neutral-700">
-                                    <span className="mr-2 font-bold uppercase tracking-[0.16em] text-neutral-400">Evidence</span>
-                                    <span className="font-mono">{serverDetail?.maskedEvidence ?? formatFindingLocation(finding)}</span>
+                              <div className="mt-2 truncate text-base font-black text-black">{titleGroup.title}</div>
+                            </div>
+                            <span className="hidden text-xs font-bold text-neutral-500 sm:inline">
+                              {expanded ? '접기' : '펼쳐보기'}
+                            </span>
+                          </button>
+                        ) : null}
+                        {visibleItems.map((finding) => {
+                          const dimmed = finding.resolutionStatus === 'RESOLVED' || finding.resolutionStatus === 'IGNORED';
+                          const serverDetail = currentScanType === 'SERVER_AUDIT' ? serverAuditDetails.get(finding.findingId) : null;
+                          const findingDetail = serverAuditDetails.get(finding.findingId);
+                          const hasApplicablePatch =
+                            currentScanType !== 'SERVER_AUDIT' &&
+                            Boolean(
+                              findingDetail?.patchPayloadJson &&
+                              findingDetail.fix?.patches?.some((patch) => patch.filePath && patch.operation && patch.newText),
+                            );
+                          const serverRecommendation =
+                            serverDetail?.fix?.summary ??
+                            serverDetail?.fix?.recommendedActions?.join(' ') ??
+                            serverDetail?.remediationGuide ??
+                            null;
+                          const findingUrl = ROUTES.resultFindingDetail
+                            .replace(':scanId', String(finding.scanId))
+                            .replace(':findingId', String(finding.findingId));
+
+                          return (
+                            <div
+                              className={`group flex items-stretch border-b border-neutral-100 last:border-b-0 ${dimmed ? 'opacity-60' : ''}`}
+                              key={finding.findingId}
+                            >
+                              <Link
+                                className="flex flex-1 items-start gap-4 p-5 hover:bg-[#F5F5F5]"
+                                state={{ ...routeState, initialView: 'explain' }}
+                                to={findingUrl}
+                              >
+                                <div className="flex shrink-0 items-start pt-1">
+                                  <CheckCircle2 className={`h-5 w-5 ${dimmed ? 'text-emerald-500' : 'text-neutral-300'}`} />
+                                </div>
+                                <div className="w-1 self-stretch" style={{ background: severityMeta[finding.severity].bg }} />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-mono text-[11px] text-neutral-500">findingId #{finding.findingId}</span>
+                                    <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.category}</span>
+                                    {finding.sourceType && finding.sourceType !== finding.category ? (
+                                      <span className="bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em]">{finding.sourceType}</span>
+                                    ) : null}
+                                    <span className="font-mono text-[10px] text-neutral-600">{finding.ruleCode}</span>
+                                    <span className={`ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold ${resolutionMeta[finding.resolutionStatus].cls}`}>
+                                      <span className={`h-1.5 w-1.5 rounded-full ${resolutionMeta[finding.resolutionStatus].dot}`} />
+                                      {resolutionMeta[finding.resolutionStatus].label}
+                                    </span>
                                   </div>
-                                  {serverRecommendation ? (
-                                    <div className="rounded border border-neutral-200 bg-white px-3 py-2 text-xs leading-6 text-neutral-700">
-                                      <span className="mr-2 font-bold uppercase tracking-[0.16em] text-neutral-400">Recommendation</span>
-                                      {serverRecommendation}
+                                  <h3 className={`mt-3 text-base font-bold ${dimmed ? 'line-through' : ''}`}>{finding.title}</h3>
+                                  <div className="mt-2 font-mono text-xs text-neutral-500">{formatFindingLocation(finding)}</div>
+                                  {currentScanType === 'SERVER_AUDIT' ? (
+                                    <div className="mt-3 space-y-2">
+                                      <div className="rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs leading-6 text-neutral-700">
+                                        <span className="mr-2 font-bold uppercase tracking-[0.16em] text-neutral-400">Evidence</span>
+                                        <span className="font-mono">{serverDetail?.maskedEvidence ?? formatFindingLocation(finding)}</span>
+                                      </div>
+                                      {serverRecommendation ? (
+                                        <div className="rounded border border-neutral-200 bg-white px-3 py-2 text-xs leading-6 text-neutral-700">
+                                          <span className="mr-2 font-bold uppercase tracking-[0.16em] text-neutral-400">Recommendation</span>
+                                          {serverRecommendation}
+                                        </div>
+                                      ) : null}
                                     </div>
                                   ) : null}
                                 </div>
-                              ) : null}
-                            </div>
-                          </Link>
-                          {currentScanType !== 'SERVER_AUDIT' ? (
-                            <div className="flex shrink-0 items-center border-l border-neutral-100 px-4">
-                              <Link
-                                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:bg-black hover:text-white"
-                                state={{ ...routeState, initialView: 'apply' }}
-                                to={findingUrl}
-                              >
-                                <Wrench className="h-3.5 w-3.5" />
-                                고치기
                               </Link>
+                              <div className="flex shrink-0 flex-col items-center justify-center gap-2 border-l border-neutral-100 px-4">
+                                <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">
+                                  상태
+                                  <select
+                                    className="w-28 rounded-full border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold normal-case tracking-normal text-neutral-700 disabled:cursor-wait disabled:opacity-50"
+                                    disabled={updatingStatusFindingIds.includes(finding.findingId)}
+                                    onChange={(event) => {
+                                      void handleResolutionStatusChange(finding, event.target.value as FindingResolutionStatus);
+                                    }}
+                                    onClick={(event) => event.stopPropagation()}
+                                    value={finding.resolutionStatus}
+                                  >
+                                    {resolutionValues.map((value) => (
+                                      <option key={value} value={value}>
+                                        {resolutionMeta[value].label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                {hasApplicablePatch ? (
+                                  <Link
+                                    className="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:bg-black hover:text-white"
+                                    state={{ ...routeState, initialView: 'apply' }}
+                                    to={findingUrl}
+                                  >
+                                    <Wrench className="h-3.5 w-3.5" />
+                                    고치기
+                                  </Link>
+                                ) : null}
+                              </div>
                             </div>
-                          ) : null}
-                        </div>
-                      );
-                    }
+                          );
+                        })}
+                      </div>
+                    );
                   })}
                 </section>
               ))

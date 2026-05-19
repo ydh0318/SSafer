@@ -22,6 +22,7 @@ export type ScanTimelineItem = {
   completedAt: string | null;
   /** 히스토리 페이지에서 표시되는 프로젝트 ID */
   projectId?: number;
+  projectName?: string;
   /** 히스토리 페이지에서 표시되는 심각도 카운트 */
   severity?: {
     critical: number;
@@ -246,7 +247,7 @@ function ScanTimeline({
                       </span>
                       {showProjectChip && scan.projectId !== undefined ? (
                         <span className="inline-flex items-center border border-neutral-200 bg-white px-2.5 py-1 font-mono text-[11px] font-bold text-neutral-600 landing-inner-radius">
-                          프로젝트 #{scan.projectId}
+                          {scan.projectName ?? `프로젝트 #${scan.projectId}`}
                         </span>
                       ) : null}
                       <span className="text-[11px] text-neutral-500">
@@ -292,13 +293,6 @@ function ScanTimeline({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      className="inline-flex items-center gap-1 border border-neutral-200 bg-white px-3 py-1.5 text-xs font-bold text-neutral-700 transition landing-inner-radius hover:border-black hover:text-black"
-                      state={linkState}
-                      to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
-                    >
-                      진행 상태
-                    </Link>
                     {scan.status === 'DONE' ? (
                       <Link
                         className="inline-flex items-center gap-1.5 bg-[#0F0F0F] px-3 py-1.5 text-xs font-bold text-white transition landing-inner-radius hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(0,0,0,0.18)]"
@@ -308,7 +302,15 @@ function ScanTimeline({
                         결과 보기
                         <ArrowRight className="h-3 w-3" />
                       </Link>
-                    ) : null}
+                    ) : (
+                      <Link
+                        className="inline-flex items-center gap-1 border border-neutral-200 bg-white px-3 py-1.5 text-xs font-bold text-neutral-700 transition landing-inner-radius hover:border-black hover:text-black"
+                        state={linkState}
+                        to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
+                      >
+                        진행 상태
+                      </Link>
+                    )}
                     {onDeleteScan && isDeleteAllowed ? (
                       <button
                         className="inline-flex items-center gap-1 border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-400 transition landing-inner-radius hover:border-rose-300 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-50"

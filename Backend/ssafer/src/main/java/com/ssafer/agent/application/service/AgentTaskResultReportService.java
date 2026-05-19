@@ -103,16 +103,21 @@ public class AgentTaskResultReportService {
     advanceToRunning(task, now);
     if (request.taskStatus() == AgentTaskStatus.SUCCEEDED) {
       String backupFilePath = firstSuccessfulBackupPath(patchResults);
+      LocalDateTime patchedAt = LocalDateTime.ofInstant(now, ZoneId.systemDefault());
       finding.markPatchResolved(
           patchResultMessage,
           extractFileName(backupFilePath),
           backupFilePath,
           backupMetadataJson,
-          LocalDateTime.ofInstant(now, ZoneId.systemDefault())
+          patchedAt
       );
       task.markSucceeded(now);
     } else {
-      finding.markPatchFailed(patchResultMessage, backupMetadataJson);
+      finding.markPatchFailed(
+          patchResultMessage,
+          backupMetadataJson,
+          LocalDateTime.ofInstant(now, ZoneId.systemDefault())
+      );
       task.markFailed(now, patchResultMessage);
     }
 

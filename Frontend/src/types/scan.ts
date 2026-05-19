@@ -167,6 +167,29 @@ export interface ScanFindingListItemData {
   createdAt: string;
 }
 
+export interface FindingResolutionStatusUpdateResponseData {
+  findingId: number;
+  scanId: number;
+  previousStatus: FindingResolutionStatus;
+  resolutionStatus: FindingResolutionStatus;
+  resolutionStatusSource: 'MANUAL' | 'PATCH' | null;
+  resolutionStatusChangedActorType: 'USER' | 'GUEST' | 'SYSTEM' | null;
+  resolutionStatusChangedByUserId: number | null;
+  resolutionStatusChangedAt: string | null;
+}
+
+export interface FindingOpenSummaryScopeData {
+  type: 'WORKSPACE' | 'PROJECT';
+  projectId: number | null;
+}
+
+export interface FindingOpenSummaryData {
+  scope: FindingOpenSummaryScopeData;
+  openCount: number;
+  bySeverity: Partial<Record<FindingSeverity, number>>;
+  includedStatuses: FindingResolutionStatus[];
+}
+
 export interface ScanFindingListResponseData {
   items: ScanFindingListItemData[];
   page: number;
