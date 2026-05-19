@@ -345,6 +345,9 @@ function ProjectListPage() {
   const selectedProjectAgentOnline = selectedProject
     ? agentStatusMap[selectedProject.id]?.status === 'ONLINE'
     : false;
+  const selectedProjectAgentAvailable = Boolean(
+    selectedProject && selectedProjectScanOptions?.availableScanModes.includes('AGENT') && selectedProjectAgentOnline,
+  );
 
   const filteredProjects = useMemo(() => {
     const keyword = projectSearchTerm.trim().toLowerCase();
@@ -769,14 +772,25 @@ function ProjectListPage() {
       </section>
 
       <ScanModePicker
-        isAgentAvailable={
-          selectedProject
-            ? Boolean(selectedProjectScanOptions?.availableScanModes.includes('AGENT') && selectedProjectAgentOnline)
-            : false
-        }
+        isAgentAvailable={selectedProjectAgentAvailable}
         onSelect={setSelectedMode}
         selectedMode={selectedMode}
       />
+
+      {selectedProject && selectedProjectScanOptions && !selectedProjectAgentAvailable ? (
+        <div className="flex flex-col gap-3 border border-dashed border-neutral-300 bg-white px-5 py-4 text-sm leading-7 text-neutral-700 landing-card-radius md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="font-black text-black">이 프로젝트는 아직 Local Agent가 연결되어 있지 않습니다.</p>
+            <p className="mt-1">
+              웹에서는 Agent를 직접 켤 수 없습니다. 스캔할 PC 또는 서버의 프로젝트 루트에서 아래 명령을 실행하면 이 프로젝트의 Agent 스캔과 수정 요청을 처리할 수 있습니다.
+            </p>
+          </div>
+          <div className="shrink-0 rounded-lg bg-black px-4 py-3 font-mono text-xs leading-6 text-[#D4FC64]">
+            <div>ssafer login</div>
+            <div>ssafer agent</div>
+          </div>
+        </div>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] landing-anim">
         {selectedMode === 'UPLOAD' ? (
