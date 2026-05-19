@@ -78,7 +78,13 @@ html.theme-dark .bg-\[\#FAFAFA\],
 html.theme-dark .bg-\[\#fafafa\],
 html.theme-dark .bg-\[\#F7F7F5\],
 html.theme-dark .bg-\[\#FAFAF7\],
-html.theme-dark .bg-\[\#fafaf7\] {
+html.theme-dark .bg-\[\#fafaf7\],
+html.theme-dark .bg-\[\#FCFCF8\],
+html.theme-dark .bg-\[\#fbfaf4\],
+html.theme-dark .bg-\[\#F2F2EF\],
+html.theme-dark .bg-\[\#EEEEEE\],
+html.theme-dark .bg-\[\#f7f7f7\],
+html.theme-dark .bg-\[\#fffdf8\] {
   background: #2b2b2b !important;
 }
 
@@ -250,6 +256,54 @@ html.theme-dark .bg-black {
 
 html.theme-dark .text-black {
   color: #f9fafb !important;
+}
+
+html.theme-dark .text-neutral-800,
+html.theme-dark .text-neutral-900,
+html.theme-dark .text-slate-800,
+html.theme-dark .text-slate-900,
+html.theme-dark .text-\[\#020617\],
+html.theme-dark .text-\[\#080B16\],
+html.theme-dark .text-\[\#0F0F0F\],
+html.theme-dark .text-\[\#111111\],
+html.theme-dark .text-\[\#161616\],
+html.theme-dark .text-\[\#6b6257\],
+html.theme-dark .text-\[\#757579\],
+html.theme-dark .text-\[\#8b7f6a\] {
+  color: #f9fafb !important;
+}
+
+html.theme-dark input,
+html.theme-dark select,
+html.theme-dark textarea {
+  background: #121212 !important;
+  border-color: #424242 !important;
+  color: #f9fafb !important;
+}
+
+html.theme-dark input::placeholder,
+html.theme-dark textarea::placeholder {
+  color: #9ca3af !important;
+}
+
+html.theme-dark option {
+  background: #181818 !important;
+  color: #f9fafb !important;
+}
+
+html.theme-dark .bg-\[\#E9F8EE\],
+html.theme-dark .bg-\[\#FFE5E5\],
+html.theme-dark .bg-\[\#F6FDE8\],
+html.theme-dark .bg-\[\#F7FFD9\],
+html.theme-dark .bg-\[\#FBFFE8\],
+html.theme-dark .bg-\[\#F9FDE3\],
+html.theme-dark .bg-\[\#F0FFD0\],
+html.theme-dark .bg-\[\#EEF1F9\],
+html.theme-dark .bg-\[\#E5EEFC\],
+html.theme-dark .bg-\[\#FAE9D5\],
+html.theme-dark .bg-\[\#FAF5E0\],
+html.theme-dark .bg-\[\#FCEAEA\] {
+  background: #202020 !important;
 }
 
 /* D4FC64 lime accent: must appear AFTER text-black to win the cascade */
