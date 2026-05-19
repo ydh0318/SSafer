@@ -49,6 +49,8 @@ const initialProjectForm: CreateProjectFormValues = {
   monitorEnabled: true,
 };
 
+const SELECTED_PROJECT_STORAGE_KEY = 'ssafer:selected-project-id';
+
 function normalizeProjectName(value: string) {
   return value.trim();
 }
@@ -245,16 +247,27 @@ function ProjectListPage() {
       return;
     }
 
-    // ProjectDetailPage 등에서 focusProjectId state로 넘겨준 경우 우선 적용
     if (focusProjectId && projects.some((project) => project.id === focusProjectId)) {
-      setSelectedProjectId((current) => current ?? focusProjectId);
+      setSelectedProjectId(focusProjectId);
       return;
     }
 
     if (!selectedProjectId || !projects.some((project) => project.id === selectedProjectId)) {
-      setSelectedProjectId(projects[0].id);
+      const storedProjectId = window.sessionStorage.getItem(SELECTED_PROJECT_STORAGE_KEY);
+      const nextProjectId =
+        storedProjectId && projects.some((project) => project.id === storedProjectId)
+          ? storedProjectId
+          : projects[0].id;
+
+      setSelectedProjectId(nextProjectId);
     }
   }, [projects, selectedProjectId, focusProjectId]);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      window.sessionStorage.setItem(SELECTED_PROJECT_STORAGE_KEY, selectedProjectId);
+    }
+  }, [selectedProjectId]);
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -329,6 +342,9 @@ function ProjectListPage() {
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
+  const selectedProjectAgentOnline = selectedProject
+    ? agentStatusMap[selectedProject.id]?.status === 'ONLINE'
+    : false;
 
   const filteredProjects = useMemo(() => {
     const keyword = projectSearchTerm.trim().toLowerCase();
@@ -379,6 +395,12 @@ function ProjectListPage() {
       isMounted = false;
     };
   }, [selectedProject]);
+
+  useEffect(() => {
+    if (selectedMode === 'AGENT' && selectedProjectScanOptions && !selectedProjectAgentOnline) {
+      setSelectedMode('UPLOAD');
+    }
+  }, [selectedMode, selectedProjectScanOptions, selectedProjectAgentOnline]);
 
   const selectedLatestCompleted = useMemo(
     () => (selectedProjectId ? latestCompletedScans[selectedProjectId] ?? null : null),
@@ -486,7 +508,7 @@ function ProjectListPage() {
       return;
     }
 
-    if (selectedMode === 'AGENT' && !selectedProjectScanOptions?.availableScanModes.includes('AGENT')) {
+    if (selectedMode === 'AGENT' && (!selectedProjectScanOptions?.availableScanModes.includes('AGENT') || !selectedProjectAgentOnline)) {
       setScanError('이 프로젝트에서는 아직 Agent 스캔을 사용할 수 없습니다.');
       return;
     }
@@ -748,7 +770,7 @@ function ProjectListPage() {
       <ScanModePicker
         isAgentAvailable={
           selectedProject
-            ? Boolean(selectedProjectScanOptions?.availableScanModes.includes('AGENT'))
+            ? Boolean(selectedProjectScanOptions?.availableScanModes.includes('AGENT') && selectedProjectAgentOnline)
             : false
         }
         onSelect={setSelectedMode}
@@ -838,7 +860,7 @@ function ProjectListPage() {
               <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {/* 스캔 */}
                 <button
-                  className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isStartingScan || !selectedProject}
                   onClick={() => void handleStartScan()}
                   type="button"
@@ -872,7 +894,7 @@ function ProjectListPage() {
                     <p className="font-black">수정</p>
                     <p className="mt-1 text-xs leading-relaxed text-neutral-500">
                       {selectedAgentScanType === 'SERVER_AUDIT'
-                        ? '\uc11c\ubc84 \ub7f0\ud0c0\uc784 \uc810\uac80\uc740 \uc2e4\ud589 \uc911\uc778 \ud3ec\ud2b8, \ubc29\ud654\ubcbd, SSH, Docker \uc0c1\ud0dc\ub97c \ud655\uc778\ud558\ub294 \uc6b4\uc601 \uc870\uce58 \uacb0\uacfc\uc785\ub2c8\ub2e4. \ud30c\uc77c \ud328\uce58 \ub300\uc0c1\uc774 \uc544\ub2c8\ubbc0\ub85c, \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc744 \uc120\ud0dd\ud55c \ub4a4 \uc218\uc815\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.'
+                        ? '\uc11c\ubc84 \uc810\uac80\uc740 \uc2e4\ud589 \uc911\uc778 \ud3ec\ud2b8, \ubc29\ud654\ubcbd, SSH, Docker \uc0c1\ud0dc\ucc98\ub7fc \uc6b4\uc601 \ud658\uacbd\uc744 \ud655\uc778\ud569\ub2c8\ub2e4. \uc6d0\uc778\uc774 \uc18c\uc2a4 \ud30c\uc77c, \uc11c\ubc84 \uc124\uc815, \ubc29\ud654\ubcbd \uc911 \uc5b4\ub514\uc778\uc9c0 \ub2e8\uc815\ud558\uae30 \uc5b4\ub824\uc6cc \uc790\ub3d9 \ud328\uce58 \uc2dc \uc11c\ube44\uc2a4 \uc7a5\uc560\uac00 \ub0a0 \uc218 \uc788\uc73c\ubbc0\ub85c, \uc218\uc815 \uae30\ub2a5\uc740 \uc81c\uacf5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.'
                         : selectedLatestProjectFileScan
                         ? '\ucd5c\uc2e0 \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94 \uacb0\uacfc\uc758 \uc218\uc815\uc548\uc744 \ud655\uc778\ud569\ub2c8\ub2e4.'
                         : '\uc644\ub8cc\ub41c \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc774 \uc5c6\uc2b5\ub2c8\ub2e4. \uba3c\uc800 \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc744 \uc2e4\ud589\ud558\uc138\uc694.'}
@@ -887,7 +909,7 @@ function ProjectListPage() {
         <aside className="space-y-4">
           <SecretMaskingCard />
           <EstimatedDurationCard />
-          {selectedMode !== 'CLI' ? (
+          {selectedMode === 'UPLOAD' ? (
             <button
               className="inline-flex w-full items-center justify-center gap-2 bg-[#D4FC64] px-5 py-3.5 text-sm font-black text-black transition landing-inner-radius hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(212,252,100,0.45)] hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
               disabled={

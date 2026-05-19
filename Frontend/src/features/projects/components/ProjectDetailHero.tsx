@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { ROUTES } from '../../../constants/routes';
 
 type ProjectDetailHeroProps = {
+  projectId: string;
   projectName: string | null;
   description: string | null;
   isLoading: boolean;
@@ -51,6 +52,7 @@ function AgentChip({ isOnline, isLoading }: { isOnline: boolean; isLoading: bool
 }
 
 function ProjectDetailHero({
+  projectId,
   projectName,
   description,
   isLoading,
@@ -69,6 +71,7 @@ function ProjectDetailHero({
     <header className="landing-anim space-y-6">
       <Link
         className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-500 transition hover:text-black"
+        state={{ focusProjectId: projectId }}
         to={ROUTES.projects}
       >
         <ArrowLeft className="h-3.5 w-3.5" />
