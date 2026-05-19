@@ -6,7 +6,9 @@ import PageBanner from '../../components/common/PageBanner';
 import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
 import { hasStoredMemberSession, isStoredGuestSession } from '../../features/auth/utils/session';
+import { useToast } from '../../features/feedback/useToast';
 import { getHistoryScans } from '../../features/history/api/history';
+import { getProjects } from '../../features/projects/api/projects';
 import { getScanCompare } from '../../features/results/api/results';
 import { deleteScanHistory } from '../../features/scans/api/scans';
 import ScanTimeline from '../../features/scans/components/ScanTimeline';
@@ -77,6 +79,7 @@ function HistoryPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const user = useAuthStore((state) => state.user);
+  const toast = useToast();
 
   const isGuestSession = user?.role === 'GUEST' || isStoredGuestSession();
   const hasMemberSession =
@@ -85,8 +88,10 @@ function HistoryPage() {
 
   const [filterScanMode, setFilterScanMode] = useState<ScanMode | ''>('');
   const [filterStatus, setFilterStatus] = useState<'DONE' | 'FAILED' | ''>('');
+  const [filterProjectId, setFilterProjectId] = useState('');
 
   const [historyData, setHistoryData] = useState<HistoryScanListResponseData>(emptyHistoryData);
+  const [projectNameMap, setProjectNameMap] = useState<Record<number, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
@@ -94,7 +99,6 @@ function HistoryPage() {
   const [selectedTargetScanId, setSelectedTargetScanId] = useState('');
   const [compareData, setCompareData] = useState<ScanCompareResponseData | null>(null);
   const [isCompareLoading, setIsCompareLoading] = useState(false);
-  const [compareErrorMessage, setCompareErrorMessage] = useState<string | null>(null);
   const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
 
   const doneHistoryItems = useMemo(
@@ -102,7 +106,19 @@ function HistoryPage() {
     [historyData.items],
   );
 
-  const loadHistory = async (params?: { scanMode?: ScanMode | ''; status?: 'DONE' | 'FAILED' | '' }) => {
+  const projectFilterOptions = useMemo(
+    () =>
+      Object.entries(projectNameMap)
+        .map(([projectId, projectName]) => ({ projectId, projectName }))
+        .sort((left, right) => left.projectName.localeCompare(right.projectName)),
+    [projectNameMap],
+  );
+
+  const formatScanOptionLabel = (item: { scanId: number; projectId: number }) => {
+    return `${projectNameMap[item.projectId] ?? `프로젝트 ${item.projectId}`} / #${item.scanId}`;
+  };
+
+  const loadHistory = async (params?: { scanMode?: ScanMode | ''; status?: 'DONE' | 'FAILED' | ''; projectId?: string }) => {
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -112,6 +128,7 @@ function HistoryPage() {
         size: HISTORY_PAGE_SIZE,
         ...(params?.scanMode && { scanMode: params.scanMode }),
         ...(params?.status && { status: params.status }),
+        ...(params?.projectId && { projectId: Number(params.projectId) }),
       });
       setHistoryData(data);
       return data;
@@ -126,11 +143,37 @@ function HistoryPage() {
 
   useEffect(() => {
     if (!canAccessHistory) {
+      setProjectNameMap({});
+      return;
+    }
+
+    let isMounted = true;
+
+    void getProjects({ page: 0, size: 100 })
+      .then((data) => {
+        if (!isMounted) return;
+        setProjectNameMap(
+          data.items.reduce<Record<number, string>>((accumulator, project) => {
+            accumulator[Number(project.id)] = project.name;
+            return accumulator;
+          }, {}),
+        );
+      })
+      .catch(() => {
+        if (isMounted) setProjectNameMap({});
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [canAccessHistory]);
+
+  useEffect(() => {
+    if (!canAccessHistory) {
       setHistoryData(emptyHistoryData);
       setErrorMessage(null);
       setNoticeMessage(null);
       setCompareData(null);
-      setCompareErrorMessage(null);
       setSelectedBaseScanId('');
       setSelectedTargetScanId('');
       return;
@@ -167,7 +210,6 @@ function HistoryPage() {
       if (selectedBaseScanId !== '') setSelectedBaseScanId('');
       if (selectedTargetScanId !== '') setSelectedTargetScanId('');
       setCompareData(null);
-      setCompareErrorMessage(null);
       return;
     }
 
@@ -183,19 +225,19 @@ function HistoryPage() {
 
   useEffect(() => {
     setCompareData(null);
-    setCompareErrorMessage(null);
   }, [selectedBaseScanId, selectedTargetScanId]);
 
-  const handleFilterChange = (scanMode: ScanMode | '', status: 'DONE' | 'FAILED' | '') => {
+  const handleFilterChange = (scanMode: ScanMode | '', status: 'DONE' | 'FAILED' | '', projectId = filterProjectId) => {
     setFilterScanMode(scanMode);
     setFilterStatus(status);
-    void loadHistory({ scanMode, status });
+    setFilterProjectId(projectId);
+    void loadHistory({ scanMode, status, projectId });
   };
 
   const handleRefresh = async () => {
     if (!canAccessHistory) return;
     setNoticeMessage(null);
-    await loadHistory({ scanMode: filterScanMode, status: filterStatus });
+    await loadHistory({ scanMode: filterScanMode, status: filterStatus, projectId: filterProjectId });
   };
 
   useScanEventSubscription(
@@ -225,26 +267,26 @@ function HistoryPage() {
 
   const handleCompare = async () => {
     if (!selectedBaseScanId || !selectedTargetScanId) {
-      setCompareErrorMessage('비교할 완료된 스캔 2개를 선택해주세요.');
+      toast.warning('비교할 완료된 프로젝트 파일 스캔 2개를 선택해 주세요.', { durationMs: 2500 });
       setCompareData(null);
       return;
     }
 
     if (selectedBaseScanId === selectedTargetScanId) {
-      setCompareErrorMessage('기준 스캔과 비교 스캔은 서로 달라야 합니다.');
+      toast.warning('기준 스캔과 비교 스캔은 서로 달라야 합니다.', { durationMs: 2500 });
       setCompareData(null);
       return;
     }
 
     setIsCompareLoading(true);
-    setCompareErrorMessage(null);
 
     try {
       const data = await getScanCompare(selectedBaseScanId, selectedTargetScanId);
       setCompareData(data);
     } catch (error) {
       setCompareData(null);
-      setCompareErrorMessage(error instanceof Error ? error.message : '스캔 비교 결과를 불러오지 못했습니다.');
+      const message = error instanceof Error ? error.message : '스캔 비교 결과를 불러오지 못했습니다.';
+      toast.error(message || '비교 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', { durationMs: 3500 });
     } finally {
       setIsCompareLoading(false);
     }
@@ -302,7 +344,7 @@ function HistoryPage() {
 
         <div className="mt-12 flex flex-wrap items-center gap-x-10 gap-y-4 border-t border-neutral-200 pt-8">
           {[
-            { label: '전체 취약점', value: historyData.summary.totalFindingCount, color: '#111111' },
+            { label: '전체 누적 탐지 수', value: historyData.summary.totalFindingCount, color: '#111111' },
             { label: 'Critical',   value: historyData.summary.criticalCount,      color: '#E63946' },
             { label: 'High',       value: historyData.summary.highCount,          color: '#FF8A33' },
             { label: 'Medium',     value: historyData.summary.mediumCount,        color: '#FFB627' },
@@ -361,7 +403,7 @@ function HistoryPage() {
                     <option value="">스캔 선택</option>
                     {doneHistoryItems.map((item) => (
                       <option key={`base-${item.scanId}`} value={item.scanId}>
-                        #{item.scanId} / 프로젝트 {item.projectId}
+                        {formatScanOptionLabel(item)}
                       </option>
                     ))}
                   </select>
@@ -380,7 +422,7 @@ function HistoryPage() {
                         key={`target-${item.scanId}`}
                         value={item.scanId}
                       >
-                        #{item.scanId} / 프로젝트 {item.projectId}
+                        {formatScanOptionLabel(item)}
                       </option>
                     ))}
                   </select>
@@ -402,10 +444,6 @@ function HistoryPage() {
                 </button>
               </div>
             </div>
-
-            {compareErrorMessage ? (
-              <div className="mt-5 border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700 landing-inner-radius">{compareErrorMessage}</div>
-            ) : null}
 
             {compareData ? (
               <div className="mt-6 space-y-6">
@@ -488,6 +526,23 @@ function HistoryPage() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h2 className="text-xl font-black tracking-tight md:text-2xl">스캔 이력</h2>
               <div className="flex flex-wrap items-center gap-4">
+                {/* 프로젝트 */}
+                <label className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">프로젝트</span>
+                  <select
+                    className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-bold text-neutral-600 outline-none transition hover:border-neutral-400 focus:border-black"
+                    onChange={(event) => handleFilterChange(filterScanMode, filterStatus, event.target.value)}
+                    value={filterProjectId}
+                  >
+                    <option value="">전체</option>
+                    {projectFilterOptions.map((project) => (
+                      <option key={project.projectId} value={project.projectId}>
+                        {project.projectName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 {/* 스캔 방식 */}
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">방식</span>
