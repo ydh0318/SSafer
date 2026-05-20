@@ -352,7 +352,7 @@ function SettingsPage() {
         setDisplayName(profile.displayName);
         setInitialDisplayName(profile.displayName);
         setIsDisplayNameConfirmed(true);
-        setHasLocalPassword(profile.hasLocalPassword);
+        setHasLocalPassword(profile.hasLocalPassword ?? null);
         setUser({
           id: user?.id ?? profile.email,
           email: profile.email,
