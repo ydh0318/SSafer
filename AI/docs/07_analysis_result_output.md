@@ -92,6 +92,20 @@ fix를 제외한 필수 문자열 필드는 비어 있지 않은 string이어야
 fix는 object이어야 함
 ```
 
+## 5-1. references 필드
+
+분석 파이프라인은 결과 저장 직전 finding마다 외부 웹 참고자료를 조회해 각 result에 `references` 배열을 추가합니다. HasData SERP API(`reference_service.py`)를 사용하며, finding의 CVE/ruleId/title로 검색 질의를 만듭니다.
+
+```json
+"references": [
+  { "title": "...", "url": "https://...", "snippet": "..." }
+]
+```
+
+- 모든 result에 추가되는 필드이며, `HASDATA_ENABLED=false`이거나 `HASDATA_API_KEY`가 없거나 조회에 실패하면 빈 배열(`[]`)입니다.
+- 스키마 검증(§4~§6) 이후 부가되는 필드라 위 필수 필드 검증 대상에는 포함되지 않습니다.
+- HasData 설정은 `05_configuration.md`, 에이전트 도구로서의 동일 API 사용은 `11_agent_graph.md`를 참고합니다.
+
 ## 6. fix 객체 필드
 
 `fix` 객체는 아래 필드를 반드시 포함해야 합니다.

@@ -28,7 +28,7 @@ qwen2.5:3b
 ollama pull qwen2.5:3b
 ```
 
-Ollama 설치 방법은 [1_ollama_setup.md](1_ollama_setup.md)를 참고합니다.
+Ollama 설치 방법은 [02_ollama_setup.md](02_ollama_setup.md)를 참고합니다.
 
 ## 2. Python 의존성
 
@@ -116,23 +116,10 @@ ChatOllama qwen2.5:3b http://127.0.0.1:11434
 
 ## 6. LLM 호출 테스트
 
-LangChain을 통해 Ollama 모델에 실제 프롬프트를 보내는 기본 응답 생성 함수는 아래 파일에 있습니다.
+LLM 객체 생성에 이어, LangChain이 실제로 Ollama 모델에 프롬프트를 보내고 응답을 받는지 확인합니다. 재시도 로직이 포함된 호출 헬퍼는 아래 파일에 있습니다.
 
 ```text
-app/services/llm_service.py
-```
-
-```python
-def generate_basic_response(prompt: str) -> str:
-    llm = get_ollama_llm()
-    response = invoke_llm_with_retry(llm, prompt)
-    return response.content
-```
-
-이 함수를 실행해보는 테스트 스크립트는 아래 파일입니다.
-
-```text
-scripts/test_llm_call.py
+app/core/llm.py
 ```
 
 먼저 Ollama 서버를 실행합니다.
@@ -141,12 +128,12 @@ scripts/test_llm_call.py
 ollama serve
 ```
 
-다른 터미널에서 테스트 스크립트를 실행합니다.
+다른 터미널에서 `get_ollama_llm()`으로 만든 LLM에 실제 프롬프트를 보내봅니다.
 
 ```bash
 cd /home/eunsu/S14P31B105/AI
 source .venv/bin/activate
-python scripts/test_llm_call.py
+python -c "from app.core.llm import get_ollama_llm, invoke_llm_with_retry; llm = get_ollama_llm(); print(invoke_llm_with_retry(llm, 'Reply with only this word: OK').content)"
 ```
 
 정상이라면 아래처럼 출력됩니다.

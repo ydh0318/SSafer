@@ -164,7 +164,7 @@ app/services/explain_service.py
 
 ```python
 generate_finding_explanation(finding: dict) -> str
-generate_finding_explanations(findings: list[dict]) -> list[dict[str, str]]
+generate_findings_explanation_batch(findings: list[dict]) -> dict[str, dict]
 ```
 
 처리 흐름:
@@ -179,7 +179,7 @@ finding dict
 → explanation 문자열 반환
 ```
 
-여러 finding을 처리할 때는 각 finding의 `id`와 생성된 `explanation`을 함께 반환합니다.
+여러 finding을 한 번에 처리할 때는 `generate_findings_explanation_batch()`가 finding `id`별로 설명을 묶어서 반환합니다.
 
 ## 10. 로직 import 확인
 
@@ -188,13 +188,13 @@ finding dict
 ```bash
 cd /home/eunsu/S14P31B105/AI
 source .venv/bin/activate
-python -c "from app.services.explain_service import generate_finding_explanation, generate_finding_explanations; print(generate_finding_explanation.__name__, generate_finding_explanations.__name__)"
+python -c "from app.services.explain_service import generate_finding_explanation, generate_findings_explanation_batch; print(generate_finding_explanation.__name__, generate_findings_explanation_batch.__name__)"
 ```
 
 정상 출력 예시:
 
 ```text
-generate_finding_explanation generate_finding_explanations
+generate_finding_explanation generate_findings_explanation_batch
 ```
 
 ## 11. 설명 결과 출력 테스트
@@ -239,9 +239,3 @@ Finding ID: FND-0001
 ```
 
 현재 기본 모델인 `qwen2.5:3b`는 로컬 모델이므로 일부 표현 품질이 불안정할 수 있습니다.
-
-## 12. 다음 작업
-
-```text
-Fix Chain 구축
-```

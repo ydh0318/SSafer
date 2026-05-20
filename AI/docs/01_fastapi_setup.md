@@ -72,10 +72,10 @@ curl -X POST http://127.0.0.1:8000/analyze \
   "finding_id": null,
   "scan_result_path": "data/scan_result.json",
   "analysis_result_path": "data/analysis_result.json",
-  "finding_count": 1,
-  "valid_finding_count": 1,
+  "finding_count": 3,
+  "valid_finding_count": 3,
   "invalid_finding_count": 0,
-  "result_count": 1,
+  "result_count": 3,
   "invalid_findings": []
 }
 ```
@@ -83,8 +83,8 @@ curl -X POST http://127.0.0.1:8000/analyze \
 ## 8. 관련 문서
 
 ```text
-1_ollama_setup.md
-2_langchain_setup.md
-8_analyze_api.md
-9_test_guide.md
+02_ollama_setup.md
+03_langchain_setup.md
+12_analyze_api.md
+16_test_guide.md
 ```
