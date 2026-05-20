@@ -68,6 +68,34 @@ class FixServiceTest(unittest.TestCase):
         self.assertEqual(parsed["patches"][0]["filePath"], "Dockerfile")
         self.assertTrue(parsed["patches"][0]["requiresApproval"])
 
+    def test_parse_fix_response_drops_noop_patch(self):
+        noop_fix = {
+            **DESCRIPTION_ONLY_FIX,
+            "patches": [
+                {"operation": "replace", "oldText": "USER root", "newText": "USER root"}
+            ],
+        }
+
+        parsed = parse_fix_response(json.dumps(noop_fix))
+
+        # no-op 패치는 검증 실패가 아니라 드롭되고, fix 본문은 유지된다.
+        self.assertNotIn("patches", parsed)
+        self.assertEqual(parsed["summary"], DESCRIPTION_ONLY_FIX["summary"])
+
+    def test_parse_fix_response_drops_noop_keeps_valid_patch(self):
+        mixed_fix = {
+            **DESCRIPTION_ONLY_FIX,
+            "patches": [
+                {"operation": "replace", "oldText": "USER root", "newText": "USER root"},
+                PATCH_FIX["patches"][0],
+            ],
+        }
+
+        parsed = parse_fix_response(json.dumps(mixed_fix))
+
+        self.assertEqual(len(parsed["patches"]), 1)
+        self.assertEqual(parsed["patches"][0]["newText"], "USER appuser")
+
     def test_parse_fix_response_accepts_legacy_target_file_and_normalizes(self):
         legacy_fix = {
             **DESCRIPTION_ONLY_FIX,
