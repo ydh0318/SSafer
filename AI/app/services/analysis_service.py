@@ -514,14 +514,35 @@ def analyze_findings(
 
     from app.core.config import MAX_FINDINGS_PER_BATCH
 
-    batches = _chunk_findings(findings, MAX_FINDINGS_PER_BATCH)
-    all_results: list[dict[str, Any]] = []
-    for batch in batches:
-        batch_results = _analyze_findings_batch(
-            batch, scan_result=scan_result, log_fields=log_fields
+    # agent 대상(HIGH/CRITICAL/CVE)은 개별 tool-calling 경로로, 나머지는 batch로 분리한다.
+    # 그렇지 않으면 다건 분석 시 모든 finding이 batch로 흡수되어 agent가 실행되지 않는다.
+    agent_items = [(i, f) for i, f in enumerate(findings) if should_use_agent(f)]
+    batch_items = [(i, f) for i, f in enumerate(findings) if not should_use_agent(f)]
+
+    results_by_index: dict[int, dict[str, Any]] = {}
+
+    for index, finding in agent_items:
+        results_by_index[index] = analyze_finding(
+            finding,
+            scan_result=scan_result,
+            log_fields=log_fields,
+            finding_index=index + 1,
+            finding_total=finding_total,
         )
-        all_results.extend(batch_results)
-    return all_results
+
+    if batch_items:
+        plain_findings = [finding for _, finding in batch_items]
+        batch_results: list[dict[str, Any]] = []
+        for batch in _chunk_findings(plain_findings, MAX_FINDINGS_PER_BATCH):
+            batch_results.extend(
+                _analyze_findings_batch(
+                    batch, scan_result=scan_result, log_fields=log_fields
+                )
+            )
+        for (index, _), result in zip(batch_items, batch_results):
+            results_by_index[index] = result
+
+    return [results_by_index[i] for i in range(finding_total)]
 
 
 def _chunk_findings(

@@ -448,9 +448,8 @@ def normalize_fix_patch_for_finding(
         normalized_patch.setdefault("patchId", f"PATCH-{finding_id}")
     normalized_patch["filePath"] = file_path
     normalized_patch["expectedFileHash"] = expected_file_hash
-    finding_line = finding.get("line")
-    if isinstance(finding_line, int):
-        normalized_patch["line"] = finding_line
+    # finding의 line을 항상 patch에 싣는다(None이면 null). LLM이 넣은 line은 신뢰하지 않는다.
+    normalized_patch["line"] = finding.get("line")
     if "requiresApproval" in normalized_patch:
         normalized_patch["requiresApproval"] = True
     return normalized_patch

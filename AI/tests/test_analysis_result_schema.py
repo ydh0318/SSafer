@@ -281,7 +281,7 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
         patch = analysis_result["results"][0]["fix"]["patches"][0]
         self.assertEqual(patch["line"], 42)
 
-    def test_normalize_analysis_result_patches_omits_line_when_finding_line_is_none(self):
+    def test_normalize_analysis_result_patches_sets_null_line_when_finding_line_is_none(self):
         analysis_result = build_analysis_result_with_patch(build_patch())
 
         normalize_analysis_result_patches(
@@ -291,7 +291,8 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
         )
 
         patch = analysis_result["results"][0]["fix"]["patches"][0]
-        self.assertNotIn("line", patch)
+        self.assertIn("line", patch)
+        self.assertIsNone(patch["line"])
 
     def test_normalize_analysis_result_patches_does_not_trust_llm_line(self):
         analysis_result = build_analysis_result_with_patch(
