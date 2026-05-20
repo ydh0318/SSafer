@@ -116,6 +116,55 @@ def version() -> None:
     console.print(__version__)
 
 
+@app.command(help="설치 후 스캔, 업로드, 수정 적용까지의 기본 사용 흐름을 확인합니다.", rich_help_panel="기본")
+def guide() -> None:
+    """처음 사용하는 사람을 위한 CLI 실행 순서를 출력합니다."""
+    console.print(Panel.fit("[bold]SSAfer CLI 빠른 시작[/bold]\n설치 후 아래 순서대로 실행하면 스캔, 업로드, 수정 적용까지 확인할 수 있습니다.", border_style="green"))
+
+    flow = Table(title="기본 흐름", show_lines=True)
+    flow.add_column("단계", style="bold cyan", width=8)
+    flow.add_column("명령어", style="bold green")
+    flow.add_column("설명")
+    flow.add_row("1", "pip install ssafer", "CLI를 설치합니다. 독립 실행 도구로 쓰려면 pipx install ssafer도 가능합니다.")
+    flow.add_row("2", "ssafer tools", "Trivy 같은 외부 점검 도구를 설치합니다. 이미 설치되어 있으면 건너뛰어도 됩니다.")
+    flow.add_row("3", "cd <프로젝트 루트>", ".env, Dockerfile, docker-compose.yml이 있는 폴더로 이동합니다.")
+    flow.add_row("4", "ssafer signup", "계정이 없으면 이메일 인증 후 회원가입합니다. 이미 계정이 있으면 건너뜁니다.")
+    flow.add_row("5", "ssafer login", "웹 업로드와 AI 분석 결과 조회에 필요한 계정 토큰을 저장합니다.")
+    flow.add_row("6", "ssafer run --upload", "프로젝트를 스캔하고 결과 JSON을 업로드한 뒤 AI 분석 완료까지 기다립니다.")
+    flow.add_row("7", "ssafer apply", "최신 완료 스캔의 AI 수정안을 내려받아 diff를 확인한 뒤 적용합니다.")
+    console.print(flow)
+
+    server_flow = Table(title="서버 런타임 점검", show_lines=True)
+    server_flow.add_column("상황", style="bold cyan")
+    server_flow.add_column("명령어", style="bold green")
+    server_flow.add_column("설명")
+    server_flow.add_row("서버 점검", "ssafer server --upload", "현재 서버의 포트, Docker, SSH, 방화벽, nginx 상태를 점검하고 업로드합니다.")
+    server_flow.add_row("OS 패키지 포함", "ssafer server --include-os-packages --upload", "Trivy rootfs 점검까지 포함합니다. 시간이 오래 걸릴 수 있습니다.")
+    server_flow.add_row("최근 결과 업로드", "ssafer upload --server", "이미 만든 최신 server-audit 결과를 새로 점검하지 않고 업로드합니다.")
+    console.print(server_flow)
+
+    agent_flow = Table(title="웹에서 Agent로 실행하려면", show_lines=True)
+    agent_flow.add_column("단계", style="bold cyan", width=8)
+    agent_flow.add_column("명령어", style="bold green")
+    agent_flow.add_column("설명")
+    agent_flow.add_row("1", "cd <프로젝트 루트>", "웹 요청을 처리할 PC 또는 서버의 프로젝트 폴더로 이동합니다.")
+    agent_flow.add_row("2", "ssafer login", "회원 또는 게스트 토큰을 CLI에 저장합니다.")
+    agent_flow.add_row("3", "ssafer agent", "이 프로젝트에 Local Agent를 연결하고 웹 요청을 기다립니다.")
+    console.print(agent_flow)
+
+    cleanup_flow = Table(title="삭제/정리", show_lines=True)
+    cleanup_flow.add_column("대상", style="bold cyan")
+    cleanup_flow.add_column("명령어", style="bold green")
+    cleanup_flow.add_column("설명")
+    cleanup_flow.add_row("SSAfer CLI", "pip uninstall ssafer", "pip로 설치한 SSAfer CLI를 삭제합니다.")
+    cleanup_flow.add_row("SSAfer CLI", "pipx uninstall ssafer", "pipx로 설치한 SSAfer CLI를 삭제합니다.")
+    cleanup_flow.add_row("Trivy (Windows)", "winget uninstall --id AquaSecurity.Trivy -e", "ssafer tools가 winget으로 설치한 Trivy를 삭제합니다.")
+    cleanup_flow.add_row("Trivy (Ubuntu/Debian)", "sudo apt-get remove -y trivy", "ssafer tools가 apt로 설치한 Trivy 패키지를 삭제합니다.")
+    console.print(cleanup_flow)
+
+    console.print("[dim]더 자세한 명령 옵션은 ssafer --help 또는 각 명령의 --help를 확인하세요.[/dim]")
+
+
 @app.command(help="로그인, 백엔드 endpoint, Local Agent 설정 상태를 확인합니다.", rich_help_panel="계정/상태")
 def status() -> None:
     """로그인과 Local Agent 설정 상태를 확인합니다."""
@@ -2632,6 +2681,7 @@ def last(
 def _sort_help_commands() -> None:
     preferred_order = [
         "version",
+        "guide",
         "status",
         "signup",
         "login",
