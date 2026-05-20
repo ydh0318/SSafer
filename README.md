@@ -110,3 +110,14 @@ ssafer apply
 ```
 
 더 자세한 CLI 명령어, 옵션, 삭제/초기화 방법은 [CLI/README.md](./CLI/README.md)를 참고하세요.
+
+---
+
+## Security
+
+Please do not report security vulnerabilities through public issues.
+Contact the SSAfer maintainers privately before disclosing security-sensitive details.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.

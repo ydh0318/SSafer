@@ -8,6 +8,7 @@ version = "0.3.11"
 description = "Security copilot CLI — scan Docker Compose, .env, Dockerfile, and server runtime for misconfigurations."
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
 authors = [
   { name = "SSAfer Team" },
 ]

@@ -1,11 +1,11 @@
-# n8n Setup
+﻿# n8n Setup
 
 `S14P31B105-160` 기준 EC2 #1 n8n 운영 설정 가이드입니다.
 
 ## 기준
 
 - n8n container: `ssafer-n8n`
-- Public path: `https://k14b105.p.ssafy.io/n8n/`
+- Public path: `https://<LEGACY_DEPLOY_DOMAIN>/n8n/`
 - Internal port: `5678`
 - Database: PostgreSQL `n8n` database
 - Reverse proxy: NGINX `/n8n/`
@@ -40,7 +40,7 @@ EC2 #1 운영 `.env`에 아래 값을 준비합니다.
 ```text
 N8N_ENCRYPTION_KEY=REPLACE_WITH_N8N_KEY
 N8N_DB_NAME=n8n
-N8N_EDITOR_BASE_URL=https://k14b105.p.ssafy.io/n8n/
+N8N_EDITOR_BASE_URL=https://<LEGACY_DEPLOY_DOMAIN>/n8n/
 ```
 
 `N8N_ENCRYPTION_KEY`는 credentials 암호화에 사용되므로 최초 기동 후 변경하면 기존 credentials를 복호화할 수 없습니다.
@@ -79,10 +79,10 @@ n8n이 NGINX 뒤에서 동작하므로 public URL을 명시합니다.
 
 ```yaml
 N8N_PROTOCOL: https
-N8N_HOST: k14b105.p.ssafy.io
+N8N_HOST: <LEGACY_DEPLOY_DOMAIN>
 N8N_PATH: /n8n/
-WEBHOOK_URL: https://k14b105.p.ssafy.io/n8n/
-N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-https://k14b105.p.ssafy.io/n8n/}
+WEBHOOK_URL: https://<LEGACY_DEPLOY_DOMAIN>/n8n/
+N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-https://<LEGACY_DEPLOY_DOMAIN>/n8n/}
 N8N_PROXY_HOPS: 1
 ```
 
@@ -117,7 +117,7 @@ curl -I http://localhost:5678
 NGINX 기동 후 외부 확인:
 
 ```bash
-curl -I https://k14b105.p.ssafy.io/n8n/
+curl -I https://<LEGACY_DEPLOY_DOMAIN>/n8n/
 ```
 
 첫 접속 시 owner 계정을 생성합니다.

@@ -1,0 +1,20 @@
+[allowlist]
+description = "Allow documented test fixtures and non-secret placeholders"
+regexes = [
+  '''x\.eyJzdWIiOiJ1c2VyOj[0-9]+ifQ\.x''',
+  '''Abcdefghijklmnop1234567890secret''',
+  '''replace-with-at-least-32-byte-secret-key''',
+  '''AKIA1234567890ABCDEF''',
+  '''AKIAIOSFODNN7EXAMPLE''',
+  '''REPLACE_WITH_N8N_KEY''',
+  '''-----BEGIN RSA PRIVATE KEY-----\\nabc\\n-----END RSA PRIVATE KEY-----''',
+  '''-----BEGIN RSA PRIVATE KEY-----\\nMIIEowIBAAKCAQ\\n-----END RSA PRIVATE KEY-----''',
+  '''-----BEGIN OPENSSH PRIVATE KEY-----\\naabbccdd\\n-----END OPENSSH PRIVATE KEY-----''',
+]
+paths = [
+  '''CLI/tests/.*''',
+  '''Backend/ssafer/src/test/.*''',
+  '''Backend/ssafer/\.env\.sample''',
+  '''Infra/docker/.*/\.env\.example''',
+  '''Infra/docs/.*''',
+]

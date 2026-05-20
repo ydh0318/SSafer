@@ -1,8 +1,12 @@
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 ANALYSIS_RESULT_SCHEMA_VERSION = "0.1"
 DEFAULT_ANALYSIS_RESULT_PATH = "data/analysis_result.json"
@@ -450,6 +454,13 @@ def normalize_fix_patch_for_finding(
     normalized_patch["expectedFileHash"] = expected_file_hash
     # finding의 line을 항상 patch에 싣는다(None이면 null). LLM이 넣은 line은 신뢰하지 않는다.
     normalized_patch["line"] = finding.get("line")
+    # patchContext.oldText로 치환한 뒤 newText와 같아지면 변경이 없는 패치이므로 드롭한다.
+    if operation == "replace" and normalized_patch.get("newText") == normalized_patch.get("oldText"):
+        logger.warning(
+            "Dropping no-op patch for finding %s (oldText == newText after patchContext substitution).",
+            finding_id,
+        )
+        return None
     if "requiresApproval" in normalized_patch:
         normalized_patch["requiresApproval"] = True
     return normalized_patch
