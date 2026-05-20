@@ -618,17 +618,7 @@ def _tasks_from_ws_message(message: Any) -> list[AgentTask] | None:
     if message_type != "TASK_ASSIGNED":
         return []
     try:
-        return [
-            AgentTask(
-                task_id=int(payload["taskId"]),
-                task_type=str(payload["taskType"]),
-                task_status=str(payload.get("taskStatus") or "SENT"),
-                project_id=int(payload["projectId"]),
-                scan_id=int(payload["scanId"]) if payload.get("scanId") is not None else None,
-                finding_id=int(payload["findingId"]) if payload.get("findingId") is not None else None,
-                payload=payload.get("payload") if isinstance(payload.get("payload"), dict) else None,
-            )
-        ]
+        return [_agent_task_from_mapping(payload, default_status="SENT")]
     except (KeyError, TypeError, ValueError):
         return None
 
@@ -664,10 +654,14 @@ def _ping_message(agent_id: int) -> dict[str, Any]:
 
 
 def _parse_agent_task(item: dict[str, Any]) -> AgentTask:
+    return _agent_task_from_mapping(item)
+
+
+def _agent_task_from_mapping(item: dict[str, Any], *, default_status: str | None = None) -> AgentTask:
     return AgentTask(
         task_id=int(item["taskId"]),
         task_type=str(item["taskType"]),
-        task_status=str(item["taskStatus"]),
+        task_status=str(item.get("taskStatus") or default_status or item["taskStatus"]),
         project_id=int(item["projectId"]),
         scan_id=int(item["scanId"]) if item.get("scanId") is not None else None,
         finding_id=int(item["findingId"]) if item.get("findingId") is not None else None,
