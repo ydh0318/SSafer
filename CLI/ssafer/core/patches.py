@@ -113,16 +113,12 @@ def _apply_patch_candidate(
     allow_hash_mismatch_if_text_matches: bool = False,
 ) -> PatchApplyResult:
     root = project_root.resolve()
-    target = _resolve_target_path(root, candidate.file_path)
-    if not target.exists() or not target.is_file():
-        raise PatchError(f"Target file not found: {candidate.file_path}")
-
-    if verify_hash:
-        _validate_expected_hash(
-            target,
-            candidate,
-            allow_hash_mismatch_if_text_matches=allow_hash_mismatch_if_text_matches,
-        )
+    target = _validated_patch_target(
+        root,
+        candidate,
+        verify_hash=verify_hash,
+        allow_hash_mismatch_if_text_matches=allow_hash_mismatch_if_text_matches,
+    )
 
     if candidate.operation == "replace":
         return _apply_replace_patch(root, target, candidate, dry_run=dry_run)
@@ -212,12 +208,10 @@ def apply_patch_candidates(
         raise PatchError(f"Patch not found: {patch_id}")
     root = project_root.resolve()
     for candidate in selected:
-        target = _resolve_target_path(root, candidate.file_path)
-        if not target.exists() or not target.is_file():
-            raise PatchError(f"Target file not found: {candidate.file_path}")
-        _validate_expected_hash(
-            target,
+        _validated_patch_target(
+            root,
             candidate,
+            verify_hash=True,
             allow_hash_mismatch_if_text_matches=allow_hash_mismatch_if_text_matches,
         )
     return [
@@ -249,6 +243,25 @@ def _iter_patch_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
                     if isinstance(patch, dict):
                         items.append({**result, **patch})
     return items
+
+
+def _validated_patch_target(
+    project_root: Path,
+    candidate: PatchCandidate,
+    *,
+    verify_hash: bool,
+    allow_hash_mismatch_if_text_matches: bool = False,
+) -> Path:
+    target = _resolve_target_path(project_root, candidate.file_path)
+    if not target.exists() or not target.is_file():
+        raise PatchError(f"Target file not found: {candidate.file_path}")
+    if verify_hash:
+        _validate_expected_hash(
+            target,
+            candidate,
+            allow_hash_mismatch_if_text_matches=allow_hash_mismatch_if_text_matches,
+        )
+    return target
 
 
 def _validate_expected_hash(

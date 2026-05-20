@@ -527,12 +527,12 @@ To                         Action      From
 --                         ------      ----
 22/tcp                     ALLOW       Anywhere
 3306/tcp                   DENY        Anywhere
-80/tcp                     ALLOW       Anywhere
+    80/tcp                     ALLOW       Anywhere
 """
     rules = parse_ufw_rules(output)
-    assert rules[22] == ["ALLOW"]
-    assert rules[3306] == ["DENY"]
-    assert rules[80] == ["ALLOW"]
+    assert rules[22] == [("ALLOW", "Anywhere")]
+    assert rules[3306] == [("DENY", "Anywhere")]
+    assert rules[80] == [("ALLOW", "Anywhere")]
 
 
 def test_parse_ufw_inactive_returns_empty():
@@ -552,9 +552,9 @@ def test_parse_iptables_accept_and_drop():
 -A INPUT -p tcp --dport 5432 -j REJECT
 """
     rules = parse_iptables_input_rules(output)
-    assert rules[22] == ["ALLOW"]
-    assert rules[3306] == ["DENY"]
-    assert rules[5432] == ["DENY"]
+    assert rules[22] == [("ALLOW", "")]
+    assert rules[3306] == [("DENY", "")]
+    assert rules[5432] == [("DENY", "")]
 
 
 def test_parse_iptables_ignores_policy_and_output_chain():
@@ -566,18 +566,20 @@ def test_parse_iptables_ignores_policy_and_output_chain():
 # ── _resolve_firewall_state ─────────────────────────────────────────────────
 
 def test_resolve_deny_overrides_allow():
-    ufw = {3306: ["ALLOW"]}
-    iptables = {3306: ["DENY"]}
+    ufw = {3306: [("ALLOW", "Anywhere")]}
+    iptables = {3306: [("DENY", "")]}
     state = _resolve_firewall_state(ufw, iptables)
-    assert state[3306] == "DENY"
+    assert state[3306].action == "DENY"
+    assert state[3306].sources == []
 
 
 def test_resolve_merges_both_sources():
-    ufw = {22: ["ALLOW"]}
-    iptables = {3306: ["DENY"]}
+    ufw = {22: [("ALLOW", "Anywhere")]}
+    iptables = {3306: [("DENY", "")]}
     state = _resolve_firewall_state(ufw, iptables)
-    assert state[22] == "ALLOW"
-    assert state[3306] == "DENY"
+    assert state[22].action == "ALLOW"
+    assert state[22].sources == ["Anywhere"]
+    assert state[3306].action == "DENY"
 
 
 # ── cross_validate (integration) ───────────────────────────────────────────

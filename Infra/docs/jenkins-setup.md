@@ -1,4 +1,4 @@
-# Jenkins Setup
+﻿# Jenkins Setup
 
 `S14P31B105-157` 기준 Jenkins 설치 및 파이프라인 설정 가이드입니다.
 
@@ -132,7 +132,7 @@ nginx 이미지 재빌드 후 Jenkins URL을 설정합니다.
 Manage Jenkins → System → Jenkins URL:
 
 ```
-https://k14b105.p.ssafy.io/jenkins/
+https://<LEGACY_DEPLOY_DOMAIN>/jenkins/
 ```
 
 ## 필수 권한
@@ -209,7 +209,7 @@ docker compose version
 
 완료 기준:
 
-- `https://k14b105.p.ssafy.io/jenkins/`에서 Jenkins 로그인 화면이 보임
+- `https://<LEGACY_DEPLOY_DOMAIN>/jenkins/`에서 Jenkins 로그인 화면이 보임
 - Jenkins service active
 - `9090` 포트에 Jenkins Java 프로세스가 떠 있음 (`sudo ss -tlnp | grep 9090`)
 - Jenkins 사용자가 Docker 명령 실행 가능

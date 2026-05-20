@@ -38,6 +38,34 @@ def _normalize_json_response(response: str) -> str:
     return normalized
 
 
+def _drop_noop_patches(parsed: dict[str, Any], label: str) -> None:
+    """oldText == newText인 replace 패치(변경 없음)를 제거한다.
+
+    no-op 패치를 검증 실패로 처리하면 재시도가 일어나 모델이 억지로 다른(틀린)
+    패치를 만들어낼 수 있다. 거부 대신 드롭하고, 남는 패치가 없으면 patches 키를 제거한다.
+    """
+    patches = parsed.get("patches")
+    if not isinstance(patches, list):
+        return
+
+    kept: list[Any] = []
+    for patch in patches:
+        if (
+            isinstance(patch, dict)
+            and patch.get("operation") == "replace"
+            and isinstance(patch.get("oldText"), str)
+            and patch.get("oldText") == patch.get("newText")
+        ):
+            logger.warning("%s: dropping no-op patch (oldText == newText).", label)
+            continue
+        kept.append(patch)
+
+    if kept:
+        parsed["patches"] = kept
+    else:
+        parsed.pop("patches", None)
+
+
 def _validate_fix_dict(parsed: dict[str, Any], label: str = "Fix Chain output") -> None:
     if not isinstance(parsed, dict):
         raise ValueError(f"{label} must be a JSON object.")
@@ -78,6 +106,8 @@ def _validate_fix_dict(parsed: dict[str, Any], label: str = "Fix Chain output") 
             raise ValueError(
                 f"{label} field '{field}' must contain non-empty strings."
             )
+
+    _drop_noop_patches(parsed, label)
 
     try:
         validate_fix_schema(parsed, label, strict_patch_metadata=False)

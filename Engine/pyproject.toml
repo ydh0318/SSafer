@@ -7,6 +7,7 @@ name = "ssafer-engine"
 version = "0.1.0"
 description = "HTTP scan engine wrapping ssafer CLI rules and Trivy."
 requires-python = ">=3.10"
+license = "MIT"
 dependencies = [
   "fastapi>=0.111.0",
   "uvicorn[standard]>=0.30.0",

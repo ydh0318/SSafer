@@ -1,12 +1,12 @@
-# Certbot SSL Setup
+﻿# Certbot SSL Setup
 
 `S14P31B105-156` 기준 Certbot SSL 인증서 발급 및 NGINX 연동 가이드입니다.
 
 ## 대상
 
 - Server: EC2 #1
-- Domain: `k14b105.p.ssafy.io`
-- Certificate path: `/etc/letsencrypt/live/k14b105.p.ssafy.io/`
+- Domain: `<LEGACY_DEPLOY_DOMAIN>`
+- Certificate path: `/etc/letsencrypt/live/<LEGACY_DEPLOY_DOMAIN>/`
 - ACME webroot: `/var/www/certbot`
 
 ## 방식 선택
@@ -14,7 +14,7 @@
 Let's Encrypt HTTP-01 인증은 외부 CA가 아래 경로로 접속해 challenge 파일을 확인하는 방식입니다.
 
 ```text
-http://k14b105.p.ssafy.io/.well-known/acme-challenge/<token>
+http://<LEGACY_DEPLOY_DOMAIN>/.well-known/acme-challenge/<token>
 ```
 
 따라서 80 포트가 외부에서 접근 가능해야 합니다.
@@ -32,7 +32,7 @@ http://k14b105.p.ssafy.io/.well-known/acme-challenge/<token>
 
 ```bash
 curl ifconfig.me
-nslookup k14b105.p.ssafy.io
+nslookup <LEGACY_DEPLOY_DOMAIN>
 ```
 
 UFW와 AWS Security Group에서 80, 443 포트가 열려 있어야 합니다.
@@ -57,13 +57,13 @@ NGINX가 아직 떠 있지 않은 초기 상태에서는 Certbot이 80 포트에
 
 ```bash
 sudo certbot certonly --standalone \
-  -d k14b105.p.ssafy.io
+  -d <LEGACY_DEPLOY_DOMAIN>
 ```
 
 발급 결과를 확인합니다.
 
 ```bash
-sudo ls -al /etc/letsencrypt/live/k14b105.p.ssafy.io/
+sudo ls -al /etc/letsencrypt/live/<LEGACY_DEPLOY_DOMAIN>/
 ```
 
 아래 파일들이 존재해야 합니다.
@@ -97,8 +97,8 @@ location /.well-known/acme-challenge/ {
 Jenkins pipeline 또는 수동 deploy로 NGINX 컨테이너를 기동한 뒤 HTTPS를 확인합니다.
 
 ```bash
-curl -I https://k14b105.p.ssafy.io
-curl -I http://k14b105.p.ssafy.io
+curl -I https://<LEGACY_DEPLOY_DOMAIN>
+curl -I http://<LEGACY_DEPLOY_DOMAIN>
 ```
 
 확인 기준:
@@ -127,7 +127,7 @@ sudo certbot renew --dry-run
 webroot 발급 중 아래 오류가 발생할 수 있습니다.
 
 ```text
-Detail: Fetching http://k14b105.p.ssafy.io/.well-known/acme-challenge/...: Connection refused
+Detail: Fetching http://<LEGACY_DEPLOY_DOMAIN>/.well-known/acme-challenge/...: Connection refused
 ```
 
 이 경우 DNS는 EC2까지 도달했지만, 해당 IP의 80 포트에서 요청을 받을 프로세스가 없거나 방화벽 또는 Security Group에서 차단된 상태입니다.

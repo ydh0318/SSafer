@@ -1,4 +1,4 @@
-# n8n Workflow Export and Secret Separation
+﻿# n8n Workflow Export and Secret Separation
 
 Task: `S14P31B105-273`
 
@@ -109,7 +109,7 @@ Authorization
 6. In GitLab, configure the Webhook URL:
 
 ```text
-https://k14b105.p.ssafy.io/n8n/webhook/gitlab-mr-review
+https://<LEGACY_DEPLOY_DOMAIN>/n8n/webhook/gitlab-mr-review
 ```
 
 7. Trigger `Merge request events` test.

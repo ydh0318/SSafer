@@ -38,15 +38,15 @@ const guideSections = [
 
 const tips = [
   'ssafer run만 실행하면 로컬 .ssafer/results에만 저장됩니다. 웹에서 결과를 보려면 --upload를 붙이거나 이후 ssafer upload를 별도로 실행하세요.',
-  'Agent가 ONLINE 상태일 때만 웹에서 스캔을 시작할 수 있습니다. ssafer agent 실행 후 웹에서 상태를 확인하세요.',
-  '자동 수정은 patch payload가 있는 finding에만 가능합니다. patch가 없는 finding은 권장 조치 가이드만 표시됩니다.',
+  'Agent는 실행한 터미널의 위치를 기준으로 파일을 읽습니다. 스캔할 프로젝트 루트에서 로그인하고 agent를 시작하세요.',
+  'CLI에서 ssafer apply를 실행하면 웹 승인 없이 터미널에서 직접 선택해 적용합니다. 웹에서 적용하려면 Agent가 켜져 있어야 합니다.',
   'cd ~ 에서 실행을 권장합니다. /var/lib 등 권한 제한 경로에서는 결과 파일 저장에 실패할 수 있습니다.',
 ];
 
 const nextSteps = [
   '프로젝트 루트에서 ssafer login 후 ssafer run --upload 로 첫 스캔을 웹에 올려보세요.',
-  'ssafer agent 실행 후 웹 프로젝트 화면에서 Agent 스캔 버튼을 눌러보세요.',
-  '웹 Finding 상세에서 diff를 확인하고 패치 적용 승인 버튼을 눌러보세요.',
+  '스캔할 프로젝트 루트에서 ssafer agent를 실행한 뒤 웹 프로젝트 화면에서 Agent 스캔 버튼을 눌러보세요.',
+  '터미널에서는 ssafer apply, 웹에서는 Finding 상세의 고치기 버튼으로 수정 흐름을 시작하세요.',
   '홈 디렉터리에서 ssafer server --upload 로 서버 점검 결과를 웹에서 바로 확인해보세요.',
 ];
 
@@ -213,7 +213,7 @@ function Section0() {
 function Section1() {
   return (
     <>
-      <Step num="01" label="프로젝트 루트 이동 및 로그인" desc="Agent가 처리할 코드가 있는 프로젝트 루트로 이동한 뒤 계정 로그인 또는 게스트 토큰으로 로그인합니다. 게스트 토큰은 웹에서 발급받을 수 있습니다.">
+      <Step num="01" label="프로젝트 루트 이동 및 로그인" desc="Agent는 실행한 위치의 파일을 읽고 수정합니다. 스캔할 코드가 있는 프로젝트 루트로 먼저 이동한 뒤 로그인하세요. 로그인 중 Agent를 바로 시작할 수 있으므로 위치를 먼저 맞춰야 합니다.">
         <TerminalBlock lines={[
           { cmd: 'cd <프로젝트 루트>' },
           { cmd: 'ssafer login' },
@@ -246,6 +246,10 @@ function Section1() {
             <InlineCommand>backend</InlineCommand>처럼
             해당 루트 <strong>내부 경로</strong>를 입력해야 합니다.
           </Note>
+          <Note>
+            Agent를 다른 폴더에서 실행하면 웹에서 요청한 스캔과 수정도 그 폴더 기준으로 처리됩니다.
+            웹에서 선택한 프로젝트와 터미널 위치가 맞지 않으면 다른 파일을 검사하거나 수정할 수 있습니다.
+          </Note>
         </div>
       </Step>
     </>
@@ -255,13 +259,13 @@ function Section1() {
 function Section2() {
   return (
     <>
-      <Step num="01" label="웹에서 패치 승인" desc="Finding 상세 화면에서 수정 전/후 diff를 확인한 뒤 패치 적용 승인 버튼을 클릭합니다.">
+      <Step num="01" label="웹에서 패치 승인" desc="웹에서 수정하려면 Finding 상세 화면에서 수정 전/후 diff를 확인한 뒤 패치를 승인합니다. 실행 중인 Agent가 승인된 패치를 실제 파일에 적용합니다.">
         <div className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
           <span className="rounded bg-[#D4FC64] px-2 py-0.5 text-[11px] font-black text-black">WEB</span>
           <span className="text-neutral-700">Finding 상세 → 패치 적용 탭 → 패치 적용 승인 버튼 클릭</span>
         </div>
       </Step>
-      <Step num="02" label="CLI에서 직접 적용" desc="웹 승인 없이 최근 스캔 결과의 패치를 CLI에서 직접 로컬 파일에 적용합니다.">
+      <Step num="02" label="CLI에서 직접 적용" desc="터미널에서 적용할 때는 웹 승인이 필요 없습니다. CLI가 최신 완료 스캔의 패치 후보를 보여주고, 사용자가 번호를 선택해 바로 로컬 파일에 적용합니다.">
         <TerminalBlock lines={[{ cmd: 'ssafer apply' }]} />
       </Step>
       <Step num="03" label="특정 스캔 지정 적용" desc="스캔 ID를 지정해 해당 스캔의 패치만 선택적으로 적용합니다." isLast>
@@ -294,9 +298,9 @@ function Section3() {
         <TerminalBlock lines={[{ cmd: 'ssafer server --include-os-packages' }]} />
         <div className="mt-3">
           <Note>
-            <strong>cd ~ 에서 실행을 권장합니다.</strong> 결과 파일이{' '}
-            <InlineCommand>~/.ssafer/server-audit</InlineCommand>에 저장되는데,
-            /var/lib 등 권한 제한 경로에서는 폴더 생성에 실패할 수 있습니다.
+            <strong>cd ~ 에서 실행을 권장합니다.</strong> 결과 파일은 기본적으로{' '}
+            <InlineCommand>~/.ssafer/server-audit</InlineCommand>에 저장됩니다.
+            /var/lib 등 권한 제한 경로에서는 결과 파일 저장에 실패할 수 있습니다.
             일부 점검(방화벽·프로세스 등)은 <strong>sudo 권한이 필요</strong>할 수 있습니다.
           </Note>
         </div>

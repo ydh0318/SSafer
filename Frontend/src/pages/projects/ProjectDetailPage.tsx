@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { BarChart3, RotateCcw } from 'lucide-react';
+import { ArrowRight, BarChart3, Loader2, RotateCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
@@ -17,10 +17,13 @@ import ProjectSettingsPanel from '../../features/projects/components/ProjectSett
 import QuickActionCard from '../../features/projects/components/QuickActionCard';
 import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
 import { getScanSummary } from '../../features/results/api/results';
+import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
+import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
 import {
   deleteScanHistory,
   getProjectScans,
 } from '../../features/scans/api/scans';
+import { formatCompactDateTime, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
 import { useAuthStore } from '../../store/authStore';
 import type { ProjectDetailResponseData } from '../../types/project';
 import type {
@@ -357,6 +360,54 @@ function ProjectDetailPage() {
         >
           {activeTab === 'recent' ? (
             <div className="space-y-6">
+              {activeScans.length > 0 ? (
+                <section className="border border-sky-200 bg-sky-50/80 p-5 landing-card-radius">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-sky-600" />
+                        <p className="text-sm font-black text-sky-950">현재 진행 중인 스캔</p>
+                      </div>
+                      <p className="mt-1 text-xs text-sky-800">
+                        CLI 또는 Agent에서 업로드한 스캔이 처리 중입니다. 진행 상태 화면에서 현재 단계를 확인할 수 있습니다.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-sky-700 shadow-sm">
+                      {activeScans.length}개 진행 중
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    {activeScans.slice(0, 3).map((scan) => (
+                      <Link
+                        className="flex flex-col gap-3 border border-sky-100 bg-white px-4 py-3 transition hover:border-sky-300 hover:shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                        key={scan.scanId}
+                        state={{ projectId }}
+                        to={ROUTES.scanDetail.replace(':scanId', String(scan.scanId))}
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-black px-2.5 py-1 font-mono text-xs font-black text-white">
+                            #{scan.scanId}
+                          </span>
+                          <ScanStatusBadge status={scan.status} />
+                          <ScanTypeBadge scanType={scan.scanType} />
+                          <span className="text-xs font-bold text-neutral-500">
+                            {getScanModeLabel(scan.scanMode, scan.source)}
+                          </span>
+                          <span className="text-xs text-neutral-400">
+                            요청 {formatCompactDateTime(scan.requestedAt)}
+                          </span>
+                        </div>
+                        <span className="inline-flex items-center gap-1.5 text-xs font-black text-sky-700">
+                          진행 상태 보기
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
               <LatestResultCard
                 isLoading={isScanListLoading && !latestScan}
                 projectId={projectId}

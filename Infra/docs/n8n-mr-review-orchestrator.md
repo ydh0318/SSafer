@@ -1,4 +1,4 @@
-# n8n MR Review Orchestrator
+﻿# n8n MR Review Orchestrator
 
 `S14P31B105-160` 기준 n8n을 GitLab MR 자동 리뷰 오케스트레이터로 사용하는 설계 문서입니다.
 
@@ -33,7 +33,7 @@ GitLab Webhook을 등록할 때 배포용 Webhook과 리뷰용 Webhook을 분리
 n8n은 NGINX 뒤에서 `/n8n/` 경로로 노출합니다.
 
 ```text
-https://k14b105.p.ssafy.io/n8n/
+https://<LEGACY_DEPLOY_DOMAIN>/n8n/
 ```
 
 n8n Webhook node를 만들면 test/production URL이 생성됩니다. GitLab MR Webhook에는 production URL을 사용합니다.
@@ -41,7 +41,7 @@ n8n Webhook node를 만들면 test/production URL이 생성됩니다. GitLab MR 
 예시:
 
 ```text
-https://k14b105.p.ssafy.io/n8n/webhook/gitlab-mr-review
+https://<LEGACY_DEPLOY_DOMAIN>/n8n/webhook/gitlab-mr-review
 ```
 
 정확한 URL은 n8n workflow의 Webhook node에서 복사합니다.
@@ -66,8 +66,8 @@ SSL verification: HTTPS 구성 후 활성화
 배포용 Jenkins Webhook과 혼동하지 않습니다.
 
 ```text
-Jenkins: http://k14b105.p.ssafy.io:9090/project/ssafer-prod-deploy
-n8n: https://k14b105.p.ssafy.io/n8n/webhook/...
+Jenkins: http://<LEGACY_DEPLOY_DOMAIN>:9090/project/ssafer-prod-deploy
+n8n: https://<LEGACY_DEPLOY_DOMAIN>/n8n/webhook/...
 ```
 
 ## Workflow 초안
