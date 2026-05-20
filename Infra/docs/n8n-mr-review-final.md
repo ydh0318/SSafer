@@ -1,4 +1,4 @@
-# n8n MR Review Final Workflow
+﻿# n8n MR Review Final Workflow
 
 This document records the finalized n8n MR auto-review workflow for `S14P31B105-160`.
 
@@ -27,7 +27,7 @@ Otherwise the workflow posts both the test summary comment and the final AI revi
 Production URL:
 
 ```text
-https://k14b105.p.ssafy.io/n8n/webhook/gitlab-mr-review
+https://<LEGACY_DEPLOY_DOMAIN>/n8n/webhook/gitlab-mr-review
 ```
 
 Trigger:

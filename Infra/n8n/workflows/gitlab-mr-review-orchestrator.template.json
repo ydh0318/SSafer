@@ -12,7 +12,7 @@
         "responseMode": "onReceived",
         "options": {}
       },
-      "notes": "Production URL: https://k14b105.p.ssafy.io/n8n/webhook/gitlab-mr-review. Configure GitLab Webhook Secret validation with a credential or environment-backed gate before enabling production use."
+      "notes": "Production URL: https://<LEGACY_DEPLOY_DOMAIN>/n8n/webhook/gitlab-mr-review. Configure GitLab Webhook Secret validation with a credential or environment-backed gate before enabling production use."
     },
     {
       "name": "Build Event Gate",

@@ -1,16 +1,16 @@
-# Official Domain, HTTPS, and OAuth Alignment
+﻿# Official Domain, HTTPS, and OAuth Alignment
 
 ## Goal
 
 Use `https://ssafer.co.kr` as the official user-facing production domain.
 
-The old SSAFY domain, `k14b105.p.ssafy.io`, remains as a redirect alias. It still needs its own valid certificate because HTTPS redirect can happen only after the TLS handshake succeeds.
+The old SSAFY domain, `<LEGACY_DEPLOY_DOMAIN>`, remains as a redirect alias. It still needs its own valid certificate because HTTPS redirect can happen only after the TLS handshake succeeds.
 
 ## Problem
 
 The service previously had split domain behavior:
 
-- `k14b105.p.ssafy.io` had a Let's Encrypt certificate.
+- `<LEGACY_DEPLOY_DOMAIN>` had a Let's Encrypt certificate.
 - `ssafer.co.kr` was connected through Gabia, but HTTPS and application settings were not fully aligned.
 - Login/OAuth could work on one domain and fail on the other because frontend build env, OAuth redirect URI, CORS origin, and NGINX `server_name` were not using one canonical domain.
 
@@ -53,11 +53,11 @@ sudo certbot renew --dry-run --cert-name ssafer.co.kr
 
 ## NGINX Policy
 
-- HTTP requests for `ssafer.co.kr` and `k14b105.p.ssafy.io` redirect directly to `https://ssafer.co.kr`.
+- HTTP requests for `ssafer.co.kr` and `<LEGACY_DEPLOY_DOMAIN>` redirect directly to `https://ssafer.co.kr`.
 - `https://ssafer.co.kr` serves the React app and proxies `/api/`, `/n8n/`, and `/jenkins/`.
-- `https://k14b105.p.ssafy.io` keeps its own certificate and redirects to `https://ssafer.co.kr`.
+- `https://<LEGACY_DEPLOY_DOMAIN>` keeps its own certificate and redirects to `https://ssafer.co.kr`.
 
-Do not remove the `k14b105.p.ssafy.io` certificate block while the domain can still receive HTTPS traffic. Without that certificate, browsers cannot complete TLS and NGINX cannot return the redirect response.
+Do not remove the `<LEGACY_DEPLOY_DOMAIN>` certificate block while the domain can still receive HTTPS traffic. Without that certificate, browsers cannot complete TLS and NGINX cannot return the redirect response.
 
 ## OAuth/CORS Checklist
 

@@ -1,4 +1,4 @@
-# E2E Validation
+﻿# E2E Validation
 
 `S14P31B105-161` 기준 운영 배포 후 E2E 검증 체크리스트입니다.
 
@@ -35,7 +35,7 @@ EC2 #1:
 ```bash
 docker compose --env-file .env -f /var/lib/jenkins/ssafer/S14P31B105/Infra/docker/ec2-1/prod/docker-compose.yml ps
 curl -sf http://localhost:8080/actuator/health
-curl -Ik https://k14b105.p.ssafy.io
+curl -Ik https://<LEGACY_DEPLOY_DOMAIN>
 ```
 
 EC2 #2:
@@ -60,8 +60,8 @@ curl -sf http://<EC2_1_PRIVATE_IP>:8080/actuator/health
 외부 PC에서 확인합니다.
 
 ```bash
-curl -Ik https://k14b105.p.ssafy.io
-curl -Ik https://k14b105.p.ssafy.io/api/v1/internal/callback
+curl -Ik https://<LEGACY_DEPLOY_DOMAIN>
+curl -Ik https://<LEGACY_DEPLOY_DOMAIN>/api/v1/internal/callback
 ```
 
 기대 결과:

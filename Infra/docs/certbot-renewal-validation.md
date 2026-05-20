@@ -1,4 +1,4 @@
-# Certbot Renewal Validation
+﻿# Certbot Renewal Validation
 
 Date: 2026-04-30
 
@@ -9,8 +9,8 @@ This document records the renewal validation result for the SSAfer service certi
 The SSAfer NGINX container uses:
 
 ```text
-/etc/letsencrypt/live/k14b105.p.ssafy.io/fullchain.pem
-/etc/letsencrypt/live/k14b105.p.ssafy.io/privkey.pem
+/etc/letsencrypt/live/<LEGACY_DEPLOY_DOMAIN>/fullchain.pem
+/etc/letsencrypt/live/<LEGACY_DEPLOY_DOMAIN>/privkey.pem
 ```
 
 The unrelated wildcard certificate `p.ssafy.io` also exists on the same EC2.
@@ -27,10 +27,10 @@ sudo certbot certificates
 Relevant SSAfer certificate:
 
 ```text
-Certificate Name: k14b105.p.ssafy.io
-Identifiers: k14b105.p.ssafy.io
-Certificate Path: /etc/letsencrypt/live/k14b105.p.ssafy.io/fullchain.pem
-Private Key Path: /etc/letsencrypt/live/k14b105.p.ssafy.io/privkey.pem
+Certificate Name: <LEGACY_DEPLOY_DOMAIN>
+Identifiers: <LEGACY_DEPLOY_DOMAIN>
+Certificate Path: /etc/letsencrypt/live/<LEGACY_DEPLOY_DOMAIN>/fullchain.pem
+Private Key Path: /etc/letsencrypt/live/<LEGACY_DEPLOY_DOMAIN>/privkey.pem
 ```
 
 Unrelated wildcard certificate:
@@ -45,7 +45,7 @@ Identifiers: *.p.ssafy.io
 Checked with:
 
 ```bash
-sudo grep -n "authenticator\|webroot_path" /etc/letsencrypt/renewal/k14b105.p.ssafy.io.conf
+sudo grep -n "authenticator\|webroot_path" /etc/letsencrypt/renewal/<LEGACY_DEPLOY_DOMAIN>.conf
 ```
 
 Confirmed:
@@ -55,14 +55,14 @@ authenticator = webroot
 webroot_path = /var/www/certbot,
 ```
 
-This means Certbot renews `k14b105.p.ssafy.io` through the NGINX-served ACME webroot instead of binding port 80 itself.
+This means Certbot renews `<LEGACY_DEPLOY_DOMAIN>` through the NGINX-served ACME webroot instead of binding port 80 itself.
 
 ## ACME Webroot
 
 NGINX must serve this path over HTTP:
 
 ```text
-http://k14b105.p.ssafy.io/.well-known/acme-challenge/<token>
+http://<LEGACY_DEPLOY_DOMAIN>/.well-known/acme-challenge/<token>
 ```
 
 The NGINX config must keep the ACME location before the HTTP to HTTPS redirect:
@@ -85,7 +85,7 @@ The NGINX container must mount:
 Use cert-name scoped dry-run for SSAfer validation:
 
 ```bash
-sudo certbot renew --dry-run --cert-name k14b105.p.ssafy.io
+sudo certbot renew --dry-run --cert-name <LEGACY_DEPLOY_DOMAIN>
 ```
 
 This is the correct validation command while the unrelated `p.ssafy.io` wildcard certificate remains on the host.
@@ -123,7 +123,7 @@ sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-ssafer-nginx.sh
 Validate after hook creation:
 
 ```bash
-sudo certbot renew --dry-run --cert-name k14b105.p.ssafy.io
+sudo certbot renew --dry-run --cert-name <LEGACY_DEPLOY_DOMAIN>
 ```
 
 ## Timer Check
@@ -139,11 +139,11 @@ Depending on the Certbot installation method, the timer name can differ.
 
 ## Completion Criteria
 
-- `k14b105.p.ssafy.io` renewal config uses `webroot`.
+- `<LEGACY_DEPLOY_DOMAIN>` renewal config uses `webroot`.
 - ACME challenge path is served by the NGINX container.
 - Scoped dry-run succeeds:
   ```bash
-  sudo certbot renew --dry-run --cert-name k14b105.p.ssafy.io
+  sudo certbot renew --dry-run --cert-name <LEGACY_DEPLOY_DOMAIN>
   ```
 - NGINX container reload hook is configured.
 - `p.ssafy.io` wildcard certificate is not deleted until ownership is confirmed.
