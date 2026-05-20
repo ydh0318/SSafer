@@ -57,7 +57,13 @@ interface CmdLine {
   cmd: string;
 }
 
-function Terminal_({ lines }: { lines: CmdLine[] }) {
+const INLINE_COMMAND_CLASS = 'rounded bg-amber-100 px-1 font-mono text-[11px]';
+
+function InlineCommand({ children }: { children: React.ReactNode }) {
+  return <code className={INLINE_COMMAND_CLASS}>{children}</code>;
+}
+
+function TerminalBlock({ lines }: { lines: CmdLine[] }) {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   const copy = (text: string, idx: number) => {
@@ -67,26 +73,26 @@ function Terminal_({ lines }: { lines: CmdLine[] }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-800 bg-[#0D0D0D]">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-[#0D0D0D]">
       {/* terminal header */}
-      <div className="flex items-center justify-between border-b border-neutral-800 bg-[#111] px-4 py-2">
+      <div className="flex min-w-0 items-center justify-between gap-3 border-b border-neutral-800 bg-[#111] px-3 py-2 sm:px-4">
         <div className="flex items-center gap-2">
           <span className="select-none font-mono text-[10px] text-[#D4FC64]">▶</span>
           <span className="font-mono text-[11px] tracking-[0.15em] text-neutral-500">bash</span>
         </div>
-        <span className="select-none font-mono text-[10px] tracking-wider text-neutral-700">~/ssafer</span>
+        <span className="min-w-0 truncate select-none font-mono text-[10px] tracking-wider text-neutral-700">~/ssafer</span>
       </div>
       {/* lines */}
-      <div className="px-5 py-4 space-y-0.5">
+      <div className="space-y-0.5 px-3 py-4 sm:px-5">
         {lines.map((line, idx) => {
           const isComment = !!line.comment;
           return (
-            <div key={idx}>
+            <div key={idx} className="min-w-0">
               {isComment && (
                 <p className="font-mono text-[11px] text-neutral-500 pt-2 first:pt-0"># {line.comment}</p>
               )}
-              <div className="group flex items-center justify-between">
-                <p className="font-mono text-[13px] leading-7 text-green-400">
+              <div className="group flex min-w-0 items-start justify-between gap-3">
+                <p className="min-w-0 break-all font-mono text-[12px] leading-7 text-green-400 sm:text-[13px]">
                   <span className="text-neutral-600 select-none mr-1.5">$</span>
                   {line.cmd}
                 </p>
@@ -94,7 +100,7 @@ function Terminal_({ lines }: { lines: CmdLine[] }) {
                   onClick={() => copy(line.cmd, idx)}
                   type="button"
                   aria-label={`${line.cmd} 복사`}
-                  className="ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-neutral-500 hover:text-[#D4FC64]"
+                  className="mt-1 shrink-0 text-neutral-500 opacity-100 transition-opacity hover:text-[#D4FC64] sm:opacity-0 sm:group-hover:opacity-100"
                 >
                   {copiedIdx === idx
                     ? <Check className="h-3.5 w-3.5 text-[#D4FC64]" />
@@ -111,9 +117,27 @@ function Terminal_({ lines }: { lines: CmdLine[] }) {
 
 function Note({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3.5">
+    <div className="flex min-w-0 gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3.5 sm:px-4">
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-      <p className="text-[12.5px] leading-relaxed text-amber-800">{children}</p>
+      <p className="min-w-0 text-[12.5px] leading-relaxed text-amber-800">{children}</p>
+    </div>
+  );
+}
+
+function PasswordSettingNotice() {
+  return (
+    <div className="mt-3 space-y-2">
+      <Note>
+        <strong>Google · GitHub로 가입한 계정</strong>은 비밀번호가 없어 이메일/비밀번호 로그인이 되지 않습니다.
+        설정 페이지에서 비밀번호를 먼저 설정한 뒤 <InlineCommand>ssafer login</InlineCommand>을 사용하세요.
+      </Note>
+      <Link
+        to={`${ROUTES.settings}?tab=security`}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
+      >
+        <KeyRound className="h-3 w-3" />
+        비밀번호 설정하러 가기
+      </Link>
     </div>
   );
 }
@@ -128,7 +152,7 @@ interface StepProps {
 
 function Step({ num, label, desc, isLast, children }: StepProps) {
   return (
-    <div className="flex gap-5">
+    <div className="flex min-w-0 gap-3 sm:gap-5">
       {/* timeline */}
       <div className="flex flex-col items-center">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#111] ring-1 ring-neutral-200 font-mono text-[11px] font-black text-[#D4FC64]">
@@ -152,45 +176,33 @@ function Section0() {
   return (
     <>
       <Step num="01" label="설치" desc="PyPI에 배포된 SSAfer CLI를 pip로 설치합니다.">
-        <Terminal_ lines={[
+        <TerminalBlock lines={[
           { comment: '권장 설치', cmd: 'pip install ssafer' },
         ]} />
       </Step>
       <Step num="02" label="프로젝트 루트 이동 및 로그인" desc="스캔할 코드가 있는 프로젝트 루트로 이동한 뒤 SSAfer 계정으로 로그인합니다. 로그인 중 Agent를 바로 시작할 수 있으므로 위치를 먼저 맞춰야 합니다.">
-        <Terminal_ lines={[
+        <TerminalBlock lines={[
           { cmd: 'cd <프로젝트 루트>' },
           { cmd: 'ssafer login' },
         ]} />
-        <div className="mt-3 space-y-2">
-          <Note>
-            <strong>Google · GitHub로 가입한 계정</strong>은 비밀번호가 없어 이메일/비밀번호 로그인이 되지 않습니다.
-            설정 페이지에서 비밀번호를 먼저 설정한 뒤 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer login</code>을 사용하세요.
-          </Note>
-          <Link
-            to={`${ROUTES.settings}?tab=security`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
-          >
-            <KeyRound className="h-3 w-3" />
-            비밀번호 설정하러 가기
-          </Link>
-        </div>
+        <PasswordSettingNotice />
       </Step>
       <Step num="03" label="환경 점검 및 도구 설치" desc="Trivy 등 스캔에 필요한 도구가 설치되어 있는지 확인하고, 없으면 설치합니다.">
-        <Terminal_ lines={[
+        <TerminalBlock lines={[
           { comment: '환경 및 도구 상태 확인', cmd: 'ssafer doctor' },
           { comment: 'Trivy 등 필요한 도구 설치', cmd: 'ssafer tools' },
         ]} />
       </Step>
       <Step num="04" label="스캔 및 업로드" desc="프로젝트 루트에서 스캔을 실행합니다. --upload 없이 실행하면 로컬에만 저장됩니다." isLast>
-        <Terminal_ lines={[
+        <TerminalBlock lines={[
           { cmd: 'ssafer run --upload' },
         ]} />
         <div className="mt-3">
           <Note>
-            <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer run</code>만 실행하면 결과가 로컬{' '}
-            <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">.ssafer/results</code>에만 저장됩니다.
-            웹에서 보려면 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">--upload</code>를 붙이거나
-            이후 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer upload</code>를 별도로 실행하세요.
+            <InlineCommand>ssafer run</InlineCommand>만 실행하면 결과가 로컬{' '}
+            <InlineCommand>.ssafer/results</InlineCommand>에만 저장됩니다.
+            웹에서 보려면 <InlineCommand>--upload</InlineCommand>를 붙이거나
+            이후 <InlineCommand>ssafer upload</InlineCommand>를 별도로 실행하세요.
           </Note>
         </div>
       </Step>
@@ -202,33 +214,21 @@ function Section1() {
   return (
     <>
       <Step num="01" label="프로젝트 루트 이동 및 로그인" desc="Agent가 처리할 코드가 있는 프로젝트 루트로 이동한 뒤 계정 로그인 또는 게스트 토큰으로 로그인합니다. 게스트 토큰은 웹에서 발급받을 수 있습니다.">
-        <Terminal_ lines={[
+        <TerminalBlock lines={[
           { cmd: 'cd <프로젝트 루트>' },
           { cmd: 'ssafer login' },
           { comment: '게스트로 시작하는 경우', cmd: 'ssafer login --guest' },
         ]} />
-        <div className="mt-3 space-y-2">
-          <Note>
-            <strong>Google · GitHub로 가입한 계정</strong>은 비밀번호가 없어 이메일/비밀번호 로그인이 되지 않습니다.
-            설정 페이지에서 비밀번호를 먼저 설정한 뒤 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer login</code>을 사용하세요.
-          </Note>
-          <Link
-            to={`${ROUTES.settings}?tab=security`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-amber-600"
-          >
-            <KeyRound className="h-3 w-3" />
-            비밀번호 설정하러 가기
-          </Link>
-        </div>
+        <PasswordSettingNotice />
       </Step>
       <Step num="02" label="환경 점검 및 도구 설치" desc="Agent가 스캔을 실행하려면 Trivy 등 도구가 필요합니다. 설치 여부를 확인하고 없으면 설치합니다.">
-        <Terminal_ lines={[
+        <TerminalBlock lines={[
           { comment: '환경 및 도구 상태 확인', cmd: 'ssafer doctor' },
           { comment: 'Trivy 등 필요한 도구 설치', cmd: 'ssafer tools' },
         ]} />
       </Step>
       <Step num="03" label="Agent 실행" desc="웹에서 보내는 스캔·패치 요청을 현재 서버에서 즉시 처리하도록 Agent를 시작합니다." isLast>
-        <Terminal_ lines={[
+        <TerminalBlock lines={[
           { comment: '점검할 디렉토리를 --path 로 지정 (기본값: 현재 디렉토리)', cmd: 'ssafer agent --path /opt/app' },
           { comment: '현재 디렉토리를 루트로 사용하는 경우', cmd: 'ssafer agent' },
         ]} />
@@ -236,14 +236,14 @@ function Section1() {
           <Note>
             <strong>Agent가 ONLINE 상태일 때만</strong> 웹에서 스캔을 시작할 수 있습니다.
             웹 버튼을 누르면 Agent가 스캔과 업로드를 <strong>한 번에 처리</strong>하므로 별도로{' '}
-            <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">ssafer upload</code>를 실행할 필요가 없습니다.
+            <InlineCommand>ssafer upload</InlineCommand>를 실행할 필요가 없습니다.
           </Note>
           <Note>
             웹에서 입력하는 <strong>대상 경로</strong>는{' '}
-            <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">--path</code>로 지정한 디렉토리 기준입니다.
-            예를 들어 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">--path /opt/app</code>으로 실행했다면
-            대상 경로에 <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">.</code> 또는{' '}
-            <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">backend</code>처럼
+            <InlineCommand>--path</InlineCommand>로 지정한 디렉토리 기준입니다.
+            예를 들어 <InlineCommand>--path /opt/app</InlineCommand>으로 실행했다면
+            대상 경로에 <InlineCommand>.</InlineCommand> 또는{' '}
+            <InlineCommand>backend</InlineCommand>처럼
             해당 루트 <strong>내부 경로</strong>를 입력해야 합니다.
           </Note>
         </div>
@@ -262,10 +262,10 @@ function Section2() {
         </div>
       </Step>
       <Step num="02" label="CLI에서 직접 적용" desc="웹 승인 없이 최근 스캔 결과의 패치를 CLI에서 직접 로컬 파일에 적용합니다.">
-        <Terminal_ lines={[{ cmd: 'ssafer apply' }]} />
+        <TerminalBlock lines={[{ cmd: 'ssafer apply' }]} />
       </Step>
       <Step num="03" label="특정 스캔 지정 적용" desc="스캔 ID를 지정해 해당 스캔의 패치만 선택적으로 적용합니다." isLast>
-        <Terminal_ lines={[{ cmd: 'ssafer apply <scanId>' }]} />
+        <TerminalBlock lines={[{ cmd: 'ssafer apply <scanId>' }]} />
         <div className="mt-3">
           <Note>
             자동 수정은 <strong>patch payload가 있는 finding에만 가능</strong>합니다.
@@ -281,21 +281,21 @@ function Section3() {
   return (
     <>
       <Step num="01" label="로그인" desc="웹으로 결과를 업로드하려면 먼저 로그인이 필요합니다.">
-        <Terminal_ lines={[{ cmd: 'ssafer login' }]} />
+        <TerminalBlock lines={[{ cmd: 'ssafer login' }]} />
       </Step>
       <Step num="02" label="서버 점검 실행" desc="홈 디렉터리에서 서버 런타임 상태를 점검합니다. --upload를 붙이면 결과를 웹에 함께 올립니다.">
-        <Terminal_ lines={[
+        <TerminalBlock lines={[
           { cmd: 'cd ~' },
           { cmd: 'ssafer server' },
           { comment: '웹으로 결과 업로드까지 함께', cmd: 'ssafer server --upload' },
         ]} />
       </Step>
       <Step num="03" label="OS 패키지 취약점 포함" desc="Trivy rootfs scan을 추가 실행해 OS 패키지 취약점까지 함께 점검합니다. 시간이 다소 걸릴 수 있습니다." isLast>
-        <Terminal_ lines={[{ cmd: 'ssafer server --include-os-packages' }]} />
+        <TerminalBlock lines={[{ cmd: 'ssafer server --include-os-packages' }]} />
         <div className="mt-3">
           <Note>
             <strong>cd ~ 에서 실행을 권장합니다.</strong> 결과 파일이{' '}
-            <code className="rounded bg-amber-100 px-1 font-mono text-[11px]">~/.ssafer/server-audit</code>에 저장되는데,
+            <InlineCommand>~/.ssafer/server-audit</InlineCommand>에 저장되는데,
             /var/lib 등 권한 제한 경로에서는 폴더 생성에 실패할 수 있습니다.
             일부 점검(방화벽·프로세스 등)은 <strong>sudo 권한이 필요</strong>할 수 있습니다.
           </Note>
@@ -331,23 +331,25 @@ function GuidePage() {
     <div className="theme-guide-page min-h-screen bg-[#F7F7F5] text-black">
       <SiteHeader showSessionBar={false} />
 
-      <main className="mx-auto max-w-7xl px-6 py-12">
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
         {/* 페이지 헤더 */}
-        <div className="mb-10 flex items-end justify-between">
-          <div>
+        <div className="mb-8 flex flex-col gap-5 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
             <p className="font-mono text-[10px] font-bold tracking-[0.32em] text-neutral-400 uppercase">SSAFER · GUIDE</p>
-            <h1 className="mt-2 text-4xl font-black tracking-tight md:text-5xl">CLI 사용 가이드</h1>
+            <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl md:text-5xl">CLI 사용 가이드</h1>
             <p className="mt-3 text-sm text-neutral-500 leading-relaxed">
               설치부터 서버 점검까지 — 핵심 명령어와 실행 흐름을 한눈에 정리합니다.
             </p>
           </div>
-          <PixelGoose mood="working" size={72} />
+          <div className="hidden shrink-0 sm:block">
+            <PixelGoose mood="working" size={72} />
+          </div>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
 
           {/* 왼쪽 사이드바 */}
-          <aside className="flex flex-col gap-4">
+          <aside className="flex min-w-0 flex-col gap-4">
             {/* 섹션 탭 */}
             <nav className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
               {guideSections.map((s, idx) => {
@@ -357,7 +359,7 @@ function GuidePage() {
                     key={s.id}
                     onClick={() => setActive(idx)}
                     type="button"
-                    className={`flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-3.5 text-left last:border-b-0 transition-colors ${
+                    className={`flex w-full min-w-0 items-center gap-3 border-b border-neutral-100 px-4 py-3.5 text-left last:border-b-0 transition-colors ${
                       isActive ? 'bg-[#111]' : 'hover:bg-neutral-50'
                     }`}
                   >
@@ -366,7 +368,7 @@ function GuidePage() {
                         isActive ? 'bg-[#D4FC64]' : 'bg-neutral-300'
                       }`}
                     />
-                    <span className={`flex-1 text-sm font-bold ${isActive ? 'text-white' : 'text-neutral-800'}`}>
+                    <span className={`min-w-0 flex-1 truncate text-sm font-bold ${isActive ? 'text-white' : 'text-neutral-800'}`}>
                       {s.title}
                     </span>
                     <span
@@ -406,7 +408,7 @@ function GuidePage() {
           </aside>
 
           {/* 오른쪽 메인 콘텐츠 */}
-          <article className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm md:p-10">
+          <article className="min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-6 md:p-10">
             {/* 섹션 헤더 */}
             <div className="mb-8 border-b border-neutral-100 pb-6">
               <div className="flex items-center gap-2">
@@ -427,29 +429,31 @@ function GuidePage() {
               <div className="mt-8 rounded-xl border border-neutral-700 bg-[#1A1A1A] p-5">
                 <p className="font-mono text-[9px] font-bold tracking-[0.26em] text-neutral-500 uppercase">CLI 연동</p>
                 <p className="mt-1 text-sm font-bold text-white">이 게스트 세션을 CLI에서 이어서 사용하기</p>
-                <div className="mt-3 flex items-center gap-2 rounded-lg border border-neutral-700 bg-[#252525] px-4 py-3">
-                  <code className="flex-1 overflow-x-auto whitespace-nowrap font-mono text-sm text-[#D4FC64]">
+                <div className="mt-3 flex min-w-0 flex-col gap-2 rounded-lg border border-neutral-700 bg-[#252525] px-3 py-3 sm:flex-row sm:items-center sm:px-4">
+                  <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs text-[#D4FC64] sm:text-sm">
                     ssafer login --guest-token{' '}
                     <span className="text-neutral-300">
                       {tokenVisible ? accessToken : `${accessToken?.slice(0, 12) ?? ''}${'•'.repeat(20)}`}
                     </span>
                   </code>
-                  <button
-                    className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-700 hover:text-neutral-200"
-                    onClick={() => setTokenVisible((v) => !v)}
-                    title={tokenVisible ? '토큰 숨기기' : '토큰 표시'}
-                    type="button"
-                  >
-                    {tokenVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                  <button
-                    className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-700 hover:text-neutral-200"
-                    onClick={() => void handleCopyCommand()}
-                    title="명령어 복사"
-                    type="button"
-                  >
-                    {copied ? <Check className="h-4 w-4 text-[#D4FC64]" /> : <Copy className="h-4 w-4" />}
-                  </button>
+                  <div className="flex justify-end gap-1">
+                    <button
+                      className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-700 hover:text-neutral-200"
+                      onClick={() => setTokenVisible((v) => !v)}
+                      title={tokenVisible ? '토큰 숨기기' : '토큰 표시'}
+                      type="button"
+                    >
+                      {tokenVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                    <button
+                      className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-700 hover:text-neutral-200"
+                      onClick={() => void handleCopyCommand()}
+                      title="명령어 복사"
+                      type="button"
+                    >
+                      {copied ? <Check className="h-4 w-4 text-[#D4FC64]" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 <p className="mt-2 text-[11px] text-neutral-600">토큰은 타인과 공유하지 마세요. 게스트 세션이 만료되면 CLI 연결도 함께 종료됩니다.</p>
               </div>
