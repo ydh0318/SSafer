@@ -1,5 +1,5 @@
 import type { HttpMethod, TokenRequirement } from '../../constants/apiSpecs';
-import type { RiskLevel, WorkStatus } from '../../mocks/ssaferMockData';
+import type { RiskLevel, WorkStatus } from '../../types/security';
 
 const severityClass: Record<RiskLevel, string> = {
   CRITICAL: 'border-red-200 bg-red-50 text-red-700',

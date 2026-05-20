@@ -1,7 +1,7 @@
 export type RiskLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 export type WorkStatus = 'DONE' | 'ANALYZING' | 'FAILED' | 'OPEN' | 'APPROVED' | 'NEW' | 'READ' | 'ONLINE' | 'OFFLINE';
 
-export type ProjectMock = {
+export type ProjectSummary = {
   id: string;
   name: string;
   owner: string;
@@ -11,7 +11,7 @@ export type ProjectMock = {
   description: string;
 };
 
-export type ScanMock = {
+export type ScanSummaryItem = {
   id: string;
   project: string;
   source: 'UPLOAD' | 'AGENT';
@@ -23,7 +23,7 @@ export type ScanMock = {
   low: number;
 };
 
-export type FindingMock = {
+export type FindingListItem = {
   id: string;
   nodeId: string;
   category: string;
@@ -42,11 +42,11 @@ export type FindingMock = {
   after: string;
 };
 
-export function formatFindingLocation(finding: FindingMock) {
+export function formatFindingLocation(finding: FindingListItem) {
   return `${finding.file}${finding.line ? `:${finding.line}` : ''}`;
 }
 
-export function countFindingSeverity(items: FindingMock[]) {
+export function countFindingSeverity(items: FindingListItem[]) {
   return items.reduce(
     (acc, finding) => {
       const key = finding.severity.toLowerCase() as keyof typeof acc;

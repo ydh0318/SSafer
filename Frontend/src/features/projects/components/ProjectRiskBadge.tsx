@@ -1,4 +1,4 @@
-import type { RiskLevel } from '../../../mocks/ssaferMockData';
+import type { RiskLevel } from '../../../types/security';
 
 type ProjectRiskBadgeProps = {
   risk: RiskLevel;
