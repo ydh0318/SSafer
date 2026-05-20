@@ -1,4 +1,4 @@
-import type { RiskLevel, WorkStatus } from '../mocks/ssaferMockData';
+import type { RiskLevel, WorkStatus } from './security';
 
 export type { ScanMode } from './scan';
 

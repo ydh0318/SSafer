@@ -1,4 +1,4 @@
-import type { WorkStatus } from '../../../mocks/ssaferMockData';
+import type { WorkStatus } from '../../../types/security';
 
 type ProjectStatusBadgeProps = {
   status: WorkStatus;

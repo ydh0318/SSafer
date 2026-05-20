@@ -1,7 +1,7 @@
 import MetricCard from '../../../components/common/MetricCard';
-import { countFindingSeverity, type FindingMock } from '../../../mocks/ssaferMockData';
+import { countFindingSeverity, type FindingListItem } from '../../../types/security';
 
-function FindingSummary({ findings }: { findings: FindingMock[] }) {
+function FindingSummary({ findings }: { findings: FindingListItem[] }) {
   const totals = countFindingSeverity(findings);
 
   return (

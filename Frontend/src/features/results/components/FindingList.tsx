@@ -1,10 +1,10 @@
 import { ChevronRight } from 'lucide-react';
 
 import { SeverityBadge, StatusPill } from '../../../components/common/Badge';
-import { type FindingMock, formatFindingLocation } from '../../../mocks/ssaferMockData';
+import { type FindingListItem, formatFindingLocation } from '../../../types/security';
 
 type FindingListProps = {
-  findings: FindingMock[];
+  findings: FindingListItem[];
   selectedId: string;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
