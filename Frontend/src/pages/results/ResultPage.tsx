@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import PageBanner from '../../components/common/PageBanner';
-import PageHero from '../../components/common/PageHero';
 import { ROUTES } from '../../constants/routes';
 import { useToast } from '../../features/feedback/useToast';
 import { getProjectDetail } from '../../features/projects/api/projects';
@@ -39,10 +38,10 @@ const severityOrder: FindingSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', '
 const resolutionValues = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'IGNORED'] as const;
 
 const resolutionMeta: Record<typeof resolutionValues[number], { label: string; cls: string; dot: string }> = {
-  OPEN:        { label: '미해결',   cls: 'bg-neutral-100 text-neutral-600',                        dot: 'bg-neutral-400' },
-  IN_PROGRESS: { label: '처리 중',  cls: 'border border-amber-200 bg-amber-50 text-amber-700',     dot: 'bg-amber-400'   },
-  RESOLVED:    { label: '해결 완료', cls: 'bg-[#EDFFC0] text-[#4A7A00]',                           dot: 'bg-[#9FCC2E]'   },
-  IGNORED:     { label: '무시됨',   cls: 'bg-neutral-100 text-neutral-400',                        dot: 'bg-neutral-300' },
+  OPEN: { label: '미해결', cls: 'bg-neutral-100 text-neutral-600', dot: 'bg-neutral-400' },
+  IN_PROGRESS: { label: '처리 중', cls: 'border border-amber-200 bg-amber-50 text-amber-700', dot: 'bg-amber-400' },
+  RESOLVED: { label: '해결 완료', cls: 'bg-[#EDFFC0] text-[#4A7A00]', dot: 'bg-[#9FCC2E]' },
+  IGNORED: { label: '무시됨', cls: 'bg-neutral-100 text-neutral-400', dot: 'bg-neutral-300' },
 };
 
 const emptyFindingList: ScanFindingListResponseData = {
@@ -77,7 +76,6 @@ function getFindingTitleGroupKey(title: string) {
     .replace(/\(\d+\)/g, '(*)')
     .replace(/\b\d{2,5}\b/g, '*');
 }
-
 function groupFindingsByTitle(findings: ScanFindingListItemData[]) {
   const groups = new Map<string, { title: string; items: ScanFindingListItemData[] }>();
 
@@ -151,7 +149,7 @@ function ResultPage() {
 
         setScanBasic(basicData);
 
-        // 프로젝트명 병렬 로드
+        // 프로젝트 이름을 함께 표시하기 위해 상세 정보를 보강한다.
         void getProjectDetail(String(basicData.projectId))
           .then((p) => { if (isMounted) setProjectName(p.name); })
           .catch(() => {});
@@ -229,7 +227,7 @@ function ResultPage() {
     };
   }, [page, resolutionFilter, scanBasic?.scanType, scanId, severityFilter]);
 
-  // Finding 상세를 병렬 fetch해서 서버 점검 evidence와 자동 패치 가능 여부를 보강한다.
+  // Finding 상세를 함께 가져와 서버 점검 evidence와 자동 수정 가능 여부를 표시한다.
   useEffect(() => {
     if (!scanId || findingsData.items.length === 0) {
       setServerAuditDetails(new Map());
@@ -277,10 +275,14 @@ function ResultPage() {
 
   const actionableTotal = Math.max((summary?.totalFindings ?? 0) - getResolutionCount(summary, 'IGNORED'), 1);
   const resolvedCount = getResolutionCount(summary, 'RESOLVED');
+  const openCount = getResolutionCount(summary, 'OPEN');
+  const inProgressCount = getResolutionCount(summary, 'IN_PROGRESS');
+  const ignoredCount = getResolutionCount(summary, 'IGNORED');
   const resolvedRatio = Math.round((resolvedCount / actionableTotal) * 100);
   const routeProjectId = routeState.projectId ? Number(routeState.projectId) : undefined;
   const currentProjectId = scanBasic?.projectId ?? routeProjectId;
   const currentScanType = getSafeScanType(scanBasic?.scanType);
+  const isServerAudit = currentScanType === 'SERVER_AUDIT';
 
   const groupedFindings = useMemo(() => {
     return severityOrder
@@ -364,98 +366,119 @@ function ResultPage() {
         </Link>
       </div>
 
-      <PageHero
-        actions={
-          <>
-            <Link
-              className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
-              to={ROUTES.history}
-            >
-              <GitBranch className="h-4 w-4" />
-              결과 비교 보기
-            </Link>
-            <button
-              className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
-              onClick={() => {
-                if (!scanId) {
-                  return;
-                }
+      <section className="overflow-hidden border border-neutral-200 bg-white">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="px-6 py-8 md:px-8">
+            <p className="font-mono text-[11px] font-bold uppercase tracking-[0.32em] text-neutral-400">SCAN RESULT</p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <h1 className="text-4xl font-black tracking-tight text-black md:text-5xl">
+                {isServerAudit ? '서버 점검 결과' : '스캔 결과'}
+              </h1>
+              <span className="rounded-full bg-black px-3 py-1 font-mono text-xs font-bold text-white">#{scanId}</span>
+            </div>
 
-                void getScanBasic(scanId).then((basicData) => {
-                  setScanBasic(basicData);
-                  void getScanSummary(scanId).then((summaryData) => {
-                    setSummary(summaryData);
-                  });
-                });
-              }}
-              type="button"
-            >
-              <RefreshCw className="h-4 w-4" />
-              새로고침
-            </button>
-            <button
-              className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-400"
-              disabled
-              type="button"
-            >
-              <FileText className="h-4 w-4" />
-              내보내기 준비 중
-            </button>
-          </>
-        }
-        aside={
-          <div className="border border-neutral-100 bg-white p-6">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">Scan Snapshot</p>
-            <h2 className="mt-3 text-2xl font-black tracking-tight">#{scanId}</h2>
-            <dl className="mt-4 space-y-2 text-sm">
-              {summary && (
-                <div className="flex items-center justify-between border-t border-neutral-100 pt-2">
-                  <dt className="text-neutral-500">총 탐지</dt>
-                  <dd className="font-bold">{summary.totalFindings}건</dd>
-                </div>
-              )}
-              {summary && counts.CRITICAL > 0 && (
-                <div className="flex items-center justify-between border-t border-neutral-100 pt-2">
-                  <dt className="text-neutral-500">Critical</dt>
-                  <dd className="font-bold text-[#E63946]">{counts.CRITICAL}건</dd>
-                </div>
-              )}
-              <div className="flex items-center justify-between border-t border-neutral-100 pt-2">
-                <dt className="text-neutral-500">해결 완료</dt>
-                <dd className="font-bold text-[#4A7A00]">{resolvedCount}건</dd>
-              </div>
-            </dl>
-          </div>
-        }
-        description={
-          <div className="space-y-2.5">
-            {currentProjectId && (
-              <Link
-                className="inline-flex items-center gap-1.5 text-sm font-bold text-black transition hover:opacity-70"
-                state={routeState}
-                to={ROUTES.projectDetail.replace(':projectId', String(currentProjectId))}
-              >
-                {projectName ?? `Project #${currentProjectId}`}
-                <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
-              </Link>
-            )}
-            <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
-              <span className="font-mono text-neutral-400">scan #{scanId}</span>
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              {currentProjectId ? (
+                <Link
+                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-sm font-bold text-black transition hover:border-black"
+                  state={routeState}
+                  to={ROUTES.projectDetail.replace(':projectId', String(currentProjectId))}
+                >
+                  {projectName ?? `Project #${currentProjectId}`}
+                  <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
+                </Link>
+              ) : null}
               {scanBasic ? <ScanStatusBadge status={scanBasic.status} /> : null}
               {scanBasic ? <ScanTypeBadge scanType={scanBasic.scanType} /> : null}
               {scanBasic ? <ScanModeBadge scanMode={scanBasic.scanMode} source={scanBasic.source} /> : null}
             </div>
-            <p className="text-neutral-600">
-              {scanBasic?.completedAt
-                ? `완료 시각: ${formatDateTime(scanBasic.completedAt)}`
-                : '아직 분석이 끝나지 않았습니다. 결과가 완전히 준비되면 더 많은 항목을 확인할 수 있습니다.'}
-            </p>
-          </div>
-        }
-        eyebrow="SCAN RESULT"
-        title={currentScanType === 'SERVER_AUDIT' ? '서버 점검 결과와 권장 조치' : '스캔 결과 체크리스트'}
-      />
 
+            <div className="mt-6 grid gap-3 text-sm text-neutral-600 sm:grid-cols-2 xl:max-w-3xl">
+              <div className="border border-neutral-100 bg-neutral-50 px-4 py-3">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">Completed</p>
+                <p className="mt-1 font-bold text-neutral-900">
+                  {scanBasic?.completedAt ? formatDateTime(scanBasic.completedAt) : '분석 대기 중'}
+                </p>
+              </div>
+              <div className="border border-neutral-100 bg-neutral-50 px-4 py-3">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">Action Needed</p>
+                <p className="mt-1 font-bold text-neutral-900">
+                  {openCount + inProgressCount}건
+                  <span className="ml-2 font-normal text-neutral-500">미해결/처리 중</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-7 flex flex-wrap gap-2">
+              <Link
+                className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+                to={ROUTES.history}
+              >
+                <GitBranch className="h-4 w-4" />
+                결과 비교
+              </Link>
+              <button
+                className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+                onClick={() => {
+                  if (!scanId) {
+                    return;
+                  }
+
+                  void getScanBasic(scanId).then((basicData) => {
+                    setScanBasic(basicData);
+                    void getScanSummary(scanId).then((summaryData) => {
+                      setSummary(summaryData);
+                    });
+                  });
+                }}
+                type="button"
+              >
+                <RefreshCw className="h-4 w-4" />
+                새로고침
+              </button>
+              <button
+                className="inline-flex items-center gap-2 border border-neutral-200 px-4 py-2 text-sm font-bold text-neutral-400"
+                disabled
+                type="button"
+              >
+                <FileText className="h-4 w-4" />
+                내보내기 준비 중
+              </button>
+            </div>
+          </div>
+
+          <aside className="border-t border-neutral-100 bg-neutral-50 p-6 xl:border-l xl:border-t-0">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">SUMMARY</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="bg-white p-4">
+                <p className="text-xs font-bold text-neutral-500">총 탐지</p>
+                <p className="mt-1 text-3xl font-black text-black">{summary?.totalFindings ?? 0}</p>
+              </div>
+              <div className="bg-white p-4">
+                <p className="text-xs font-bold text-neutral-500">Critical</p>
+                <p className="mt-1 text-3xl font-black text-[#E63946]">{counts.CRITICAL}</p>
+              </div>
+              <div className="bg-white p-4">
+                <p className="text-xs font-bold text-neutral-500">해결 완료</p>
+                <p className="mt-1 text-3xl font-black text-[#4A7A00]">{resolvedCount}</p>
+              </div>
+              <div className="bg-white p-4">
+                <p className="text-xs font-bold text-neutral-500">무시됨</p>
+                <p className="mt-1 text-3xl font-black text-neutral-400">{ignoredCount}</p>
+              </div>
+            </div>
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
+                <span>해결 진행률</span>
+                <span className="font-mono font-bold text-black">{resolvedRatio}%</span>
+              </div>
+              <div className="h-2 bg-neutral-200">
+                <div className="h-full bg-[#9FCC2E] transition-all duration-500" style={{ width: `${resolvedRatio}%` }} />
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
       {errorMessage ? <PageBanner message={errorMessage} tone="error" /> : null}
 
       {isInitialLoading ? (
@@ -464,7 +487,7 @@ function ResultPage() {
 
       {!isInitialLoading && summary ? (
         <>
-          {currentScanType === 'SERVER_AUDIT' ? (
+          {isServerAudit ? (
             <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-900">
               <AlertTriangle className="mt-1 h-4 w-4 shrink-0 text-amber-600" />
               <div>
@@ -474,134 +497,109 @@ function ResultPage() {
                   sudo 권한이나 OS package scan 옵션에 따라 일부 점검은 제한될 수 있습니다.
                 </p>
                 <p className="mt-2 font-bold text-amber-950">
-                  {
-                    '\uc11c\ubc84 \uc810\uac80\uc740 \uc6b4\uc601 \ud658\uacbd\uc758 \ud604\uc7ac \uc0c1\ud0dc\ub97c \ubcf4\ub294 \uac83\uc774\ub77c \uc6d0\uc778\uc774 \uc18c\uc2a4 \ud30c\uc77c, \uc11c\ubc84 \uc124\uc815, \ubc29\ud654\ubcbd \uc911 \uc5b4\ub514\uc778\uc9c0 \ub2e8\uc815\ud558\uae30 \uc5b4\ub835\uc2b5\ub2c8\ub2e4. \uc790\ub3d9 \ud328\uce58\ub294 \uc811\uadfc \ucc28\ub2e8\uc774\ub098 \uc11c\ube44\uc2a4 \uc911\ub2e8\uc73c\ub85c \uc774\uc5b4\uc9c8 \uc218 \uc788\uc5b4, \uad8c\uc7a5 \uc870\uce58\ub97c \ud655\uc778\ud55c \ub4a4 \uc6b4\uc601 \ud658\uacbd\uc5d0 \ub9de\uac8c \uc801\uc6a9\ud574\uc57c \ud569\ub2c8\ub2e4.'
-                  }
+                  서버 점검은 운영 환경의 현재 상태를 보는 결과라 자동 코드 패치 대상이 아닙니다. 권장 조치를 확인한 뒤 운영 영향도를 보고 적용해야 합니다.
                 </p>
               </div>
             </div>
           ) : null}
 
-          {/* ── Severity 카드 ── */}
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {severityOrder.map((severity) => {
-              const meta = severityMeta[severity];
-              const count = counts[severity];
-              return (
-                <div
-                  className="border border-neutral-100 bg-white px-5 py-4"
-                  key={severity}
-                  style={{ borderLeftColor: meta.bg, borderLeftWidth: '3px' }}
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: meta.bg }}>
-                    {meta.label}
-                  </span>
-                  <div className={`mt-2 text-4xl font-black ${count === 0 ? 'text-neutral-200' : 'text-black'}`}>
-                    {count}
-                  </div>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="border border-neutral-100 bg-white px-5 py-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">Severity Overview</p>
+                  <p className="mt-1 text-sm text-neutral-500">위험도별 탐지 수와 조치 상태를 한 번에 확인합니다.</p>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* ── Checklist Progress ── */}
-          <div className="border border-neutral-100 bg-white px-6 py-5">
-            <div className="flex flex-wrap items-center justify-between gap-6">
-              <div>
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">Checklist Progress</p>
-                <div className="mt-2 text-3xl font-black">
-                  {resolvedCount}
-                  <span className="text-neutral-300"> / {actionableTotal}</span>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {resolutionValues.map((value) => {
-                    const m = resolutionMeta[value];
-                    const cnt = getResolutionCount(summary, value);
-                    return (
-                      <span key={value} className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-bold ${m.cls}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
-                        {m.label} {cnt}
-                      </span>
-                    );
-                  })}
+                <div className="text-right">
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">Resolved</p>
+                  <p className="mt-1 text-2xl font-black text-black">{resolvedCount}<span className="text-neutral-300"> / {actionableTotal}</span></p>
                 </div>
               </div>
-              <div className="w-full xl:max-w-sm">
-                <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
-                  <span>진행률</span>
-                  <span className="font-mono font-bold text-black">{resolvedRatio}%</span>
-                </div>
-                <div className="h-2 rounded-full bg-neutral-100">
-                  <div className="h-full rounded-full bg-[#9FCC2E] transition-all duration-500" style={{ width: `${resolvedRatio}%` }} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── 필터 ── */}
-          <div className="border border-neutral-100 bg-white px-5 py-4">
-            <div className="flex flex-col gap-3">
-              {/* Severity */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="w-24 shrink-0 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">Severity</span>
-                <button
-                  className={`border px-2.5 py-1 text-xs transition ${severityFilter === 'all' ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
-                  onClick={() => setSeverityFilter('all')}
-                  type="button"
-                >
-                  전체
-                </button>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                 {severityOrder.map((severity) => {
-                  const active = severityFilter === severity;
+                  const meta = severityMeta[severity];
+                  const count = counts[severity];
                   return (
                     <button
-                      className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-bold transition ${active ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
+                      className={`border px-4 py-3 text-left transition ${
+                        severityFilter === severity
+                          ? 'border-black bg-black text-white'
+                          : 'border-neutral-200 bg-white hover:border-neutral-400'
+                      }`}
                       key={severity}
                       onClick={() => setSeverityFilter(severity)}
                       type="button"
                     >
-                      <span className="h-2 w-2 rounded-full" style={{ background: active ? 'white' : severityMeta[severity].bg }} />
-                      {severity}
-                      <span className={`font-mono text-[11px] ${active ? 'text-neutral-300' : 'text-neutral-400'}`}>{counts[severity]}</span>
+                      <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em]" style={{ color: severityFilter === severity ? 'white' : meta.bg }}>
+                        <span className="h-2 w-2 rounded-full" style={{ background: severityFilter === severity ? 'white' : meta.bg }} />
+                        {meta.label}
+                      </span>
+                      <span className={`mt-2 block text-3xl font-black ${count === 0 && severityFilter !== severity ? 'text-neutral-200' : ''}`}>{count}</span>
                     </button>
                   );
                 })}
               </div>
+            </div>
 
-              {/* Resolution */}
-              <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3">
-                <span className="w-24 shrink-0 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">Resolution</span>
-                <button
-                  className={`border px-2.5 py-1 text-xs transition ${resolutionFilter === 'all' ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
-                  onClick={() => setResolutionFilter('all')}
-                  type="button"
-                >
-                  전체
-                </button>
+            <div className="border border-neutral-100 bg-white px-5 py-5">
+              <div className="mb-3 flex items-center justify-between text-sm">
+                <span className="font-bold text-neutral-700">체크리스트 진행률</span>
+                <span className="font-mono font-black text-black">{resolvedRatio}%</span>
+              </div>
+              <div className="h-2 bg-neutral-100">
+                <div className="h-full bg-[#9FCC2E] transition-all duration-500" style={{ width: `${resolvedRatio}%` }} />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
                 {resolutionValues.map((value) => {
-                  const active = resolutionFilter === value;
                   const m = resolutionMeta[value];
+                  const cnt = getResolutionCount(summary, value);
                   return (
                     <button
-                      className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-bold transition ${active ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
+                      className={`inline-flex items-center justify-between gap-2 border px-3 py-2 text-xs font-bold transition ${
+                        resolutionFilter === value
+                          ? 'border-black bg-black text-white'
+                          : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'
+                      }`}
                       key={value}
                       onClick={() => setResolutionFilter(value)}
                       type="button"
                     >
-                      <span className={`h-2 w-2 rounded-full ${active ? 'bg-white' : m.dot}`} />
-                      {m.label}
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`h-1.5 w-1.5 rounded-full ${resolutionFilter === value ? 'bg-white' : m.dot}`} />
+                        {m.label}
+                      </span>
+                      <span className="font-mono">{cnt}</span>
                     </button>
                   );
                 })}
-                <div className="ml-auto flex flex-wrap items-center gap-3 font-mono text-[11px] text-neutral-400">
-                  <span>Trivy {getSourceCount(summary, 'TRIVY')}</span>
-                  <span>Custom {getSourceCount(summary, 'CUSTOM_RULE')}</span>
-                  <span>AI {getSourceCount(summary, 'AI')}</span>
-                </div>
               </div>
             </div>
           </div>
 
+          <div className="border border-neutral-100 bg-white px-5 py-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">Filter</span>
+              <button
+                className={`border px-3 py-1.5 text-xs font-bold transition ${severityFilter === 'all' ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
+                onClick={() => setSeverityFilter('all')}
+                type="button"
+              >
+                모든 위험도
+              </button>
+              <button
+                className={`border px-3 py-1.5 text-xs font-bold transition ${resolutionFilter === 'all' ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'}`}
+                onClick={() => setResolutionFilter('all')}
+                type="button"
+              >
+                모든 상태
+              </button>
+              <div className="ml-auto flex flex-wrap items-center gap-3 font-mono text-[11px] text-neutral-400">
+                <span>Trivy {getSourceCount(summary, 'TRIVY')}</span>
+                <span>Custom {getSourceCount(summary, 'CUSTOM_RULE')}</span>
+                <span>AI {getSourceCount(summary, 'AI')}</span>
+              </div>
+            </div>
+          </div>
           <div className="space-y-4">
             {isFindingsLoading ? (
               <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">탐지 항목을 불러오는 중입니다.</div>

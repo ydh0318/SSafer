@@ -283,7 +283,7 @@ function HistoryPage() {
         setProjectNameMap((current) => ({
           ...current,
           ...projects.reduce<Record<number, string>>((accumulator, project) => {
-            accumulator[Number(project.id)] = project.name;
+            accumulator[Number(project.projectId)] = project.name;
             return accumulator;
           }, {}),
         }));
