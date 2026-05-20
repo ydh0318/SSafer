@@ -1,7 +1,9 @@
-import { Check, ChevronRight, List, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, List, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 
 import PixelGoose from '../../components/common/PixelGoose';
+import { ROUTES } from '../../constants/routes';
 
 import { useUiStore } from '../../store/uiStore';
 
@@ -15,6 +17,10 @@ type TokenTone = 'emerald' | 'sky' | 'amber' | 'rose' | 'slate';
 type CommandToken = { label: string; meaning: string; tone: TokenTone };
 type TypingCommand = { id: number; command: string; description: string; xp: number; tokens: CommandToken[] };
 type TypingStage = { id: string; order: number; title: string; level: string; summary: string; commands: TypingCommand[] };
+type TypingRouteState = {
+  returnToScanId?: string;
+  projectId?: string;
+};
 
 /* ─── data ─── */
 const STAGES: TypingStage[] = [
@@ -273,6 +279,8 @@ function getTokenStyles(tone: TokenTone, isDark: boolean) {
 
 /* ─── Main Page ─── */
 export default function TypingGamePage() {
+  const location = useLocation();
+  const routeState = (location.state ?? {}) as TypingRouteState;
   const [stageIdx, setStageIdx] = useState(0);
   const [cmdIdx, setCmdIdx] = useState(0);
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
@@ -403,6 +411,22 @@ export default function TypingGamePage() {
       {/* vertically centered main — equal top/bottom space */}
       <main className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="w-full max-w-2xl">
+          {routeState.returnToScanId ? (
+            <div className="mb-6">
+              <Link
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold transition ${
+                  isDark
+                    ? 'border-neutral-600 text-neutral-300 hover:border-neutral-300 hover:text-white'
+                    : 'border-neutral-300 text-neutral-600 hover:border-black hover:text-black'
+                }`}
+                state={{ projectId: routeState.projectId }}
+                to={ROUTES.scanDetail.replace(':scanId', String(routeState.returnToScanId))}
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                스캔 화면으로 돌아가기
+              </Link>
+            </div>
+          ) : null}
 
           {/* Top section: Goose, XP, and CURRENT LIST button */}
           <div className="flex items-end justify-between pb-4">

@@ -74,7 +74,7 @@ function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
           setOAuthResultMessage(`${providerLabel} 로그인에 성공했습니다.`);
         }
 
-        navigate(ROUTES.dashboard, { replace: true });
+        navigate(ROUTES.projects, { replace: true });
       } catch (error) {
         if (
           axios.isAxiosError<ApiErrorResponse<RejoinRequiredData>>(error) &&
@@ -107,7 +107,7 @@ function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
             });
 
             setOAuthResultMessage(`${providerLabel} 계정으로 재가입 후 로그인이 완료되었습니다.`);
-            navigate(ROUTES.dashboard, { replace: true });
+            navigate(ROUTES.projects, { replace: true });
             return;
           } catch (rejoinError) {
             setErrorMessage(getOAuthLoginErrorMessage(rejoinError, provider));

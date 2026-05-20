@@ -73,7 +73,7 @@ function LoginPanel() {
           role: 'USER',
         },
       });
-      navigate(ROUTES.dashboard);
+      navigate(ROUTES.projects);
     } catch (error) {
       const serverFieldErrors = getApiFieldErrors(error);
 
