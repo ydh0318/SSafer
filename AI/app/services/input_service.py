@@ -72,10 +72,6 @@ def format_finding_for_llm(finding: dict[str, Any]) -> str:
     return format_finding_for_fix_llm(finding)
 
 
-def format_findings_for_llm(findings: list[dict[str, Any]]) -> list[str]:
-    return [format_finding_for_llm(finding) for finding in findings]
-
-
 def format_findings_for_explanation_llm(findings: list[dict[str, Any]]) -> str:
     sections = []
     for i, finding in enumerate(findings, start=1):

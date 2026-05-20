@@ -182,16 +182,6 @@ def generate_finding_explanation(
     )
 
 
-def generate_finding_explanations(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
-            "finding_id": finding["id"],
-            **generate_finding_explanation(finding),
-        }
-        for finding in findings
-    ]
-
-
 def compute_batch_max_tokens(
     finding_count: int,
     per_finding_tokens: int,

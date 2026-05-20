@@ -2,7 +2,7 @@
 
 이 문서는 현재 구현된 FastAPI `/analyze` 엔드포인트 스펙을 정리합니다.
 
-Spring Boot, RabbitMQ Worker 연동 전체 계약은 `11_spring_fastapi_interface.md`를 함께 참고합니다.
+Spring Boot, RabbitMQ Worker 연동 전체 계약은 `13_spring_fastapi_interface.md`를 함께 참고합니다.
 
 ## 1. Endpoint
 
@@ -39,16 +39,7 @@ API 응답 반환
 | 결과 저장 | `build_analysis_result_from_results()`, `save_analysis_result()` | `analysis_result.json` 생성, 매핑 검증, 파일 저장 |
 | 응답 반환 | `AnalysisResponse` | 처리 상태와 count 정보 반환 |
 
-기본 설정:
-
-```text
-OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=qwen2.5:3b
-OLLAMA_TEMPERATURE=0.1
-OLLAMA_TIMEOUT_SECONDS=600
-OLLAMA_MAX_RETRIES=2
-OLLAMA_RETRY_BACKOFF_SECONDS=1
-```
+LLM 기본 설정(provider/모델/타임아웃/재시도)은 `05_configuration.md`를 참고합니다. 기본 provider는 로컬 Ollama, 기본 모델은 `qwen2.5:3b`입니다.
 
 ## 3. Request
 
@@ -85,6 +76,7 @@ Body:
 | `agentId` | number 또는 null | Worker 연동 시 예 | `null` | 작업을 처리하는 agent ID |
 | `projectId` | number 또는 null | Worker 연동 시 예 | `null` | scan이 속한 project ID |
 | `scanId` | number 또는 null | Worker 연동 시 예 | `null` | Spring Boot `scans.id` |
+| `scanType` | string 또는 null | 아니오 | `null` | `PROJECT_FILE` 또는 `SERVER_AUDIT`. 생략 시 입력에서 자동 판별 |
 | `rawResultPath` | string 또는 null | Worker 연동 시 예 | `null` | 분석할 raw result S3 URI |
 | `analysisResultPath` | string 또는 null | Worker 연동 시 예 | `null` | analysis result 업로드 대상 S3 URI |
 
@@ -114,29 +106,36 @@ Worker 연동 요청 예시:
 
 ## 3-1. scan_result DTO
 
-`scan_result` 객체는 아래 필드를 필수로 갖습니다.
+입력은 project scan과 server-audit 두 모드로 검증되며, 모드별 필수 필드가 다릅니다. 입력 형식 상세와 정규화는 `06_scan_result_input.md`(특히 §4-1)를 참고합니다.
 
-| 필드 | 타입 | 설명 |
-| --- | --- | --- |
-| `schemaVersion` | string | 현재 지원 버전은 `0.1` |
-| `scanId` | string | UUID v4 |
-| `source` | string | 현재 허용 값은 `cli` |
-| `scannedAt` | string | ISO 8601 datetime |
-| `analysisStatus` | string | `SUCCESS`, `PARTIAL`, `FAILED` |
-| `findings` | array | 분석 대상 finding 배열 |
+`scan_result` 최상위 필드:
 
-개별 valid finding은 아래 필드를 필수로 갖습니다.
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `schemaVersion` | string | 예 | 현재 지원 버전은 `0.1` |
+| `source` | string | 예 | 비어 있지 않은 문자열 (예: `cli`, `server-audit`) |
+| `findings` | array | 예 | 분석 대상 finding 배열 |
+| `scanId` | string | project scan | UUID v4 |
+| `scannedAt` | string | project scan | ISO 8601 datetime |
+| `analysisStatus` | string | project scan | `SUCCESS`, `PARTIAL`, `PARTIAL_SUCCESS`, `FAILED` |
+| `auditId` | string | server-audit | UUID v4 |
+| `generatedAt` | string | server-audit | ISO 8601 datetime |
 
-| 필드 | 타입 | 설명 |
-| --- | --- | --- |
-| `id` | string | finding ID |
-| `ruleId` | string | 탐지 규칙 ID |
-| `source` | string | 탐지 출처 |
-| `severity` | string | 심각도 |
-| `file` | string | 대상 파일 |
-| `line` | integer 또는 null | 라인 번호 |
-| `title` | string | finding 제목 |
-| `maskedEvidence` | string | 마스킹된 근거 |
+개별 valid finding 필드:
+
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `id` | string | 예 | finding ID |
+| `ruleId` | string | 예 | 탐지 규칙 ID |
+| `source` | string | 예 | 탐지 출처 |
+| `severity` | string | 예 | 심각도 |
+| `title` | string | 예 | finding 제목 |
+| `file` | string | project scan | 대상 파일 |
+| `maskedEvidence` | string | project scan | 마스킹된 근거 |
+| `target` | string | server-audit | 점검 대상 (정규화 시 `file`로 복사) |
+| `evidence` | string | server-audit | 근거 (`evidence` 또는 `maskedEvidence` 필요) |
+| `line` | integer 또는 null | 아니오 | 라인 번호 |
+| `patchContext` | object 또는 null | 아니오 | CLI 자동수정 힌트 (`operation`, `oldText`, `expectedFileHash`) |
 
 일부 finding이 DTO 검증에 실패하면 전체 요청을 실패시키지 않고 `invalid_findings`에 기록합니다.
 
@@ -295,7 +294,7 @@ HTTP status:
 ```json
 {
   "status": "failed",
-  "error_code": "ANALYSIS_EXPLAIN_ERROR",
+  "error_code": "LLM_CALL_FAILED",
   "message": "error message",
   "stage": "explain",
   "finding_id": "FND-0001",
@@ -321,14 +320,14 @@ HTTP status:
 
 `error_code` 값:
 
-| error_code | 의미 |
-| --- | --- |
-| `ANALYSIS_INPUT_ERROR` | 입력 처리 실패 |
-| `ANALYSIS_EXPLAIN_ERROR` | explanation 생성 실패 |
-| `ANALYSIS_FIX_ERROR` | fix 생성 실패 |
-| `ANALYSIS_PIPELINE_ERROR` | 일반 분석 실패 |
-| `ANALYSIS_OUTPUT_ERROR` | 결과 생성 또는 저장 실패 |
-| `ANALYSIS_ERROR` | 매핑되지 않은 분석 실패 |
+| error_code | stage | 의미 |
+| --- | --- | --- |
+| `ANALYSIS_INPUT_ERROR` | `input` | 입력 처리 실패 |
+| `LLM_TIMEOUT` | `explain` / `fix` | LLM 호출 timeout |
+| `LLM_CALL_FAILED` | `explain` / `fix` | LLM 호출 실패 |
+| `ANALYSIS_PIPELINE_ERROR` | `analysis` | 일반 분석 실패 |
+| `ANALYSIS_OUTPUT_ERROR` | `output` | 결과 생성 또는 저장 실패 |
+| `UNKNOWN_ERROR` | - | 매핑되지 않은 분석 실패 |
 
 ## 6. Curl Example
 

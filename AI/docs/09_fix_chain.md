@@ -130,7 +130,7 @@ app/services/fix_service.py
 
 ```python
 generate_finding_fix(finding: dict) -> dict
-generate_finding_fixes(findings: list[dict]) -> list[dict]
+generate_findings_fix_batch(findings: list[dict]) -> dict[str, dict]
 parse_fix_response(response: str) -> dict
 build_fix_retry_prompt(finding_input: str, error_message: str) -> str
 ```

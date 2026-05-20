@@ -177,16 +177,6 @@ def generate_finding_fix(
     raise ValueError(message) from last_error
 
 
-def generate_finding_fixes(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
-            "finding_id": finding["id"],
-            "fix": generate_finding_fix(finding),
-        }
-        for finding in findings
-    ]
-
-
 def generate_findings_fix_batch(
     findings: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
