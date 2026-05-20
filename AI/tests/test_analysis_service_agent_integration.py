@@ -188,5 +188,82 @@ class AgentIntegrationTest(unittest.TestCase):
         self.assertEqual(captured["enriched"], {})
 
 
+class AnalyzeFindingsRoutingTest(unittest.TestCase):
+    """다건 분석에서 agent 대상은 개별 경로, 나머지는 batch 경로로 분리되는지 검증."""
+
+    def _build_findings(self):
+        cve = build_cve_finding()  # HIGH + CVE ruleId -> agent
+        med1 = build_non_cve_finding()  # MEDIUM non-cve -> batch
+        med2 = {**build_non_cve_finding(), "id": "FND-AGENT-INT-003"}
+        low = {
+            **build_non_cve_finding(),
+            "id": "FND-AGENT-INT-004",
+            "severity": "LOW",
+        }
+        return [cve, med1, med2, low]
+
+    def test_high_cve_uses_agent_others_use_batch(self):
+        captured = {"agent_ids": [], "batch_explain_ids": None, "batch_fix_ids": None}
+
+        def fake_agent(finding, scan_result=None):
+            captured["agent_ids"].append(finding["id"])
+            return {"tool_calls": [{"tool": "search_cve", "args": {}, "result": {}}]}
+
+        def fake_explain_batch(findings):
+            captured["batch_explain_ids"] = [f["id"] for f in findings]
+            return {f["id"]: dict(GOOD_EXPLAIN) for f in findings}
+
+        def fake_fix_batch(findings):
+            captured["batch_fix_ids"] = [f["id"] for f in findings]
+            return {f["id"]: dict(GOOD_FIX) for f in findings}
+
+        class _SkippedVerify:
+            stage = "skipped"
+
+        findings = self._build_findings()
+
+        with patch.object(agent_service, "AGENT_ENABLED", True), patch.object(
+            analysis_service, "run_agent_for_finding", side_effect=fake_agent
+        ), patch.object(
+            analysis_service, "generate_finding_explanation", return_value=GOOD_EXPLAIN
+        ), patch.object(
+            analysis_service, "generate_finding_fix", return_value=dict(GOOD_FIX)
+        ), patch.object(
+            analysis_service,
+            "generate_findings_explanation_batch",
+            side_effect=fake_explain_batch,
+        ), patch.object(
+            analysis_service, "generate_findings_fix_batch", side_effect=fake_fix_batch
+        ), patch.object(
+            analysis_service,
+            "verify_and_maybe_regenerate",
+            side_effect=lambda finding, fix: (fix, _SkippedVerify()),
+        ):
+            results = analysis_service.analyze_findings(
+                findings, scan_result=SAMPLE_SCAN_RESULT
+            )
+
+        # agent는 HIGH+CVE 한 건만
+        self.assertEqual(captured["agent_ids"], ["FND-AGENT-INT-001"])
+        # 나머지 세 건만 batch로
+        self.assertEqual(
+            captured["batch_explain_ids"],
+            ["FND-AGENT-INT-002", "FND-AGENT-INT-003", "FND-AGENT-INT-004"],
+        )
+        self.assertEqual(captured["batch_fix_ids"], captured["batch_explain_ids"])
+        # 결과는 입력 순서 그대로 보존
+        self.assertEqual(
+            [r["findingId"] for r in results],
+            [
+                "FND-AGENT-INT-001",
+                "FND-AGENT-INT-002",
+                "FND-AGENT-INT-003",
+                "FND-AGENT-INT-004",
+            ],
+        )
+        # agent를 탄 finding에만 reasoningSteps 흔적 (enriched가 explain/fix로 전달됨)
+        self.assertEqual(len(results), 4)
+
+
 if __name__ == "__main__":
     unittest.main()
