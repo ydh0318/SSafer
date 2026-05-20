@@ -26,7 +26,7 @@ const guideSections = [
     id: 2,
     category: 'PATCH',
     title: '수정 적용',
-    summary: '웹 Finding 상세에서 diff를 확인하고 패치를 승인하면 Agent가 실제 파일을 수정합니다.',
+    summary: 'CLI에서 분석 결과의 패치 후보를 확인하고 터미널에서 직접 선택해 적용합니다.',
   },
   {
     id: 3,
@@ -39,14 +39,14 @@ const guideSections = [
 const tips = [
   'ssafer run만 실행하면 로컬 .ssafer/results에만 저장됩니다. 웹에서 결과를 보려면 --upload를 붙이거나 이후 ssafer upload를 별도로 실행하세요.',
   'Agent는 실행한 터미널의 위치를 기준으로 파일을 읽습니다. 스캔할 프로젝트 루트에서 로그인하고 agent를 시작하세요.',
-  'CLI에서 ssafer apply를 실행하면 웹 승인 없이 터미널에서 직접 선택해 적용합니다. 웹에서 적용하려면 Agent가 켜져 있어야 합니다.',
+  'CLI에서 ssafer apply를 실행하면 웹 승인 없이 터미널에서 직접 선택해 적용합니다.',
   'cd ~ 에서 실행을 권장합니다. /var/lib 등 권한 제한 경로에서는 결과 파일 저장에 실패할 수 있습니다.',
 ];
 
 const nextSteps = [
   '프로젝트 루트에서 ssafer login 후 ssafer run --upload 로 첫 스캔을 웹에 올려보세요.',
   '스캔할 프로젝트 루트에서 ssafer agent를 실행한 뒤 웹 프로젝트 화면에서 Agent 스캔 버튼을 눌러보세요.',
-  '터미널에서는 ssafer apply, 웹에서는 Finding 상세의 고치기 버튼으로 수정 흐름을 시작하세요.',
+  '터미널에서 ssafer apply를 실행해 최신 완료 스캔의 수정 후보를 확인해보세요.',
   '홈 디렉터리에서 ssafer server --upload 로 서버 점검 결과를 웹에서 바로 확인해보세요.',
 ];
 
@@ -227,7 +227,7 @@ function Section1() {
           { comment: 'Trivy 등 필요한 도구 설치', cmd: 'ssafer tools' },
         ]} />
       </Step>
-      <Step num="03" label="Agent 실행" desc="웹에서 보내는 스캔·패치 요청을 현재 서버에서 즉시 처리하도록 Agent를 시작합니다." isLast>
+      <Step num="03" label="Agent 실행" desc="웹에서 보내는 스캔·패치 요청을 현재 서버에서 즉시 처리하도록 Agent를 시작합니다. ssafer login 과정에서 이미 Agent 시작을 선택했다면 다시 실행하지 않아도 됩니다." isLast>
         <TerminalBlock lines={[
           { comment: '점검할 디렉토리를 --path 로 지정 (기본값: 현재 디렉토리)', cmd: 'ssafer agent --path /opt/app' },
           { comment: '현재 디렉토리를 루트로 사용하는 경우', cmd: 'ssafer agent' },
@@ -259,17 +259,14 @@ function Section1() {
 function Section2() {
   return (
     <>
-      <Step num="01" label="웹에서 패치 승인" desc="웹에서 수정하려면 Finding 상세 화면에서 수정 전/후 diff를 확인한 뒤 패치를 승인합니다. 실행 중인 Agent가 승인된 패치를 실제 파일에 적용합니다.">
-        <div className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
-          <span className="rounded bg-[#D4FC64] px-2 py-0.5 text-[11px] font-black text-black">WEB</span>
-          <span className="text-neutral-700">Finding 상세 → 패치 적용 탭 → 패치 적용 승인 버튼 클릭</span>
-        </div>
-      </Step>
-      <Step num="02" label="CLI에서 직접 적용" desc="터미널에서 적용할 때는 웹 승인이 필요 없습니다. CLI가 최신 완료 스캔의 패치 후보를 보여주고, 사용자가 번호를 선택해 바로 로컬 파일에 적용합니다.">
+      <Step num="01" label="최신 스캔 수정안 적용" desc="CLI가 최신 완료 스캔의 패치 후보를 보여주고, 사용자가 번호를 선택해 바로 로컬 파일에 적용합니다. 웹 승인은 필요하지 않습니다.">
         <TerminalBlock lines={[{ cmd: 'ssafer apply' }]} />
       </Step>
-      <Step num="03" label="특정 스캔 지정 적용" desc="스캔 ID를 지정해 해당 스캔의 패치만 선택적으로 적용합니다." isLast>
-        <TerminalBlock lines={[{ cmd: 'ssafer apply <scanId>' }]} />
+      <Step num="02" label="특정 스캔 지정 적용" desc="스캔 ID를 지정해 해당 스캔의 패치만 선택적으로 적용합니다.">
+        <TerminalBlock lines={[{ cmd: 'ssafer apply --scan-id <scanId>' }]} />
+      </Step>
+      <Step num="03" label="변경 내용만 미리 확인" desc="실제 파일을 바꾸기 전에 적용될 diff만 먼저 확인합니다." isLast>
+        <TerminalBlock lines={[{ cmd: 'ssafer apply --dry-run' }]} />
         <div className="mt-3">
           <Note>
             자동 수정은 <strong>patch payload가 있는 finding에만 가능</strong>합니다.

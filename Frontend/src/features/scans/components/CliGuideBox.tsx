@@ -21,6 +21,7 @@ const CLI_UPLOAD_COMMANDS = [
   { label: '백엔드 인증 로그인', cmd: 'ssafer login' },
   { label: '스캔 도구 설치 (Trivy 등)', cmd: 'ssafer tools' },
   { label: '스캔 실행 및 업로드', cmd: 'ssafer run --upload' },
+  { label: '수정안 적용', cmd: 'ssafer apply' },
 ];
 
 export default function CliGuideBox({ mode }: CliGuideBoxProps) {

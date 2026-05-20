@@ -192,6 +192,7 @@ function ScanDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Link
             className="inline-flex items-center gap-1.5 border border-neutral-200 px-4 py-2 text-xs font-bold text-neutral-600 transition hover:border-black hover:text-black"
+            state={{ returnToScanId: scanId, projectId: routeState.projectId }}
             to={ROUTES.typingGame}
           >
             <Gamepad2 className="h-3.5 w-3.5" />

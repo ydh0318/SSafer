@@ -24,7 +24,7 @@ function PublicOnlyRoute() {
   }
 
   if (isMemberSession) {
-    return <Navigate replace to={ROUTES.dashboard} />;
+    return <Navigate replace to={ROUTES.projects} />;
   }
 
   return <Outlet />;

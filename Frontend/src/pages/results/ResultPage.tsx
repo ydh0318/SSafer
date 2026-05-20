@@ -98,15 +98,7 @@ function hasApplicablePatchPayload(finding: ScanFindingDetailData | undefined) {
 
   return Boolean(
     finding.fix?.patches?.some((patch) => {
-      if (!patch.filePath || !patch.operation) {
-        return false;
-      }
-
-      if (patch.operation === 'replace') {
-        return typeof patch.oldText === 'string' && typeof patch.newText === 'string';
-      }
-
-      return typeof patch.newText === 'string' && patch.newText.length > 0;
+      return Boolean(patch.filePath && patch.operation);
     }),
   );
 }
