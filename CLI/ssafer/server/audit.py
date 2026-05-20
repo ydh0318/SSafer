@@ -592,7 +592,7 @@ def _resolve_firewall_state(
 
 def _cross_validate_ports_firewall(result: ServerAuditResult) -> None:
     ufw_rules: dict[int, list[tuple[str, str]]] = {}
-    iptables_rules: dict[int, list[str]] = {}
+    iptables_rules: dict[int, list[tuple[str, str]]] = {}
     has_firewall_data = False
     for artifact in result.artifacts:
         if artifact.type != "command-output" or not isinstance(artifact.content, dict):
