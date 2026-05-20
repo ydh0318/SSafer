@@ -308,6 +308,19 @@ class AnalysisResultFixSchemaTest(unittest.TestCase):
         patch = analysis_result["results"][0]["fix"]["patches"][0]
         self.assertEqual(patch["line"], 42)
 
+    def test_normalize_analysis_result_patches_drops_noop_after_substitution(self):
+        # patchContext.oldText("USER root")로 치환하면 newText와 같아져 변경이 없는 패치가 된다.
+        analysis_result = build_analysis_result_with_patch(build_patch(newText="USER root"))
+
+        normalize_analysis_result_patches(
+            findings=[build_finding()],
+            scan_result={"sourceFileHashes": {"Dockerfile": "sha256:fresh"}},
+            analysis_result=analysis_result,
+        )
+
+        fix = analysis_result["results"][0]["fix"]
+        self.assertNotIn("patches", fix)
+
     def test_normalize_analysis_result_patches_removes_patch_without_patch_context(self):
         finding = build_finding()
         finding.pop("patchContext")
