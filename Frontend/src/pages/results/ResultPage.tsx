@@ -91,6 +91,26 @@ function groupFindingsByTitle(findings: ScanFindingListItemData[]) {
   return Array.from(groups.values());
 }
 
+function hasApplicablePatchPayload(finding: ScanFindingDetailData | undefined) {
+  if (!finding?.patchPayloadJson) {
+    return false;
+  }
+
+  return Boolean(
+    finding.fix?.patches?.some((patch) => {
+      if (!patch.filePath || !patch.operation) {
+        return false;
+      }
+
+      if (patch.operation === 'replace') {
+        return typeof patch.oldText === 'string' && typeof patch.newText === 'string';
+      }
+
+      return typeof patch.newText === 'string' && patch.newText.length > 0;
+    }),
+  );
+}
+
 function ResultPage() {
   const { scanId = '' } = useParams<{ scanId: string }>();
   const location = useLocation();
@@ -670,10 +690,7 @@ function ResultPage() {
                           const findingDetail = serverAuditDetails.get(finding.findingId);
                           const hasApplicablePatch =
                             currentScanType !== 'SERVER_AUDIT' &&
-                            Boolean(
-                              findingDetail?.patchPayloadJson &&
-                              findingDetail.fix?.patches?.some((patch) => patch.filePath && patch.operation && patch.newText),
-                            );
+                            hasApplicablePatchPayload(findingDetail);
                           const serverRecommendation =
                             serverDetail?.fix?.summary ??
                             serverDetail?.fix?.recommendedActions?.join(' ') ??
