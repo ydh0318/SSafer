@@ -1,4 +1,4 @@
-# Environment Variable Inventory
+﻿# Environment Variable Inventory
 
 `S14P31B105-160` 기준 운영 배포 환경변수 정리 문서입니다.
 
@@ -96,7 +96,7 @@ Frontend는 Vite build time 환경변수를 사용합니다.
 현재 `Infra/docker/dockerfiles/nginx/Dockerfile` 기본값은 아래와 같습니다.
 
 ```text
-https://k14b105.p.ssafy.io/api/v1
+https://<LEGACY_DEPLOY_DOMAIN>/api/v1
 ```
 
 운영 도메인이 바뀌면 NGINX image build 시 `--build-arg VITE_API_BASE_URL=...`로 덮어씁니다.
