@@ -7,7 +7,7 @@ from typing import Any, Callable
 import httpx
 
 from ssafer import __version__
-from ssafer.core.auth import normalize_api_url
+from ssafer.core.auth import load_agent_config, normalize_api_url
 from ssafer.core.config import load_project_config
 from ssafer.core.constants import MASK
 from ssafer.core.result_store import load_last_scan
@@ -184,6 +184,13 @@ def _upload_result(
         headers["Authorization"] = f"Bearer {token}"
     with httpx.Client(timeout=30) as client:
         _emit_step(on_step, "백엔드에 스캔 요청을 등록하는 중...")
+        project_name = _resolve_upload_project_name(
+            client=client,
+            base_url=base_url,
+            project_root=project_root,
+            result=result,
+            headers=headers,
+        )
         create_response = _post_preserving_redirects(
             client,
             f"{base_url}/api/v1/scans",
@@ -193,6 +200,7 @@ def _upload_result(
                 scan_type=scan_type,
                 source=source,
                 name=name,
+                project_name=project_name,
             ),
             headers=headers,
         )
@@ -238,9 +246,10 @@ def _build_create_scan_payload(
     scan_type: str | None,
     source: str,
     name: str,
+    project_name: str | None = None,
 ) -> dict[str, Any]:
     payload = {
-        "projectName": result.get("projectName") or project_root.name,
+        "projectName": project_name or result.get("projectName") or project_root.name,
         "source": source,
         "scanName": name,
         "targetPath": str(project_root),
@@ -249,6 +258,41 @@ def _build_create_scan_payload(
     if scan_type:
         payload["scanType"] = scan_type
     return payload
+
+
+def _resolve_upload_project_name(
+    *,
+    client: httpx.Client,
+    base_url: str,
+    project_root: Path,
+    result: dict[str, Any],
+    headers: dict[str, str],
+) -> str:
+    agent_project_id = _load_agent_project_id(project_root)
+    if agent_project_id is None:
+        return str(result.get("projectName") or project_root.name)
+
+    response = client.get(
+        f"{base_url}/api/v1/projects/{agent_project_id}",
+        headers=headers,
+    )
+    response.raise_for_status()
+    data = _response_data(response.json())
+    project_name = data.get("name")
+    if not project_name:
+        raise RuntimeError(f"Local Agent projectId={agent_project_id}의 프로젝트 이름을 확인할 수 없습니다.")
+    return str(project_name)
+
+
+def _load_agent_project_id(project_root: Path) -> int | None:
+    config = load_agent_config(project_root)
+    value = config.get("projectId")
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _scan_name(scan: dict[str, Any]) -> str:

@@ -120,6 +120,74 @@ def test_upload_last_scan_registers_uploads_to_s3_and_reports_completion(tmp_pat
     ]
 
 
+def test_upload_last_scan_uses_local_agent_project_name(tmp_path: Path, monkeypatch):
+    scan = {
+        "scanId": "local-scan-test",
+        "projectName": "folder-project",
+        "artifacts": [],
+        "findings": [],
+    }
+    _write_scan(tmp_path, scan)
+    agent_config = tmp_path / ".ssafer" / "agent.yml"
+    agent_config.write_text("agentId: 99\nprojectId: 109\nagentToken: agent-token\n", encoding="utf-8")
+    calls: list[tuple[str, str, Any]] = []
+
+    class FakeClient:
+        def __init__(self, timeout: int):
+            assert timeout == 30
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url: str, headers: dict | None = None):
+            calls.append(("GET", url, dict(headers or {})))
+            request = httpx.Request("GET", url)
+            return httpx.Response(
+                200,
+                json={"data": {"projectId": 109, "name": "web-selected-project"}},
+                request=request,
+            )
+
+        def post(self, url: str, json: dict[str, Any], headers: dict | None = None):
+            calls.append(("POST", url, json))
+            request = httpx.Request("POST", url)
+            if url.endswith("/api/v1/scans"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "data": {
+                            "scanId": 1001,
+                            "projectId": 109,
+                            "status": "REQUESTED",
+                            "rawResultPath": "s3://ssafer/raw/1001/upload/scan_result.json",
+                            "rawUploadUrl": "https://s3.example.com/upload",
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(200, json={"scanId": 1001, "status": "RAW_UPLOADED"}, request=request)
+
+        def put(self, url: str, content: bytes, headers: dict | None = None):
+            calls.append(("PUT", url, json.loads(content.decode("utf-8"))))
+            request = httpx.Request("PUT", url)
+            return httpx.Response(200, request=request)
+
+    monkeypatch.setattr(upload.httpx, "Client", FakeClient)
+
+    upload.upload_last_scan(tmp_path, api_url="http://backend.test/", token="access-token")
+
+    assert calls[0] == (
+        "GET",
+        "http://backend.test/api/v1/projects/109",
+        {"Authorization": "Bearer access-token"},
+    )
+    assert calls[1][0] == "POST"
+    assert calls[1][2]["projectName"] == "web-selected-project"
+
+
 def test_upload_last_scan_redirect_keeps_post_method(tmp_path: Path, monkeypatch):
     scan = {
         "scanId": "local-scan-test",
