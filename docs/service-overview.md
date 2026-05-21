@@ -8,7 +8,7 @@
 > 결정론적 탐지 + 마스킹 + 구조화된 프롬프트 = 재현 가능한 보안 조언
 
 - 개발 기간 : 2026.04.06 ~ 2026.05.22 (7주)
-- 플랫폼 : Web (CLI 동반)
+- 플랫폼 : Web + CLI
 - 개발 인원 : 6명
 - 기관 : 삼성 청년 SW·AI 아카데미 14기
 
@@ -24,8 +24,8 @@
 
 ### 🤖 AI 분석 파이프라인 — 컴퓨터의 언어를, 사람의 언어로
 - **Agent Gate**: CVE 또는 HIGH/CRITICAL인 finding에만 LangGraph 기반 Tool-calling Agent가 동작하여 LLM 비용을 최소화합니다.
-- **3개 Tool**: NVD CVE 조회, 코드 컨텍스트 추출, HasData SERP 웹 검색을 통해 근거를 수집한 뒤 Explain → Fix → Verify 체인으로 설명과 수정안을 생성합니다.
-- **멀티 LLM 프로바이더**: `LLM_PROVIDER` 환경변수로 Anthropic Claude / Ollama / GMS를 런타임에 전환할 수 있으며, GMS provider는 내부적으로 OpenAI-compatible endpoint도 지원합니다.
+- **3개 Tool**: NVD CVE 조회, HasData SERP, 코드 컨텍스트 추출 웹 검색을 통해 근거를 수집한 뒤 Explain → Fix → Verify 체인으로 설명과 수정안을 생성합니다.
+- **멀티 LLM 프로바이더**: `LLM_PROVIDER` 환경변수로 Ollama / GMS / Anthropic Claude 를 런타임에 전환할 수 있습니다.
 
 ### 🔐 마스킹 레이어
 - **로컬 마스킹**: CLI는 업로드 전에 `.env` 원본 값 · API 키 · Private Key를 마스킹합니다. 원본 값은 외부 LLM으로 절대 전송되지 않습니다.
@@ -96,7 +96,7 @@
 ## 🛠 핵심 기술
 
 ### 🔄 비동기 분석 파이프라인
-- **RabbitMQ + AI Worker**: Spring이 HTTP 동기 호출 대신 RabbitMQ로 작업을 dispatch하고, AI Worker가 consume → FastAPI 호출 → 콜백하는 구조로 분석 시간(10~60초)이 길어도 커넥션 점유 문제가 없습니다.
+- **RabbitMQ + AI Worker**: Spring이 HTTP 동기 호출 대신 RabbitMQ로 작업을 dispatch하고, AI Worker가 consume → FastAPI 호출 → callback하는 구조로 분석 시간이 길어도 커넥션 점유 문제가 없습니다.
 - **재시도 정책 정교화**: 409 Conflict 등 영구 에러는 `requeue=False`, timeout · 5xx만 `requeue=True`로 처리해 무한 재처리 루프를 차단했습니다.
 
 ### 📡 실시간 진행 상태 통지
@@ -105,7 +105,7 @@
 
 ### 🧠 LangGraph 기반 Tool-calling Agent
 - **조건부 Agent 호출**: `AGENT_ENABLED && (CVE 존재 || severity ∈ {HIGH, CRITICAL})`일 때만 Agent를 활성화해 LLM 비용을 절감합니다.
-- **근거 수집기로서의 Agent**: Agent는 최종 설명을 직접 쓰지 않고 CVE/코드/웹 컨텍스트만 수집해 Explain · Fix Chain의 입력에 추가합니다. 할루시네이션이 최종 출력에 직접 영향을 주지 않는 구조입니다.
+- **근거 수집기로서의 Agent**: Agent는 최종 설명을 직접 쓰지 않고 CVE/웹/코드 컨텍스트만 수집해 Explain · Fix Chain의 입력에 추가합니다. 할루시네이션이 최종 출력에 직접 영향을 주지 않는 구조입니다.
 
 ### 🧱 ssafer-engine 컨테이너 분리
 - **책임 분리**: Spring 컨테이너가 Trivy를 직접 실행하지 않고, FastAPI + Trivy 내장 컨테이너(`ssafer-engine`)가 웹 업로드 스캔을 전담합니다. CLI의 RuleEngine을 그대로 재사용해 CLI ↔ 웹 결과 정합성을 확보했습니다.
@@ -122,13 +122,13 @@
 | 기술 영역 | 요약 |
 | --- | --- |
 | 결정론적 탐지 | Custom Rule 엔진과 Trivy를 책임 분리하여 룰 기반으로만 finding을 생성합니다. LLM은 절대 새 취약점을 만들어내지 않습니다. |
-| LangGraph Agent | LangChain `create_agent` 기반 ReAct 루프로 NVD CVE 조회 · 코드 컨텍스트 추출 · HasData SERP 검색 3개 Tool을 조건부로 호출합니다. |
-| 멀티 LLM 프로바이더 | `LLM_PROVIDER` 환경변수로 anthropic / ollama / gms 3종을 런타임에 전환합니다. gms provider는 내부적으로 OpenAI-compatible endpoint도 처리합니다. 운영은 GMS gpt-5-mini로 추가 인프라 비용 0원. |
+| LangGraph Agent | LangChain `create_agent` 기반 ReAct 루프로 NVD CVE 조회 · HasData SERP 검색 · 코드 컨텍스트 추출 3개 Tool을 조건부로 호출합니다. |
+| 멀티 LLM 프로바이더 | `LLM_PROVIDER` 환경변수로 ollama / gms / anthropic 3종을 런타임에 전환합니다.
 | 마스킹 우선 | CLI에서 업로드 전 정규식 기반 마스킹을 수행하고, `maskedEvidence`만 LLM에 전달해 `.env` 원본이 외부로 나가지 않습니다. |
 | 그룹화 batch 호출 | 같은 `rule_id`의 findings를 묶어 batch 호출하고, 실패 시 단건 fallback. CVE 결과는 `lru_cache`로 메모리 캐싱. |
 | 신뢰성 재시도 | `invoke_llm_with_retry`로 세마포어 + 지수 백오프 재시도, Pydantic JSON 스키마 검증, `verify_chain`으로 fix 이중 검증. |
 | 자동 수정 안전 계약 | `patchContext`로 CLI가 `oldText` · `expectedFileHash`를 제공하고 AI는 `newText`만 생성하며 Agent가 hash 재검증 후 적용. |
-| 컨텍스트 보강 | Agent가 수집한 CVE · 코드 스니펫 · 웹 레퍼런스를 `enriched_context`로 구조화해 Explain · Fix Chain 프롬프트에 주입합니다. |
+| 컨텍스트 보강 | Agent가 수집한 CVE · 웹 레퍼런스 · 코드 스니펫을 `enriched_context`로 구조화해 Explain · Fix Chain 프롬프트에 주입합니다. |
 
 ---
 
@@ -186,23 +186,25 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/FastAPI-Latest-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/FastAPI-0.136.1-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/LangChain-1.x-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" alt="LangChain">
-  <img src="https://img.shields.io/badge/LangGraph-create__agent-FF6F00?style=for-the-badge" alt="LangGraph">
-  <img src="https://img.shields.io/badge/RabbitMQ-aio--pika-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white" alt="aio-pika">
+  <img src="https://img.shields.io/badge/LangGraph-1.1.9_runtime-FF6F00?style=for-the-badge" alt="LangGraph">
+  <img src="https://img.shields.io/badge/RabbitMQ-9.6.2_aio--pika-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white" alt="aio-pika">
 </p>
 
 | Category | Stack |
 | --- | --- |
-| Language | Python 3.11+ |
-| Framework | FastAPI + Uvicorn |
-| Orchestration | LangChain 1.x + LangGraph (`create_agent`) |
-| LLM Providers | `LLM_PROVIDER` 3종: `anthropic` (Claude) / `ollama` (로컬) / `gms` (운영, OpenAI-compatible 포함) |
-| Messaging | pika + aio-pika (RabbitMQ consumer) |
-| Validation | Pydantic |
-| Storage | boto3 (S3) |
+| Language | Python 3.11 (`python:3.11-slim` 컨테이너) |
+| Framework | FastAPI 0.136.1 + Uvicorn 0.46.0 |
+| Orchestration | LangChain 1.2.15 `create_agent` (→ LangGraph 1.1.9 `CompiledStateGraph` 런타임) |
+| LLM Providers | `LLM_PROVIDER` 3종: `ollama` (로컬) / `gms` (운영, OpenAI-compatible 포함) / `anthropic` (Claude) |
+| LLM 통합 | `langchain-ollama` 1.1.0 (ChatOllama) / `langchain-anthropic` 1.4.3 (ChatAnthropic) / `langchain-openai` 1.2.1 (ChatOpenAI) |
+| Messaging | pika 1.3.2 + aio-pika 9.6.2 (RabbitMQ consumer) |
+| HTTP Client | httpx 0.28.1 (NVD · HasData 등 외부 API 호출), urllib (Worker → FastAPI / Spring callback) |
+| Validation | Pydantic 2.13.3 |
+| Storage | boto3 1.43.2 (S3) |
 | External Tools | NVD CVE API, HasData SERP API |
-| Operational | 운영은 GMS gpt-5-mini, 검증은 Claude, 로컬은 Ollama |
+
 
 ### CLI
 
@@ -249,7 +251,6 @@
   <img src="https://img.shields.io/badge/Nginx-Reverse_Proxy-009639?style=for-the-badge&logo=nginx&logoColor=white" alt="Nginx">
   <img src="https://img.shields.io/badge/Jenkins-CI/CD-D24939?style=for-the-badge&logo=jenkins&logoColor=white" alt="Jenkins">
   <img src="https://img.shields.io/badge/AWS_S3-Storage-569A31?style=for-the-badge&logo=amazons3&logoColor=white" alt="S3">
-  <img src="https://img.shields.io/badge/CloudWatch-Logs-FF4F8B?style=for-the-badge&logo=amazoncloudwatch&logoColor=white" alt="CloudWatch">
 </p>
 
 | Category | Stack |
@@ -260,7 +261,6 @@
 | SSL | Let's Encrypt (Certbot) |
 | CI/CD | Jenkins |
 | Storage | AWS S3 |
-| Monitoring | CloudWatch Logs |
 | Domain | k14b105.p.ssafy.io / ssafer.co.kr |
 
 ---
@@ -271,10 +271,10 @@
 
 ```
 [웹 업로드 경로]
-브라우저 → Nginx → Spring → ssafer-engine (FastAPI + Trivy) → scan_result.json → S3
+브라우저 → Nginx → Spring → ssafer-engine (FastAPI + Trivy) → S3
 
 [CLI 경로]
-로컬 CLI → Trivy + Custom Rule + Masking → scan_result.json → S3 → Spring
+로컬 CLI → Trivy + Custom Rule + Masking → S3 → Spring
 
 [공통 분석 흐름]
 Spring → RabbitMQ publish (scan_request)
@@ -283,8 +283,8 @@ Spring → RabbitMQ publish (scan_request)
       → FastAPI /analyze
       → LangGraph Agent (CVE OR HIGH/CRITICAL일 때만)
             ├─ search_cve (NVD)
-            ├─ analyze_code_context
-            └─ search_web (HasData)
+            ├─ search_web (HasData)
+            └─ analyze_code_context
       → Explain → Fix → Verify Chain
       → analysis_result.json → S3
       → Spring callback (DONE/FAILED)
@@ -406,20 +406,20 @@ ssafer apply
     </td>
   </tr>
   <tr>
-    <td align="center"><sub>팀장</sub></td>
-    <td align="center"><sub>백엔드</sub></td>
-    <td align="center"><sub>백엔드</sub></td>
-    <td align="center"><sub>풀스택</sub></td>
+    <td align="center"><sub>Infrastructure</sub></td>
+    <td align="center"><sub>Backend</sub></td>
+    <td align="center"><sub>Backend</sub></td>
+    <td align="center"><sub>Full Stack</sub></td>
     <td align="center"><sub>CLI</sub></td>
-    <td align="center"><sub>인프라</sub></td>
+    <td align="center"><sub>AI</sub></td>
   </tr>
   <tr>
-    <td align="center"><sub>프로젝트 총괄, 일정 관리, AI 파이프라인 / Agent 설계</sub></td>
+    <td align="center"><sub>프로젝트 총괄, 일정 관리, EC2 2대 분리 구성, Jenkins CI/CD, Nginx + Certbot, ssafer-engine 컨테이너 분리</sub></td>
     <td align="center"><sub>스캔 · 결과 API, RabbitMQ 워커 dispatch, SSE 발행, 인증/인가</sub></td>
     <td align="center"><sub>Local Agent Raw WebSocket 채널, 패치 승인 API, 히스토리 비교, JPA 설계</sub></td>
     <td align="center"><sub>전체 프론트엔드 + 일부 백엔드, 결과 탐색 UI, SSE/폴링 구독, 페이지 라우팅 설계</sub></td>
     <td align="center"><sub>CLI 명령어 체계, Custom Rule 엔진, 마스킹 정책, Local Agent, PyPI 배포</sub></td>
-    <td align="center"><sub>EC2 2대 분리 구성, Jenkins CI/CD, Nginx + Certbot, ssafer-engine 컨테이너 분리</sub></td>
+    <td align="center"><sub>AI 분석 파이프라인 설계, LangChain → LangGraph Agent, Tool-calling, RabbitMQ AI Worker</sub></td>
   </tr>
 </table>
 
