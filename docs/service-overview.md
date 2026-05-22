@@ -181,15 +181,11 @@
 | Database | PostgreSQL (JPA + Flyway 마이그레이션) |
 | TTL Store | Redis (refresh token, email/password verification codes) |
 | Messaging | Spring AMQP (RabbitMQ) |
-| Async Reliability | `worker_jobs` 기반 작업 추적 + `@Scheduled` 재발행 |
 | Real-time | SSE (scan status) + Raw WebSocket (Agent heartbeat, TASK_AVAILABLE notification) |
 | Security | Spring Security, JWT (jjwt), Custom OAuth2 Login, Agent token, Worker secret |
-| Security Design | Path-based SecurityFilterChain |
 | Scheduler | `@Scheduled` 기반 `WorkerJobRepublishScheduler` (Spring Batch 미사용) |
 | Storage | AWS S3 SDK v2 |
-| Result Ingestion | S3 `analysis_result.json` → `scan_nodes` / `scan_findings` 적재 |
 | API Docs | springdoc-openapi 3.0.2 |
-| Monitoring | Spring Boot Actuator |
 | IDE | IntelliJ IDEA |
 
 ### AI
