@@ -98,10 +98,14 @@
 ### 🔄 비동기 분석 파이프라인
 - **RabbitMQ + AI Worker**: Spring이 HTTP 동기 호출 대신 RabbitMQ로 작업을 dispatch하고, AI Worker가 consume → FastAPI 호출 → callback하는 구조로 분석 시간이 길어도 커넥션 점유 문제가 없습니다.
 - **재시도 정책 정교화**: 409 Conflict 등 영구 에러는 `requeue=False`, timeout · 5xx만 `requeue=True`로 처리해 무한 재처리 루프를 차단했습니다.
+- **worker_jobs 기반 작업 추적**: 분석 요청을 RabbitMQ 메시지로만 흘려보내지 않고 DB의 `worker_jobs`에 상태를 남깁니다. publish / running / succeeded / failed 상태를 추적해 Worker callback 검증과 장애 복구의 기준점으로 사용합니다.
+- **재발행 스케줄러**: `WorkerJobRepublishScheduler`가 오래된 published job을 주기적으로 찾아 재발행해, 일시적인 MQ publish 실패나 Worker 누락 상황에서도 작업을 복구할 수 있게 했습니다.
 
 ### 📡 실시간 진행 상태 통지
 - **폴링 + SSE 이중 구조**: 기본 5초 폴링으로 안정성을 확보하고, SSE 완료 · 실패 이벤트 수신 시 즉시 새로고침을 트리거해 실시간성을 확보했습니다.
 - **Raw WebSocket Agent 채널**: Local Agent와 백엔드 사이의 Task 알림은 Spring의 raw WebSocket handler 위에서 자체 정의한 CONNECT / PING / PONG 메시지를 주고받는 방식으로 처리합니다. STOMP/SockJS 같은 상위 프로토콜에 묶이지 않아 Python Agent에서 가볍게 구현할 수 있습니다.
+- **커밋 이후 SSE 발행**: DONE / FAILED 상태 전이를 DB에 반영한 뒤 SSE 이벤트를 발행해, 프론트가 이벤트 수신 직후 재조회해도 최신 상태를 읽을 수 있게 했습니다.
+- **알림과 작업 조회 분리**: WebSocket은 Agent 연결 상태와 `TASK_AVAILABLE` 알림에 집중하고, 실제 pending task 조회와 `patchResults` 보고는 internal Agent API로 분리해 메시지 유실과 재시도 처리를 단순화했습니다.
 
 ### 🧠 LangGraph 기반 Tool-calling Agent
 - **조건부 Agent 호출**: `AGENT_ENABLED && (CVE 존재 || severity ∈ {HIGH, CRITICAL})`일 때만 Agent를 활성화해 LLM 비용을 절감합니다.
@@ -114,6 +118,7 @@
 ### 🔧 patchContext 안전 계약
 - **CLI ↔ AI ↔ Agent 3자 계약**: CLI가 `oldText` · `expectedFileHash`를 만들면 AI는 `newText`만 생성하고, Local Agent가 파일 적용 직전 hash를 다시 검증합니다.
 - **3중 안전장치**: (1) 사용자 승인, (2) `expectedFileHash` 일치, (3) 백업 파일 생성 후 적용. 프로젝트 루트 밖 파일 접근은 차단됩니다.
+- **PATCH_APPLY task 추적**: 사용자가 패치를 승인하면 백엔드는 finding을 승인 상태로 전환하고 `PATCH_APPLY` Agent task를 생성합니다. Agent의 `patchResults` 보고를 받아 성공/실패, 백업 메타데이터, 적용 시각을 finding에 반영합니다.
 
 ---
 
@@ -174,12 +179,17 @@
 | Framework | Spring Boot 4.0.5 |
 | Build Tool | Maven |
 | Database | PostgreSQL (JPA + Flyway 마이그레이션) |
-| Cache / Session | Redis |
+| TTL Store | Redis (refresh token, email/password verification codes) |
 | Messaging | Spring AMQP (RabbitMQ) |
-| Real-time | Raw WebSocket Handler (Agent 채널, CONNECT / PING / PONG 자체 정의) + SSE (프론트 통지) |
-| Security | Spring Security, JWT (jjwt), OAuth2 (Google / GitHub) |
+| Async Reliability | `worker_jobs` 기반 작업 추적 + `@Scheduled` 재발행 |
+| Real-time | SSE (scan status) + Raw WebSocket (Agent heartbeat, TASK_AVAILABLE notification) |
+| Security | Spring Security, JWT (jjwt), Custom OAuth2 Login, Agent token, Worker secret |
+| Security Design | Path-based SecurityFilterChain |
 | Scheduler | `@Scheduled` 기반 `WorkerJobRepublishScheduler` (Spring Batch 미사용) |
 | Storage | AWS S3 SDK v2 |
+| Result Ingestion | S3 `analysis_result.json` → `scan_nodes` / `scan_findings` 적재 |
+| API Docs | springdoc-openapi 3.0.2 |
+| Monitoring | Spring Boot Actuator |
 | IDE | IntelliJ IDEA |
 
 ### AI
