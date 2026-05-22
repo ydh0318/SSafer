@@ -127,6 +127,8 @@ services:
       APP_SCAN_RAW_S3_BUCKET: ${APP_SCAN_RAW_S3_BUCKET}
       APP_SCAN_RAW_S3_REGION: ${APP_SCAN_RAW_S3_REGION:-ap-northeast-2}
       SPRING_PROFILES_ACTIVE: local
+      TZ: UTC
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
     ports:
       - "8080:8080"
     networks:

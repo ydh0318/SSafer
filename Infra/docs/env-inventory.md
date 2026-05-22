@@ -1,4 +1,4 @@
-﻿# Environment Variable Inventory
+# Environment Variable Inventory
 
 `S14P31B105-160` 기준 운영 배포 환경변수 정리 문서입니다.
 
@@ -53,7 +53,7 @@ EC2 #1은 Spring, PostgreSQL, Redis, n8n, NGINX를 실행합니다.
 | `EMAIL_VERIFICATION_CODE_TTL_SECONDS` | spring | 인증 코드 TTL |
 | `EMAIL_VERIFICATION_COOLDOWN_SECONDS` | spring | 재전송 cooldown |
 | `EMAIL_VERIFICATION_VERIFIED_TTL_SECONDS` | spring | 인증 완료 상태 TTL |
-| `EC2_2_PRIVATE_IP` | spring compose | FastAPI 분석 서버 private IP |
+| `EC2_2_PUBLIC_IP` | spring compose | FastAPI 분석 서버 public IP (서로 다른 VPC 통신용) |
 | `INTERNAL_TOKEN` | spring, fastapi | 서버 간 내부 호출 공유 secret |
 | `N8N_ENCRYPTION_KEY` | n8n | n8n credentials 암호화 키 |
 | `N8N_DB_NAME` | postgres init, n8n | n8n 전용 DB 이름 |
@@ -79,7 +79,7 @@ EC2 #2는 FastAPI 분석 서버와 LLM cache Redis를 실행합니다.
 | `AWS_SECRET_ACCESS_KEY` | fastapi env | S3 secret |
 | `AWS_REGION` | fastapi env | AWS region |
 | `AWS_S3_BUCKET` | fastapi env | EC2 #1과 동일 bucket |
-| `EC2_1_PRIVATE_IP` | fastapi compose | Spring callback 대상 private IP |
+| `EC2_1_PUBLIC_IP` | fastapi compose | Spring callback 대상 public IP (RABBITMQ_HOST 및 SPRING_BASE_URL에 반영) |
 | `INTERNAL_TOKEN` | spring, fastapi | 서버 간 내부 호출 공유 secret |
 | `FASTAPI_IMAGE` | compose | Jenkins가 push한 FastAPI image |
 
@@ -164,7 +164,7 @@ EMAIL_FROM_ADDRESS
 EMAIL_VERIFICATION_CODE_TTL_SECONDS
 EMAIL_VERIFICATION_COOLDOWN_SECONDS
 EMAIL_VERIFICATION_VERIFIED_TTL_SECONDS
-EC2_2_PRIVATE_IP
+EC2_2_PUBLIC_IP
 INTERNAL_TOKEN
 N8N_ENCRYPTION_KEY
 N8N_EDITOR_BASE_URL
@@ -172,4 +172,4 @@ SPRING_IMAGE
 NGINX_IMAGE
 ```
 
-EC2 #2가 아직 없으면 `EC2_2_PRIVATE_IP`는 임시 private IP placeholder로 둘 수 있지만, Spring이 실제 분석 요청을 보내는 기능은 동작하지 않습니다.
+EC2 #2가 아직 없으면 `EC2_2_PUBLIC_IP`는 임시 public IP placeholder로 둘 수 있지만, Spring이 실제 분석 요청을 보내는 기능은 동작하지 않습니다.

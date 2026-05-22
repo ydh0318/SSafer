@@ -2,7 +2,7 @@
 
 > **당신의 코드가 세상에 안전하게 닿도록.**
 
-**SSAfer**는 프로젝트의 Docker · 환경 변수 · 서버 설정 같은 인프라 보안 취약점을 결정론적으로 탐지하고, AI가 사람이 이해할 수 있는 설명과 수정안으로 변환한 뒤, 사용자가 승인하면 Local Agent가 실제 파일을 안전하게 수정하는 작업형 보안 코파일럿입니다.
+**SSAfer**는 프로젝트의 Docker · 환경 변수 · 서버 설정 같은 인프라 보안 취약점을 결정론적으로 탐지하고, AI가 사람이 이해할 수 있는 설명과 수정안으로 변환한 뒤, 사용자가 승인하면 Local Agent가 실제 파일을 안전하게 수정하는 자율 실행형 보안 에이전트(Agent)입니다.
 
 > _"1명이 없어도, 6명 모두가 안전하도록."_  
 > 결정론적 탐지 + 마스킹 + 구조화된 프롬프트 = 재현 가능한 보안 조언
@@ -261,13 +261,14 @@
 
 | Category | Stack |
 | --- | --- |
-| Compute | AWS Lightsail (EC2 #1: 서비스) + AWS EC2 t3.large (EC2 #2: 분석) |
+| Compute | AWS EC2 (EC2 #1: 서비스) + AWS EC2 t3.large (EC2 #2: 분석) |
 | Container | Docker, Docker Compose |
 | Web Server | Nginx (SSE 패스스루) |
 | SSL | Let's Encrypt (Certbot) |
 | CI/CD | Jenkins |
 | Storage | AWS S3 |
 | Domain | k14b105.p.ssafy.io / ssafer.co.kr |
+| Timezone | Spring Boot (UTC 강제) / n8n (KST) 타임존 이원화 구성 |
 
 ---
 
@@ -420,7 +421,7 @@ ssafer apply
     <td align="center"><sub>AI</sub></td>
   </tr>
   <tr>
-    <td align="center"><sub>프로젝트 총괄, 일정 관리, EC2 2대 분리 구성, Jenkins CI/CD, Nginx + Certbot, ssafer-engine 컨테이너 분리</sub></td>
+    <td align="center"><sub>프로젝트 총괄 및 일정 관리, 2-EC2 격리 아키텍처 설계 (VPC/계정 격리 및 UFW 화이트리스트 접근 제어), Jenkins CI/CD 자동화 파이프라인 구축, Nginx 리버스 프록시 및 Certbot SSL 도입, n8n MR 리뷰 자동화 인프라 구축, 스캔 엔진(ssafer-engine) 컨테이너 분리 및 보안 위협 완화, 서비스 내 타임존(UTC/KST) 정합성 설계</sub></td>
     <td align="center"><sub>스캔 · 결과 API, RabbitMQ 워커 dispatch, SSE 발행, 인증/인가</sub></td>
     <td align="center"><sub>Local Agent Raw WebSocket 채널, 패치 승인 API, 히스토리 비교, JPA 설계</sub></td>
     <td align="center"><sub>전체 프론트엔드 + 일부 백엔드, 결과 탐색 UI, SSE/폴링 구독, 페이지 라우팅 설계</sub></td>
