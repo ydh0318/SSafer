@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 import { Bot, FolderUp, Terminal } from 'lucide-react';
-import type { ReactNode } from 'react';
 
 import RevealOnScroll from '../../home/components/primitives/RevealOnScroll';
 import { revealItemVariants } from '../../home/components/primitives/revealVariants';
@@ -17,8 +16,6 @@ type ModeConfig = {
   id: ScanModeOption;
   icon: typeof FolderUp;
   title: string;
-  description: string;
-  chips: string[];
 };
 
 const MODES: ModeConfig[] = [
@@ -26,36 +23,18 @@ const MODES: ModeConfig[] = [
     id: 'UPLOAD',
     icon: FolderUp,
     title: '파일 업로드',
-    description: '설정 파일을 바로 올려서 빠르게 결과 확인. CLI 설치 없이 브라우저에서 바로 가능.',
-    chips: ['.env', 'docker-compose.yml', 'Dockerfile', 'sshd_config'],
   },
   {
     id: 'CLI',
     icon: Terminal,
     title: 'CLI',
-    description: '로컬에서 전체 프로젝트 스캔. 파일 권한, 볼륨 마운트, 포트 공개 여부까지 검사.',
-    chips: ['pip install ssafer', 'ssafer run --upload'],
   },
   {
     id: 'AGENT',
     icon: Bot,
     title: 'Agent',
-    description: '로컬 Agent를 연결해서 실제 서버 런타임 환경 기준으로 점검합니다.',
-    chips: ['프로젝트 파일', '서버 런타임'],
   },
 ];
-
-function Chip({ children, selected }: { children: ReactNode; selected: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-1 font-mono text-[11px] transition-colors duration-300 landing-inner-radius ${
-        selected ? 'bg-white/[0.08] text-white/70' : 'bg-[#F5F4EF] text-neutral-600'
-      }`}
-    >
-      {children}
-    </span>
-  );
-}
 
 function ScanModePicker({ selectedMode, onSelect, isAgentAvailable }: ScanModePickerProps) {
   return (
@@ -71,8 +50,7 @@ function ScanModePicker({ selectedMode, onSelect, isAgentAvailable }: ScanModePi
           return (
             <motion.button
               aria-pressed={isSelected}
-              aria-describedby={isDisabled ? `scan-mode-${mode.id}-reason` : undefined}
-              className={`group relative flex min-h-[240px] flex-col overflow-hidden border p-6 text-left transition-all duration-300 ease-out landing-card-radius ${
+              className={`group relative flex min-h-[128px] flex-col overflow-hidden border p-5 text-left transition-all duration-300 ease-out landing-card-radius ${
                 isDisabled
                   ? 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-500 opacity-85 grayscale'
                   : isSelected
@@ -98,38 +76,12 @@ function ScanModePicker({ selectedMode, onSelect, isAgentAvailable }: ScanModePi
               </div>
 
               <h3
-                className={`mt-7 text-xl font-black tracking-tight transition-colors duration-300 ${
+                className={`mt-4 text-xl font-black tracking-tight transition-colors duration-300 ${
                   isDisabled ? 'text-neutral-500' : isSelected ? 'text-white' : 'text-[#0F0F0F]'
                 }`}
               >
                 {mode.title}
               </h3>
-              <p
-                className={`mt-2 text-sm leading-relaxed transition-colors duration-300 ${
-                  isDisabled ? 'text-neutral-500' : isSelected ? 'text-white/60' : 'text-neutral-500'
-                }`}
-              >
-                {isDisabled ? '아래 명령으로 Agent를 연결하세요.' : mode.description}
-              </p>
-
-              {isDisabled && mode.id === 'AGENT' ? (
-                <div className="mt-4" id={`scan-mode-${mode.id}-reason`}>
-                  <div className="rounded-xl bg-black px-4 py-3 font-mono text-xs leading-6 text-[#D4FC64]">
-                    <div>ssafer login</div>
-                    <div>ssafer agent</div>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="mt-auto pt-5">
-                <div className="flex flex-wrap gap-1.5">
-                  {mode.chips.map((chip) => (
-                    <Chip key={chip} selected={isSelected}>
-                      {chip}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
             </motion.button>
           );
         })}

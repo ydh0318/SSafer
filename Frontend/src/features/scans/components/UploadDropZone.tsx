@@ -116,9 +116,18 @@ function UploadDropZone({ files, onFilesChange, onFileLimitExceeded, isDragOver,
       <h2 className="mt-6 text-xl font-black tracking-tight text-[#0F0F0F] md:text-2xl">
         파일을 여기에 드래그하거나 클릭해서 선택
       </h2>
-      <p className="mt-2.5 max-w-md text-sm leading-relaxed text-neutral-500">
-        docker-compose.yml, .env, Dockerfile, sshd_config 등 보안 설정이 들어있는 파일을 올려주세요.
-      </p>
+
+      <div className="mt-4 flex max-w-2xl flex-wrap items-center justify-center gap-2">
+        <span className="text-xs font-bold uppercase tracking-[0.16em] text-neutral-500">허용 파일</span>
+        {['.env', 'docker-compose.yml', 'Dockerfile', 'sshd_config', 'nginx.conf'].map((fileType) => (
+          <span
+            className="inline-flex items-center rounded-full border border-neutral-200 bg-white px-3 py-1.5 font-mono text-[11px] font-bold text-black"
+            key={fileType}
+          >
+            {fileType}
+          </span>
+        ))}
+      </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.16em] text-neutral-400">
         <span>
