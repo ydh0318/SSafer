@@ -97,8 +97,8 @@ export const setupInterceptors = (client: AxiosInstance) => {
       ) {
         clearSessionWithMessage(useAuthStore.getState().logout);
 
-        if (typeof window !== 'undefined' && window.location.pathname !== ROUTES.login) {
-          window.location.assign(ROUTES.login);
+        if (typeof window !== 'undefined' && window.location.pathname !== ROUTES.welcome) {
+          window.location.assign(ROUTES.welcome);
         }
 
         return Promise.reject(error);
@@ -128,8 +128,8 @@ export const setupInterceptors = (client: AxiosInstance) => {
         clearSessionWithMessage(useAuthStore.getState().logout);
 
         if (typeof window !== 'undefined') {
-          if (window.location.pathname !== ROUTES.login) {
-            window.location.assign(ROUTES.login);
+          if (window.location.pathname !== ROUTES.welcome) {
+            window.location.assign(ROUTES.welcome);
           }
         }
 

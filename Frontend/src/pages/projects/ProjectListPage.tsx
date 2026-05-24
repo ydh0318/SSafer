@@ -578,104 +578,101 @@ function ProjectListPage() {
       </header>
 
       <section className="space-y-3 pt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-neutral-500">프로젝트</div>
-          <button
-            className="inline-flex items-center gap-2 rounded-full bg-black px-4 py-2 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800"
-            onClick={() => {
-              setIsProjectDropdownOpen(false);
-              setProjectSearchTerm('');
-              setIsCreateOpen(true);
-            }}
-            type="button"
-          >
-            <FolderPlus className="h-4 w-4" />
-            새 프로젝트 만들기
-          </button>
-        </div>
-
         {isLoading ? (
           <div className="bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">프로젝트 목록을 불러오는 중입니다.</div>
         ) : loadError ? (
           <PageBanner message={loadError} tone="error" />
         ) : (
-          <div className="relative max-w-xl" ref={projectSelectRef}>
+          <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
             <button
-              className="flex min-h-[112px] w-full items-center justify-between gap-4 border border-neutral-200 bg-white px-6 py-5 text-left transition landing-card-radius hover:border-black"
-              onClick={() => setIsProjectDropdownOpen((current) => !current)}
+              aria-label="새 프로젝트 만들기"
+              className="flex min-h-[112px] w-full items-center justify-center border border-dashed border-neutral-300 bg-neutral-50 transition landing-card-radius hover:border-black hover:bg-white"
+              onClick={() => {
+                setIsProjectDropdownOpen(false);
+                setProjectSearchTerm('');
+                setIsCreateOpen(true);
+              }}
               type="button"
             >
-              <div className="min-w-0">
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Project</p>
-                <p className="mt-1 truncate text-xl font-black text-black">
-                  {selectedProject ? selectedProject.name : '프로젝트를 선택하세요'}
-                </p>
-                {selectedProject ? (
-                  <p className="mt-2 text-xs font-bold text-neutral-500">projectId #{selectedProject.id}</p>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                {selectedProject ? (() => {
-                  const agentDisplay = getAgentDisplay(selectedProject, agentStatusMap[selectedProject.id] ?? null, true);
-                  return <span className={`hidden text-sm font-bold sm:inline ${agentDisplay.className}`}>{agentDisplay.label}</span>;
-                })() : null}
-                <ChevronDown className={`h-5 w-5 text-neutral-400 transition ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
+              <div className="flex h-14 w-14 items-center justify-center border border-neutral-900 bg-black text-white transition landing-inner-radius hover:scale-[1.03]">
+                <FolderPlus className="h-7 w-7" />
               </div>
             </button>
 
-            {isProjectDropdownOpen ? (
-              <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden border border-neutral-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.16)] landing-card-radius">
-                <div className="border-b border-neutral-100 p-3">
-                  <label className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm focus-within:border-black focus-within:bg-white">
-                    <Search className="h-4 w-4 text-neutral-400" />
-                    <input
-                      autoFocus
-                      className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-black outline-none placeholder:text-neutral-400"
-                      onChange={(event) => setProjectSearchTerm(event.target.value)}
-                      placeholder="프로젝트 이름 또는 ID 검색"
-                      type="text"
-                      value={projectSearchTerm}
-                    />
-                  </label>
+            <div className="relative" ref={projectSelectRef}>
+              <button
+                className="flex min-h-[112px] w-full items-center justify-between gap-4 border border-neutral-200 bg-white px-6 py-5 text-left transition landing-card-radius hover:border-black"
+                onClick={() => setIsProjectDropdownOpen((current) => !current)}
+                type="button"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-xl font-black text-black">
+                    {selectedProject ? selectedProject.name : '프로젝트를 선택하세요'}
+                  </p>
                 </div>
-
-                <div className="max-h-72 overflow-y-auto p-2">
-                  {filteredProjects.length > 0 ? (
-                    filteredProjects.map((project) => {
-                      const isSelected = project.id === selectedProjectId;
-                      const agentDisplay = getAgentDisplay(project, agentStatusMap[project.id] ?? null, isSelected);
-
-                      return (
-                        <button
-                          className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition ${
-                            isSelected ? 'bg-black text-white' : 'text-black hover:bg-neutral-50'
-                          }`}
-                          key={project.id}
-                          onClick={() => {
-                            setSelectedProjectId(project.id);
-                            setProjectSearchTerm('');
-                            setIsProjectDropdownOpen(false);
-                          }}
-                          type="button"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-black">{project.name}</p>
-                          </div>
-                          <span className={`shrink-0 text-xs font-bold ${agentDisplay.className}`}>{agentDisplay.label}</span>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="px-3 py-5 text-center text-sm text-neutral-500">검색 결과가 없습니다.</div>
-                  )}
+                <div className="flex shrink-0 items-center gap-3">
+                  {selectedProject ? (() => {
+                    const agentDisplay = getAgentDisplay(selectedProject, agentStatusMap[selectedProject.id] ?? null, true);
+                    return <span className={`hidden text-sm font-bold sm:inline ${agentDisplay.className}`}>{agentDisplay.label}</span>;
+                  })() : null}
+                  <ChevronDown className={`h-5 w-5 text-neutral-400 transition ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
                 </div>
-              </div>
-            ) : null}
+              </button>
+
+              {isProjectDropdownOpen ? (
+                <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden border border-neutral-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.16)] landing-card-radius">
+                  <div className="border-b border-neutral-100 p-3">
+                    <label className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm focus-within:border-black focus-within:bg-white">
+                      <Search className="h-4 w-4 text-neutral-400" />
+                      <input
+                        autoFocus
+                        className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-black outline-none placeholder:text-neutral-400"
+                        onChange={(event) => setProjectSearchTerm(event.target.value)}
+                        placeholder="프로젝트 이름 또는 ID 검색"
+                        type="text"
+                        value={projectSearchTerm}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto p-2">
+                    {filteredProjects.length > 0 ? (
+                      filteredProjects.map((project) => {
+                        const isSelected = project.id === selectedProjectId;
+                        const agentDisplay = getAgentDisplay(project, agentStatusMap[project.id] ?? null, isSelected);
+
+                        return (
+                          <button
+                            className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition ${
+                              isSelected ? 'bg-black text-white' : 'text-black hover:bg-neutral-50'
+                            }`}
+                            key={project.id}
+                            onClick={() => {
+                              setSelectedProjectId(project.id);
+                              setProjectSearchTerm('');
+                              setIsProjectDropdownOpen(false);
+                            }}
+                            type="button"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-black">{project.name}</p>
+                            </div>
+                            <span className={`shrink-0 text-xs font-bold ${agentDisplay.className}`}>{agentDisplay.label}</span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="px-3 py-5 text-center text-sm text-neutral-500">검색 결과가 없습니다.</div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
 
         {selectedProject ? (
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <button
               className="inline-flex items-center gap-2 rounded-full border border-neutral-300 px-3.5 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:text-black"
               onClick={() => navigate(ROUTES.projectDetail.replace(':projectId', selectedProject.id))}
@@ -717,24 +714,18 @@ function ProjectListPage() {
           />
         ) : (
           <div className="min-h-[340px] bg-white p-7 landing-card-radius md:p-8">
-            <p className="font-mono text-[11px] tracking-[0.24em] text-neutral-400">{selectedMode}</p>
-            <h2 className="mt-3 text-xl font-black tracking-tight md:text-2xl">
-              {selectedMode === 'CLI' ? '터미널에서 스캔하고 결과를 올립니다' : 'Agent가 연결된 환경에서 스캔을 시작합니다'}
-            </h2>
-            <p className="mt-2 max-w-xl text-sm leading-7 text-neutral-500">
-              {selectedMode === 'CLI'
-                ? '웹 버튼으로 실행하지 않고, 아래 명령어를 프로젝트 루트 터미널에서 직접 실행합니다.'
-                : 'Agent 스캔은 스캔 실행과 결과 업로드를 한 번에 처리합니다.'}
-            </p>
-
             {selectedMode === 'CLI' ? (
-              <div className="mt-7">
+              <div>
                 <CliGuideBox mode="CLI_UPLOAD" />
               </div>
             ) : null}
 
             {selectedMode === 'AGENT' && (
-              <div className="mt-6">
+              <div>
+                <div className="mb-4 border border-neutral-200 bg-neutral-50 px-4 py-3 landing-inner-radius">
+                  <p className="text-sm font-black text-black">Agent 준비</p>
+                  <p className="mt-1 text-sm text-neutral-500">`ssafer login` 후 `ssafer agent`를 실행하면 웹에서 Agent 스캔을 시작할 수 있습니다.</p>
+                </div>
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">스캔 유형 선택</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
