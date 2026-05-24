@@ -1,13 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, BarChart3, Loader2, RotateCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import PageBanner from '../../components/common/PageBanner';
 import { ROUTES } from '../../constants/routes';
-import { getProjectAgentStatus } from '../../features/agents/api/agents';
-import { useToast } from '../../features/feedback/useToast';
-import { getProjectDetail } from '../../features/projects/api/projects';
 import LatestResultCard from '../../features/projects/components/LatestResultCard';
 import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
 import ProjectDetailHero from '../../features/projects/components/ProjectDetailHero';
@@ -15,52 +12,43 @@ import ProjectDetailTabs, { type ProjectDetailTab } from '../../features/project
 import ProjectScanTimeline from '../../features/projects/components/ProjectScanTimeline';
 import ProjectSettingsPanel from '../../features/projects/components/ProjectSettingsPanel';
 import QuickActionCard from '../../features/projects/components/QuickActionCard';
+import useProjectAgentStatus from '../../features/projects/hooks/useProjectAgentStatus';
 import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
-import { getScanSummary } from '../../features/results/api/results';
+import useProjectDetailData from '../../features/projects/hooks/useProjectDetailData';
+import useProjectScans from '../../features/projects/hooks/useProjectScans';
 import ScanStatusBadge from '../../features/scans/components/ScanStatusBadge';
 import ScanTypeBadge from '../../features/scans/components/ScanTypeBadge';
-import {
-  deleteScanHistory,
-  getProjectScans,
-} from '../../features/scans/api/scans';
 import { formatCompactDateTime, getScanModeLabel } from '../../features/scans/utils/scanPresentation';
 import { useAuthStore } from '../../store/authStore';
-import type { ProjectDetailResponseData } from '../../types/project';
-import type {
-  AgentStatusResponseData,
-  ProjectScanListItemData,
-  ProjectScanListQuery,
-  ScanSummaryData,
-} from '../../types/scan';
 
 function ProjectDetailPage() {
   const navigate = useNavigate();
   const { projectId = '' } = useParams<{ projectId: string }>();
-  const toast = useToast();
   const user = useAuthStore((state) => state.user);
 
-  const [projectDetail, setProjectDetail] = useState<ProjectDetailResponseData | null>(null);
-  const [projectError, setProjectError] = useState<string | null>(null);
-  const [isProjectLoading, setIsProjectLoading] = useState(true);
-
-  const [agentStatus, setAgentStatus] = useState<AgentStatusResponseData | null>(null);
-  const [agentError, setAgentError] = useState<string | null>(null);
-  const [isAgentLoading, setIsAgentLoading] = useState(true);
-
-  const [scanFilters, setScanFilters] = useState<ProjectScanListQuery>({
-    page: 0,
-    size: 20,
-    status: '',
-    scanMode: '',
-  });
-  const [scans, setScans] = useState<ProjectScanListItemData[]>([]);
-  const [scanListError, setScanListError] = useState<string | null>(null);
-  const [scanListNotice, setScanListNotice] = useState<string | null>(null);
-  const [isScanListLoading, setIsScanListLoading] = useState(true);
-  const [deletingScanIds, setDeletingScanIds] = useState<number[]>([]);
-
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>('recent');
-  const [latestScanSummary, setLatestScanSummary] = useState<ScanSummaryData | null>(null);
+  const isGuest = user?.role === 'GUEST';
+
+  const { isProjectLoading, projectDetail, projectError } = useProjectDetailData(projectId);
+  const { agentError, agentStatus, isAgentLoading, refreshAgentStatus } = useProjectAgentStatus({
+    isGuest,
+    projectId,
+  });
+  const {
+    activeScans,
+    completedScans,
+    deleteScan,
+    deletingScanIds,
+    failedScans,
+    isScanListLoading,
+    latestScan,
+    latestScanSummary,
+    refreshScans,
+    scanFilters,
+    scanListError,
+    scans,
+    setScanFilters,
+  } = useProjectScans(projectId);
 
   const {
     closeDeleteModal,
@@ -76,244 +64,18 @@ function ProjectDetailPage() {
     },
   });
 
-  const activeScans = scans.filter((scan) => ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED'].includes(scan.status));
-  const completedScans = scans.filter((scan) => scan.status === 'DONE');
-  const failedScans = scans.filter((scan) => scan.status === 'FAILED' || scan.status === 'CANCELED');
-
-  const latestCompletedScanId = completedScans[0]?.scanId ?? null;
-
-  useEffect(() => {
-    if (!latestCompletedScanId) {
-      setLatestScanSummary(null);
-      return;
-    }
-
-    let isMounted = true;
-
-    getScanSummary(latestCompletedScanId)
-      .then((summary) => {
-        if (isMounted) {
-          setLatestScanSummary(summary);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setLatestScanSummary(null);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [latestCompletedScanId]);
-
-  useEffect(() => {
-    if (!scanListNotice) {
-      return;
-    }
-
-    toast.success(scanListNotice, { durationMs: 2000 });
-    setScanListNotice(null);
-  }, [scanListNotice, toast]);
-
-  useEffect(() => {
-    if (!projectId) {
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadProject = async () => {
-      setIsProjectLoading(true);
-      setProjectError(null);
-
-      try {
-        const data = await getProjectDetail(projectId);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setProjectDetail(data);
-      } catch (error) {
-        if (isMounted) {
-          setProjectError(error instanceof Error ? error.message : '프로젝트 상세 정보를 불러오지 못했습니다.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsProjectLoading(false);
-        }
-      }
-    };
-
-    void loadProject();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId]);
-
-  useEffect(() => {
-    if (!projectId) {
-      return;
-    }
-
-    if (user?.role === 'GUEST') {
-      setAgentStatus(null);
-      setAgentError(null);
-      setIsAgentLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadAgentStatus = async () => {
-      setIsAgentLoading(true);
-      setAgentError(null);
-
-      try {
-        const data = await getProjectAgentStatus(projectId);
-
-        if (isMounted) {
-          setAgentStatus(data);
-        }
-      } catch (error) {
-        if (isMounted) {
-          setAgentStatus(null);
-          setAgentError(error instanceof Error ? error.message : '에이전트 상태를 불러오지 못했습니다.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsAgentLoading(false);
-        }
-      }
-    };
-
-    void loadAgentStatus();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId, user?.role]);
-
-  useEffect(() => {
-    if (!projectId) {
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadScans = async () => {
-      setIsScanListLoading(true);
-      setScanListError(null);
-
-      try {
-        const data = await getProjectScans(projectId, scanFilters);
-
-        if (isMounted) {
-          setScans(data.items);
-        }
-      } catch (error) {
-        if (isMounted) {
-          setScans([]);
-          setScanListError(error instanceof Error ? error.message : '스캔 목록을 불러오지 못했습니다.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsScanListLoading(false);
-        }
-      }
-    };
-
-    void loadScans();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId, scanFilters]);
-
-  const handleRefreshAgentStatus = async () => {
-    if (!projectId || user?.role === 'GUEST') {
-      setAgentStatus(null);
-      setAgentError(null);
-      setIsAgentLoading(false);
-      return;
-    }
-
-    setIsAgentLoading(true);
-    setAgentError(null);
-
-    try {
-      const data = await getProjectAgentStatus(projectId);
-      setAgentStatus(data);
-    } catch (error) {
-      setAgentStatus(null);
-      setAgentError(error instanceof Error ? error.message : '에이전트 상태를 불러오지 못했습니다.');
-    } finally {
-      setIsAgentLoading(false);
-    }
-  };
-
-  const handleRefreshScans = async () => {
-    if (!projectId) {
-      return;
-    }
-
-    setIsScanListLoading(true);
-    setScanListError(null);
-
-    try {
-      const data = await getProjectScans(projectId, scanFilters);
-      setScans(data.items);
-    } catch (error) {
-      setScans([]);
-      setScanListError(error instanceof Error ? error.message : '스캔 목록을 불러오지 못했습니다.');
-    } finally {
-      setIsScanListLoading(false);
-    }
-  };
-
-  const handleDeleteScan = async (scanId: number) => {
-    if (!projectId) {
-      return;
-    }
-
-    const shouldDelete = window.confirm(`스캔 #${scanId} 이력을 삭제할까요?`);
-
-    if (!shouldDelete) {
-      return;
-    }
-
-    setDeletingScanIds((current) => [...current, scanId]);
-    setScanListError(null);
-    setScanListNotice(null);
-
-    try {
-      await deleteScanHistory(scanId);
-
-      setScanListNotice(`스캔 #${scanId} 이력을 삭제했습니다.`);
-      await handleRefreshScans();
-    } catch (error) {
-      setScanListError(error instanceof Error ? error.message : '스캔 이력 삭제에 실패했습니다.');
-      setScanListNotice(null);
-    } finally {
-      setDeletingScanIds((current) => current.filter((value) => value !== scanId));
-    }
-  };
-
   if (!projectId) {
     return (
       <section className="space-y-4">
-        <p className="text-sm text-neutral-600">프로젝트 ID가 없습니다.</p>
+        <p className="text-sm text-neutral-600">Project ID is missing.</p>
         <Link className="inline-flex bg-black px-4 py-2 text-sm font-bold text-white" to={ROUTES.projects}>
-          프로젝트 목록으로 돌아가기
+          Back to projects
         </Link>
       </section>
     );
   }
 
   const agentIsOnline = agentStatus?.status === 'ONLINE';
-  const latestScan = completedScans[0] ?? null;
 
   const handleStartNewScan = () => {
     navigate(ROUTES.projects, { state: { focusProjectId: projectId } });
@@ -366,14 +128,14 @@ function ProjectDetailPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin text-sky-600" />
-                        <p className="text-sm font-black text-sky-950">현재 진행 중인 스캔</p>
+                        <p className="text-sm font-black text-sky-950">Active scans</p>
                       </div>
                       <p className="mt-1 text-xs text-sky-800">
-                        CLI 또는 Agent에서 업로드한 스캔이 처리 중입니다. 진행 상태 화면에서 현재 단계를 확인할 수 있습니다.
+                        CLI and agent-driven scans that are still in progress appear here first.
                       </p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-sky-700 shadow-sm">
-                      {activeScans.length}개 진행 중
+                      {activeScans.length} active
                     </span>
                   </div>
 
@@ -395,11 +157,11 @@ function ProjectDetailPage() {
                             {getScanModeLabel(scan.scanMode, scan.source)}
                           </span>
                           <span className="text-xs text-neutral-400">
-                            요청 {formatCompactDateTime(scan.requestedAt)}
+                            Requested {formatCompactDateTime(scan.requestedAt)}
                           </span>
                         </div>
                         <span className="inline-flex items-center gap-1.5 text-xs font-black text-sky-700">
-                          진행 상태 보기
+                          Open progress
                           <ArrowRight className="h-3.5 w-3.5" />
                         </span>
                       </Link>
@@ -417,21 +179,21 @@ function ProjectDetailPage() {
 
               <div className="grid gap-3 md:grid-cols-2">
                 <QuickActionCard
-                  description="같은 프로젝트로 새 스캔을 한 번 더 돌려서 변경사항을 확인해 보세요."
+                  description="Jump back to the project scan launcher with this project preselected."
                   icon={RotateCcw}
                   onClick={handleStartNewScan}
-                  title="다시 스캔"
+                  title="Start another scan"
                 />
                 <QuickActionCard
                   description={
                     completedScans.length >= 2
-                      ? '히스토리에서 두 스캔을 골라 신규·해결됨·심각도 변경을 확인합니다.'
-                      : '완료된 스캔이 2개 이상 쌓이면 비교할 수 있어요.'
+                      ? 'Compare completed scan results for the same project.'
+                      : 'You need at least two completed scans before comparison is available.'
                   }
                   disabled={completedScans.length < 2}
                   icon={BarChart3}
                   onClick={handleCompare}
-                  title="이전 결과와 비교"
+                  title="Compare results"
                 />
               </div>
             </div>
@@ -443,9 +205,9 @@ function ProjectDetailPage() {
               errorMessage={scanListError}
               filters={scanFilters}
               isLoading={isScanListLoading}
-              onDeleteScan={(scanId) => void handleDeleteScan(scanId)}
+              onDeleteScan={(scanId) => void deleteScan(scanId)}
               onFilterChange={setScanFilters}
-              onRefresh={() => void handleRefreshScans()}
+              onRefresh={() => void refreshScans()}
               projectId={projectId}
               scans={scans}
             />
@@ -461,7 +223,7 @@ function ProjectDetailPage() {
                   openDeleteModal({ id: projectId, name: projectDetail.name });
                 }
               }}
-              onRefreshAgent={() => void handleRefreshAgentStatus()}
+              onRefreshAgent={() => void refreshAgentStatus()}
               project={projectDetail}
               scanCount={scans.length}
             />

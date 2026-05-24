@@ -1,20 +1,20 @@
 import { AlertTriangle, ArrowRight, ChevronDown, Clock, FolderPlus, ScanSearch, Search, Trash2, Wrench } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import ModalFrame from '../../components/common/ModalFrame';
 import PageBanner from '../../components/common/PageBanner';
 import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
-import { getProjectAgentStatus } from '../../features/agents/api/agents';
 import { useToast } from '../../features/feedback/useToast';
-import { createProject, getProjects } from '../../features/projects/api/projects';
+import { createProject } from '../../features/projects/api/projects';
 import ProjectCreateForm from '../../features/projects/components/ProjectCreateForm';
 import ProjectDeleteModal from '../../features/projects/components/ProjectDeleteModal';
 import useProjectDeleteFlow from '../../features/projects/hooks/useProjectDeleteFlow';
+import useProjectOverviewData from '../../features/projects/hooks/useProjectOverviewData';
+import useProjectSelection from '../../features/projects/hooks/useProjectSelection';
 import {
   getProjectScanOptions,
-  getProjectScans,
   requestAgentScan,
   requestUploadScan,
 } from '../../features/scans/api/scans';
@@ -23,23 +23,13 @@ import EstimatedDurationCard from '../../features/scans/components/EstimatedDura
 import ScanModePicker from '../../features/scans/components/ScanModePicker';
 import SecretMaskingCard from '../../features/scans/components/SecretMaskingCard';
 import UploadDropZone from '../../features/scans/components/UploadDropZone';
-import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
 import { getUploadScanToastFeedback, getUploadScanValidationToastMessage } from '../../features/scans/utils/uploadScanFeedback';
 import { getScanUploadValidationIssue } from '../../features/scans/utils/uploadValidation';
 import { useProjectStore } from '../../store/projectStore';
 import type { CreateProjectFormValues, ProjectSummary } from '../../types/project';
-import type { AgentStatusResponseData, ProjectScanListItemData, ProjectScanOptionsData, ScanType } from '../../types/scan';
+import type { AgentStatusResponseData, ProjectScanOptionsData, ScanType } from '../../types/scan';
 
 type ScanModeOption = 'UPLOAD' | 'CLI' | 'AGENT';
-
-type LatestCompletedScanMap = Record<
-  string,
-  {
-    projectId: string;
-    projectName: string;
-    scan: ProjectScanListItemData;
-  }
->;
 
 const initialProjectForm: CreateProjectFormValues = {
   name: '',
@@ -47,8 +37,6 @@ const initialProjectForm: CreateProjectFormValues = {
   defaultScanMode: 'AGENT',
   monitorEnabled: true,
 };
-
-const SELECTED_PROJECT_STORAGE_KEY = 'ssafer:selected-project-id';
 
 function normalizeProjectName(value: string) {
   return value.trim();
@@ -59,36 +47,36 @@ function getAgentDisplay(
   agentStatus: AgentStatusResponseData | null,
   isSelected: boolean,
 ) {
-  // 실제 agent 상태가 fetch된 경우 우선 사용
   if (agentStatus) {
     if (agentStatus.status === 'ONLINE') {
       return {
-        label: 'Agent 연결됨',
+        label: 'Agent online',
         className: isSelected ? 'text-emerald-300' : 'text-emerald-700',
       };
     }
+
     if (agentStatus.status === 'ERROR') {
       return {
-        label: 'Agent 오류',
+        label: 'Agent error',
         className: isSelected ? 'text-orange-300' : 'text-orange-500',
       };
     }
-    // OFFLINE — agent는 등록되어 있지만 현재 끊김
+
     return {
-      label: 'Agent 오프라인',
+      label: 'Agent offline',
       className: isSelected ? 'text-neutral-400' : 'text-neutral-500',
     };
   }
 
-  // agent 상태 정보가 없음 (미등록이거나 아직 로딩 중) — monitorEnabled 설정으로 fallback
   if (project.monitorEnabled) {
     return {
-      label: 'Agent 미연결',
+      label: 'Agent pending',
       className: isSelected ? 'text-neutral-400' : 'text-neutral-500',
     };
   }
+
   return {
-    label: 'Agent 없음',
+    label: 'Agent disabled',
     className: isSelected ? 'text-neutral-400' : 'text-neutral-500',
   };
 }
@@ -97,67 +85,36 @@ function ProjectListPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const focusProjectId = (location.state as { focusProjectId?: string } | null)?.focusProjectId;
-  const projects = useProjectStore((state) => state.projects);
-  const setProjectsFromList = useProjectStore((state) => state.setProjectsFromList);
   const addProject = useProjectStore((state) => state.addProject);
   const toast = useToast();
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { agentStatusMap, isLoading, latestCompletedScans, loadError, projects } = useProjectOverviewData();
+  const {
+    filteredProjects,
+    isProjectDropdownOpen,
+    projectSearchTerm,
+    projectSelectRef,
+    selectProjectById,
+    selectedProjectId,
+    setIsProjectDropdownOpen,
+    setProjectSearchTerm,
+  } = useProjectSelection({ projects, focusProjectId });
+  const [selectedProjectScanOptionsState, setSelectedProjectScanOptionsState] = useState<{
+    data: ProjectScanOptionsData;
+    projectId: string;
+  } | null>(null);
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [projectSearchTerm, setProjectSearchTerm] = useState('');
-  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<ScanModeOption>('UPLOAD');
   const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
   const [createUploadFiles, setCreateUploadFiles] = useState<File[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [isStartingScan, setIsStartingScan] = useState(false);
   const [formValues, setFormValues] = useState<CreateProjectFormValues>(initialProjectForm);
-  const [latestCompletedScans, setLatestCompletedScans] = useState<LatestCompletedScanMap>({});
-  const [selectedProjectScanOptions, setSelectedProjectScanOptions] = useState<ProjectScanOptionsData | null>(null);
-  const [completedScansRefreshKey, setCompletedScansRefreshKey] = useState(0);
   const [selectedAgentScanType, setSelectedAgentScanType] = useState<ScanType>('PROJECT_FILE');
-  const [agentStatusMap, setAgentStatusMap] = useState<Record<string, AgentStatusResponseData | null>>({});
-  const projectSelectRef = useRef<HTMLDivElement | null>(null);
-  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useScanEventSubscription(
-    () => {
-      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = setTimeout(() => {
-        setCompletedScansRefreshKey((key) => key + 1);
-      }, 500);
-    },
-    () => {
-      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = setTimeout(() => {
-        setCompletedScansRefreshKey((key) => key + 1);
-      }, 500);
-    },
-  );
-
-  useEffect(() => {
-    return () => {
-      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isProjectDropdownOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!projectSelectRef.current?.contains(event.target as Node)) {
-        setIsProjectDropdownOpen(false);
-      }
-    };
-
-    window.addEventListener('pointerdown', handlePointerDown);
-    return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, [isProjectDropdownOpen]);
+  const [modeOverrides, setModeOverrides] = useState<Partial<Record<string, ScanModeOption>>>({});
 
   const {
     closeDeleteModal,
@@ -169,191 +126,12 @@ function ProjectListPage() {
     targetProject,
   } = useProjectDeleteFlow({
     onDeleted: (project) => {
-      toast.success(`${project.name} 프로젝트가 삭제되었습니다.`);
+      toast.success(`${project.name} project deleted.`);
     },
   });
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadProjects = async () => {
-      setIsLoading(true);
-      setLoadError(null);
-
-      try {
-        const data = await getProjects();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setProjectsFromList(data.items, data.totalElements, data.totalPages);
-      } catch (error) {
-        console.error('Failed to load projects.', error);
-
-        if (isMounted) {
-          setLoadError('프로젝트 목록을 불러오지 못했습니다.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadProjects();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [setProjectsFromList]);
-
-  // 프로젝트별 Agent 연결 상태를 병렬로 가져온다 (MonitorPage와 동일한 패턴).
-  // 프로젝트 목록이 바뀔 때만 다시 fetch 한다.
-  const projectIdsKey = useMemo(() => projects.map((p) => p.id).join(','), [projects]);
-  useEffect(() => {
-    if (projects.length === 0) {
-      setAgentStatusMap({});
-      return;
-    }
-
-    let isMounted = true;
-    const targetProjects = projects.slice();
-
-    void (async () => {
-      const entries = await Promise.all(
-        targetProjects.map(async (project) => {
-          const status = await getProjectAgentStatus(project.id).catch(() => null);
-          return [project.id, status] as const;
-        }),
-      );
-
-      if (isMounted) {
-        setAgentStatusMap(Object.fromEntries(entries));
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectIdsKey]);
-
-  useEffect(() => {
-    if (projects.length === 0) {
-      setSelectedProjectId(null);
-      return;
-    }
-
-    if (focusProjectId && projects.some((project) => project.id === focusProjectId)) {
-      setSelectedProjectId(focusProjectId);
-      return;
-    }
-
-    if (!selectedProjectId || !projects.some((project) => project.id === selectedProjectId)) {
-      const storedProjectId = window.sessionStorage.getItem(SELECTED_PROJECT_STORAGE_KEY);
-      const nextProjectId =
-        storedProjectId && projects.some((project) => project.id === storedProjectId)
-          ? storedProjectId
-          : projects[0].id;
-
-      setSelectedProjectId(nextProjectId);
-    }
-  }, [projects, selectedProjectId, focusProjectId]);
-
-  useEffect(() => {
-    if (selectedProjectId) {
-      window.sessionStorage.setItem(SELECTED_PROJECT_STORAGE_KEY, selectedProjectId);
-    }
-  }, [selectedProjectId]);
-
-  useEffect(() => {
-    if (projects.length === 0) {
-      setLatestCompletedScans({});
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadCompletedScans = async () => {
-      try {
-        const scanResponses = await Promise.all(
-          projects.map(async (project) => {
-            const response = await getProjectScans(project.id, { page: 0, size: 10 });
-            const latestDoneScan = response.items
-              .filter((scan) => scan.status === 'DONE')
-              .sort((left, right) => {
-                const leftTime = new Date(left.completedAt ?? left.requestedAt).getTime();
-                const rightTime = new Date(right.completedAt ?? right.requestedAt).getTime();
-                return rightTime - leftTime;
-              })[0];
-
-            if (!latestDoneScan) {
-              return null;
-            }
-
-            return {
-              projectId: project.id,
-              projectName: project.name,
-              scan: latestDoneScan,
-            };
-          }),
-        );
-
-        if (!isMounted) {
-          return;
-        }
-
-        const nextMap = scanResponses.reduce<LatestCompletedScanMap>((accumulator, item) => {
-          if (item) {
-            accumulator[item.projectId] = item;
-          }
-
-          return accumulator;
-        }, {});
-
-        setLatestCompletedScans(nextMap);
-      } catch (error) {
-        console.error('Failed to load latest completed scans.', error);
-
-        if (isMounted) {
-          setLatestCompletedScans({});
-        }
-      }
-    };
-
-    void loadCompletedScans();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [projects, completedScansRefreshKey]);
-
-  const selectedProject = useMemo(
-    () => projects.find((project) => project.id === selectedProjectId) ?? null,
-    [projects, selectedProjectId],
-  );
-  const selectedProjectAgentOnline = selectedProject
-    ? agentStatusMap[selectedProject.id]?.status === 'ONLINE'
-    : false;
-  const selectedProjectAgentAvailable = Boolean(
-    selectedProject && selectedProjectScanOptions?.availableScanModes.includes('AGENT') && selectedProjectAgentOnline,
-  );
-
-  const filteredProjects = useMemo(() => {
-    const keyword = projectSearchTerm.trim().toLowerCase();
-    if (!keyword) return projects;
-
-    return projects.filter((project) => {
-      const name = project.name.toLowerCase();
-      const id = project.id.toLowerCase();
-      return name.includes(keyword) || id.includes(keyword);
-    });
-  }, [projectSearchTerm, projects]);
-
-  useEffect(() => {
-    if (!selectedProject) {
-      setSelectedProjectScanOptions(null);
+    if (!selectedProjectId) {
       return;
     }
 
@@ -361,24 +139,22 @@ function ProjectListPage() {
 
     const loadScanOptions = async () => {
       try {
-        const data = await getProjectScanOptions(selectedProject.id);
+        const data = await getProjectScanOptions(selectedProjectId);
 
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setSelectedProjectScanOptionsState({
+            data,
+            projectId: selectedProjectId,
+          });
         }
-
-        setSelectedProjectScanOptions(data);
-
-        const nextMode =
-          data.defaultScanMode === 'AGENT' && data.availableScanModes.includes('AGENT') ? 'AGENT' : 'UPLOAD';
-
-        setSelectedMode((current) => (current === 'CLI' ? current : nextMode));
       } catch (error) {
         console.error('Failed to load scan options.', error);
 
-        if (isMounted) {
-          setSelectedProjectScanOptions(null);
-          setSelectedMode((current) => (current === 'AGENT' ? 'UPLOAD' : current));
+        if (
+          isMounted &&
+          selectedProjectScanOptionsState?.projectId === selectedProjectId
+        ) {
+          setSelectedProjectScanOptionsState(null);
         }
       }
     };
@@ -388,13 +164,50 @@ function ProjectListPage() {
     return () => {
       isMounted = false;
     };
-  }, [selectedProject]);
+  }, [selectedProjectId, selectedProjectScanOptionsState?.projectId]);
 
-  useEffect(() => {
-    if (selectedMode === 'AGENT' && selectedProjectScanOptions && !selectedProjectAgentOnline) {
-      setSelectedMode('UPLOAD');
+  const selectedProjectScanOptions =
+    selectedProjectScanOptionsState?.projectId === selectedProjectId
+      ? selectedProjectScanOptionsState.data
+      : null;
+
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) ?? null,
+    [projects, selectedProjectId],
+  );
+
+  const selectedProjectAgentOnline = selectedProject
+    ? agentStatusMap[selectedProject.id]?.status === 'ONLINE'
+    : false;
+  const selectedProjectAgentAvailable = Boolean(
+    selectedProject && selectedProjectScanOptions?.availableScanModes.includes('AGENT') && selectedProjectAgentOnline,
+  );
+
+  const selectedMode = useMemo<ScanModeOption>(() => {
+    if (!selectedProject) {
+      return 'UPLOAD';
     }
-  }, [selectedMode, selectedProjectScanOptions, selectedProjectAgentOnline]);
+
+    const override = modeOverrides[selectedProject.id];
+
+    if (override === 'CLI') {
+      return 'CLI';
+    }
+
+    if (override === 'UPLOAD') {
+      return 'UPLOAD';
+    }
+
+    if (override === 'AGENT') {
+      return selectedProjectAgentAvailable ? 'AGENT' : 'UPLOAD';
+    }
+
+    if (selectedProjectScanOptions?.defaultScanMode === 'AGENT' && selectedProjectAgentAvailable) {
+      return 'AGENT';
+    }
+
+    return 'UPLOAD';
+  }, [modeOverrides, selectedProject, selectedProjectAgentAvailable, selectedProjectScanOptions]);
 
   const selectedLatestCompleted = useMemo(
     () => (selectedProjectId ? latestCompletedScans[selectedProjectId] ?? null : null),
@@ -402,12 +215,24 @@ function ProjectListPage() {
   );
   const selectedLatestProjectFileScan =
     selectedLatestCompleted && selectedLatestCompleted.scan.scanType !== 'SERVER_AUDIT' ? selectedLatestCompleted : null;
-  const canApplyLatestProjectFileScan = selectedAgentScanType === 'PROJECT_FILE' && Boolean(selectedLatestProjectFileScan);
+  const canApplyLatestProjectFileScan =
+    selectedAgentScanType === 'PROJECT_FILE' && Boolean(selectedLatestProjectFileScan);
 
   const resetCreateForm = () => {
     setFormValues(initialProjectForm);
     setCreateUploadFiles([]);
     setCreateError(null);
+  };
+
+  const handleModeSelect = (mode: ScanModeOption) => {
+    if (!selectedProject) {
+      return;
+    }
+
+    setModeOverrides((current) => ({
+      ...current,
+      [selectedProject.id]: mode,
+    }));
   };
 
   const handleUploadFileChange = (files: File[] | null) => {
@@ -426,7 +251,7 @@ function ProjectListPage() {
     const projectName = normalizeProjectName(formValues.name);
 
     if (projects.some((project) => normalizeProjectName(project.name) === projectName)) {
-      setCreateError('같은 이름의 프로젝트가 이미 있습니다. 다른 이름으로 다시 시도해 주세요.');
+      setCreateError('A project with the same name already exists.');
       return;
     }
 
@@ -434,7 +259,7 @@ function ProjectListPage() {
       const validationIssue = getScanUploadValidationIssue(createUploadFiles);
 
       if (validationIssue) {
-        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? '업로드 파일을 확인해주세요.', {
+        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? 'Please check the selected files.', {
           durationMs: 3000,
         });
         return;
@@ -453,14 +278,18 @@ function ProjectListPage() {
         scans: 0,
         lastStatus: 'NEW',
         risk: 'LOW',
-        description: projectDescription || '프로젝트 설명이 아직 없습니다.',
+        description: projectDescription || 'No project description provided yet.',
         defaultScanMode: formValues.defaultScanMode,
         monitorEnabled: formValues.monitorEnabled,
         createdAt: new Date().toISOString(),
       };
 
       addProject(nextProject);
-      setSelectedProjectId(nextProject.id);
+      selectProjectById(nextProject.id);
+      setModeOverrides((current) => ({
+        ...current,
+        [nextProject.id]: nextProject.defaultScanMode === 'AGENT' ? 'AGENT' : 'UPLOAD',
+      }));
       resetCreateForm();
       setIsCreateOpen(false);
 
@@ -468,7 +297,7 @@ function ProjectListPage() {
         try {
           const scanData = await requestUploadScan({
             projectName,
-            scanName: `${projectName} 초기 스캔`,
+            scanName: `${projectName} initial scan`,
             files: createUploadFiles,
           });
           navigate(ROUTES.scanDetail.replace(':scanId', String(scanData.scanId)), {
@@ -478,19 +307,21 @@ function ProjectListPage() {
         } catch (error) {
           console.error('Failed to start initial scan after project creation.', error);
           const feedback = getUploadScanToastFeedback(error, 'project-create');
+
           if (feedback.tone === 'warning') {
             toast.warning(feedback.message, { durationMs: 3000 });
           } else {
             toast.error(feedback.message, { durationMs: 3000 });
           }
+
           return;
         }
       }
 
-      toast.success('프로젝트가 생성되었습니다.');
+      toast.success('Project created successfully.');
     } catch (error) {
       console.error('Failed to create project.', error);
-      setCreateError('프로젝트 생성에 실패했습니다.');
+      setCreateError('Failed to create project.');
     } finally {
       setIsCreating(false);
     }
@@ -498,20 +329,27 @@ function ProjectListPage() {
 
   const handleStartScan = async () => {
     if (!selectedProject) {
-      setScanError('먼저 프로젝트를 선택해 주세요.');
+      setScanError('Select a project first.');
       return;
     }
 
-    if (selectedMode === 'AGENT' && (!selectedProjectScanOptions?.availableScanModes.includes('AGENT') || !selectedProjectAgentOnline)) {
-      setScanError('이 프로젝트에서는 아직 Agent 스캔을 사용할 수 없습니다.');
-      return;
+    if (selectedMode === 'AGENT') {
+      const refreshedScanOptions = await getProjectScanOptions(selectedProject.id).catch(() => null);
+      const agentAvailable = Boolean(
+        refreshedScanOptions?.availableScanModes.includes('AGENT') && selectedProjectAgentOnline,
+      );
+
+      if (!agentAvailable) {
+        setScanError('Agent scan is not available for this project right now.');
+        return;
+      }
     }
 
     if (selectedMode === 'UPLOAD') {
       const validationIssue = getScanUploadValidationIssue(selectedUploadFiles);
 
       if (validationIssue) {
-        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? '업로드 파일을 확인해주세요.', {
+        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? 'Please check the selected files.', {
           durationMs: 3000,
         });
         return;
@@ -527,18 +365,18 @@ function ProjectListPage() {
       if (selectedMode === 'UPLOAD' && selectedUploadFiles.length > 0) {
         scanData = await requestUploadScan({
           projectName: selectedProject.name,
-          scanName: `${selectedProject.name} 업로드 스캔`,
+          scanName: `${selectedProject.name} upload scan`,
           files: selectedUploadFiles,
         });
       } else if (selectedMode === 'AGENT') {
         scanData = await requestAgentScan(String(selectedProject.id), {
           targetPath: '.',
           scanType: selectedAgentScanType,
-          scanName: `${selectedProject.name} Agent 스캔`,
+          scanName: `${selectedProject.name} agent scan`,
           includeLogs: false,
         });
       } else {
-        setScanError('CLI 방식은 웹에서 스캔 요청을 만들지 않습니다. 아래 안내된 명령어를 터미널에서 실행해 주세요.');
+        setScanError('CLI mode is a guide-only mode. Please run the CLI manually.');
         return;
       }
 
@@ -550,15 +388,17 @@ function ProjectListPage() {
 
       if (selectedMode === 'UPLOAD') {
         const feedback = getUploadScanToastFeedback(error, 'project-list');
+
         if (feedback.tone === 'warning') {
           toast.warning(feedback.message, { durationMs: 3000 });
         } else {
           toast.error(feedback.message, { durationMs: 3000 });
         }
+
         return;
       }
 
-      setScanError('스캔 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      setScanError('Failed to start scan.');
     } finally {
       setIsStartingScan(false);
     }
@@ -569,7 +409,7 @@ function ProjectListPage() {
       <header className="flex items-end justify-between gap-6 pt-2">
         <div className="min-w-0">
           <h1 className="text-4xl font-black leading-[0.95] tracking-[-0.03em] text-[#080B16] md:text-5xl xl:text-6xl">
-            {projects.length === 0 ? '프로젝트를 생성해주세요' : '뭘 스캔할까요?'}
+            {projects.length === 0 ? 'Create your first project' : 'Run a project scan'}
           </h1>
         </div>
         <div className="shrink-0">
@@ -579,13 +419,13 @@ function ProjectListPage() {
 
       <section className="space-y-3 pt-6">
         {isLoading ? (
-          <div className="bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">프로젝트 목록을 불러오는 중입니다.</div>
+          <div className="bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">Loading projects...</div>
         ) : loadError ? (
           <PageBanner message={loadError} tone="error" />
         ) : (
           <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
             <button
-              aria-label="새 프로젝트 만들기"
+              aria-label="Create project"
               className="flex min-h-[112px] w-full items-center justify-center border border-dashed border-neutral-300 bg-neutral-50 transition landing-card-radius hover:border-black hover:bg-white"
               onClick={() => {
                 setIsProjectDropdownOpen(false);
@@ -602,12 +442,12 @@ function ProjectListPage() {
             <div className="relative" ref={projectSelectRef}>
               <button
                 className="flex min-h-[112px] w-full items-center justify-between gap-4 border border-neutral-200 bg-white px-6 py-5 text-left transition landing-card-radius hover:border-black"
-                onClick={() => setIsProjectDropdownOpen((current) => !current)}
+                onClick={() => setIsProjectDropdownOpen(!isProjectDropdownOpen)}
                 type="button"
               >
                 <div className="min-w-0">
                   <p className="truncate text-xl font-black text-black">
-                    {selectedProject ? selectedProject.name : '프로젝트를 선택하세요'}
+                    {selectedProject ? selectedProject.name : 'Select a project'}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
@@ -628,7 +468,7 @@ function ProjectListPage() {
                         autoFocus
                         className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-black outline-none placeholder:text-neutral-400"
                         onChange={(event) => setProjectSearchTerm(event.target.value)}
-                        placeholder="프로젝트 이름 또는 ID 검색"
+                        placeholder="Search by name or id"
                         type="text"
                         value={projectSearchTerm}
                       />
@@ -648,7 +488,7 @@ function ProjectListPage() {
                             }`}
                             key={project.id}
                             onClick={() => {
-                              setSelectedProjectId(project.id);
+                              selectProjectById(project.id);
                               setProjectSearchTerm('');
                               setIsProjectDropdownOpen(false);
                             }}
@@ -662,7 +502,7 @@ function ProjectListPage() {
                         );
                       })
                     ) : (
-                      <div className="px-3 py-5 text-center text-sm text-neutral-500">검색 결과가 없습니다.</div>
+                      <div className="px-3 py-5 text-center text-sm text-neutral-500">No projects found.</div>
                     )}
                   </div>
                 </div>
@@ -678,7 +518,7 @@ function ProjectListPage() {
               onClick={() => navigate(ROUTES.projectDetail.replace(':projectId', selectedProject.id))}
               type="button"
             >
-              프로젝트 상세 보기
+              Open project
               <ArrowRight className="h-4 w-4" />
             </button>
             <button
@@ -687,7 +527,7 @@ function ProjectListPage() {
               type="button"
             >
               <Trash2 className="h-4 w-4" />
-              프로젝트 삭제
+              Delete project
             </button>
           </div>
         ) : null}
@@ -695,7 +535,7 @@ function ProjectListPage() {
 
       <ScanModePicker
         isAgentAvailable={selectedProjectAgentAvailable}
-        onSelect={setSelectedMode}
+        onSelect={handleModeSelect}
         selectedMode={selectedMode}
       />
 
@@ -705,7 +545,7 @@ function ProjectListPage() {
             files={selectedUploadFiles}
             isDragOver={isDragOver}
             onFileLimitExceeded={() => {
-              toast.warning(getUploadScanValidationToastMessage('FILE_COUNT_EXCEEDED') ?? '파일은 최대 3개까지 업로드할 수 있습니다.', {
+              toast.warning(getUploadScanValidationToastMessage('FILE_COUNT_EXCEEDED') ?? 'Too many files selected.', {
                 durationMs: 3000,
               });
             }}
@@ -723,10 +563,10 @@ function ProjectListPage() {
             {selectedMode === 'AGENT' && (
               <div>
                 <div className="mb-4 border border-neutral-200 bg-neutral-50 px-4 py-3 landing-inner-radius">
-                  <p className="text-sm font-black text-black">Agent 준비</p>
-                  <p className="mt-1 text-sm text-neutral-500">`ssafer login` 후 `ssafer agent`를 실행하면 웹에서 Agent 스캔을 시작할 수 있습니다.</p>
+                  <p className="text-sm font-black text-black">Agent scan</p>
+                  <p className="mt-1 text-sm text-neutral-500">Use an online agent to run the scan directly from the workspace.</p>
                 </div>
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">스캔 유형 선택</p>
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">Scan target</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     className={`border p-4 text-left transition landing-inner-radius ${
@@ -737,9 +577,9 @@ function ProjectListPage() {
                     onClick={() => setSelectedAgentScanType('PROJECT_FILE')}
                     type="button"
                   >
-                    <p className="font-black">프로젝트 파일 스캔</p>
+                    <p className="font-black">Project files</p>
                     <p className={`mt-1 text-xs leading-relaxed ${selectedAgentScanType === 'PROJECT_FILE' ? 'text-neutral-300' : 'text-neutral-500'}`}>
-                      소스 코드·설정 파일의 취약점을 분석합니다.
+                      Scan source files and config files in the project workspace.
                     </p>
                   </button>
                   <button
@@ -751,9 +591,9 @@ function ProjectListPage() {
                     onClick={() => setSelectedAgentScanType('SERVER_AUDIT')}
                     type="button"
                   >
-                    <p className="font-black">서버 런타임 점검</p>
+                    <p className="font-black">Server audit</p>
                     <p className={`mt-1 text-xs leading-relaxed ${selectedAgentScanType === 'SERVER_AUDIT' ? 'text-neutral-300' : 'text-neutral-500'}`}>
-                      실행 중인 서버 환경의 보안 상태를 점검합니다.
+                      Inspect the running server environment and operational settings.
                     </p>
                   </button>
                 </div>
@@ -761,10 +601,9 @@ function ProjectListPage() {
                   <div className="mt-3 flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900 landing-inner-radius">
                     <AlertTriangle className="mt-1 h-4 w-4 shrink-0" />
                     <div>
-                      <p className="font-black text-amber-950">Agent 서버 점검은 비대화형으로 실행됩니다.</p>
+                      <p className="font-black text-amber-950">Server audit only supports inspection right now.</p>
                       <p className="mt-1">
-                        비밀번호 입력이 필요한 sudo 명령은 실행할 수 없어 DOCKER-USER, iptables, 일부 방화벽 상세 점검 결과가 제한될 수 있습니다.
-                        더 완전한 점검이 필요하면 서버 터미널에서 <code className="rounded bg-amber-100 px-1 font-mono">ssafer server --upload</code>를 직접 실행하세요.
+                        Auto-fix is disabled for server audit results because operational changes can affect live services.
                       </p>
                     </div>
                   </div>
@@ -774,7 +613,6 @@ function ProjectListPage() {
 
             {selectedMode === 'AGENT' ? (
               <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {/* 스캔 */}
                 <button
                   className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isStartingScan || !selectedProject}
@@ -785,14 +623,13 @@ function ProjectListPage() {
                     <ScanSearch className="h-5 w-5 text-white" />
                   </div>
                   <div>
-                    <p className="font-black">스캔 및 업로드</p>
+                    <p className="font-black">Start scan</p>
                     <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                      연결된 Agent가 현재 환경을 점검하고 결과 JSON 업로드까지 이어서 처리합니다.
+                      Run a new agent scan for this project.
                     </p>
                   </div>
                 </button>
 
-                {/* 수정 */}
                 <button
                   className="flex flex-col gap-3 border border-neutral-200 p-5 text-left transition landing-inner-radius hover:-translate-y-0.5 hover:border-black hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={!selectedProject || !canApplyLatestProjectFileScan}
@@ -807,13 +644,13 @@ function ProjectListPage() {
                     <Wrench className="h-5 w-5 text-black" />
                   </div>
                   <div>
-                    <p className="font-black">수정</p>
+                    <p className="font-black">Review latest fix</p>
                     <p className="mt-1 text-xs leading-relaxed text-neutral-500">
                       {selectedAgentScanType === 'SERVER_AUDIT'
-                        ? '\uc11c\ubc84 \uc810\uac80\uc740 \uc2e4\ud589 \uc911\uc778 \ud3ec\ud2b8, \ubc29\ud654\ubcbd, SSH, Docker \uc0c1\ud0dc\ucc98\ub7fc \uc6b4\uc601 \ud658\uacbd\uc744 \ud655\uc778\ud569\ub2c8\ub2e4. \uc6d0\uc778\uc774 \uc18c\uc2a4 \ud30c\uc77c, \uc11c\ubc84 \uc124\uc815, \ubc29\ud654\ubcbd \uc911 \uc5b4\ub514\uc778\uc9c0 \ub2e8\uc815\ud558\uae30 \uc5b4\ub824\uc6cc \uc790\ub3d9 \ud328\uce58 \uc2dc \uc11c\ube44\uc2a4 \uc7a5\uc560\uac00 \ub0a0 \uc218 \uc788\uc73c\ubbc0\ub85c, \uc218\uc815 \uae30\ub2a5\uc740 \uc81c\uacf5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.'
+                        ? 'Server audit does not provide auto-fix output.'
                         : selectedLatestProjectFileScan
-                        ? '\ucd5c\uc2e0 \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94 \uacb0\uacfc\uc758 \uc218\uc815\uc548\uc744 \ud655\uc778\ud569\ub2c8\ub2e4.'
-                        : '\uc644\ub8cc\ub41c \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc774 \uc5c6\uc2b5\ub2c8\ub2e4. \uba3c\uc800 \ud504\ub85c\uc81d\ud2b8 \ud30c\uc77c \uc2a4\uce94\uc744 \uc2e4\ud589\ud558\uc138\uc694.'}
+                        ? 'Open the latest project-file scan result.'
+                        : 'Run a completed project-file scan first.'}
                     </p>
                   </div>
                 </button>
@@ -837,14 +674,14 @@ function ProjectListPage() {
               type="button"
             >
               {isStartingScan
-                ? '스캔 요청 중...'
+                ? 'Starting scan...'
                 : !selectedProject
-                ? '프로젝트를 먼저 선택해 주세요'
+                ? 'Select a project first'
                 : selectedMode === 'UPLOAD' && selectedUploadFiles.length === 0
-                ? '파일을 선택해 주세요'
+                ? 'Select files first'
                 : selectedMode === 'UPLOAD'
-                ? `파일 ${selectedUploadFiles.length}개로 스캔 시작`
-                : 'Agent 스캔 및 업로드 시작'}
+                ? `Start upload scan (${selectedUploadFiles.length})`
+                : 'Start agent scan'}
               {isStartingScan ? <Clock className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
             </button>
           ) : null}
@@ -885,7 +722,6 @@ function ProjectListPage() {
           projectName={targetProject.name}
         />
       ) : null}
-
     </section>
   );
 }
