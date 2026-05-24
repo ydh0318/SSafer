@@ -6,6 +6,7 @@ import { useAuthStore } from '../../../store/authStore';
 const envBaseURL = import.meta.env.VITE_API_BASE_URL;
 const isDevelopment = import.meta.env.DEV;
 const baseURL = envBaseURL ?? (isDevelopment ? '/api/v1' : '');
+const SSE_NOT_AVAILABLE_ERROR = 'SSE_NOT_AVAILABLE';
 
 export function useScanEventSubscription(
   onCompleted?: (scanId: number) => void,
@@ -28,6 +29,7 @@ export function useScanEventSubscription(
     const abortController = new AbortController();
     let retryCount = 0;
     const MAX_RETRIES = 5;
+    let isSseUnavailable = false;
 
     const connect = async () => {
       try {
@@ -39,15 +41,19 @@ export function useScanEventSubscription(
           },
           signal: abortController.signal,
           onopen: async (response) => {
+            if (response.status === 404) {
+              isSseUnavailable = true;
+              throw new Error(SSE_NOT_AVAILABLE_ERROR);
+            }
+
             if (response.status >= 400 && response.status < 500 && response.status !== 429) {
               if (response.status === 401 || response.status === 403) {
-                // Ignore auth errors, likely token expired and will be refreshed or logged out
                 throw new Error('Auth error');
               }
+
               throw new Error('Fatal SSE error');
             }
-            
-            // 연결 성공 시 재시도 횟수 초기화
+
             retryCount = 0;
           },
           onmessage: (msg) => {
@@ -57,8 +63,8 @@ export function useScanEventSubscription(
                 if (data.scanId && onCompletedRef.current) {
                   onCompletedRef.current(data.scanId);
                 }
-              } catch (e) {
-                // Ignore JSON parsing errors
+              } catch {
+                // Ignore JSON parsing errors.
               }
             } else if (msg.event === 'scan.failed') {
               try {
@@ -66,25 +72,31 @@ export function useScanEventSubscription(
                 if (data.scanId && onFailedRef.current) {
                   onFailedRef.current(data.scanId);
                 }
-              } catch (e) {
-                // Ignore JSON parsing errors
+              } catch {
+                // Ignore JSON parsing errors.
               }
             }
           },
-          onerror: (err) => {
-            // Error 발생 시 지수 백오프(Exponential Backoff)로 재시도
-            retryCount += 1;
-            
-            if (retryCount >= MAX_RETRIES) {
-              throw new Error('Max retries exceeded'); // throw 시 재시도 중단
+          onerror: () => {
+            if (isSseUnavailable) {
+              throw new Error(SSE_NOT_AVAILABLE_ERROR);
             }
-            
-            // 최대 10초 내에서 1s -> 2s -> 4s -> 8s 단위로 지연시간 증가
+
+            retryCount += 1;
+
+            if (retryCount >= MAX_RETRIES) {
+              throw new Error('Max retries exceeded');
+            }
+
             return Math.min(1000 * (2 ** (retryCount - 1)), 10000);
           },
         });
-      } catch (err) {
-        // SSE connection completely failed or aborted
+      } catch (error) {
+        if (error instanceof Error && error.message === SSE_NOT_AVAILABLE_ERROR) {
+          return;
+        }
+
+        // Ignore transient connection failures and rely on polling as fallback.
       }
     };
 

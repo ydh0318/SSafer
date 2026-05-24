@@ -1,102 +1,32 @@
 import { ArrowLeft, FileSearch, Gamepad2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { ROUTES } from '../../constants/routes';
 import { useToast } from '../../features/feedback/useToast';
-import { getScanStatus } from '../../features/scans/api/scans';
 import ScanProgressPanel from '../../features/scans/components/ScanProgressPanel';
-import { useScanEventSubscription } from '../../features/scans/hooks/useScanEventSubscription';
+import useScanStatusDetail from '../../features/scans/hooks/useScanStatusDetail';
 import { isTerminalScanStatus } from '../../features/scans/utils/scanPresentation';
-import type { ScanProgressStatusData } from '../../types/scan';
 
 type ScanRouteState = {
   projectId?: string;
   autoOpenedFromScanRequest?: boolean;
 };
 
-const LOAD_STATUS_ERROR_MESSAGE = '스캔 진행 상태를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
-const REFRESH_STATUS_ERROR_MESSAGE = '자동 새로고침에 실패했습니다. 잠시 후 다시 시도해 주세요.';
-
 function ScanDetailPage() {
   const { scanId = '' } = useParams<{ scanId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const routeState = (location.state ?? {}) as ScanRouteState;
+  const routeState = useMemo(() => (location.state ?? {}) as ScanRouteState, [location.state]);
   const toast = useToast();
   const hasShownSuccessToastRef = useRef(false);
   const hasAutoNavigatedRef = useRef(false);
   const hasSeenNonTerminalScanStatusRef = useRef(false);
-
-  const [statusData, setStatusData] = useState<ScanProgressStatusData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(true);
-
-  useEffect(() => {
-    if (!scanId) {
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadStatus = async () => {
-      setIsLoading(true);
-      setErrorMessage(null);
-      setRefreshNotice(null);
-
-      try {
-        const data = await getScanStatus(scanId);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setStatusData(data);
-      } catch {
-        if (!isMounted) {
-          return;
-        }
-
-        setStatusData(null);
-        setErrorMessage(LOAD_STATUS_ERROR_MESSAGE);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadStatus();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [scanId]);
-
-  useEffect(() => {
-    if (!scanId || !isAutoRefreshEnabled || !statusData || isTerminalScanStatus(statusData.status)) {
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      void (async () => {
-        try {
-          const data = await getScanStatus(scanId);
-          setStatusData(data);
-          setErrorMessage(null);
-          setRefreshNotice(null);
-        } catch {
-          setRefreshNotice(REFRESH_STATUS_ERROR_MESSAGE);
-        }
-      })();
-    }, 5000);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [isAutoRefreshEnabled, scanId, statusData]);
+  const { errorMessage, isLoading, refreshNotice, refreshStatus, setRefreshNotice, statusData } = useScanStatusDetail(
+    scanId,
+    isAutoRefreshEnabled,
+  );
 
   useEffect(() => {
     if (!routeState.autoOpenedFromScanRequest || hasShownSuccessToastRef.current) {
@@ -104,7 +34,7 @@ function ScanDetailPage() {
     }
 
     hasShownSuccessToastRef.current = true;
-    toast.success('스캔 요청이 접수되었습니다.', { durationMs: 2000 });
+    toast.success('Scan request submitted.', { durationMs: 2000 });
   }, [routeState.autoOpenedFromScanRequest, toast]);
 
   useEffect(() => {
@@ -114,7 +44,7 @@ function ScanDetailPage() {
 
     toast.warning(refreshNotice, { durationMs: 2000 });
     setRefreshNotice(null);
-  }, [refreshNotice, toast]);
+  }, [refreshNotice, setRefreshNotice, toast]);
 
   useEffect(() => {
     if (statusData && !isTerminalScanStatus(statusData.status)) {
@@ -136,44 +66,11 @@ function ScanDetailPage() {
     }
 
     hasAutoNavigatedRef.current = true;
-    toast.success('분석이 완료되어 결과 화면으로 이동합니다.', { durationMs: 2000 });
+    toast.success('Analysis completed. Opening the result page.', { durationMs: 2000 });
     window.setTimeout(() => {
       navigate(ROUTES.resultDetail.replace(':scanId', scanId), { state: routeState });
     }, 500);
   }, [navigate, routeState, scanId, statusData, toast]);
-
-  const handleRefresh = async () => {
-    if (!scanId) {
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
-    setRefreshNotice(null);
-
-    try {
-      const data = await getScanStatus(scanId);
-      setStatusData(data);
-    } catch {
-      setStatusData(null);
-      setErrorMessage(LOAD_STATUS_ERROR_MESSAGE);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useScanEventSubscription(
-    (completedScanId) => {
-      if (scanId && completedScanId === Number(scanId)) {
-        void handleRefresh();
-      }
-    },
-    (failedScanId) => {
-      if (scanId && failedScanId === Number(scanId)) {
-        void handleRefresh();
-      }
-    },
-  );
 
   const canOpenResult = statusData?.status === 'DONE';
   const backTo = routeState.projectId ? ROUTES.projectDetail.replace(':projectId', routeState.projectId) : ROUTES.projects;
@@ -186,7 +83,7 @@ function ScanDetailPage() {
           to={backTo}
         >
           <ArrowLeft className="h-4 w-4" />
-          프로젝트로 돌아가기
+          Back to project
         </Link>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -196,7 +93,7 @@ function ScanDetailPage() {
             to={ROUTES.typingGame}
           >
             <Gamepad2 className="h-3.5 w-3.5" />
-            기다리는 동안 보안 타이핑
+            Open typing game
           </Link>
 
           {canOpenResult ? (
@@ -205,12 +102,12 @@ function ScanDetailPage() {
               state={routeState}
               to={ROUTES.resultDetail.replace(':scanId', scanId)}
             >
-              결과 보기
+              View result
               <FileSearch className="h-3.5 w-3.5" />
             </Link>
           ) : (
             <span className="inline-flex items-center gap-1.5 bg-neutral-100 px-4 py-2 text-xs font-bold text-neutral-400">
-              결과 준비 중
+              Result pending
               <FileSearch className="h-3.5 w-3.5" />
             </span>
           )}
@@ -222,7 +119,7 @@ function ScanDetailPage() {
         isAutoRefreshEnabled={isAutoRefreshEnabled}
         isLoading={isLoading}
         onAutoRefreshChange={setIsAutoRefreshEnabled}
-        onRefresh={() => void handleRefresh()}
+        onRefresh={() => void refreshStatus()}
         statusData={statusData}
       />
     </section>
