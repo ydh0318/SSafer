@@ -20,7 +20,7 @@ import ThemeToggleButton from '../common/ThemeToggleButton';
 
 type SiteHeaderProps = {
   showSessionBar?: boolean;
-  variant?: 'default' | 'transparent';
+  variant?: 'default' | 'transparent' | 'landing';
 };
 
 function getProfileInitial(name?: string, email?: string, fallback = 'U') {
@@ -30,6 +30,7 @@ function getProfileInitial(name?: string, email?: string, fallback = 'U') {
 
 function SiteHeader({ showSessionBar = true, variant = 'default' }: SiteHeaderProps) {
   const isTransparent = variant === 'transparent';
+  const isLanding = variant === 'landing';
   const location = useLocation();
   const navigate = useNavigate();
   const refreshToken = useAuthStore((state) => state.refreshToken);
@@ -137,21 +138,53 @@ function SiteHeader({ showSessionBar = true, variant = 'default' }: SiteHeaderPr
 
   const headerShellClass = isTransparent
     ? 'site-header-shell site-app-header-shell'
-    : 'site-header-shell site-app-header-shell theme-surface-header border-b border-neutral-200 bg-[#FAFAFA]/95 backdrop-blur';
+    : isLanding
+      ? 'site-header-shell bg-[#FAF5EF]'
+      : 'site-header-shell site-app-header-shell theme-surface-header border-b border-neutral-200 bg-[#FAFAFA]/95 backdrop-blur';
+
+  const headerInnerClass = isLanding
+    ? 'mx-auto flex max-w-[1560px] items-start justify-between gap-3 px-4 py-2 sm:px-6'
+    : 'site-header-inner mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6';
+
+  const landingLogoLetters = ['s', 's', 'a', 'f', 'e', 'r'] as const;
 
   return (
     <header className={headerShellClass}>
-      <div className="site-header-inner mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
-        <AppBrand
-          className="shrink-0"
-          iconWrapperClassName={isTransparent ? 'h-10 w-10 shrink-0' : undefined}
-          linkClassName={isTransparent ? 'text-white' : 'text-black'}
-          textClassName="hidden lg:block"
-          titleClassName={`text-lg font-black tracking-tight ${isTransparent ? 'text-white' : 'text-black'}`}
-          to={ROUTES.landing}
-        />
+      <div className={headerInnerClass}>
+        {isLanding ? (
+          <Link
+            className="shrink-0 text-black no-underline"
+            to={ROUTES.landing}
+          >
+            <span
+              aria-label="ssafer"
+              className="flex items-start text-[4.5rem] font-black leading-none tracking-[-0.06em] lowercase md:text-[5.5rem]"
+            >
+              {landingLogoLetters.map((letter, index) => (
+                <span
+                  className={letter === 'f'
+                    ? 'inline-block align-top leading-none'
+                    : 'inline-block -mt-[0.21em] align-top leading-none'
+                  }
+                  key={`${letter}-${index}`}
+                >
+                  {letter}
+                </span>
+              ))}
+            </span>
+          </Link>
+        ) : (
+          <AppBrand
+            className="shrink-0"
+            iconWrapperClassName={isTransparent ? 'h-10 w-10 shrink-0' : undefined}
+            linkClassName={isTransparent ? 'text-white' : 'text-black'}
+            textClassName="hidden lg:block"
+            titleClassName={`text-lg font-black tracking-tight ${isTransparent ? 'text-white' : 'text-black'}`}
+            to={ROUTES.landing}
+          />
+        )}
 
-        <nav className="site-header-nav flex min-w-0 items-center justify-end gap-1.5 text-sm sm:gap-2 lg:gap-3">
+        <nav className={`site-header-nav flex min-w-0 items-center justify-end gap-1.5 text-sm sm:gap-2 lg:gap-3 ${isLanding ? 'pt-2' : ''}`}>
           {navItems.map((item) => {
             const Icon = item.icon;
 

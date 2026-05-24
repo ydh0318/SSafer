@@ -105,9 +105,10 @@ function TerminalLine({ code, dangerRange }: { code: string; dangerRange: readon
 type AppleHeroSectionProps = {
   /** 섹션 하단 그라데이션 페이드 색상. 다음 섹션 bg와 매치시키면 스크롤 전환이 자연스러워짐. */
   bottomFadeColor?: string;
+  showHeader?: boolean;
 };
 
-function AppleHeroSection({ bottomFadeColor }: AppleHeroSectionProps = {}) {
+function AppleHeroSection({ bottomFadeColor, showHeader = true }: AppleHeroSectionProps = {}) {
   const [bitten, setBitten] = useState<[boolean, boolean, boolean]>([false, false, false]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
@@ -145,7 +146,7 @@ function AppleHeroSection({ bottomFadeColor }: AppleHeroSectionProps = {}) {
       ) : null}
 
       <div className={hasFade ? 'sticky top-0 h-screen' : 'h-full'}>
-        <SiteHeader showSessionBar={false} variant="transparent" />
+        {showHeader ? <SiteHeader showSessionBar={false} variant="transparent" /> : null}
 
       <main className="relative z-10 flex h-[calc(100vh-4rem)] flex-col items-center px-8 pt-2 md:pt-4">
         <div className="grid w-full max-w-6xl grid-cols-3 gap-x-6">
