@@ -1,5 +1,4 @@
 import type { ScanStatus } from '../../../types/scan';
-
 import type { ScanUploadValidationIssue } from './uploadValidation';
 
 export type UploadScanToastContext = 'project-create' | 'project-list' | 'project-detail';

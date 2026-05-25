@@ -31,3 +31,13 @@ export function getApiErrorCode(error: unknown) {
 
   return error.response?.data?.code ?? null;
 }
+
+export function createApiError(error: unknown, fallbackMessage = DEFAULT_MESSAGE) {
+  const wrappedError = new Error(getApiErrorMessage(error, fallbackMessage));
+
+  if (error !== wrappedError) {
+    Reflect.set(wrappedError, 'cause', error);
+  }
+
+  return wrappedError;
+}

@@ -868,7 +868,7 @@ function SettingsPage() {
       await withdrawCurrentUser();
       toast.success('회원 탈퇴 처리가 완료되었습니다.');
       logout();
-    } catch (error) {
+    } catch {
       toast.error('회원 탈퇴 처리 중 오류가 발생했습니다. 다시 시도해 주세요.');
     }
   };

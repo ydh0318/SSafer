@@ -1,5 +1,5 @@
 import { publicApiClient } from '../../../api/client';
-import { getApiErrorMessage } from '../../../api/error';
+import { createApiError } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type { GuestEnterData, GuestEnterRequest } from '../../../types/auth';
 import { getGuestDeviceId } from '../../../utils/deviceId';
@@ -17,6 +17,6 @@ export async function enterGuestMode() {
 
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '게스트 모드로 진입하지 못했습니다.'));
+    throw createApiError(error, '게스트 모드로 진입하지 못했습니다.');
   }
 }

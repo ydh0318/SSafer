@@ -4,6 +4,18 @@ import { useState } from 'react';
 
 import AuthField from './AuthField';
 
+function InteractiveAuthField(args: ComponentProps<typeof AuthField>) {
+  const [value, setValue] = useState('');
+
+  return (
+    <AuthField
+      {...args}
+      onChange={(event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value)}
+      value={value}
+    />
+  );
+}
+
 const meta = {
   title: 'Auth/Base/AuthField',
   component: AuthField,
@@ -17,7 +29,7 @@ const meta = {
     docs: {
       description: {
         component:
-          '인증 화면에서 사용하는 기본 입력 컴포넌트입니다. `errorMessage`로 인라인 오류를, `helperText`로 보조 설명을, `trailing`으로 show 버튼이나 액션 요소를 배치합니다.',
+          '?몄쬆 ?붾㈃?먯꽌 ?ъ슜?섎뒗 湲곕낯 ?낅젰 而댄룷?뚰듃?낅땲?? `errorMessage`濡??몃씪???ㅻ쪟瑜? `helperText`濡?蹂댁“ ?ㅻ챸?? `trailing`?쇰줈 show 踰꾪듉?대굹 ?≪뀡 ?붿냼瑜?諛곗튂?⑸땲??',
       },
     },
   },
@@ -28,21 +40,11 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
-  render: (args: ComponentProps<typeof AuthField>) => {
-    const [value, setValue] = useState('');
-
-    return (
-      <AuthField
-        {...args}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value)}
-        value={value}
-      />
-    );
-  },
+  render: (args: ComponentProps<typeof AuthField>) => <InteractiveAuthField {...args} />,
   parameters: {
     docs: {
       description: {
-        story: '기본 입력 상태입니다. 가장 일반적인 텍스트 입력 UI로 사용합니다.',
+        story: '湲곕낯 ?낅젰 ?곹깭?낅땲?? 媛???쇰컲?곸씤 ?띿뒪???낅젰 UI濡??ъ슜?⑸땲??',
       },
     },
   },
@@ -50,14 +52,14 @@ export const Default: Story = {
 
 export const WithError: Story = {
   args: {
-    errorMessage: '이미 가입된 이메일입니다.',
+    errorMessage: '?대? 媛?낅맂 ?대찓?쇱엯?덈떎.',
     value: 'hello@example.com',
     onChange: () => {},
   },
   parameters: {
     docs: {
       description: {
-        story: '실패 메시지는 토스트가 아니라 입력창 바로 아래 인라인으로 노출하는 패턴을 사용합니다.',
+        story: '?ㅽ뙣 硫붿떆吏???좎뒪?멸? ?꾨땲???낅젰李?諛붾줈 ?꾨옒 ?몃씪?몄쑝濡??몄텧?섎뒗 ?⑦꽩???ъ슜?⑸땲??',
       },
     },
   },
@@ -65,14 +67,14 @@ export const WithError: Story = {
 
 export const WithHelper: Story = {
   args: {
-    helperText: '입력한 이메일로 인증 코드를 보내드립니다.',
+    helperText: '?낅젰???대찓?쇰줈 ?몄쬆 肄붾뱶瑜?蹂대궡?쒕┰?덈떎.',
     value: '',
     onChange: () => {},
   },
   parameters: {
     docs: {
       description: {
-        story: '사용자가 다음 액션을 이해해야 할 때 보조 문구를 함께 보여주는 예시입니다.',
+        story: '?ъ슜?먭? ?ㅼ쓬 ?≪뀡???댄빐?댁빞 ????蹂댁“ 臾멸뎄瑜??④퍡 蹂댁뿬二쇰뒗 ?덉떆?낅땲??',
       },
     },
   },

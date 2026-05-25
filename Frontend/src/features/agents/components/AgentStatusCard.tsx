@@ -1,4 +1,4 @@
-import { Bot, Clock3, RefreshCw, Radio, ScanSearch, Wand2, Workflow } from 'lucide-react';
+import { Bot, Clock3, Radio, RefreshCw, ScanSearch, Wand2, Workflow } from 'lucide-react';
 
 import SectionPanel from '../../../components/common/SectionPanel';
 import type { AgentStatusResponseData } from '../../../types/scan';

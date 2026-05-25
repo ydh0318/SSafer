@@ -424,7 +424,7 @@ ssafer apply
     <td align="center"><sub>프로젝트 총괄 및 일정 관리, 2-EC2 격리 아키텍처 설계 (VPC/계정 격리 및 UFW 화이트리스트 접근 제어), Jenkins CI/CD 자동화 파이프라인 구축, Nginx 리버스 프록시 및 Certbot SSL 도입, n8n MR 리뷰 자동화 인프라 구축, 스캔 엔진(ssafer-engine) 컨테이너 분리 및 보안 위협 완화, 서비스 내 타임존(UTC/KST) 정합성 설계</sub></td>
     <td align="center"><sub>스캔 · 결과 API, RabbitMQ 워커 dispatch, SSE 발행, 인증/인가</sub></td>
     <td align="center"><sub>Local Agent Raw WebSocket 채널, 패치 승인 API, 히스토리 비교, JPA 설계</sub></td>
-    <td align="center"><sub>전체 프론트엔드 + 일부 백엔드, 결과 탐색 UI, SSE/폴링 구독, 페이지 라우팅 설계</sub></td>
+    <td align="center"><sub>React + TypeScript 기반 프론트엔드 전반 설계 및 구현, 프로젝트·스캔·결과·히스토리·인증 흐름의 도메인 중심 화면 구조 설계, SSE 및 polling fallback 기반 실시간 스캔 진행 UX 구현, 커스텀 훅·재사용 컴포넌트 중심 리팩토링을 통한 유지보수성 및 확장성 개선, Zustand·React Router·Axios interceptor·TypeScript·ESLint 기반 상태 관리 및 코드 품질 체계 정비, ERD 설계와 API 인증·인가 구조 참여를 통한 데이터 구조 및 권한 흐름 통합 설계</sub></td>
     <td align="center"><sub>CLI 명령어 체계, Custom Rule 엔진, 마스킹 정책, Local Agent, PyPI 배포</sub></td>
     <td align="center"><sub>AI 분석 파이프라인 설계, LangChain → LangGraph Agent, Tool-calling, RabbitMQ AI Worker</sub></td>
   </tr>

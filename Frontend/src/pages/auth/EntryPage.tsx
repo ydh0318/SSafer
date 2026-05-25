@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 
 import AuthShell from '../../features/auth/components/AuthShell';
 import EmailVerificationPanel from '../../features/auth/components/EmailVerificationPanel';
-import { useToast } from '../../features/feedback/useToast';
 import LoginPanel from '../../features/auth/components/LoginPanel';
 import SignupPanel, { type SignupStage } from '../../features/auth/components/SignupPanel';
 import SignupProfilePanel from '../../features/auth/components/SignupProfilePanel';
 import { SESSION_EXPIRED_STORAGE_KEY } from '../../features/auth/utils/session';
 import { initialSignupFormValues } from '../../features/auth/utils/signup';
+import { useToast } from '../../features/feedback/useToast';
 import type { SignupFormValues } from '../../types/auth';
 
 function EntryPage() {

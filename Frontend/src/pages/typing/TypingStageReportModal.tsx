@@ -1,5 +1,6 @@
-import { Trophy, FastForward, Target, User, ChevronRight } from 'lucide-react';
+import { ChevronRight, FastForward, Target, User } from 'lucide-react';
 import { useEffect } from 'react';
+
 import PixelGoose from '../../components/common/PixelGoose';
 
 interface TypingStageReportModalProps {

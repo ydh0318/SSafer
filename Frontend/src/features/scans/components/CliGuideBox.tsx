@@ -1,5 +1,5 @@
+import { Check, ChevronDown, ChevronUp,Copy, HelpCircle, Terminal } from 'lucide-react';
 import { useState } from 'react';
-import { Copy, Check, Terminal, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 type Mode = 'AGENT' | 'CLI_UPLOAD';
 

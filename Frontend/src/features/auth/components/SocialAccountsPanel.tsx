@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { LoaderCircle, Link2, Unlink2 } from 'lucide-react';
+import { Link2, LoaderCircle, Unlink2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { getApiErrorCode } from '../../../api/error';
@@ -87,24 +87,22 @@ function getSocialListErrorMessage(error: unknown) {
 function SocialAccountsPanel() {
   const [socials, setSocials] = useState<SocialAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [message, setMessage] = useState<MessageState | null>(null);
+  const [message, setMessage] = useState<MessageState | null>(() => {
+    const oauthResultMessage = consumeOAuthResultMessage();
+
+    return oauthResultMessage
+      ? {
+          tone: 'success',
+          text: oauthResultMessage,
+        }
+      : null;
+  });
   const [busyProvider, setBusyProvider] = useState<OAuthProvider | null>(null);
 
   const mergedSocials = useMemo(() => {
     const mapped = new Map(socials.map((item) => [item.provider, item]));
     return PROVIDERS.map((provider) => mapped.get(provider) ?? createFallbackSocial(provider));
   }, [socials]);
-
-  useEffect(() => {
-    const oauthResultMessage = consumeOAuthResultMessage();
-
-    if (oauthResultMessage) {
-      setMessage({
-        tone: 'success',
-        text: oauthResultMessage,
-      });
-    }
-  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -184,7 +182,7 @@ function SocialAccountsPanel() {
       );
       setMessage({
         tone: 'success',
-        text: `${getOAuthProviderLabel(provider)} 계정 연결이 해제되었습니다.`,
+        text: `${getOAuthProviderLabel(provider)} 계정 연결을 해제했습니다.`,
       });
     } catch (error) {
       setMessage({
@@ -199,9 +197,9 @@ function SocialAccountsPanel() {
   return (
     <div className="space-y-5 border border-neutral-200 bg-white p-8">
       <div>
-        <h2 className="text-xl font-black tracking-tight text-black">Social Accounts</h2>
+        <h2 className="text-xl font-black tracking-tight text-black">소셜 계정</h2>
         <p className="mt-2 text-sm text-neutral-600">
-          로그인 수단으로 사용할 Google, GitHub 계정의 연결 상태를 확인하고 관리합니다.
+          로그인 수단으로 사용 중인 Google, GitHub 계정의 연결 상태를 확인하고 관리합니다.
         </p>
       </div>
 
@@ -245,15 +243,13 @@ function SocialAccountsPanel() {
                           : 'bg-neutral-100 text-neutral-600'
                       }`}
                     >
-                      {social.connected ? 'Connected' : 'Not connected'}
+                      {social.connected ? '연결됨' : '연결 안 됨'}
                     </span>
                   </div>
                   <p className="text-sm text-neutral-700">
                     {social.email ?? `${providerLabel} 계정이 아직 연결되지 않았습니다.`}
                   </p>
-                  <p className="text-xs text-neutral-500">
-                    Connected at: {formatConnectedAt(social.connectedAt)}
-                  </p>
+                  <p className="text-xs text-neutral-500">연결 시각: {formatConnectedAt(social.connectedAt)}</p>
                 </div>
 
                 {social.connected ? (

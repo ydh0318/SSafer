@@ -1,5 +1,6 @@
 import { Check, Copy, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+
 import { useUiStore } from '../../store/uiStore';
 
 const COMMAND_GROUPS = [

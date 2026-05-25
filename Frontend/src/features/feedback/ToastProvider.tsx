@@ -1,29 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { type ReactNode,useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import GlobalToast, { type GlobalToastTone } from '../../components/common/GlobalToast';
-
-type ToastInput = {
-  message: string;
-  tone?: GlobalToastTone;
-  durationMs?: number;
-};
+import GlobalToast from '../../components/common/GlobalToast';
+import { ToastContext, type ToastContextValue, type ToastInput } from './toastContext';
 
 type ToastRecord = Required<ToastInput> & {
   id: number;
 };
 
-type ToastContextValue = {
-  dismissToast: (id: number) => void;
-  error: (message: string, options?: Omit<ToastInput, 'message' | 'tone'>) => void;
-  info: (message: string, options?: Omit<ToastInput, 'message' | 'tone'>) => void;
-  showToast: (input: ToastInput) => void;
-  success: (message: string, options?: Omit<ToastInput, 'message' | 'tone'>) => void;
-  warning: (message: string, options?: Omit<ToastInput, 'message' | 'tone'>) => void;
-};
-
 const DEFAULT_DURATION_MS = 3200;
-
-const ToastContext = createContext<ToastContextValue | null>(null);
 
 function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
@@ -88,7 +72,12 @@ function ToastProvider({ children }: { children: ReactNode }) {
       {toasts.length > 0 ? (
         <div className="pointer-events-none fixed right-6 top-6 z-50 flex flex-col gap-3">
           {toasts.map((toast) => (
-            <GlobalToast key={toast.id} message={toast.message} onClose={() => dismissToast(toast.id)} tone={toast.tone} />
+            <GlobalToast
+              key={toast.id}
+              message={toast.message}
+              onClose={() => dismissToast(toast.id)}
+              tone={toast.tone}
+            />
           ))}
         </div>
       ) : null}
@@ -96,14 +85,4 @@ function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function useToastContext() {
-  const context = useContext(ToastContext);
-
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider.');
-  }
-
-  return context;
-}
-
-export { ToastProvider, useToastContext };
+export { ToastProvider };

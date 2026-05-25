@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 
 import SectionPanel from '../../../components/common/SectionPanel';
 import { ROUTES } from '../../../constants/routes';
+import type { ServerAuditResultViewModel } from '../../../types/scan';
 import ScanTypeBadge from '../../scans/components/ScanTypeBadge';
 import { formatDateTime } from '../../scans/utils/scanPresentation';
-import type { ServerAuditResultViewModel } from '../../../types/scan';
 
 type ServerAuditResultViewProps = {
   result: ServerAuditResultViewModel;

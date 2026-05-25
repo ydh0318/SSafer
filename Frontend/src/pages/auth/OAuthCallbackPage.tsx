@@ -1,9 +1,13 @@
 import axios from 'axios';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { ROUTES } from '../../constants/routes';
-import { loginWithOAuth, connectGithubSocialAccount, connectGoogleSocialAccount } from '../../features/auth/api/member';
+import {
+  connectGithubSocialAccount,
+  connectGoogleSocialAccount,
+  loginWithOAuth,
+} from '../../features/auth/api/member';
 import {
   getOAuthLoginCancelledMessage,
   getOAuthLoginErrorMessage,
@@ -26,9 +30,20 @@ function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
   const [searchParams] = useSearchParams();
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasProcessedRef = useRef(false);
   const providerLabel = getOAuthProviderLabel(provider);
+  const code = searchParams.get('code')?.trim();
+  const providerError = searchParams.get('error');
+  const state = searchParams.get('state');
+  const intent = useMemo(() => resolveOAuthCallbackIntent(provider, state), [provider, state]);
+  const initialErrorMessage = useMemo(() => {
+    if (providerError || !code || !intent) {
+      return getOAuthLoginCancelledMessage(provider);
+    }
+
+    return null;
+  }, [code, intent, provider, providerError]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(initialErrorMessage);
 
   useEffect(() => {
     if (hasProcessedRef.current) {
@@ -37,13 +52,7 @@ function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
 
     hasProcessedRef.current = true;
 
-    const code = searchParams.get('code')?.trim();
-    const providerError = searchParams.get('error');
-    const state = searchParams.get('state');
-    const intent = resolveOAuthCallbackIntent(provider, state);
-
-    if (providerError || !code || !intent) {
-      setErrorMessage(getOAuthLoginCancelledMessage(provider));
+    if (!code || !intent || initialErrorMessage) {
       return;
     }
 
@@ -81,10 +90,10 @@ function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
           error.response?.data?.code === 'REJOIN_REQUIRED' &&
           error.response.data.data?.rejoinToken
         ) {
-          const confirmed = window.confirm('탈퇴한 계정입니다. 재가입 후 로그인하시겠습니까?');
+          const confirmed = window.confirm('탈퇴한 계정입니다. 복구 후 로그인하시겠습니까?');
 
           if (!confirmed) {
-            setErrorMessage('재가입 확인이 취소되었습니다.');
+            setErrorMessage('복구 요청을 취소했습니다.');
             return;
           }
 
@@ -106,7 +115,7 @@ function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
               },
             });
 
-            setOAuthResultMessage(`${providerLabel} 계정으로 재가입 후 로그인이 완료되었습니다.`);
+            setOAuthResultMessage(`${providerLabel} 계정으로 복구와 로그인이 완료되었습니다.`);
             navigate(ROUTES.projects, { replace: true });
             return;
           } catch (rejoinError) {
@@ -141,7 +150,7 @@ function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
     };
 
     void (intent === 'connect' ? runSocialConnect() : runOAuthLogin());
-  }, [login, navigate, provider, providerLabel, searchParams]);
+  }, [code, initialErrorMessage, intent, login, navigate, provider, providerLabel]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-6">

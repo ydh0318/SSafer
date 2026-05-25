@@ -1,7 +1,7 @@
 import { Shield, ShieldAlert } from 'lucide-react';
 
-import { getSafeScanType, getScanTypeLabel } from '../utils/scanPresentation';
 import type { ScanType } from '../../../types/scan';
+import { getSafeScanType, getScanTypeLabel } from '../utils/scanPresentation';
 
 type ScanTypeBadgeProps = {
   scanType?: ScanType | null;
