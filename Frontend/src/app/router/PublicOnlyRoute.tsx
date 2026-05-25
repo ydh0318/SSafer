@@ -3,8 +3,8 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import {
   clearSessionWithMessage,
-  hasStoredMemberSession,
   hasInvalidAccessToken,
+  hasStoredMemberSession,
   isTokenExpired,
 } from '../../features/auth/utils/session';
 import { useAuthStore } from '../../store/authStore';

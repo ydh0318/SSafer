@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { ROUTES } from '../../constants/routes';
@@ -6,22 +6,42 @@ import { useAuthStore } from '../../store/authStore';
 
 function parseJwtPayload(token: string): Record<string, unknown> {
   const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('유효하지 않은 토큰 형식입니다.');
+
+  if (parts.length !== 3) {
+    throw new Error('유효하지 않은 토큰 형식입니다.');
+  }
+
   const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
   const padding = base64.length % 4 ? '='.repeat(4 - (base64.length % 4)) : '';
   return JSON.parse(atob(base64 + padding));
 }
 
 export default function GuestContinuePage() {
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
+  const token = searchParams.get('token');
+
+  const tokenErrorMessage = useMemo(() => {
+    if (!token) {
+      return null;
+    }
+
+    try {
+      const payload = parseJwtPayload(token);
+      const exp = typeof payload.exp === 'number' ? payload.exp : null;
+
+      if (!exp) {
+        return '토큰에 만료 정보가 없습니다.';
+      }
+
+      return null;
+    } catch {
+      return '유효하지 않은 토큰입니다. CLI에서 발급한 게스트 토큰인지 확인해 주세요.';
+    }
+  }, [token]);
 
   useEffect(() => {
-    const token = searchParams.get('token');
-
-    // URL에서 토큰 즉시 제거 — 브라우저 히스토리/로그 노출 방지
     window.history.replaceState({}, '', ROUTES.guestContinue);
 
     if (!token) {
@@ -29,14 +49,16 @@ export default function GuestContinuePage() {
       return;
     }
 
+    if (tokenErrorMessage) {
+      return;
+    }
+
     try {
       const payload = parseJwtPayload(token);
-
-      const exp = typeof payload.exp === 'number' ? payload.exp : null;
-      if (!exp) throw new Error('토큰에 만료 정보가 없습니다.');
+      const exp = payload.exp as number;
 
       if (Date.now() > exp * 1000) {
-        setErrorMessage('토큰이 만료되었습니다. CLI에서 새 게스트 세션을 발급해 주세요.');
+        navigate(ROUTES.root, { replace: true });
         return;
       }
 
@@ -55,17 +77,16 @@ export default function GuestContinuePage() {
 
       navigate(ROUTES.projects, { replace: true });
     } catch {
-      setErrorMessage('유효하지 않은 토큰입니다. CLI에서 발급한 게스트 토큰을 확인해 주세요.');
+      navigate(ROUTES.root, { replace: true });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [login, navigate, token, tokenErrorMessage]);
 
-  if (errorMessage) {
+  if (tokenErrorMessage) {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#1A1A1A] px-4 text-white">
         <div className="w-full max-w-md rounded-2xl border border-red-900/50 bg-[#2A1A1A] p-8 text-center">
           <p className="text-sm font-bold uppercase tracking-widest text-red-400">토큰 오류</p>
-          <p className="mt-4 text-base text-neutral-300">{errorMessage}</p>
+          <p className="mt-4 text-base text-neutral-300">{tokenErrorMessage}</p>
           <button
             className="mt-8 rounded-full bg-neutral-700 px-6 py-2 text-sm font-bold text-white transition-colors hover:bg-neutral-600"
             onClick={() => navigate(ROUTES.root, { replace: true })}

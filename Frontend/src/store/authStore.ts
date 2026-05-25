@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
 import { tokenStorage } from '../api/tokenStorage';
-import { useProjectStore } from './projectStore';
 import type { AuthUser } from '../types/auth';
+import { useProjectStore } from './projectStore';
 
 interface AuthState {
   accessToken: string | null;

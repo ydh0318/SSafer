@@ -420,7 +420,7 @@ function ProjectListPage() {
     <section className="space-y-8">
       <header className="flex items-end justify-between gap-6 pt-2">
         <div className="min-w-0">
-          <h1 className="text-4xl font-black leading-[0.95] tracking-[-0.03em] text-[#080B16] md:text-5xl xl:text-6xl">
+          <h1 className="text-3xl font-black leading-[0.95] tracking-[-0.03em] text-[#080B16] md:text-4xl xl:text-5xl">
             {projects.length === 0 ? '첫 프로젝트를 만들어 보세요' : '프로젝트 스캔을 시작해 보세요'}
           </h1>
         </div>

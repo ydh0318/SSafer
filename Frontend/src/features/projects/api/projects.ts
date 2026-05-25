@@ -1,5 +1,5 @@
 import { apiClient } from '../../../api/client';
-import { getApiErrorMessage } from '../../../api/error';
+import { createApiError } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
   CreateProjectFormValues,
@@ -30,7 +30,7 @@ export async function createProject(values: CreateProjectFormValues) {
     const response = await apiClient.post<ApiSuccessResponse<CreateProjectResponseData>>('/projects', payload);
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '프로젝트 생성 중 오류가 발생했습니다.'));
+    throw createApiError(error, '프로젝트 생성 중 오류가 발생했습니다.');
   }
 }
 
@@ -45,7 +45,7 @@ export async function getProjects(query: ProjectListQuery = {}) {
 
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '프로젝트 목록을 불러오는 중 오류가 발생했습니다.'));
+    throw createApiError(error, '프로젝트 목록을 불러오는 중 오류가 발생했습니다.');
   }
 }
 
@@ -54,7 +54,7 @@ export async function getProjectDetail(projectId: string) {
     const response = await apiClient.get<ApiSuccessResponse<ProjectDetailResponseData>>(`/projects/${projectId}`);
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '프로젝트 상세 정보를 불러오는 중 오류가 발생했습니다.'));
+    throw createApiError(error, '프로젝트 상세 정보를 불러오는 중 오류가 발생했습니다.');
   }
 }
 
@@ -66,7 +66,7 @@ export async function updateProject(projectId: string, payload: UpdateProjectReq
     );
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '프로젝트 수정 중 오류가 발생했습니다.'));
+    throw createApiError(error, '프로젝트 수정 중 오류가 발생했습니다.');
   }
 }
 
@@ -74,6 +74,6 @@ export async function deleteProject(projectId: string) {
   try {
     await apiClient.delete<ApiSuccessResponse<null>>(`/projects/${projectId}`);
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, '프로젝트 삭제 중 오류가 발생했습니다.'));
+    throw createApiError(error, '프로젝트 삭제 중 오류가 발생했습니다.');
   }
 }

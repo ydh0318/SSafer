@@ -1,5 +1,5 @@
 import { apiClient } from '../../../api/client';
-import { getApiErrorMessage } from '../../../api/error';
+import { createApiError } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type {
   FindingOpenSummaryData,
@@ -18,7 +18,7 @@ const GET_SCAN_SUMMARY_ERROR = '스캔 요약 정보를 불러오지 못했습�
 const GET_SCAN_FINDINGS_ERROR = '스캔 취약점 목록을 불러오지 못했습니다.';
 const GET_SCAN_FINDING_DETAIL_ERROR = '취약점 상세 정보를 불러오지 못했습니다.';
 const GET_SCAN_COMPARE_ERROR = '스캔 비교 결과를 불러오지 못했습니다.';
-const UPDATE_FINDING_RESOLUTION_STATUS_ERROR = '탐지 결과 상태를 변경하지 못했습니다.';
+const UPDATE_FINDING_RESOLUTION_STATUS_ERROR = '조치 결과 상태를 변경하지 못했습니다.';
 const GET_OPEN_FINDING_SUMMARY_ERROR = '조치 필요 취약점 집계를 불러오지 못했습니다.';
 
 export async function getScanBasic(scanId: string | number) {
@@ -26,7 +26,7 @@ export async function getScanBasic(scanId: string | number) {
     const response = await apiClient.get<ApiSuccessResponse<ScanBasicData>>(`/scans/${scanId}`);
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, GET_SCAN_BASIC_ERROR));
+    throw createApiError(error, GET_SCAN_BASIC_ERROR);
   }
 }
 
@@ -35,7 +35,7 @@ export async function getScanSummary(scanId: string | number) {
     const response = await apiClient.get<ApiSuccessResponse<ScanSummaryData>>(`/scans/${scanId}/summary`);
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, GET_SCAN_SUMMARY_ERROR));
+    throw createApiError(error, GET_SCAN_SUMMARY_ERROR);
   }
 }
 
@@ -73,7 +73,7 @@ export async function getScanFindings(scanId: string | number, query: ScanFindin
 
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, GET_SCAN_FINDINGS_ERROR));
+    throw createApiError(error, GET_SCAN_FINDINGS_ERROR);
   }
 }
 
@@ -84,7 +84,7 @@ export async function getScanFindingDetail(scanId: string | number, findingId: s
     );
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, GET_SCAN_FINDING_DETAIL_ERROR));
+    throw createApiError(error, GET_SCAN_FINDING_DETAIL_ERROR);
   }
 }
 
@@ -99,7 +99,7 @@ export async function getScanCompare(baseScanId: string | number, targetScanId: 
 
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, GET_SCAN_COMPARE_ERROR));
+    throw createApiError(error, GET_SCAN_COMPARE_ERROR);
   }
 }
 
@@ -114,7 +114,7 @@ export async function updateFindingResolutionStatus(
     );
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, UPDATE_FINDING_RESOLUTION_STATUS_ERROR));
+    throw createApiError(error, UPDATE_FINDING_RESOLUTION_STATUS_ERROR);
   }
 }
 
@@ -125,6 +125,6 @@ export async function getOpenFindingSummary(projectId?: string | number) {
     });
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, GET_OPEN_FINDING_SUMMARY_ERROR));
+    throw createApiError(error, GET_OPEN_FINDING_SUMMARY_ERROR);
   }
 }

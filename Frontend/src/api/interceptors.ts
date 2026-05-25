@@ -5,11 +5,11 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
+import { ROUTES } from '../constants/routes';
+import { clearSessionWithMessage } from '../features/auth/utils/session';
 import { useAuthStore } from '../store/authStore';
 import type { ApiSuccessResponse } from '../types/api';
 import type { AuthTokenData, RefreshTokenRequest } from '../types/auth';
-import { ROUTES } from '../constants/routes';
-import { clearSessionWithMessage } from '../features/auth/utils/session';
 import { tokenStorage } from './tokenStorage';
 
 type RetryableRequestConfig = AxiosRequestConfig & {

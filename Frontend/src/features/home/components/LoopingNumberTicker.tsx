@@ -23,17 +23,19 @@ function LoopingNumberTicker({
     () => formatter ?? ((value: number) => new Intl.NumberFormat('ko-KR').format(value)),
     [formatter],
   );
-  const [value, setValue] = useState(from);
+  const [state, setState] = useState({ from, to, value: from });
+  const prefersReducedMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const value =
+    paused || prefersReducedMotion
+      ? to
+      : state.from === from && state.to === to
+        ? state.value
+        : from;
 
   useEffect(() => {
-    if (paused) {
-      return undefined;
-    }
-
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-
-    if (reducedMotion.matches) {
-      setValue(to);
+    if (paused || prefersReducedMotion) {
       return undefined;
     }
 
@@ -61,7 +63,11 @@ function LoopingNumberTicker({
 
       if (nextValue !== lastValue) {
         lastValue = nextValue;
-        setValue(nextValue);
+        setState({
+          from,
+          to,
+          value: nextValue,
+        });
       }
 
       animationFrameId = window.requestAnimationFrame(tick);
@@ -70,11 +76,11 @@ function LoopingNumberTicker({
     animationFrameId = window.requestAnimationFrame(tick);
 
     return () => window.cancelAnimationFrame(animationFrameId);
-  }, [durationMs, edgeHoldMs, from, to, paused]);
+  }, [durationMs, edgeHoldMs, from, to, paused, prefersReducedMotion]);
 
   return (
     <span
-      aria-label={`0부터 ${to.toLocaleString('ko-KR')}까지 반복 증감하는 취약점 수`}
+      aria-label={`0부터 ${to.toLocaleString('ko-KR')}까지 반복 증가하는 취약점 수`}
       className={`inline-flex min-w-[4.8ch] items-center justify-center whitespace-nowrap text-center tabular-nums ${className}`.trim()}
     >
       {resolvedFormatter(value)}

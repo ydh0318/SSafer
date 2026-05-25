@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import PixelGoose from '../../components/common/PixelGoose';
-import { useUiStore } from '../../store/uiStore';
 import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+import PixelGoose from '../../components/common/PixelGoose';
 import { ROUTES } from '../../constants/routes';
+import { useUiStore } from '../../store/uiStore';
 
 export default function TypingGameEnding({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState(0);

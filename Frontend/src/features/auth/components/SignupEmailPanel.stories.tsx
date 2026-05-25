@@ -1,11 +1,92 @@
-import type { ChangeEvent } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { ChangeEvent } from 'react';
 import { useState } from 'react';
 
 import AuthButton from './AuthButton';
 import AuthField from './AuthField';
 import AuthPanelHeading from './AuthPanelHeading';
 import SignupEmailPanel from './SignupEmailPanel';
+
+function DefaultSignupEmailExample() {
+  const [email, setEmail] = useState('');
+
+  return (
+    <div className="min-h-screen bg-[#f4f4f4] p-10">
+      <div className="mx-auto max-w-[560px]">
+        <SignupEmailPanel
+          email={email}
+          onEmailChange={setEmail}
+          onVerificationCodeSent={() => {}}
+          onVerificationStarted={() => {}}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ExistingEmailExample() {
+  const [email, setEmail] = useState('ssafer@example.com');
+
+  return (
+    <div className="min-h-screen bg-[#f4f4f4] p-10">
+      <div className="mx-auto max-w-[560px]">
+        <div>
+          <AuthPanelHeading subtitle="Member" title="New" />
+
+          <div className="mt-[clamp(2rem,5.6vh,3.5rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
+            <AuthField
+              autoComplete="email"
+              errorMessage="?대? 媛?낅맂 ?대찓?쇱엯?덈떎."
+              label="EMAIL ADDRESS"
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setEmail(event.target.value)}
+              placeholder="Email Address"
+              value={email}
+            />
+          </div>
+
+          <div className="mt-[clamp(2.5rem,6vh,4.25rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
+            <AuthButton type="button">Continue</AuthButton>
+            <p className="auth-body-text text-black">
+              ?낅젰???대찓?쇰줈 ?뚯썝媛???몄쬆 肄붾뱶瑜?蹂대궡?쒕┰?덈떎.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RateLimitExample() {
+  const [email, setEmail] = useState('ssafer@example.com');
+
+  return (
+    <div className="min-h-screen bg-[#f4f4f4] p-10">
+      <div className="mx-auto max-w-[560px]">
+        <div>
+          <AuthPanelHeading subtitle="Member" title="New" />
+
+          <div className="mt-[clamp(2rem,5.6vh,3.5rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
+            <AuthField
+              autoComplete="email"
+              errorMessage="?몄쬆 踰덊샇 ?붿껌???덈Т 留롮뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭??"
+              label="EMAIL ADDRESS"
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setEmail(event.target.value)}
+              placeholder="Email Address"
+              value={email}
+            />
+          </div>
+
+          <div className="mt-[clamp(2.5rem,6vh,4.25rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
+            <AuthButton type="button">Continue</AuthButton>
+            <p className="auth-body-text text-black">
+              ?낅젰???대찓?쇰줈 ?뚯썝媛???몄쬆 肄붾뱶瑜?蹂대궡?쒕┰?덈떎.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const meta = {
   title: 'Auth/Flows/SignupEmailPanel',
@@ -22,7 +103,7 @@ const meta = {
     docs: {
       description: {
         component:
-          '회원가입 첫 단계 패널입니다. 이메일을 입력받고 인증 코드 발송을 시작합니다. 이미 가입된 이메일이나 요청 제한 같은 실패 상태는 모두 이메일 입력 아래 인라인으로 통일합니다.',
+          '?뚯썝媛??泥??④퀎 ?⑤꼸?낅땲?? ?대찓?쇱쓣 ?낅젰諛쏄퀬 ?몄쬆 肄붾뱶 諛쒖넚???쒖옉?⑸땲?? ?대? 媛?낅맂 ?대찓?쇱씠???붿껌 ?쒗븳 媛숈? ?ㅽ뙣 ?곹깭??紐⑤몢 ?대찓???낅젰 ?꾨옒 ?몃씪?몄쑝濡??듭씪?⑸땲??',
       },
     },
   },
@@ -33,108 +114,33 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
-  render: () => {
-    const [email, setEmail] = useState('');
-
-    return (
-      <div className="min-h-screen bg-[#f4f4f4] p-10">
-        <div className="mx-auto max-w-[560px]">
-          <SignupEmailPanel
-            email={email}
-            onEmailChange={setEmail}
-            onVerificationCodeSent={() => {}}
-            onVerificationStarted={() => {}}
-          />
-        </div>
-      </div>
-    );
-  },
+  render: () => <DefaultSignupEmailExample />,
   parameters: {
     docs: {
       description: {
-        story: '기본 회원가입 첫 화면입니다. 사용자가 이메일을 입력하고 인증을 시작하는 단계입니다.',
+        story: '湲곕낯 ?뚯썝媛??泥??붾㈃?낅땲?? ?ъ슜?먭? ?대찓?쇱쓣 ?낅젰?섍퀬 ?몄쬆???쒖옉?섎뒗 ?④퀎?낅땲??',
       },
     },
   },
 };
 
 export const WithExistingEmailError: Story = {
-  render: () => {
-    const [email, setEmail] = useState('ssafer@example.com');
-
-    return (
-      <div className="min-h-screen bg-[#f4f4f4] p-10">
-        <div className="mx-auto max-w-[560px]">
-          <div>
-            <AuthPanelHeading subtitle="Member" title="New" />
-
-            <div className="mt-[clamp(2rem,5.6vh,3.5rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
-              <AuthField
-                autoComplete="email"
-                errorMessage="이미 가입된 이메일입니다."
-                label="EMAIL ADDRESS"
-                onChange={(event: ChangeEvent<HTMLInputElement>) => setEmail(event.target.value)}
-                placeholder="Email Address"
-                value={email}
-              />
-            </div>
-
-            <div className="mt-[clamp(2.5rem,6vh,4.25rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
-              <AuthButton type="button">Continue</AuthButton>
-              <p className="auth-body-text text-black">
-                입력한 이메일로 회원가입 인증 코드를 보내드립니다.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  },
+  render: () => <ExistingEmailExample />,
   parameters: {
     docs: {
       description: {
-        story: '`이미 가입된 이메일입니다.`를 인라인으로 보여주는 상태입니다.',
+        story: '`?대? 媛?낅맂 ?대찓?쇱엯?덈떎.`瑜??몃씪?몄쑝濡?蹂댁뿬二쇰뒗 ?곹깭?낅땲??',
       },
     },
   },
 };
 
 export const WithRateLimitError: Story = {
-  render: () => {
-    const [email, setEmail] = useState('ssafer@example.com');
-
-    return (
-      <div className="min-h-screen bg-[#f4f4f4] p-10">
-        <div className="mx-auto max-w-[560px]">
-          <div>
-            <AuthPanelHeading subtitle="Member" title="New" />
-
-            <div className="mt-[clamp(2rem,5.6vh,3.5rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
-              <AuthField
-                autoComplete="email"
-                errorMessage="인증 번호 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
-                label="EMAIL ADDRESS"
-                onChange={(event: ChangeEvent<HTMLInputElement>) => setEmail(event.target.value)}
-                placeholder="Email Address"
-                value={email}
-              />
-            </div>
-
-            <div className="mt-[clamp(2.5rem,6vh,4.25rem)] space-y-[clamp(0.875rem,2vh,1.25rem)]">
-              <AuthButton type="button">Continue</AuthButton>
-              <p className="auth-body-text text-black">
-                입력한 이메일로 회원가입 인증 코드를 보내드립니다.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  },
+  render: () => <RateLimitExample />,
   parameters: {
     docs: {
       description: {
-        story: '`인증 번호 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.`를 인라인으로 보여주는 상태입니다.',
+        story: '`?몄쬆 踰덊샇 ?붿껌???덈Т 留롮뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭??`瑜??몃씪?몄쑝濡?蹂댁뿬二쇰뒗 ?곹깭?낅땲??',
       },
     },
   },

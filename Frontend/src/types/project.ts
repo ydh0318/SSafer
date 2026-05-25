@@ -1,5 +1,5 @@
-import type { RiskLevel, WorkStatus } from './security';
 import type { ScanMode } from './scan';
+import type { RiskLevel, WorkStatus } from './security';
 
 export type { ScanMode } from './scan';
 

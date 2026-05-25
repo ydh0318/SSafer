@@ -1,4 +1,4 @@
-import { Globe, Terminal, ArrowRight, Copy, Check, Eye, EyeOff, LoaderCircle } from 'lucide-react';
+import { ArrowRight, Check, Copy, Eye, EyeOff, Globe, LoaderCircle,Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 

@@ -1,6 +1,5 @@
-import type { OAuthProvider } from '../../../types/auth';
-
 import { ROUTES } from '../../../constants/routes';
+import type { OAuthProvider } from '../../../types/auth';
 
 const GOOGLE_OAUTH_BASE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GITHUB_OAUTH_BASE_URL = 'https://github.com/login/oauth/authorize';

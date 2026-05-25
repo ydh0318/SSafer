@@ -1,5 +1,5 @@
 import { apiClient } from '../../../api/client';
-import { getApiErrorMessage } from '../../../api/error';
+import { createApiError } from '../../../api/error';
 import type { ApiSuccessResponse } from '../../../types/api';
 import type { HistoryScanListQuery, HistoryScanListResponseData } from '../../../types/scan';
 
@@ -30,6 +30,6 @@ export async function getHistoryScans(query: HistoryScanListQuery = {}) {
 
     return response.data.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, GET_HISTORY_SCANS_ERROR));
+    throw createApiError(error, GET_HISTORY_SCANS_ERROR);
   }
 }

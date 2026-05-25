@@ -7,53 +7,58 @@ type AppleData = {
   bittenSrc: string;
   bubble: string;
   code: string;
-  /** 코드 중 보안상 위험한 구간 [start, end) — 빨갛게 강조됨 */
   dangerRange: readonly [number, number];
 };
 
 const APPLES: AppleData[] = [
   {
     bittenSrc: '/landing/1bite.png',
-    bubble: '비밀번호 한 입 털림 ㅋ',
+    bubble: '비밀번호가 그대로 노출됨',
     code: 'DB_PASSWORD=mysecret123',
     dangerRange: [12, 23],
   },
   {
     bittenSrc: '/landing/2bite.png',
-    bubble: '서버 권한 두 입 털림 ㅋ',
+    bubble: '서버 권한이 과도하게 열림',
     code: 'privileged: true',
     dangerRange: [12, 16],
   },
   {
     bittenSrc: '/landing/nbite.png',
-    bubble: 'DB 문까지 왕창 털림ㅋ',
+    bubble: 'DB 포트가 외부에 그대로 열림',
     code: '0.0.0.0:3306:3306',
     dangerRange: [0, 7],
   },
 ];
 
 function useTypewriter(text: string, speed = 36) {
-  const [displayed, setDisplayed] = useState('');
-  const [done, setDone] = useState(false);
+  const [state, setState] = useState({ displayed: '', text });
+  const displayed = state.text === text ? state.displayed : '';
+  const done = displayed === text;
 
   useEffect(() => {
-    setDisplayed('');
-    setDone(false);
-    if (!text) return undefined;
+    if (!text) {
+      return undefined;
+    }
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let i = 0;
+    let index = 0;
 
     const tick = () => {
-      if (cancelled) return;
-      i += 1;
-      setDisplayed(text.slice(0, i));
-      if (i < text.length) {
+      if (cancelled) {
+        return;
+      }
+
+      index += 1;
+      setState({
+        displayed: text.slice(0, index),
+        text,
+      });
+
+      if (index < text.length) {
         const jitter = Math.floor(Math.random() * 40);
         timer = setTimeout(tick, speed + jitter);
-      } else {
-        setDone(true);
       }
     };
 
@@ -61,7 +66,9 @@ function useTypewriter(text: string, speed = 36) {
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
   }, [text, speed]);
 
@@ -70,10 +77,10 @@ function useTypewriter(text: string, speed = 36) {
 
 function TerminalLine({ code, dangerRange }: { code: string; dangerRange: readonly [number, number] }) {
   const { displayed, done } = useTypewriter(code);
-  const [dStart, dEnd] = dangerRange;
-  const len = displayed.length;
-  const cutStart = Math.min(dStart, len);
-  const cutEnd = Math.min(dEnd, len);
+  const [dangerStart, dangerEnd] = dangerRange;
+  const length = displayed.length;
+  const cutStart = Math.min(dangerStart, length);
+  const cutEnd = Math.min(dangerEnd, length);
 
   const safeBefore = displayed.slice(0, cutStart);
   const dangerPart = displayed.slice(cutStart, cutEnd);
@@ -94,7 +101,7 @@ function TerminalLine({ code, dangerRange }: { code: string; dangerRange: readon
           initial={{ opacity: 0, scale: 0.5, x: -10 }}
           transition={{ type: 'spring', damping: 14, stiffness: 320 }}
         >
-          <span aria-hidden="true">⚠</span>
+          <span aria-hidden="true">!</span>
           INSECURE
         </motion.span>
       )}
@@ -103,7 +110,6 @@ function TerminalLine({ code, dangerRange }: { code: string; dangerRange: readon
 }
 
 type AppleHeroSectionProps = {
-  /** 섹션 하단 그라데이션 페이드 색상. 다음 섹션 bg와 매치시키면 스크롤 전환이 자연스러워짐. */
   bottomFadeColor?: string;
   showHeader?: boolean;
 };
@@ -119,6 +125,7 @@ function AppleHeroSection({ bottomFadeColor, showHeader = true }: AppleHeroSecti
       next[index] = !wasBitten;
       return next;
     });
+
     if (wasBitten) {
       if (activeIndex === index) {
         setActiveIndex(null);
@@ -128,15 +135,10 @@ function AppleHeroSection({ bottomFadeColor, showHeader = true }: AppleHeroSecti
     }
   };
 
-  const hasFade = !!bottomFadeColor;
+  const hasFade = Boolean(bottomFadeColor);
 
   return (
-    <section
-      className={`relative w-full overflow-hidden bg-black text-white ${
-        hasFade ? 'h-[160vh]' : 'h-screen'
-      }`}
-    >
-      {/* Fade는 DOM에서 sticky 콘텐츠보다 먼저 둠 — sticky inner가 투명이라 페이드가 뒤로 비침 */}
+    <section className={`relative w-full overflow-hidden bg-black text-white ${hasFade ? 'h-[160vh]' : 'h-screen'}`}>
       {hasFade ? (
         <div
           aria-hidden="true"
@@ -148,145 +150,134 @@ function AppleHeroSection({ bottomFadeColor, showHeader = true }: AppleHeroSecti
       <div className={hasFade ? 'sticky top-0 h-screen' : 'h-full'}>
         {showHeader ? <SiteHeader showSessionBar={false} variant="transparent" /> : null}
 
-      <main className="relative z-10 flex h-[calc(100vh-4rem)] flex-col items-center px-8 pt-2 md:pt-4">
-        <div className="grid w-full max-w-6xl grid-cols-3 gap-x-6">
-          {APPLES.map((apple, index) => {
-            const isBitten = bitten[index];
-            const isActive = activeIndex === index;
+        <main className="relative z-10 flex h-[calc(100vh-4rem)] flex-col items-center px-8 pt-2 md:pt-4">
+          <div className="grid w-full max-w-6xl grid-cols-3 gap-x-6">
+            {APPLES.map((apple, index) => {
+              const isBitten = bitten[index];
+              const isActive = activeIndex === index;
 
-            return (
-              <div className="relative flex flex-col items-center" key={index}>
-                {/* Above-apple */}
-                <div className="relative flex h-44 w-full items-end justify-center">
-                  <AnimatePresence>
-                    {isActive ? (
-                      <motion.div
-                        animate={{ opacity: 1, y: 0 }}
-                        className="absolute bottom-0 flex flex-col items-center"
-                        exit={{ opacity: 0, y: -12 }}
-                        initial={{ opacity: 0, y: -8 }}
-                        key="overlay"
-                        transition={{ duration: 0.28, ease: 'easeOut' }}
-                      >
+              return (
+                <div className="relative flex flex-col items-center" key={index}>
+                  <div className="relative flex h-44 w-full items-end justify-center">
+                    <AnimatePresence>
+                      {isActive ? (
                         <motion.div
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.5, y: 10 }}
-                          initial={{ opacity: 0, scale: 0.4, y: 16 }}
-                          transition={{ type: 'spring', damping: 12, stiffness: 340 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="absolute bottom-0 flex flex-col items-center"
+                          exit={{ opacity: 0, y: -12 }}
+                          initial={{ opacity: 0, y: -8 }}
+                          key="overlay"
+                          transition={{ duration: 0.28, ease: 'easeOut' }}
                         >
                           <motion.div
-                            animate={{ y: [0, -3, 0, -3, 0], rotate: [0, -1.4, 1.4, -1.4, 0] }}
-                            className="relative rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-neutral-800 shadow-[0_12px_30px_rgba(0,0,0,0.55)]"
-                            transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.5, y: 10 }}
+                            initial={{ opacity: 0, scale: 0.4, y: 16 }}
+                            transition={{ type: 'spring', damping: 12, stiffness: 340 }}
                           >
-                            {apple.bubble}
-                            <span className="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 bg-white" />
+                            <motion.div
+                              animate={{ y: [0, -3, 0, -3, 0], rotate: [0, -1.4, 1.4, -1.4, 0] }}
+                              className="relative rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-neutral-800 shadow-[0_12px_30px_rgba(0,0,0,0.55)]"
+                              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                            >
+                              {apple.bubble}
+                              <span className="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 bg-white" />
+                            </motion.div>
+                          </motion.div>
+
+                          <div className="h-3" />
+
+                          <motion.div
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.7, y: -8 }}
+                            initial={{ opacity: 0, scale: 0.6, y: -18 }}
+                            transition={{ delay: 0.05, type: 'spring', damping: 12, stiffness: 300 }}
+                          >
+                            <motion.img
+                              alt=""
+                              animate={{ y: [0, -3, 0, -3, 0], rotate: [0, -6, 6, -6, 0] }}
+                              className="h-16 w-16 object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.75)]"
+                              src="/landing/doguk.png"
+                              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                            />
                           </motion.div>
                         </motion.div>
-
-                        <div className="h-3" />
-
+                      ) : !isBitten ? (
                         <motion.div
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.7, y: -8 }}
-                          initial={{ opacity: 0, scale: 0.6, y: -18 }}
-                          transition={{ delay: 0.05, type: 'spring', damping: 12, stiffness: 300 }}
+                          animate={{ opacity: 1 }}
+                          className="take-a-bite select-none text-white/90"
+                          exit={{ opacity: 0 }}
+                          initial={{ opacity: 0 }}
+                          key="cta"
+                          transition={{ duration: 0.25 }}
                         >
-                          <motion.img
-                            alt=""
-                            animate={{ y: [0, -3, 0, -3, 0], rotate: [0, -6, 6, -6, 0] }}
-                            className="h-16 w-16 object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.75)]"
-                            src="/landing/doguk.png"
-                            transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-                          />
+                          Take a bite !
                         </motion.div>
-                      </motion.div>
-                    ) : !isBitten ? (
+                      ) : null}
+                    </AnimatePresence>
+                  </div>
+
+                  <motion.button
+                    aria-label={isBitten ? `사과 ${index + 1} 되돌리기` : `사과 ${index + 1} 베어 물기`}
+                    className="relative h-64 w-64 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 md:h-72 md:w-72"
+                    onClick={() => handleAppleClick(index)}
+                    type="button"
+                    whileHover={!isBitten ? { scale: 1.07, y: -6 } : { scale: 1.03 }}
+                    whileTap={{ scale: 0.9, rotate: -8 }}
+                  >
+                    <AnimatePresence initial={false}>
                       <motion.div
-                        animate={{ opacity: 1 }}
-                        className="take-a-bite select-none text-white/90"
-                        exit={{ opacity: 0 }}
-                        initial={{ opacity: 0 }}
-                        key="cta"
-                        transition={{ duration: 0.25 }}
+                        animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                        className="absolute inset-0"
+                        exit={{ opacity: 0, scale: 1.12, rotate: 6 }}
+                        initial={{ opacity: 0, scale: 0.82, rotate: -6 }}
+                        key={isBitten ? `bitten-${index}` : `fresh-${index}`}
+                        transition={{ type: 'spring', damping: 14, stiffness: 260 }}
                       >
-                        Take a bite !
+                        <motion.img
+                          alt="apple"
+                          animate={isBitten ? { y: 0, rotate: 0 } : { y: [0, -7, 0], rotate: [0, -1.2, 1.2, 0] }}
+                          className={`h-full w-full select-none object-contain ${isBitten ? '' : 'fresh-apple-glow'}`}
+                          draggable={false}
+                          src={isBitten ? apple.bittenSrc : '/landing/apple.png'}
+                          transition={
+                            isBitten ? { duration: 0.3 } : { duration: 3.6, repeat: Infinity, ease: 'easeInOut' }
+                          }
+                        />
                       </motion.div>
-                    ) : null}
-                  </AnimatePresence>
+                    </AnimatePresence>
+                  </motion.button>
+
+                  <div className="-mt-2 flex h-9 w-full items-center justify-center">
+                    <AnimatePresence>
+                      {isActive ? (
+                        <motion.div
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 6 }}
+                          initial={{ opacity: 0, y: 10 }}
+                          key="code"
+                          transition={{ delay: 0.18, duration: 0.28 }}
+                        >
+                          <TerminalLine code={apple.code} dangerRange={apple.dangerRange} />
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  </div>
                 </div>
+              );
+            })}
+          </div>
 
-                {/* 사과 */}
-                <motion.button
-                  aria-label={isBitten ? `사과 ${index + 1} 되돌리기` : `사과 ${index + 1} 베어 물기`}
-                  className="relative h-64 w-64 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 md:h-72 md:w-72"
-                  onClick={() => handleAppleClick(index)}
-                  type="button"
-                  whileHover={!isBitten ? { scale: 1.07, y: -6 } : { scale: 1.03 }}
-                  whileTap={{ scale: 0.9, rotate: -8 }}
-                >
-                  <AnimatePresence initial={false}>
-                    <motion.div
-                      animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                      className="absolute inset-0"
-                      exit={{ opacity: 0, scale: 1.12, rotate: 6 }}
-                      initial={{ opacity: 0, scale: 0.82, rotate: -6 }}
-                      key={isBitten ? `bitten-${index}` : `fresh-${index}`}
-                      transition={{ type: 'spring', damping: 14, stiffness: 260 }}
-                    >
-                      <motion.img
-                        alt="apple"
-                        animate={
-                          isBitten
-                            ? { y: 0, rotate: 0 }
-                            : { y: [0, -7, 0], rotate: [0, -1.2, 1.2, 0] }
-                        }
-                        className={`h-full w-full select-none object-contain ${isBitten ? '' : 'fresh-apple-glow'}`}
-                        draggable={false}
-                        src={isBitten ? apple.bittenSrc : '/landing/apple.png'}
-                        transition={
-                          isBitten
-                            ? { duration: 0.3 }
-                            : { duration: 3.6, repeat: Infinity, ease: 'easeInOut' }
-                        }
-                      />
-                    </motion.div>
-                  </AnimatePresence>
-                </motion.button>
+          <motion.div
+            animate={{ y: [0, 8, 0], opacity: [0.55, 1, 0.55] }}
+            className="mt-auto pb-44 text-xs font-light tracking-[0.4em] text-white/60"
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            SCROLL DOWN
+          </motion.div>
+        </main>
+      </div>
 
-                {/* 코드 블록 */}
-                <div className="-mt-2 flex h-9 w-full items-center justify-center">
-                  <AnimatePresence>
-                    {isActive ? (
-                      <motion.div
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 6 }}
-                        initial={{ opacity: 0, y: 10 }}
-                        key="code"
-                        transition={{ delay: 0.18, duration: 0.28 }}
-                      >
-                        <TerminalLine code={apple.code} dangerRange={apple.dangerRange} />
-                      </motion.div>
-                    ) : null}
-                  </AnimatePresence>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 스크롤 힌트 — fade 영역(아래쪽 ~40)보다 위에 두어 어떤 페이드 색에서도 가독성 유지 */}
-        <motion.div
-          animate={{ y: [0, 8, 0], opacity: [0.55, 1, 0.55] }}
-          className="mt-auto pb-44 text-xs font-light tracking-[0.4em] text-white/60"
-          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-        >
-          SCROLL ↓
-        </motion.div>
-      </main>
-      </div>{/* /sticky-or-static wrapper */}
-
-      {/* Local CSS — Apple Hero 전용 스타일 */}
       <style>{`
         .take-a-bite {
           font-family: 'Montserrat', "Segoe UI", "Helvetica Neue", sans-serif;
