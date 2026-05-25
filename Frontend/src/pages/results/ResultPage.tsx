@@ -210,13 +210,13 @@ function ResultPage() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   {severityOrder.map((severity) => {
                     const meta = severityMeta[severity];
                     const count = counts[severity];
                     return (
                       <button
-                        className={`border px-4 py-3 text-left transition ${
+                        className={`flex min-h-[132px] flex-col justify-between border px-4 py-4 text-left transition ${
                           severityFilter === severity
                             ? 'border-black bg-black text-white'
                             : 'border-neutral-200 bg-white hover:border-neutral-400'
@@ -226,7 +226,7 @@ function ResultPage() {
                         type="button"
                       >
                         <span
-                          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em]"
+                          className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em]"
                           style={{ color: severityFilter === severity ? 'white' : meta.bg }}
                         >
                           <span
@@ -235,7 +235,11 @@ function ResultPage() {
                           />
                           {meta.label}
                         </span>
-                        <span className={`mt-2 block text-3xl font-black ${count === 0 && severityFilter !== severity ? 'text-neutral-200' : ''}`}>
+                        <span
+                          className={`mt-6 block text-5xl font-black leading-none ${
+                            count === 0 && severityFilter !== severity ? 'text-neutral-200' : ''
+                          }`}
+                        >
                           {count}
                         </span>
                       </button>
