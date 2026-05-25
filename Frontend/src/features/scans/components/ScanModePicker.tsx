@@ -77,7 +77,7 @@ function ScanModePicker({ selectedMode, onSelect, isAgentAvailable }: ScanModePi
 
               <h3
                 className={`mt-4 text-xl font-black tracking-tight transition-colors duration-300 ${
-                  isDisabled ? 'text-neutral-500' : isSelected ? 'text-[#111111]' : 'text-[#0F0F0F]'
+                  isDisabled ? 'text-neutral-500' : isSelected ? 'text-white' : 'text-[#0F0F0F]'
                 }`}
               >
                 {mode.title}

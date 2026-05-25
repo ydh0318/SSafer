@@ -194,15 +194,15 @@ function ResultPage() {
           <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
             <div className="space-y-5">
               <div className="border border-neutral-100 bg-white px-5 py-5">
-                <div className="flex items-end justify-between gap-3">
-                  <div>
+                <div className="grid gap-4 md:grid-cols-2 md:items-start">
+                  <div className="min-w-0">
                     <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400">개요</p>
                     <h2 className="mt-2 text-2xl font-black text-black">
                       {summary?.totalFindings ?? 0}
                       <span className="ml-2 text-base text-neutral-300">건</span>
                     </h2>
                   </div>
-                  <div className="text-right">
+                  <div className="min-w-0 md:text-right">
                     <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400">조치 완료</p>
                     <p className="mt-2 text-2xl font-black text-black">
                       {resolvedCount}
