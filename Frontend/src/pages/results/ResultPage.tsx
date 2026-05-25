@@ -109,16 +109,16 @@ function ResultPage() {
 
             <div className="mt-6 grid gap-3 text-sm text-neutral-600 sm:grid-cols-2 xl:max-w-3xl">
               <div className="border border-neutral-100 bg-neutral-50 px-4 py-3">
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">완료 시각</p>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">COMPLETED</p>
                 <p className="mt-1 font-bold text-neutral-900">
                   {scanBasic?.completedAt ? formatDateTime(scanBasic.completedAt) : '아직 완료되지 않았습니다'}
                 </p>
               </div>
               <div className="border border-neutral-100 bg-neutral-50 px-4 py-3">
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">조치 필요</p>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">ACTION NEEDED</p>
                 <p className="mt-1 font-bold text-neutral-900">
                   {openCount + inProgressCount}
-                  <span className="ml-2 font-normal text-neutral-500">미조치 + 진행 중</span>
+                  <span className="ml-2 font-normal text-neutral-500">미해결/처리 중</span>
                 </p>
               </div>
             </div>
@@ -154,25 +154,25 @@ function ResultPage() {
             <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">SUMMARY</p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="bg-white p-4">
-                <p className="text-xs font-bold text-neutral-500">Total</p>
+                <p className="text-xs font-bold text-neutral-500">총 탐지</p>
                 <p className="mt-1 text-3xl font-black text-black">{summary?.totalFindings ?? 0}</p>
               </div>
               <div className="bg-white p-4">
-                <p className="text-xs font-bold text-neutral-500">치명적</p>
+                <p className="text-xs font-bold text-neutral-500">Critical</p>
                 <p className="mt-1 text-3xl font-black text-[#E63946]">{counts.CRITICAL}</p>
               </div>
               <div className="bg-white p-4">
-                <p className="text-xs font-bold text-neutral-500">조치 완료</p>
+                <p className="text-xs font-bold text-neutral-500">해결 완료</p>
                 <p className="mt-1 text-3xl font-black text-[#4A7A00]">{resolvedCount}</p>
               </div>
               <div className="bg-white p-4">
-                <p className="text-xs font-bold text-neutral-500">무시</p>
+                <p className="text-xs font-bold text-neutral-500">무시됨</p>
                 <p className="mt-1 text-3xl font-black text-neutral-400">{ignoredCount}</p>
               </div>
             </div>
             <div className="mt-5">
               <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
-                <span>조치 완료 비율</span>
+                <span>해결 진행률</span>
                 <span className="font-mono font-bold text-black">{resolvedRatio}%</span>
               </div>
               <div className="h-2 bg-neutral-200">
@@ -201,19 +201,19 @@ function ResultPage() {
                   </div>
                   <div className="min-w-0 md:text-right">
                     <p className="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-neutral-400">RESOLVED</p>
-                    <p className="mt-2 text-4xl font-black leading-none text-black">
+                    <p className="mt-2 text-3xl font-black leading-none text-black">
                       {resolvedCount}
                       <span className="text-neutral-200"> / {Math.max((summary?.totalFindings ?? 0) - ignoredCount, 1)}</span>
                     </p>
                   </div>
                 </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   {severityOrder.map((severity) => {
                     const meta = severityMeta[severity];
                     const count = counts[severity];
                     return (
                       <button
-                        className={`flex min-h-[126px] flex-col border px-4 py-4 text-left transition ${
+                        className={`flex min-h-[98px] flex-col border px-3.5 py-3 text-left transition ${
                           severityFilter === severity
                             ? 'border-black bg-black text-white'
                             : 'border-neutral-200 bg-white hover:border-neutral-400'
@@ -223,7 +223,7 @@ function ResultPage() {
                         type="button"
                       >
                         <span
-                          className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em]"
+                          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em]"
                           style={{ color: severityFilter === severity ? 'white' : meta.bg }}
                         >
                           <span
@@ -233,7 +233,7 @@ function ResultPage() {
                           {meta.label}
                         </span>
                         <span
-                          className={`mt-auto block pt-6 text-[42px] font-black leading-none ${
+                          className={`mt-auto block pt-3 text-[34px] font-black leading-none ${
                             count === 0 && severityFilter !== severity ? 'text-neutral-200' : ''
                           }`}
                         >
