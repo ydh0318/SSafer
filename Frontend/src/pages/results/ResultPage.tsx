@@ -192,28 +192,28 @@ function ResultPage() {
       ) : (
         <>
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="grid gap-5 xl:col-span-2 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
+            <div className="grid gap-5 xl:col-span-2 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-stretch">
               <div className="border border-neutral-100 bg-white px-5 py-5">
-                <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <p className="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-neutral-400">SEVERITY OVERVIEW</p>
-                    <p className="mt-3 text-[15px] text-neutral-700">위험도별 탐지 수와 조치 상태를 한 번에 확인합니다.</p>
+                    <p className="mt-2 text-sm text-neutral-700">위험도별 탐지 수와 조치 상태를 한 번에 확인합니다.</p>
                   </div>
                   <div className="min-w-0 md:text-right">
                     <p className="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-neutral-400">RESOLVED</p>
-                    <p className="mt-2 text-5xl font-black leading-none text-black">
+                    <p className="mt-2 text-4xl font-black leading-none text-black">
                       {resolvedCount}
                       <span className="text-neutral-200"> / {Math.max((summary?.totalFindings ?? 0) - ignoredCount, 1)}</span>
                     </p>
                   </div>
                 </div>
-                <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   {severityOrder.map((severity) => {
                     const meta = severityMeta[severity];
                     const count = counts[severity];
                     return (
                       <button
-                        className={`flex min-h-[156px] flex-col border px-5 py-5 text-left transition ${
+                        className={`flex min-h-[126px] flex-col border px-4 py-4 text-left transition ${
                           severityFilter === severity
                             ? 'border-black bg-black text-white'
                             : 'border-neutral-200 bg-white hover:border-neutral-400'
@@ -233,7 +233,7 @@ function ResultPage() {
                           {meta.label}
                         </span>
                         <span
-                          className={`mt-auto block pt-8 text-[56px] font-black leading-none ${
+                          className={`mt-auto block pt-6 text-[42px] font-black leading-none ${
                             count === 0 && severityFilter !== severity ? 'text-neutral-200' : ''
                           }`}
                         >
@@ -245,9 +245,9 @@ function ResultPage() {
                 </div>
               </div>
 
-              <div className="border border-neutral-100 bg-white px-5 py-5">
+              <div className="flex h-full flex-col border border-neutral-100 bg-white px-5 py-5">
                 <div className="mb-3 flex items-center justify-between text-sm">
-                  <span className="font-bold text-neutral-700">조치 진행 현황</span>
+                  <span className="font-bold text-neutral-700">체크리스트 진행률</span>
                   <span className="font-mono font-black text-black">{resolvedRatio}%</span>
                 </div>
                 <div className="h-2 bg-neutral-100">
