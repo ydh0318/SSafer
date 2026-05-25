@@ -18,14 +18,14 @@ export const severityOrder: FindingSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', '
 export const resolutionValues = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'IGNORED'] as const;
 
 export const resolutionMeta: Record<typeof resolutionValues[number], { label: string; cls: string; dot: string }> = {
-  OPEN: { label: 'Open', cls: 'bg-neutral-100 text-neutral-600', dot: 'bg-neutral-400' },
+  OPEN: { label: '미조치', cls: 'bg-neutral-100 text-neutral-600', dot: 'bg-neutral-400' },
   IN_PROGRESS: {
-    label: 'In progress',
+    label: '진행 중',
     cls: 'border border-amber-200 bg-amber-50 text-amber-700',
     dot: 'bg-amber-400',
   },
-  RESOLVED: { label: 'Resolved', cls: 'bg-[#EDFFC0] text-[#4A7A00]', dot: 'bg-[#9FCC2E]' },
-  IGNORED: { label: 'Ignored', cls: 'bg-neutral-100 text-neutral-400', dot: 'bg-neutral-300' },
+  RESOLVED: { label: '조치 완료', cls: 'bg-[#EDFFC0] text-[#4A7A00]', dot: 'bg-[#9FCC2E]' },
+  IGNORED: { label: '무시', cls: 'bg-neutral-100 text-neutral-400', dot: 'bg-neutral-300' },
 };
 
 export function getResolutionCount(summary: ScanSummaryData | null, status: FindingResolutionStatus) {
@@ -37,7 +37,7 @@ export function getSourceCount(summary: ScanSummaryData | null, sourceType: stri
 }
 
 export function formatFindingLocation(finding: ScanFindingListItemData) {
-  const target = finding.filePath || finding.resourceName || 'Unknown target';
+  const target = finding.filePath || finding.resourceName || '알 수 없는 대상';
 
   if (finding.lineNumber && finding.lineNumber > 0) {
     return `${target}:${finding.lineNumber}`;
@@ -47,8 +47,9 @@ export function formatFindingLocation(finding: ScanFindingListItemData) {
 }
 
 function getFindingTitleGroupKey(title: string) {
-  return (title.trim() || 'Untitled finding')
+  return (title.trim() || '제목 없는 취약점')
     .replace(/라인\(\d+\)/g, '라인(*)')
+    .replace(/line\(\d+\)/gi, 'line(*)')
     .replace(/\(\d+\)/g, '(*)')
     .replace(/\b\d{2,5}\b/g, '*');
 }

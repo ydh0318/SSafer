@@ -13,19 +13,19 @@ export const findingSeverityOrder: FindingSeverity[] = ['CRITICAL', 'HIGH', 'MED
 export const findingResolutionValues = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'IGNORED'] as const;
 
 export const findingResolutionMeta: Record<string, { label: string; cls: string; dot: string }> = {
-  OPEN: { label: 'Open', cls: 'bg-neutral-100 text-neutral-600', dot: 'bg-neutral-400' },
+  OPEN: { label: '미조치', cls: 'bg-neutral-100 text-neutral-600', dot: 'bg-neutral-400' },
   IN_PROGRESS: {
-    label: 'In progress',
+    label: '진행 중',
     cls: 'border border-amber-200 bg-amber-50 text-amber-700',
     dot: 'bg-amber-400',
   },
-  RESOLVED: { label: 'Resolved', cls: 'bg-[#EDFFC0] text-[#4A7A00]', dot: 'bg-[#9FCC2E]' },
-  IGNORED: { label: 'Ignored', cls: 'bg-neutral-100 text-neutral-400', dot: 'bg-neutral-300' },
+  RESOLVED: { label: '조치 완료', cls: 'bg-[#EDFFC0] text-[#4A7A00]', dot: 'bg-[#9FCC2E]' },
+  IGNORED: { label: '무시', cls: 'bg-neutral-100 text-neutral-400', dot: 'bg-neutral-300' },
 };
 
 export function prettyJsonText(value: string | null) {
   if (!value) {
-    return 'No structured data is available.';
+    return '구조화된 데이터가 없습니다.';
   }
 
   try {

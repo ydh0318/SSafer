@@ -19,11 +19,7 @@ import {
   getScanSummary,
   updateFindingResolutionStatus,
 } from '../api/results';
-import {
-  getResolutionCount,
-  groupFindingsByTitle,
-  severityOrder,
-} from '../utils/resultPresentation';
+import { getResolutionCount, groupFindingsByTitle, severityOrder } from '../utils/resultPresentation';
 
 const emptyFindingList: ScanFindingListResponseData = {
   items: [],
@@ -107,7 +103,7 @@ function useResultPageData(scanId: string, routeState: ResultPageRouteState) {
       const summaryData = await getScanSummary(scanId);
       setSummary(summaryData);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to load scan result.');
+      setErrorMessage(error instanceof Error ? error.message : '스캔 결과를 불러오지 못했습니다.');
     } finally {
       setIsInitialLoading(false);
     }
@@ -148,7 +144,7 @@ function useResultPageData(scanId: string, routeState: ResultPageRouteState) {
         }
       } catch (error) {
         if (isMounted) {
-          setErrorMessage(error instanceof Error ? error.message : 'Failed to load scan result.');
+          setErrorMessage(error instanceof Error ? error.message : '스캔 결과를 불러오지 못했습니다.');
         }
       } finally {
         if (isMounted) {
@@ -189,7 +185,7 @@ function useResultPageData(scanId: string, routeState: ResultPageRouteState) {
         }
       } catch (error) {
         if (isMounted) {
-          setErrorMessage(error instanceof Error ? error.message : 'Failed to load findings.');
+          setErrorMessage(error instanceof Error ? error.message : '취약점 목록을 불러오지 못했습니다.');
           setFindingsData(emptyFindingList);
         }
       } finally {
@@ -337,9 +333,9 @@ function useResultPageData(scanId: string, routeState: ResultPageRouteState) {
           },
         };
       });
-      toast.success('Finding status updated.', { durationMs: 2000 });
+      toast.success('조치 상태를 변경했습니다.', { durationMs: 2000 });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update finding status.';
+      const message = error instanceof Error ? error.message : '조치 상태를 변경하지 못했습니다.';
       toast.error(message, { durationMs: 2500 });
     } finally {
       setUpdatingStatusFindingIds((current) => current.filter((id) => id !== finding.findingId));

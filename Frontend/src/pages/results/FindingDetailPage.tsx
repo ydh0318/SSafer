@@ -106,14 +106,14 @@ function FindingDetailPage() {
         to={ROUTES.resultDetail.replace(':scanId', scanId)}
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to results
+        결과로 돌아가기
       </Link>
 
       {errorMessage ? <PageBanner message={errorMessage} tone="error" /> : null}
 
       {isLoading ? (
         <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">
-          Loading finding details...
+          취약점 상세 정보를 불러오는 중입니다...
         </div>
       ) : null}
 
@@ -179,7 +179,7 @@ function FindingDetailPage() {
               <div className="mt-3 flex flex-col gap-2 text-sm text-neutral-500">
                 <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
                   <span className="rounded border border-neutral-200 bg-neutral-50 px-2 py-0.5">
-                    {finding.file || finding.resourceName || finding.filePath || 'Unknown target'}
+                    {finding.file || finding.resourceName || finding.filePath || '알 수 없는 대상'}
                     {(finding.line || finding.lineNumber) ? ` : ${finding.line || finding.lineNumber}` : ''}
                   </span>
                   <span className="text-neutral-300">·</span>
@@ -187,7 +187,7 @@ function FindingDetailPage() {
                 </div>
                 {finding.maskedEvidence ? (
                   <div className="mt-1 w-fit rounded border border-neutral-200 bg-neutral-50 px-3 py-2 font-mono text-xs text-neutral-700">
-                    <span className="mr-2 font-bold text-neutral-400">Evidence</span>
+                    <span className="mr-2 font-bold text-neutral-400">근거</span>
                     {finding.maskedEvidence}
                   </div>
                 ) : null}
@@ -196,10 +196,10 @@ function FindingDetailPage() {
 
             <div className="mt-6 flex border-b border-neutral-300">
               {[
-                { id: 'explain', icon: AlertTriangle, label: 'Explain' },
-                { id: 'fix', icon: Wand2, label: 'Fix' },
-                { id: 'apply', icon: Send, label: 'Apply' },
-                { id: 'references', icon: BookOpen, label: 'References' },
+                { id: 'explain', icon: AlertTriangle, label: '설명' },
+                { id: 'fix', icon: Wand2, label: '조치 가이드' },
+                { id: 'apply', icon: Send, label: '적용' },
+                { id: 'references', icon: BookOpen, label: '참고 자료' },
               ].map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -225,34 +225,34 @@ function FindingDetailPage() {
                     <PixelGoose mood="alert" size={60} />
                     <div>
                       <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">
-                        Impact
+                        영향
                       </div>
                       <p className="mt-2 text-sm leading-7 text-neutral-800">{finding.impact}</p>
                     </div>
                   </div>
                 ) : null}
 
-                <DetailCard title="Summary">
+                <DetailCard title="요약">
                   <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.explanation?.summary || finding.description || 'No summary is available.'}
+                    {finding.explanation?.summary || finding.description || '요약 정보가 없습니다.'}
                   </p>
                 </DetailCard>
 
-                <DetailCard title="Why Risky">
+                <DetailCard title="위험한 이유">
                   <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.explanation?.whyRisky || 'Risk explanation is not available.'}
+                    {finding.explanation?.whyRisky || '위험 설명이 없습니다.'}
                   </p>
                 </DetailCard>
 
-                <DetailCard title="Attack Scenario">
+                <DetailCard title="공격 시나리오">
                   <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.explanation?.abuseScenario || finding.attackScenario || 'Attack scenario is not available.'}
+                    {finding.explanation?.abuseScenario || finding.attackScenario || '공격 시나리오 정보가 없습니다.'}
                   </p>
                 </DetailCard>
 
-                <DetailCard title="Severity Interpretation">
+                <DetailCard title="심각도 해석">
                   <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.explanation?.severityInterpretation || 'Severity interpretation is not available.'}
+                    {finding.explanation?.severityInterpretation || '심각도 해석 정보가 없습니다.'}
                   </p>
                 </DetailCard>
               </div>
@@ -260,28 +260,28 @@ function FindingDetailPage() {
 
             {view === 'fix' ? (
               <div className="mt-6 space-y-6">
-                <DetailCard title="Fix Summary">
+                <DetailCard title="조치 요약">
                   <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.fix?.summary || 'No fix summary is available.'}
+                    {finding.fix?.summary || '조치 요약 정보가 없습니다.'}
                   </p>
                 </DetailCard>
 
-                <DetailCard title="Recommended Actions">
+                <DetailCard title="권장 조치">
                   <ParsedTextList
-                    fallback="No recommended actions are available."
+                    fallback="권장 조치가 없습니다."
                     text={finding.fix?.recommendedActions?.join('\n') ?? finding.remediationGuide}
                   />
                 </DetailCard>
 
-                <DetailCard title="Code Guidance">
+                <DetailCard title="코드 가이드">
                   <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.fix?.codeGuidance || 'No code guidance is available.'}
+                    {finding.fix?.codeGuidance || '코드 가이드가 없습니다.'}
                   </p>
                 </DetailCard>
 
-                <DetailCard title="Verification">
+                <DetailCard title="검증 방법">
                   <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.fix?.verification || 'No verification notes are available.'}
+                    {finding.fix?.verification || '검증 정보가 없습니다.'}
                   </p>
                 </DetailCard>
 
@@ -290,7 +290,7 @@ function FindingDetailPage() {
                     <div className="flex items-center gap-2">
                       <Trophy className="h-4 w-4 text-[#e8c84f]" />
                       <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">
-                        Practice
+                        연습
                       </span>
                     </div>
                     <div className="mt-4">
@@ -306,7 +306,7 @@ function FindingDetailPage() {
                 {finding.fix?.patches && finding.fix.patches.length > 0 ? (
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <h3 className="text-xl font-black tracking-tight">Available patches</h3>
+                      <h3 className="text-xl font-black tracking-tight">적용 가능한 패치</h3>
                       {scanBasic?.scanMode === 'AGENT' && finding.resolutionStatus === 'OPEN' && finding.patchPayloadJson ? (
                         <button
                           className="inline-flex items-center justify-center gap-2 bg-[#D4FC64] px-5 py-2.5 text-sm font-bold text-black transition hover:bg-[#c5e35b] disabled:cursor-not-allowed disabled:opacity-40"
@@ -317,7 +317,7 @@ function FindingDetailPage() {
                           type="button"
                         >
                           <Send className="h-4 w-4" />
-                          {isApprovingPatch ? 'Requesting...' : 'Request patch apply'}
+                          {isApprovingPatch ? '요청 중...' : '패치 적용 요청'}
                         </button>
                       ) : (
                         (() => {
@@ -346,18 +346,18 @@ function FindingDetailPage() {
                         {patch.operation === 'replace' ? (
                           <div className="grid grid-cols-1 divide-y divide-neutral-200 font-mono text-sm md:grid-cols-2 md:divide-x md:divide-y-0">
                             <div className="whitespace-pre-wrap bg-rose-50 p-4 text-rose-900">
-                              <div className="mb-2 text-xs font-bold text-rose-500">Before</div>
-                              {patch.oldText || <span className="italic text-rose-400">(No previous text)</span>}
+                              <div className="mb-2 text-xs font-bold text-rose-500">변경 전</div>
+                              {patch.oldText || <span className="italic text-rose-400">(이전 텍스트 없음)</span>}
                             </div>
                             <div className="whitespace-pre-wrap bg-emerald-50 p-4 text-emerald-900">
-                              <div className="mb-2 text-xs font-bold text-emerald-500">After</div>
-                              {patch.newText || <span className="italic text-emerald-400">(No new text)</span>}
+                              <div className="mb-2 text-xs font-bold text-emerald-500">변경 후</div>
+                              {patch.newText || <span className="italic text-emerald-400">(새 텍스트 없음)</span>}
                             </div>
                           </div>
                         ) : (
                           <div className="whitespace-pre-wrap bg-emerald-50 p-4 font-mono text-sm text-emerald-900">
-                            <div className="mb-2 text-xs font-bold text-emerald-500">Append</div>
-                            {patch.newText || <span className="italic text-emerald-400">(No appended text)</span>}
+                            <div className="mb-2 text-xs font-bold text-emerald-500">추가</div>
+                            {patch.newText || <span className="italic text-emerald-400">(추가 텍스트 없음)</span>}
                           </div>
                         )}
                       </div>
@@ -365,19 +365,19 @@ function FindingDetailPage() {
                   </div>
                 ) : (
                   <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-6 py-8 text-center text-sm text-neutral-500">
-                    No patch payload is available for this finding.
+                    이 취약점에는 적용 가능한 패치 정보가 없습니다.
                   </div>
                 )}
 
-                <DetailCard title="Patch Result">
+                <DetailCard title="패치 결과">
                   <p className="mt-3 leading-8 text-neutral-800">
-                    {finding.patchResultMessage || 'There is no patch result yet.'}
+                    {finding.patchResultMessage || '아직 패치 결과가 없습니다.'}
                   </p>
                 </DetailCard>
 
                 {finding.backupMetadataJson ? (
                   <div className="bg-black p-6 text-white">
-                    <div className="text-xs font-bold uppercase tracking-[0.24em] text-[#3DDC84]">Backup metadata</div>
+                    <div className="text-xs font-bold uppercase tracking-[0.24em] text-[#3DDC84]">백업 메타데이터</div>
                     <pre className="mt-3 overflow-x-auto whitespace-pre-wrap bg-neutral-900 p-4 font-mono text-sm">
                       {prettyJsonText(finding.backupMetadataJson)}
                     </pre>
@@ -392,17 +392,17 @@ function FindingDetailPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-neutral-500 before:inline-block before:h-3 before:w-0.5 before:rounded-full before:bg-[#D4FC64] before:content-['']">
-                        Raw Snippet
+                        원본 스니펫
                       </div>
-                      <p className="mt-2 text-sm text-neutral-500">Captured snippet and structured context used for this finding.</p>
+                      <p className="mt-2 text-sm text-neutral-500">이 취약점 분석에 사용된 스니펫과 구조화된 컨텍스트입니다.</p>
                     </div>
                     <button
                       className="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:text-black"
-                      onClick={() => void copyText(rawSnippetText, 'Raw snippet copied.')}
+                      onClick={() => void copyText(rawSnippetText, '원본 스니펫을 복사했습니다.')}
                       type="button"
                     >
                       <Copy className="h-3.5 w-3.5" />
-                      Copy
+                      복사
                     </button>
                   </div>
                   <pre className="mt-4 overflow-x-auto whitespace-pre-wrap rounded-lg bg-neutral-950 px-5 py-4 font-mono text-sm leading-7 text-[#D4FC64]">
@@ -437,7 +437,7 @@ function FindingDetailPage() {
                   </>
                 ) : (
                   <div className="border border-dashed border-neutral-300 bg-[#fafafa] px-6 py-8 text-center text-sm text-neutral-500">
-                    No reference links are available.
+                    참고 링크가 없습니다.
                   </div>
                 )}
               </div>
@@ -446,10 +446,10 @@ function FindingDetailPage() {
 
           <aside className="sticky top-24 h-fit border border-neutral-100 bg-white">
             <div className="border-b border-neutral-100 px-4 py-3">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">Related findings</p>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-400">관련 취약점</p>
               <p className="mt-0.5 text-lg font-black text-black">
                 {relatedFindings.length}
-                <span className="ml-1 text-sm font-normal text-neutral-400">items</span>
+                <span className="ml-1 text-sm font-normal text-neutral-400">건</span>
               </p>
             </div>
 
