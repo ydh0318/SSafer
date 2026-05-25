@@ -41,7 +41,7 @@ function useProjectScans(projectId: string) {
       setScans(data.items);
     } catch (error) {
       setScans([]);
-      setScanListError(error instanceof Error ? error.message : 'Failed to load scans.');
+      setScanListError(error instanceof Error ? error.message : '스캔 목록을 불러오지 못했습니다.');
     } finally {
       setIsScanListLoading(false);
     }
@@ -67,7 +67,7 @@ function useProjectScans(projectId: string) {
       } catch (error) {
         if (isMounted) {
           setScans([]);
-          setScanListError(error instanceof Error ? error.message : 'Failed to load scans.');
+          setScanListError(error instanceof Error ? error.message : '스캔 목록을 불러오지 못했습니다.');
         }
       } finally {
         if (isMounted) {
@@ -133,7 +133,7 @@ function useProjectScans(projectId: string) {
       return;
     }
 
-    const shouldDelete = window.confirm(`Delete scan #${scanId}?`);
+    const shouldDelete = window.confirm(`스캔 #${scanId} 이력을 삭제하시겠습니까?`);
 
     if (!shouldDelete) {
       return;
@@ -144,10 +144,10 @@ function useProjectScans(projectId: string) {
 
     try {
       await deleteScanHistory(scanId);
-      toast.success(`Deleted scan #${scanId}.`, { durationMs: 2000 });
+      toast.success(`스캔 #${scanId} 이력을 삭제했습니다.`, { durationMs: 2000 });
       await refreshScans();
     } catch (error) {
-      setScanListError(error instanceof Error ? error.message : 'Failed to delete scan.');
+      setScanListError(error instanceof Error ? error.message : '스캔을 삭제하지 못했습니다.');
     } finally {
       setDeletingScanIds((current) => current.filter((value) => value !== scanId));
     }

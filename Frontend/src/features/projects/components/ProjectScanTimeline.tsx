@@ -6,7 +6,7 @@ import { getScanStatusLabel } from '../../scans/utils/scanPresentation';
 
 const scanStatuses: Array<ScanStatus> = ['REQUESTED', 'QUEUED', 'RUNNING', 'RAW_UPLOADED', 'DONE', 'FAILED', 'CANCELED'];
 const scanModes: Array<{ value: ScanMode; label: string }> = [
-  { value: 'AGENT', label: 'Agent / CLI 스캔' },
+  { value: 'AGENT', label: '에이전트 / CLI 스캔' },
   { value: 'UPLOAD', label: '파일 업로드 스캔' },
 ];
 
@@ -48,22 +48,18 @@ function ProjectScanTimeline({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-black tracking-tight text-[#0F0F0F] md:text-2xl">스캔 이력</h2>
-          <p className="mt-1 text-xs text-neutral-500">최신 순으로 정렬됩니다.</p>
+          <p className="mt-1 text-xs text-neutral-500">최신순으로 정렬됩니다.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <FilterSelect
             ariaLabel="상태 필터"
-            onChange={(value) =>
-              onFilterChange({ ...filters, status: value as ProjectScanListQuery['status'] })
-            }
+            onChange={(value) => onFilterChange({ ...filters, status: value as ProjectScanListQuery['status'] })}
             options={[{ value: '', label: '전체 상태' }, ...scanStatuses.map((status) => ({ value: status, label: getScanStatusLabel(status) }))]}
             value={filters.status ?? ''}
           />
           <FilterSelect
             ariaLabel="스캔 방식 필터"
-            onChange={(value) =>
-              onFilterChange({ ...filters, scanMode: value as ProjectScanListQuery['scanMode'] })
-            }
+            onChange={(value) => onFilterChange({ ...filters, scanMode: value as ProjectScanListQuery['scanMode'] })}
             options={[{ value: '', label: '전체 방식' }, ...scanModes.map((mode) => ({ value: mode.value, label: mode.label }))]}
             value={filters.scanMode ?? ''}
           />

@@ -8,25 +8,26 @@ type TypingBoxProps = {
 };
 
 function TypingBox({ snippet, rewardLabel = '+10 XP', onComplete }: TypingBoxProps) {
-  const [input, setInput] = useState('');
+  const [state, setState] = useState({ input: '', snippet });
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isCompletedRef = useRef(false);
-
-  useEffect(() => {
-    setInput('');
-    isCompletedRef.current = false;
-  }, [snippet]);
+  const input = state.snippet === snippet ? state.input : '';
 
   const correctCount = input.split('').filter((char, index) => char === snippet[index]).length;
   const mistakeCount = input.length - correctCount;
   const done = input === snippet;
 
   useEffect(() => {
+    if (state.snippet !== snippet) {
+      isCompletedRef.current = false;
+      return;
+    }
+
     if (done && !isCompletedRef.current) {
       isCompletedRef.current = true;
       onComplete?.();
     }
-  }, [done, onComplete]);
+  }, [done, onComplete, snippet, state.snippet]);
 
   return (
     <div
@@ -76,7 +77,12 @@ function TypingBox({ snippet, rewardLabel = '+10 XP', onComplete }: TypingBoxPro
           autoCorrect="off"
           className="absolute inset-0 h-full w-full resize-none overflow-hidden opacity-0"
           name="ssafer-typing-box"
-          onChange={(event) => setInput(event.target.value.slice(0, snippet.length))}
+          onChange={(event) =>
+            setState({
+              input: event.target.value.slice(0, snippet.length),
+              snippet,
+            })
+          }
           ref={textareaRef}
           rows={Math.max(snippet.split('\n').length, 3)}
           spellCheck={false}

@@ -1,4 +1,14 @@
-import { AlertTriangle, ArrowRight, ChevronDown, Clock, FolderPlus, ScanSearch, Search, Trash2, Wrench } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  ChevronDown,
+  Clock,
+  FolderPlus,
+  ScanSearch,
+  Search,
+  Trash2,
+  Wrench,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -23,7 +33,10 @@ import EstimatedDurationCard from '../../features/scans/components/EstimatedDura
 import ScanModePicker from '../../features/scans/components/ScanModePicker';
 import SecretMaskingCard from '../../features/scans/components/SecretMaskingCard';
 import UploadDropZone from '../../features/scans/components/UploadDropZone';
-import { getUploadScanToastFeedback, getUploadScanValidationToastMessage } from '../../features/scans/utils/uploadScanFeedback';
+import {
+  getUploadScanToastFeedback,
+  getUploadScanValidationToastMessage,
+} from '../../features/scans/utils/uploadScanFeedback';
 import { getScanUploadValidationIssue } from '../../features/scans/utils/uploadValidation';
 import { useProjectStore } from '../../store/projectStore';
 import type { CreateProjectFormValues, ProjectSummary } from '../../types/project';
@@ -50,33 +63,33 @@ function getAgentDisplay(
   if (agentStatus) {
     if (agentStatus.status === 'ONLINE') {
       return {
-        label: 'Agent online',
+        label: '에이전트 연결됨',
         className: isSelected ? 'text-emerald-300' : 'text-emerald-700',
       };
     }
 
     if (agentStatus.status === 'ERROR') {
       return {
-        label: 'Agent error',
+        label: '에이전트 오류',
         className: isSelected ? 'text-orange-300' : 'text-orange-500',
       };
     }
 
     return {
-      label: 'Agent offline',
+      label: '에이전트 오프라인',
       className: isSelected ? 'text-neutral-400' : 'text-neutral-500',
     };
   }
 
   if (project.monitorEnabled) {
     return {
-      label: 'Agent pending',
+      label: '에이전트 확인 중',
       className: isSelected ? 'text-neutral-400' : 'text-neutral-500',
     };
   }
 
   return {
-    label: 'Agent disabled',
+    label: '에이전트 비활성화',
     className: isSelected ? 'text-neutral-400' : 'text-neutral-500',
   };
 }
@@ -126,7 +139,7 @@ function ProjectListPage() {
     targetProject,
   } = useProjectDeleteFlow({
     onDeleted: (project) => {
-      toast.success(`${project.name} project deleted.`);
+      toast.success(`${project.name} 프로젝트를 삭제했습니다.`);
     },
   });
 
@@ -150,10 +163,7 @@ function ProjectListPage() {
       } catch (error) {
         console.error('Failed to load scan options.', error);
 
-        if (
-          isMounted &&
-          selectedProjectScanOptionsState?.projectId === selectedProjectId
-        ) {
+        if (isMounted && selectedProjectScanOptionsState?.projectId === selectedProjectId) {
           setSelectedProjectScanOptionsState(null);
         }
       }
@@ -214,7 +224,9 @@ function ProjectListPage() {
     [latestCompletedScans, selectedProjectId],
   );
   const selectedLatestProjectFileScan =
-    selectedLatestCompleted && selectedLatestCompleted.scan.scanType !== 'SERVER_AUDIT' ? selectedLatestCompleted : null;
+    selectedLatestCompleted && selectedLatestCompleted.scan.scanType !== 'SERVER_AUDIT'
+      ? selectedLatestCompleted
+      : null;
   const canApplyLatestProjectFileScan =
     selectedAgentScanType === 'PROJECT_FILE' && Boolean(selectedLatestProjectFileScan);
 
@@ -251,7 +263,7 @@ function ProjectListPage() {
     const projectName = normalizeProjectName(formValues.name);
 
     if (projects.some((project) => normalizeProjectName(project.name) === projectName)) {
-      setCreateError('A project with the same name already exists.');
+      setCreateError('같은 이름의 프로젝트가 이미 존재합니다.');
       return;
     }
 
@@ -259,7 +271,7 @@ function ProjectListPage() {
       const validationIssue = getScanUploadValidationIssue(createUploadFiles);
 
       if (validationIssue) {
-        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? 'Please check the selected files.', {
+        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? '선택한 파일을 다시 확인해 주세요.', {
           durationMs: 3000,
         });
         return;
@@ -278,7 +290,7 @@ function ProjectListPage() {
         scans: 0,
         lastStatus: 'NEW',
         risk: 'LOW',
-        description: projectDescription || 'No project description provided yet.',
+        description: projectDescription || '아직 등록된 프로젝트 설명이 없습니다.',
         defaultScanMode: formValues.defaultScanMode,
         monitorEnabled: formValues.monitorEnabled,
         createdAt: new Date().toISOString(),
@@ -318,10 +330,10 @@ function ProjectListPage() {
         }
       }
 
-      toast.success('Project created successfully.');
+      toast.success('프로젝트가 생성되었습니다.');
     } catch (error) {
       console.error('Failed to create project.', error);
-      setCreateError('Failed to create project.');
+      setCreateError('프로젝트를 생성하지 못했습니다.');
     } finally {
       setIsCreating(false);
     }
@@ -329,7 +341,7 @@ function ProjectListPage() {
 
   const handleStartScan = async () => {
     if (!selectedProject) {
-      setScanError('Select a project first.');
+      setScanError('먼저 프로젝트를 선택해 주세요.');
       return;
     }
 
@@ -340,7 +352,7 @@ function ProjectListPage() {
       );
 
       if (!agentAvailable) {
-        setScanError('Agent scan is not available for this project right now.');
+        setScanError('현재 이 프로젝트에서는 에이전트 스캔을 사용할 수 없습니다.');
         return;
       }
     }
@@ -349,7 +361,7 @@ function ProjectListPage() {
       const validationIssue = getScanUploadValidationIssue(selectedUploadFiles);
 
       if (validationIssue) {
-        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? 'Please check the selected files.', {
+        toast.warning(getUploadScanValidationToastMessage(validationIssue) ?? '선택한 파일을 다시 확인해 주세요.', {
           durationMs: 3000,
         });
         return;
@@ -376,7 +388,7 @@ function ProjectListPage() {
           includeLogs: false,
         });
       } else {
-        setScanError('CLI mode is a guide-only mode. Please run the CLI manually.');
+        setScanError('CLI 모드는 가이드 전용입니다. 직접 CLI를 실행해 주세요.');
         return;
       }
 
@@ -398,7 +410,7 @@ function ProjectListPage() {
         return;
       }
 
-      setScanError('Failed to start scan.');
+      setScanError('스캔을 시작하지 못했습니다.');
     } finally {
       setIsStartingScan(false);
     }
@@ -409,7 +421,7 @@ function ProjectListPage() {
       <header className="flex items-end justify-between gap-6 pt-2">
         <div className="min-w-0">
           <h1 className="text-4xl font-black leading-[0.95] tracking-[-0.03em] text-[#080B16] md:text-5xl xl:text-6xl">
-            {projects.length === 0 ? 'Create your first project' : 'Run a project scan'}
+            {projects.length === 0 ? '첫 프로젝트를 만들어 보세요' : '프로젝트 스캔을 시작해 보세요'}
           </h1>
         </div>
         <div className="shrink-0">
@@ -419,13 +431,15 @@ function ProjectListPage() {
 
       <section className="space-y-3 pt-6">
         {isLoading ? (
-          <div className="bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">Loading projects...</div>
+          <div className="bg-white px-5 py-4 text-sm text-neutral-500 landing-card-radius">
+            프로젝트를 불러오는 중입니다...
+          </div>
         ) : loadError ? (
           <PageBanner message={loadError} tone="error" />
         ) : (
           <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
             <button
-              aria-label="Create project"
+              aria-label="프로젝트 생성"
               className="flex min-h-[112px] w-full items-center justify-center border border-dashed border-neutral-300 bg-neutral-50 transition landing-card-radius hover:border-black hover:bg-white"
               onClick={() => {
                 setIsProjectDropdownOpen(false);
@@ -447,15 +461,25 @@ function ProjectListPage() {
               >
                 <div className="min-w-0">
                   <p className="truncate text-xl font-black text-black">
-                    {selectedProject ? selectedProject.name : 'Select a project'}
+                    {selectedProject ? selectedProject.name : '프로젝트를 선택해 주세요'}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   {selectedProject ? (() => {
-                    const agentDisplay = getAgentDisplay(selectedProject, agentStatusMap[selectedProject.id] ?? null, true);
-                    return <span className={`hidden text-sm font-bold sm:inline ${agentDisplay.className}`}>{agentDisplay.label}</span>;
+                    const agentDisplay = getAgentDisplay(
+                      selectedProject,
+                      agentStatusMap[selectedProject.id] ?? null,
+                      true,
+                    );
+                    return (
+                      <span className={`hidden text-sm font-bold sm:inline ${agentDisplay.className}`}>
+                        {agentDisplay.label}
+                      </span>
+                    );
                   })() : null}
-                  <ChevronDown className={`h-5 w-5 text-neutral-400 transition ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown
+                    className={`h-5 w-5 text-neutral-400 transition ${isProjectDropdownOpen ? 'rotate-180' : ''}`}
+                  />
                 </div>
               </button>
 
@@ -468,7 +492,7 @@ function ProjectListPage() {
                         autoFocus
                         className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-black outline-none placeholder:text-neutral-400"
                         onChange={(event) => setProjectSearchTerm(event.target.value)}
-                        placeholder="Search by name or id"
+                        placeholder="이름 또는 ID로 검색"
                         type="text"
                         value={projectSearchTerm}
                       />
@@ -497,12 +521,16 @@ function ProjectListPage() {
                             <div className="min-w-0">
                               <p className="truncate text-sm font-black">{project.name}</p>
                             </div>
-                            <span className={`shrink-0 text-xs font-bold ${agentDisplay.className}`}>{agentDisplay.label}</span>
+                            <span className={`shrink-0 text-xs font-bold ${agentDisplay.className}`}>
+                              {agentDisplay.label}
+                            </span>
                           </button>
                         );
                       })
                     ) : (
-                      <div className="px-3 py-5 text-center text-sm text-neutral-500">No projects found.</div>
+                      <div className="px-3 py-5 text-center text-sm text-neutral-500">
+                        검색된 프로젝트가 없습니다.
+                      </div>
                     )}
                   </div>
                 </div>
@@ -518,7 +546,7 @@ function ProjectListPage() {
               onClick={() => navigate(ROUTES.projectDetail.replace(':projectId', selectedProject.id))}
               type="button"
             >
-              Open project
+              프로젝트 열기
               <ArrowRight className="h-4 w-4" />
             </button>
             <button
@@ -527,7 +555,7 @@ function ProjectListPage() {
               type="button"
             >
               <Trash2 className="h-4 w-4" />
-              Delete project
+              프로젝트 삭제
             </button>
           </div>
         ) : null}
@@ -545,9 +573,12 @@ function ProjectListPage() {
             files={selectedUploadFiles}
             isDragOver={isDragOver}
             onFileLimitExceeded={() => {
-              toast.warning(getUploadScanValidationToastMessage('FILE_COUNT_EXCEEDED') ?? 'Too many files selected.', {
-                durationMs: 3000,
-              });
+              toast.warning(
+                getUploadScanValidationToastMessage('FILE_COUNT_EXCEEDED') ?? '선택한 파일 수가 너무 많습니다.',
+                {
+                  durationMs: 3000,
+                },
+              );
             }}
             onDragStateChange={setIsDragOver}
             onFilesChange={handleUploadFileChange}
@@ -560,13 +591,15 @@ function ProjectListPage() {
               </div>
             ) : null}
 
-            {selectedMode === 'AGENT' && (
+            {selectedMode === 'AGENT' ? (
               <div>
                 <div className="mb-4 border border-neutral-200 bg-neutral-50 px-4 py-3 landing-inner-radius">
-                  <p className="text-sm font-black text-black">Agent scan</p>
-                  <p className="mt-1 text-sm text-neutral-500">Use an online agent to run the scan directly from the workspace.</p>
+                  <p className="text-sm font-black text-black">에이전트 스캔</p>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    온라인 에이전트를 사용해 워크스페이스에서 바로 스캔을 실행합니다.
+                  </p>
                 </div>
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">Scan target</p>
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">스캔 대상</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     className={`border p-4 text-left transition landing-inner-radius ${
@@ -577,9 +610,13 @@ function ProjectListPage() {
                     onClick={() => setSelectedAgentScanType('PROJECT_FILE')}
                     type="button"
                   >
-                    <p className="font-black">Project files</p>
-                    <p className={`mt-1 text-xs leading-relaxed ${selectedAgentScanType === 'PROJECT_FILE' ? 'text-neutral-300' : 'text-neutral-500'}`}>
-                      Scan source files and config files in the project workspace.
+                    <p className="font-black">프로젝트 파일</p>
+                    <p
+                      className={`mt-1 text-xs leading-relaxed ${
+                        selectedAgentScanType === 'PROJECT_FILE' ? 'text-neutral-300' : 'text-neutral-500'
+                      }`}
+                    >
+                      프로젝트 워크스페이스의 소스 파일과 설정 파일을 스캔합니다.
                     </p>
                   </button>
                   <button
@@ -591,9 +628,13 @@ function ProjectListPage() {
                     onClick={() => setSelectedAgentScanType('SERVER_AUDIT')}
                     type="button"
                   >
-                    <p className="font-black">Server audit</p>
-                    <p className={`mt-1 text-xs leading-relaxed ${selectedAgentScanType === 'SERVER_AUDIT' ? 'text-neutral-300' : 'text-neutral-500'}`}>
-                      Inspect the running server environment and operational settings.
+                    <p className="font-black">서버 점검</p>
+                    <p
+                      className={`mt-1 text-xs leading-relaxed ${
+                        selectedAgentScanType === 'SERVER_AUDIT' ? 'text-neutral-300' : 'text-neutral-500'
+                      }`}
+                    >
+                      실행 중인 서버 환경과 운영 설정을 점검합니다.
                     </p>
                   </button>
                 </div>
@@ -601,15 +642,15 @@ function ProjectListPage() {
                   <div className="mt-3 flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900 landing-inner-radius">
                     <AlertTriangle className="mt-1 h-4 w-4 shrink-0" />
                     <div>
-                      <p className="font-black text-amber-950">Server audit only supports inspection right now.</p>
+                      <p className="font-black text-amber-950">현재 서버 점검은 조회 기능만 지원합니다.</p>
                       <p className="mt-1">
-                        Auto-fix is disabled for server audit results because operational changes can affect live services.
+                        운영 환경 변경이 실제 서비스에 영향을 줄 수 있어 서버 점검 결과에는 자동 수정이 제공되지 않습니다.
                       </p>
                     </div>
                   </div>
                 ) : null}
               </div>
-            )}
+            ) : null}
 
             {selectedMode === 'AGENT' ? (
               <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -623,9 +664,9 @@ function ProjectListPage() {
                     <ScanSearch className="h-5 w-5 text-white" />
                   </div>
                   <div>
-                    <p className="font-black">Start scan</p>
+                    <p className="font-black">스캔 시작</p>
                     <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                      Run a new agent scan for this project.
+                      이 프로젝트에 대한 새로운 에이전트 스캔을 실행합니다.
                     </p>
                   </div>
                 </button>
@@ -635,7 +676,9 @@ function ProjectListPage() {
                   disabled={!selectedProject || !canApplyLatestProjectFileScan}
                   onClick={() => {
                     const latest = selectedLatestProjectFileScan;
-                    if (!latest?.scan?.scanId) return;
+                    if (!latest?.scan?.scanId) {
+                      return;
+                    }
                     navigate(ROUTES.resultDetail.replace(':scanId', String(latest.scan.scanId)));
                   }}
                   type="button"
@@ -644,13 +687,13 @@ function ProjectListPage() {
                     <Wrench className="h-5 w-5 text-black" />
                   </div>
                   <div>
-                    <p className="font-black">Review latest fix</p>
+                    <p className="font-black">최근 결과 확인</p>
                     <p className="mt-1 text-xs leading-relaxed text-neutral-500">
                       {selectedAgentScanType === 'SERVER_AUDIT'
-                        ? 'Server audit does not provide auto-fix output.'
+                        ? '서버 점검 결과에는 자동 수정 제안이 제공되지 않습니다.'
                         : selectedLatestProjectFileScan
-                        ? 'Open the latest project-file scan result.'
-                        : 'Run a completed project-file scan first.'}
+                          ? '가장 최근 프로젝트 파일 스캔 결과를 엽니다.'
+                          : '먼저 완료된 프로젝트 파일 스캔을 실행해 주세요.'}
                     </p>
                   </div>
                 </button>
@@ -674,14 +717,14 @@ function ProjectListPage() {
               type="button"
             >
               {isStartingScan
-                ? 'Starting scan...'
+                ? '스캔 시작 중...'
                 : !selectedProject
-                ? 'Select a project first'
-                : selectedMode === 'UPLOAD' && selectedUploadFiles.length === 0
-                ? 'Select files first'
-                : selectedMode === 'UPLOAD'
-                ? `Start upload scan (${selectedUploadFiles.length})`
-                : 'Start agent scan'}
+                  ? '먼저 프로젝트를 선택해 주세요'
+                  : selectedMode === 'UPLOAD' && selectedUploadFiles.length === 0
+                    ? '먼저 파일을 선택해 주세요'
+                    : selectedMode === 'UPLOAD'
+                      ? `업로드 스캔 시작 (${selectedUploadFiles.length})`
+                      : '에이전트 스캔 시작'}
               {isStartingScan ? <Clock className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
             </button>
           ) : null}

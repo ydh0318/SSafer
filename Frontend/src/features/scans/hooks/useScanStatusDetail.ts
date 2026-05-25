@@ -5,8 +5,8 @@ import { getScanStatus } from '../api/scans';
 import { isTerminalScanStatus } from '../utils/scanPresentation';
 import { useScanEventSubscription } from './useScanEventSubscription';
 
-const LOAD_STATUS_ERROR_MESSAGE = 'Failed to load scan status. Please try again shortly.';
-const REFRESH_STATUS_ERROR_MESSAGE = 'Auto refresh failed. Please try again shortly.';
+const LOAD_STATUS_ERROR_MESSAGE = '스캔 상태를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const REFRESH_STATUS_ERROR_MESSAGE = '자동 새로고침에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 
 function useScanStatusDetail(scanId: string, isAutoRefreshEnabled: boolean) {
   const [statusData, setStatusData] = useState<ScanProgressStatusData | null>(null);

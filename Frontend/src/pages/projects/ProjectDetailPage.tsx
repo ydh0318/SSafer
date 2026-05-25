@@ -67,9 +67,9 @@ function ProjectDetailPage() {
   if (!projectId) {
     return (
       <section className="space-y-4">
-        <p className="text-sm text-neutral-600">Project ID is missing.</p>
+        <p className="text-sm text-neutral-600">프로젝트 ID가 없습니다.</p>
         <Link className="inline-flex bg-black px-4 py-2 text-sm font-bold text-white" to={ROUTES.projects}>
-          Back to projects
+          프로젝트 목록으로 돌아가기
         </Link>
       </section>
     );
@@ -128,14 +128,14 @@ function ProjectDetailPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin text-sky-600" />
-                        <p className="text-sm font-black text-sky-950">Active scans</p>
+                        <p className="text-sm font-black text-sky-950">진행 중인 스캔</p>
                       </div>
                       <p className="mt-1 text-xs text-sky-800">
-                        CLI and agent-driven scans that are still in progress appear here first.
+                        아직 진행 중인 CLI 및 에이전트 스캔이 먼저 표시됩니다.
                       </p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-sky-700 shadow-sm">
-                      {activeScans.length} active
+                      {activeScans.length}건 진행 중
                     </span>
                   </div>
 
@@ -157,11 +157,11 @@ function ProjectDetailPage() {
                             {getScanModeLabel(scan.scanMode, scan.source)}
                           </span>
                           <span className="text-xs text-neutral-400">
-                            Requested {formatCompactDateTime(scan.requestedAt)}
+                            요청 {formatCompactDateTime(scan.requestedAt)}
                           </span>
                         </div>
                         <span className="inline-flex items-center gap-1.5 text-xs font-black text-sky-700">
-                          Open progress
+                          진행 화면 열기
                           <ArrowRight className="h-3.5 w-3.5" />
                         </span>
                       </Link>
@@ -179,21 +179,21 @@ function ProjectDetailPage() {
 
               <div className="grid gap-3 md:grid-cols-2">
                 <QuickActionCard
-                  description="Jump back to the project scan launcher with this project preselected."
+                  description="이 프로젝트가 선택된 상태로 스캔 시작 화면으로 돌아갑니다."
                   icon={RotateCcw}
                   onClick={handleStartNewScan}
-                  title="Start another scan"
+                  title="새 스캔 시작"
                 />
                 <QuickActionCard
                   description={
                     completedScans.length >= 2
-                      ? 'Compare completed scan results for the same project.'
-                      : 'You need at least two completed scans before comparison is available.'
+                      ? '같은 프로젝트의 완료된 스캔 결과를 비교합니다.'
+                      : '비교 기능을 사용하려면 완료된 스캔이 2개 이상 필요합니다.'
                   }
                   disabled={completedScans.length < 2}
                   icon={BarChart3}
                   onClick={handleCompare}
-                  title="Compare results"
+                  title="결과 비교"
                 />
               </div>
             </div>

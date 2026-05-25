@@ -29,27 +29,27 @@ type SecurityTipPreviewProps = {
 function getRunningStepChecks(scanType: ScanType | undefined): string[] {
   if (scanType === 'SERVER_AUDIT') {
     return [
-      'Review exposed ports and reachable services.',
-      'Inspect access control and login policy.',
-      'Check user permissions and auth configuration.',
-      'Audit package and system security posture.',
+      '노출된 포트와 접근 가능한 서비스를 점검합니다.',
+      '접근 제어와 로그인 정책을 확인합니다.',
+      '사용자 권한과 인증 설정을 점검합니다.',
+      '패키지와 시스템 보안 상태를 살펴봅니다.',
     ];
   }
 
   return [
-    'Look for hardcoded secrets in config files.',
-    'Inspect Dockerfile and compose security settings.',
-    'Review container permissions and exposed settings.',
-    'Scan base images for known vulnerabilities.',
+    '설정 파일에 하드코딩된 비밀값이 있는지 확인합니다.',
+    'Dockerfile과 compose 보안 설정을 점검합니다.',
+    '컨테이너 권한과 노출 설정을 확인합니다.',
+    '베이스 이미지의 알려진 취약점을 스캔합니다.',
   ];
 }
 
 function getRunningStepDoing(scanType: ScanType | undefined): string {
   if (scanType === 'SERVER_AUDIT') {
-    return 'Scanning the live server environment with Trivy and custom rules.';
+    return 'Trivy와 커스텀 규칙으로 서버 환경을 스캔하고 있습니다.';
   }
 
-  return 'Scanning project files and configuration with Trivy and custom rules.';
+  return 'Trivy와 커스텀 규칙으로 프로젝트 파일과 설정을 스캔하고 있습니다.';
 }
 
 function getProgressSteps(scanType: ScanType | undefined): ProgressStep[] {
@@ -58,23 +58,23 @@ function getProgressSteps(scanType: ScanType | undefined): ProgressStep[] {
       key: 'SCAN_REGISTERED',
       statusKey: 'REQUESTED',
       code: 'SCAN_REGISTERED',
-      label: 'Request Registered',
-      doing: 'The scan job is being created and validated.',
-      checks: ['Validate request payload.', 'Confirm project access.', 'Prepare the job queue.'],
+      label: '요청 접수',
+      doing: '스캔 작업을 생성하고 요청 정보를 확인하고 있습니다.',
+      checks: ['요청 값을 검증합니다.', '프로젝트 접근 권한을 확인합니다.', '작업 큐를 준비합니다.'],
     },
     {
       key: 'AGENT_DISPATCHED',
       statusKey: 'QUEUED',
       code: 'AGENT_DISPATCHED',
-      label: 'Queued',
-      doing: 'The engine is receiving the task and preparing execution.',
-      checks: ['Queue the scan job.', 'Confirm engine connectivity.', 'Resolve scan scope.'],
+      label: '대기 중',
+      doing: '엔진이 작업을 받아 실행 준비를 하고 있습니다.',
+      checks: ['스캔 작업을 큐에 등록합니다.', '엔진 연결 상태를 확인합니다.', '스캔 범위를 정리합니다.'],
     },
     {
       key: 'SCAN_RUNNING',
       statusKey: 'RUNNING',
       code: 'SCAN_RUNNING',
-      label: 'Scanning',
+      label: '스캔 중',
       doing: getRunningStepDoing(scanType),
       checks: getRunningStepChecks(scanType),
     },
@@ -82,39 +82,39 @@ function getProgressSteps(scanType: ScanType | undefined): ProgressStep[] {
       key: 'RAW_UPLOADED',
       statusKey: 'RAW_UPLOADED',
       code: 'RAW_UPLOADED',
-      label: 'Results Stored',
-      doing: 'Raw scan data is uploaded and prepared for AI analysis.',
-      checks: ['Upload raw output.', 'Queue AI analysis.', 'Prepare finding parsing.'],
+      label: '결과 저장',
+      doing: '원본 스캔 데이터를 업로드하고 AI 분석 준비를 하고 있습니다.',
+      checks: ['원본 결과를 업로드합니다.', 'AI 분석 작업을 대기열에 넣습니다.', '취약점 파싱을 준비합니다.'],
     },
     {
       key: 'ANALYSIS_RUNNING',
       statusKey: 'RAW_UPLOADED',
       code: 'ANALYSIS_RUNNING',
-      label: 'AI Analysis',
-      doing: 'AI is summarizing risks, impact, and suggested fixes.',
+      label: 'AI 분석',
+      doing: 'AI가 위험도, 영향도, 권장 조치사항을 정리하고 있습니다.',
       checks: [
-        'Interpret severity and impact.',
-        'Draft explanation text.',
-        'Generate patch suggestions.',
-        'Assemble guidance and references.',
+        '심각도와 영향을 해석합니다.',
+        '설명 문구를 작성합니다.',
+        '패치 제안을 생성합니다.',
+        '가이드와 참고 정보를 정리합니다.',
       ],
     },
     {
       key: 'DONE',
       statusKey: 'DONE',
       code: 'DONE',
-      label: 'Completed',
-      doing: 'The scan and analysis flow has finished.',
-      checks: ['Save findings.', 'Finalize fix guidance.', 'Prepare result view.'],
+      label: '완료',
+      doing: '스캔과 분석이 모두 완료되었습니다.',
+      checks: ['취약점을 저장합니다.', '조치 가이드를 마무리합니다.', '결과 화면을 준비합니다.'],
     },
   ];
 }
 
 const securityTips = [
-  { label: 'Separate environment variables', code: 'DB_PASSWORD=${DB_PASSWORD}' },
-  { label: 'Limit port bindings', code: 'ports:\n  - "127.0.0.1:5432:5432"' },
-  { label: 'Disable SSH root login', code: 'PermitRootLogin no' },
-  { label: 'Run as non-root user', code: 'USER node' },
+  { label: '환경 변수를 분리하세요', code: 'DB_PASSWORD=${DB_PASSWORD}' },
+  { label: '포트 바인딩을 최소화하세요', code: 'ports:\n  - "127.0.0.1:5432:5432"' },
+  { label: 'SSH root 로그인을 비활성화하세요', code: 'PermitRootLogin no' },
+  { label: '루트가 아닌 사용자로 실행하세요', code: 'USER node' },
 ] as const;
 
 function resolveActiveStepIndex(
@@ -195,9 +195,9 @@ function ScanProgressPanel({
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-3 bg-neutral-50 px-8 py-16 text-sm text-neutral-500">
-        <span className="inline-block h-2 w-2 animate-ping rounded-full bg-[#9FCC2E]" />
-        Loading scan status...
+        <div className="flex items-center gap-3 bg-neutral-50 px-8 py-16 text-sm text-neutral-500">
+          <span className="inline-block h-2 w-2 animate-ping rounded-full bg-[#9FCC2E]" />
+        스캔 상태를 불러오는 중입니다...
       </div>
     );
   }
@@ -212,7 +212,7 @@ function ScanProgressPanel({
   }
 
   if (!statusData) {
-    return <div className="bg-neutral-50 px-8 py-16 text-sm text-neutral-500">No scan status available.</div>;
+    return <div className="bg-neutral-50 px-8 py-16 text-sm text-neutral-500">표시할 스캔 상태가 없습니다.</div>;
   }
 
   return (
@@ -220,7 +220,7 @@ function ScanProgressPanel({
       <div className="border border-neutral-100 bg-white px-8 py-8">
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">Scan Status</span>
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">스캔 상태</span>
             <span className="font-mono text-[10px] text-neutral-300">#{statusData.scanId}</span>
           </div>
           <div className="flex items-center gap-3">
@@ -231,7 +231,7 @@ function ScanProgressPanel({
                 onChange={(event) => onAutoRefreshChange(event.target.checked)}
                 type="checkbox"
               />
-              Auto refresh
+              자동 새로고침
             </label>
             <button
               className="inline-flex items-center gap-1.5 border border-neutral-200 px-3 py-1.5 text-xs text-neutral-500 transition hover:border-black hover:text-black"
@@ -239,7 +239,7 @@ function ScanProgressPanel({
               type="button"
             >
               <RefreshCw className="h-3 w-3" />
-              Refresh
+              새로고침
             </button>
           </div>
         </div>
@@ -248,14 +248,14 @@ function ScanProgressPanel({
           <div>
             <div className="flex items-baseline gap-2 leading-none">
               <span className="text-7xl font-black tracking-tight text-black md:text-8xl">
-                {isFailed ? (statusData.status === 'FAILED' ? 'Error' : 'Canceled') : Math.round(progressPercent)}
+                {isFailed ? (statusData.status === 'FAILED' ? '오류' : '중단') : Math.round(progressPercent)}
               </span>
               {!isFailed && <span className="text-4xl font-black text-neutral-300">%</span>}
             </div>
             <p className="mt-3 text-xl font-black text-black">{activeStep.label}</p>
             <p className="mt-1 text-sm leading-relaxed text-neutral-500">
               {isFailed
-                ? (statusData.errorMessage ?? 'A problem occurred during analysis. Please try again shortly.')
+                ? (statusData.errorMessage ?? '분석 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.')
                 : activeStep.doing}
             </p>
           </div>
@@ -316,15 +316,15 @@ function ScanProgressPanel({
         </div>
 
         <div className="mt-5 flex flex-wrap gap-4 font-mono text-[11px] text-neutral-400">
-          <span>requested {formatDateTime(statusData.requestedAt)}</span>
-          {statusData.startedAt && <span>started {formatDateTime(statusData.startedAt)}</span>}
-          {statusData.completedAt && <span>completed {formatDateTime(statusData.completedAt)}</span>}
+          <span>요청 {formatDateTime(statusData.requestedAt)}</span>
+          {statusData.startedAt && <span>시작 {formatDateTime(statusData.startedAt)}</span>}
+          {statusData.completedAt && <span>완료 {formatDateTime(statusData.completedAt)}</span>}
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="border border-neutral-100 bg-white px-6 py-6">
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">Current checks</p>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">현재 점검 항목</p>
           <p className="mt-3 text-sm font-black text-black">{activeStep.label}</p>
           <p className="mt-1 text-xs leading-relaxed text-neutral-500">{activeStep.doing}</p>
 
@@ -348,14 +348,14 @@ function ScanProgressPanel({
 
           {!isTerminal && (
             <p className="mt-5 text-xs leading-relaxed text-neutral-400">
-              Most scans finish within 10 to 30 seconds. You can leave this page and come back later.
+              대부분의 스캔은 10초에서 30초 안에 끝납니다. 이 페이지를 나가도 나중에 다시 돌아올 수 있습니다.
             </p>
           )}
         </div>
 
         <div className="border border-neutral-100 bg-white px-6 py-6">
           <div className="flex items-center justify-between">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">Security Insight</p>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-400">보안 인사이트</p>
             <span className="font-mono text-[10px] text-neutral-300">{tipIndex + 1} / {securityTips.length}</span>
           </div>
           <p className="mt-2 text-sm font-bold text-black">{securityTips[tipIndex].label}</p>
@@ -374,7 +374,7 @@ function ScanProgressPanel({
           </div>
 
           <p className="mt-3 text-xs leading-relaxed text-neutral-400">
-            SSAfer also checks configuration patterns like these while the scan is running.
+            SSAfer는 스캔이 진행되는 동안 이런 설정 패턴도 함께 점검합니다.
           </p>
         </div>
       </div>

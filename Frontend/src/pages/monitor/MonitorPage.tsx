@@ -1,81 +1,35 @@
 import { AlertCircle, RefreshCw, Wifi, WifiOff } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import PageBanner from '../../components/common/PageBanner';
 import FeatureBanner from '../../components/common/FeatureBanner';
 import FeatureInfoCard from '../../components/common/FeatureInfoCard';
+import PageBanner from '../../components/common/PageBanner';
 import { ROUTES } from '../../constants/routes';
-import { getProjectAgentStatus } from '../../features/agents/api/agents';
-import { getProjects } from '../../features/projects/api/projects';
+import useMonitorData from '../../features/monitor/hooks/useMonitorData';
 import { formatDateTime, getAgentStatusLabel } from '../../features/scans/utils/scanPresentation';
-import type { AgentStatus, AgentStatusResponseData } from '../../types/scan';
-import type { ProjectListItemData } from '../../types/project';
-
-const agentStatusColorMap: Record<AgentStatus, string> = {
-  ONLINE: 'text-[#0A8F4E]',
-  ERROR: 'text-[#FF8A33]',
-  OFFLINE: 'text-neutral-400',
-};
+import type { AgentStatus } from '../../types/scan';
 
 function AgentStatusIcon({ status }: { status: AgentStatus }) {
-  if (status === 'ONLINE') return <Wifi className="h-4 w-4" />;
-  if (status === 'ERROR') return <AlertCircle className="h-4 w-4" />;
+  if (status === 'ONLINE') {
+    return <Wifi className="h-4 w-4" />;
+  }
+  if (status === 'ERROR') {
+    return <AlertCircle className="h-4 w-4" />;
+  }
   return <WifiOff className="h-4 w-4" />;
 }
 
 function MonitorPage() {
-  const [projects, setProjects] = useState<ProjectListItemData[]>([]);
-  const [agentStatusMap, setAgentStatusMap] = useState<Record<number, AgentStatusResponseData | null>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const loadData = useCallback(async (signal?: { cancelled: boolean }) => {
-    setIsLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const projectData = await getProjects({ size: 100 });
-
-      if (signal?.cancelled) return;
-
-      setProjects(projectData.items);
-
-      const statusEntries = await Promise.all(
-        projectData.items.map(async (project) => {
-          const status = await getProjectAgentStatus(String(project.projectId)).catch(() => null);
-          return [project.projectId, status] as const;
-        }),
-      );
-
-      if (signal?.cancelled) return;
-
-      setAgentStatusMap(Object.fromEntries(statusEntries));
-    } catch (error) {
-      if (signal?.cancelled) return;
-      const raw = error instanceof Error ? error.message : '';
-      const isAuthError = /authentication|token|unauthorized|인증|권한/i.test(raw);
-      setErrorMessage(
-        isAuthError
-          ? '로그인 세션이 만료되었습니다. 페이지를 새로고침하거나 다시 로그인해 주세요.'
-          : '에이전트 상태를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
-      );
-    } finally {
-      if (!signal?.cancelled) setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const signal = { cancelled: false };
-    void loadData(signal);
-    return () => {
-      signal.cancelled = true;
-    };
-  }, [loadData]);
-
-  const agentStatuses = Object.values(agentStatusMap);
-  const onlineCount = agentStatuses.filter((s) => s?.status === 'ONLINE').length;
-  const runningTaskCount = agentStatuses.filter((s) => Boolean(s?.currentTaskType)).length;
+  const {
+    agentStatusColorMap,
+    agentStatusMap,
+    errorMessage,
+    isLoading,
+    loadData,
+    onlineCount,
+    projects,
+    runningTaskCount,
+  } = useMonitorData();
 
   return (
     <section className="space-y-8">
@@ -83,7 +37,7 @@ function MonitorPage() {
         aside={
           <FeatureInfoCard
             className="min-w-[280px]"
-            description="실시간 알림과 위험 변동 추적 기능은 곧 추가될 예정입니다."
+            description="실시간 알림과 위험 변화 추적 기능은 곧 추가될 예정입니다."
             eyebrow="COMING SOON"
             title={<div className="text-lg font-black">모니터링 서비스 준비 중</div>}
             tone="dark"
@@ -112,14 +66,13 @@ function MonitorPage() {
         />
       </div>
 
-      {/* 모니터링 기능 준비 중 안내 — 사용자에게 친근한 톤으로 한 줄 안내 */}
       <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
-        <span className="mt-0.5 text-base">🚧</span>
+        <span className="mt-0.5 text-base">ⓘ</span>
         <div>
-          <div className="font-bold">모니터링 서비스는 일부 기능이 준비 중이에요.</div>
+          <div className="font-bold">모니터링 서비스는 일부 기능만 준비 중이에요.</div>
           <div className="mt-1 text-xs leading-6 text-amber-800">
             지금은 Agent의 <span className="font-bold">연결 여부</span>만 확인할 수 있어요.
-            실시간 알림이나 위험 변동 알림은 곧 만나보실 수 있어요.
+            실시간 알림이나 위험 변화 알림은 곧 만나보실 수 있어요.
             최신 상태가 궁금하시면 아래 <span className="font-bold">새로고침</span> 버튼을 눌러주세요.
           </div>
         </div>
@@ -159,7 +112,7 @@ function MonitorPage() {
                   <div className="font-bold">{project.name}</div>
                   <div className="font-mono text-[11px] text-neutral-400">
                     projectId #{project.projectId}
-                    {agentStatus ? ` · agentId #${agentStatus.agentId}` : ''}
+                    {agentStatus ? ` | agentId #${agentStatus.agentId}` : ''}
                   </div>
                 </div>
 

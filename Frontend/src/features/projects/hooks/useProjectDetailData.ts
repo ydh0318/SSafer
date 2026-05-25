@@ -28,7 +28,7 @@ function useProjectDetailData(projectId: string) {
       } catch (error) {
         if (isMounted) {
           setProjectDetail(null);
-          setProjectError(error instanceof Error ? error.message : 'Failed to load project details.');
+          setProjectError(error instanceof Error ? error.message : '프로젝트 상세 정보를 불러오지 못했습니다.');
         }
       } finally {
         if (isMounted) {

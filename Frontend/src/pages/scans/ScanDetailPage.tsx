@@ -34,7 +34,7 @@ function ScanDetailPage() {
     }
 
     hasShownSuccessToastRef.current = true;
-    toast.success('Scan request submitted.', { durationMs: 2000 });
+    toast.success('스캔 요청이 접수되었습니다.', { durationMs: 2000 });
   }, [routeState.autoOpenedFromScanRequest, toast]);
 
   useEffect(() => {
@@ -66,7 +66,7 @@ function ScanDetailPage() {
     }
 
     hasAutoNavigatedRef.current = true;
-    toast.success('Analysis completed. Opening the result page.', { durationMs: 2000 });
+    toast.success('분석이 완료되어 결과 페이지로 이동합니다.', { durationMs: 2000 });
     window.setTimeout(() => {
       navigate(ROUTES.resultDetail.replace(':scanId', scanId), { state: routeState });
     }, 500);
@@ -83,7 +83,7 @@ function ScanDetailPage() {
           to={backTo}
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to project
+          프로젝트로 돌아가기
         </Link>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -93,7 +93,7 @@ function ScanDetailPage() {
             to={ROUTES.typingGame}
           >
             <Gamepad2 className="h-3.5 w-3.5" />
-            Open typing game
+            타이핑 게임 열기
           </Link>
 
           {canOpenResult ? (
@@ -102,12 +102,12 @@ function ScanDetailPage() {
               state={routeState}
               to={ROUTES.resultDetail.replace(':scanId', scanId)}
             >
-              View result
+              결과 보기
               <FileSearch className="h-3.5 w-3.5" />
             </Link>
           ) : (
             <span className="inline-flex items-center gap-1.5 bg-neutral-100 px-4 py-2 text-xs font-bold text-neutral-400">
-              Result pending
+              결과 대기 중
               <FileSearch className="h-3.5 w-3.5" />
             </span>
           )}

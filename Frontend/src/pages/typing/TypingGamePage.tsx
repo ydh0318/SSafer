@@ -3,14 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import PixelGoose from '../../components/common/PixelGoose';
-import { ROUTES } from '../../constants/routes';
-
-import { useUiStore } from '../../store/uiStore';
-
 import SiteHeader from '../../components/layout/SiteHeader';
+import { ROUTES } from '../../constants/routes';
+import useTypingGameSession from '../../features/typing/hooks/useTypingGameSession';
+import { useAuthStore } from '../../store/authStore';
+import { useUiStore } from '../../store/uiStore';
 import TypingGameEnding from './TypingGameEnding';
 import TypingStageReportModal from './TypingStageReportModal';
-import { useAuthStore } from '../../store/authStore';
 
 /* ─── types ─── */
 type TokenTone = 'emerald' | 'sky' | 'amber' | 'rose' | 'slate';
@@ -128,19 +127,19 @@ function TypingLine({
   onTypeActivity?: (cpm: number, isTyping: boolean) => void;
   onStroke?: () => void;
 }) {
-  const [input, setInput] = useState('');
+  const [state, setState] = useState({ command, input: '' });
   const inputRef = useRef<HTMLInputElement>(null);
   const doneRef = useRef(false);
   const keyStamps = useRef<number[]>([]);
   const activityTimer = useRef<NodeJS.Timeout | null>(null);
+  const input = state.command === command ? state.input : '';
 
   useEffect(() => {
-    setInput('');
     doneRef.current = false;
     keyStamps.current = [];
     if (onTypeActivity) onTypeActivity(0, false);
     setTimeout(() => inputRef.current?.focus(), 0);
-  }, [command]);
+  }, [command, onTypeActivity]);
 
   const done = input === command;
 
@@ -169,7 +168,10 @@ function TypingLine({
     if (!autoPlay) return;
     if (!done) {
       const timer = setTimeout(() => {
-        setInput((prev) => command.slice(0, prev.length + 1));
+        setState((prev) => ({
+          command,
+          input: command.slice(0, (prev.command === command ? prev.input : '').length + 1),
+        }));
       }, 100); // typing speed (slower)
       return () => clearTimeout(timer);
     } else {
@@ -221,7 +223,10 @@ function TypingLine({
           if (newVal.length > input.length) {
             if (onStroke) onStroke();
           }
-          setInput(newVal);
+          setState({
+            command,
+            input: newVal,
+          });
 
           if (onTypeActivity) {
             const now = Date.now();
@@ -281,91 +286,45 @@ function getTokenStyles(tone: TokenTone, isDark: boolean) {
 export default function TypingGamePage() {
   const location = useLocation();
   const routeState = (location.state ?? {}) as TypingRouteState;
-  const [stageIdx, setStageIdx] = useState(0);
-  const [cmdIdx, setCmdIdx] = useState(0);
-  const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState(0);
-  const [showEnding, setShowEnding] = useState(false);
-  const [autoPlay, setAutoPlay] = useState(false);
-  const [eating, setEating] = useState(false);
-  const [cpm, setCpm] = useState(0);
-  const [isTyping, setIsTyping] = useState(false);
-  const [stageStrokes, setStageStrokes] = useState(0);
-  const [maxStageCpm, setMaxStageCpm] = useState(0);
-  const [showStageReport, setShowStageReport] = useState(false);
-  
   const theme = useUiStore((s) => s.theme);
   const { user } = useAuthStore();
   const username = user?.name || user?.email || 'Guest Agent';
   const isDark = theme === 'dark';
   const currentLineRef = useRef<HTMLDivElement>(null);
-
-  const stage = STAGES[stageIdx];
+  const {
+    autoPlay,
+    closeStageReportAndGoNext,
+    cmdIdx,
+    cpm,
+    doneIds,
+    eating,
+    goNextCmd,
+    goNextStage,
+    handleDone,
+    handleEnterNext,
+    handleStroke,
+    handleTypeActivity,
+    isCurrentDone,
+    isLastCmd,
+    isLastStage,
+    isTyping,
+    jumpTo,
+    maxStageCpm,
+    openSidebarForCurrentStage,
+    progressPercent,
+    setSidebarOpen,
+    setSidebarTab,
+    setShowEnding,
+    showEnding,
+    showStageReport,
+    sidebarOpen,
+    sidebarTab,
+    stage,
+    stageIdx,
+    stageStrokes,
+    totalXp,
+  } = useTypingGameSession(STAGES);
   const cmd = stage.commands[cmdIdx];
-  const isCurrentDone = doneIds.has(cmd.id);
-  const isLastCmd = cmdIdx === stage.commands.length - 1;
-  const isLastStage = stageIdx === STAGES.length - 1;
-
-  const handleDone = () => {
-    setDoneIds((prev) => new Set([...prev, cmd.id]));
-    setEating(true);
-    setTimeout(() => setEating(false), 800);
-  };
-
-  const goNextCmd = () => {
-    if (!isLastCmd) setCmdIdx((i) => i + 1);
-  };
-
-  const goNextStage = () => {
-    if (!isLastStage) { setStageIdx((i) => i + 1); setCmdIdx(0); }
-  };
-
-  // Enter key from TypingLine auto-advances
-  const handleEnterNext = () => {
-    if (!isLastCmd) goNextCmd();
-    else if (!isLastStage) setShowStageReport(true);
-    else setShowEnding(true);
-  };
-
-  const closeStageReportAndGoNext = () => {
-    setShowStageReport(false);
-    setStageStrokes(0);
-    setMaxStageCpm(0);
-    goNextStage();
-  };
-
-  const jumpTo = (si: number, ci: number) => {
-    setStageIdx(si); setCmdIdx(ci); setSidebarOpen(false);
-  };
-
-  // Easter egg: Ctrl x 3
-  const ctrlCount = useRef(0);
-  const ctrlTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setAutoPlay(false);
-      }
-      if (e.key === 'Control') {
-        ctrlCount.current += 1;
-        if (ctrlCount.current >= 3) {
-          setAutoPlay(true);
-          ctrlCount.current = 0;
-        }
-        if (ctrlTimeout.current) clearTimeout(ctrlTimeout.current);
-        ctrlTimeout.current = setTimeout(() => {
-          ctrlCount.current = 0;
-        }, 1000);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (ctrlTimeout.current) clearTimeout(ctrlTimeout.current);
-    };
-  }, []);
 
   // Auto-scroll to the current typing line whenever the command changes
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -396,13 +355,6 @@ export default function TypingGamePage() {
   const nextStageBtnCls = isDark ? 'border-neutral-300 bg-neutral-200 text-neutral-900 hover:bg-white' : 'border-neutral-800 bg-neutral-800 text-white hover:bg-black';
   const currentListCls  = isDark ? 'text-neutral-500 hover:text-neutral-200' : 'text-neutral-500 hover:text-neutral-800';
   const descRevealCls   = isDark ? 'text-neutral-500' : 'text-neutral-500';
-
-  // calculatons
-  const totalXp = STAGES.flatMap(s => s.commands)
-    .filter(c => doneIds.has(c.id))
-    .reduce((sum, c) => sum + c.xp, 0);
-  const progressCount = isCurrentDone ? cmdIdx + 1 : cmdIdx;
-  const progressPercent = (progressCount / stage.commands.length) * 100;
 
   return (
     <div className={`relative flex min-h-screen flex-col ${pageBg}`}>
@@ -452,7 +404,7 @@ export default function TypingGamePage() {
             </div>
 
             <button
-              onClick={() => { setSidebarOpen(true); setSidebarTab(stageIdx); }}
+              onClick={openSidebarForCurrentStage}
               className={`flex items-center gap-1 text-xs font-bold uppercase tracking-widest transition-colors mb-1 ${currentListCls}`}
             >
               CURRENT LIST <List className="h-3.5 w-3.5" />
@@ -507,12 +459,8 @@ export default function TypingGamePage() {
                 onEnterNext={handleEnterNext}
                 isDark={isDark}
                 autoPlay={autoPlay}
-                onTypeActivity={(currentCpm, typingStatus) => {
-                  setCpm(currentCpm);
-                  setMaxStageCpm(prev => Math.max(prev, currentCpm));
-                  setIsTyping(typingStatus);
-                }}
-                onStroke={() => setStageStrokes(prev => prev + 1)}
+                onTypeActivity={handleTypeActivity}
+                onStroke={handleStroke}
               />
             </div>
 
