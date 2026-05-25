@@ -191,32 +191,29 @@ function ResultPage() {
         </div>
       ) : (
         <>
-          <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <div className="space-y-5">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid gap-5 xl:col-span-2 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
               <div className="border border-neutral-100 bg-white px-5 py-5">
-                <div className="grid gap-4 md:grid-cols-2 md:items-start">
+                <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
-                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400">개요</p>
-                    <h2 className="mt-2 text-2xl font-black text-black">
-                      {summary?.totalFindings ?? 0}
-                      <span className="ml-2 text-base text-neutral-300">건</span>
-                    </h2>
+                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-neutral-400">SEVERITY OVERVIEW</p>
+                    <p className="mt-3 text-[15px] text-neutral-700">위험도별 탐지 수와 조치 상태를 한 번에 확인합니다.</p>
                   </div>
                   <div className="min-w-0 md:text-right">
-                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400">조치 완료</p>
-                    <p className="mt-2 text-2xl font-black text-black">
+                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-neutral-400">RESOLVED</p>
+                    <p className="mt-2 text-5xl font-black leading-none text-black">
                       {resolvedCount}
-                      <span className="text-neutral-300"> / {Math.max((summary?.totalFindings ?? 0) - ignoredCount, 1)}</span>
+                      <span className="text-neutral-200"> / {Math.max((summary?.totalFindings ?? 0) - ignoredCount, 1)}</span>
                     </p>
                   </div>
                 </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   {severityOrder.map((severity) => {
                     const meta = severityMeta[severity];
                     const count = counts[severity];
                     return (
                       <button
-                        className={`flex min-h-[132px] flex-col justify-between border px-4 py-4 text-left transition ${
+                        className={`flex min-h-[156px] flex-col border px-5 py-5 text-left transition ${
                           severityFilter === severity
                             ? 'border-black bg-black text-white'
                             : 'border-neutral-200 bg-white hover:border-neutral-400'
@@ -236,7 +233,7 @@ function ResultPage() {
                           {meta.label}
                         </span>
                         <span
-                          className={`mt-6 block text-5xl font-black leading-none ${
+                          className={`mt-auto block pt-8 text-[56px] font-black leading-none ${
                             count === 0 && severityFilter !== severity ? 'text-neutral-200' : ''
                           }`}
                         >
@@ -283,7 +280,7 @@ function ResultPage() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 xl:col-span-2">
               <div className="border border-neutral-100 bg-white px-5 py-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="mr-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">필터</span>
