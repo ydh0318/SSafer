@@ -156,12 +156,14 @@ export function getScanModeClassName(scanMode: ScanMode, source?: ScanRequestSou
 
 export function getScanSourceLabel(source?: string | null) {
   if (!source) return null;
+
   const map: Record<string, string> = {
     CLI: 'CLI',
     WEB: 'Web 업로드',
     AGENT: 'Agent',
     UPLOAD: 'Web 업로드',
   };
+
   return map[source] ?? source;
 }
 

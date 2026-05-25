@@ -13,7 +13,7 @@ export const findingSeverityOrder: FindingSeverity[] = ['CRITICAL', 'HIGH', 'MED
 export const findingResolutionValues = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'IGNORED'] as const;
 
 export const findingResolutionMeta: Record<string, { label: string; cls: string; dot: string }> = {
-  OPEN: { label: '미조치', cls: 'bg-neutral-100 text-neutral-600', dot: 'bg-neutral-400' },
+  OPEN: { label: '미해결', cls: 'bg-neutral-100 text-neutral-600', dot: 'bg-neutral-400' },
   IN_PROGRESS: {
     label: '진행 중',
     cls: 'border border-amber-200 bg-amber-50 text-amber-700',
