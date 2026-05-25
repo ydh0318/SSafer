@@ -29,7 +29,7 @@ function useProjectAgentStatus({ isGuest, projectId }: UseProjectAgentStatusOpti
       setAgentStatus(data);
     } catch (error) {
       setAgentStatus(null);
-      setAgentError(error instanceof Error ? error.message : 'Failed to load agent status.');
+      setAgentError(error instanceof Error ? error.message : '에이전트 상태를 불러오지 못했습니다.');
     } finally {
       setIsAgentLoading(false);
     }
@@ -55,7 +55,7 @@ function useProjectAgentStatus({ isGuest, projectId }: UseProjectAgentStatusOpti
       } catch (error) {
         if (isMounted) {
           setAgentStatus(null);
-          setAgentError(error instanceof Error ? error.message : 'Failed to load agent status.');
+          setAgentError(error instanceof Error ? error.message : '에이전트 상태를 불러오지 못했습니다.');
         }
       } finally {
         if (isMounted) {

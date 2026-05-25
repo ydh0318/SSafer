@@ -26,7 +26,7 @@ function AgentChip({ isOnline, isLoading }: { isOnline: boolean; isLoading: bool
     return (
       <span className="inline-flex items-center gap-1.5 border border-neutral-200 bg-white px-3 py-1 text-[11px] font-bold text-neutral-500 landing-inner-radius">
         <Loader2 className="h-3 w-3 animate-spin" />
-        Agent 확인 중
+        에이전트 확인 중
       </span>
     );
   }
@@ -38,7 +38,7 @@ function AgentChip({ isOnline, isLoading }: { isOnline: boolean; isLoading: bool
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D4FC64] opacity-75" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#D4FC64]" />
         </span>
-        Agent 연결됨
+        에이전트 연결됨
       </span>
     );
   }
@@ -46,7 +46,7 @@ function AgentChip({ isOnline, isLoading }: { isOnline: boolean; isLoading: bool
   return (
     <span className="inline-flex items-center gap-1.5 border border-neutral-300 bg-white px-3 py-1 text-[11px] font-bold text-[#0F0F0F] landing-inner-radius">
       <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
-      Agent 오프라인
+      에이전트 오프라인
     </span>
   );
 }
@@ -84,27 +84,21 @@ function ProjectDetailHero({
         initial={{ opacity: 0, y: 16 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       >
-        {/* 상태 칩 */}
         <div className="flex flex-wrap items-center gap-2">
           <AgentChip isLoading={isAgentLoading} isOnline={isAgentOnline} />
           {completedScanCount > 0 ? (
             <span className="inline-flex items-center border border-neutral-200 bg-white px-3 py-1 text-[11px] font-bold text-neutral-600 landing-inner-radius">
-              스캔 {completedScanCount}회 완료
+              스캔 {completedScanCount}건 완료
             </span>
           ) : null}
         </div>
 
-        {/* 프로젝트 이름 */}
         <h1 className="mt-5 text-4xl font-black leading-[1.05] tracking-[-0.03em] text-[#0F0F0F] md:text-5xl xl:text-6xl">
           {isLoading ? <span className="text-neutral-300">불러오는 중...</span> : (projectName ?? '프로젝트')}
         </h1>
 
-        {/* 설명 (있을 때만) */}
-        {description ? (
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-neutral-500">{description}</p>
-        ) : null}
+        {description ? <p className="mt-3 max-w-xl text-sm leading-relaxed text-neutral-500">{description}</p> : null}
 
-        {/* 액션 버튼 row — 사진과 동일한 배치 */}
         <div className="mt-6 flex flex-wrap items-center gap-2.5">
           <button
             className="inline-flex items-center gap-2 bg-[#0F0F0F] px-5 py-2.5 text-sm font-bold text-white transition landing-inner-radius hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(0,0,0,0.18)]"
@@ -118,7 +112,7 @@ function ProjectDetailHero({
             className="inline-flex items-center gap-2 border border-neutral-200 bg-white px-4 py-2.5 text-sm font-bold text-neutral-700 transition landing-inner-radius hover:border-neutral-400 hover:text-[#0F0F0F] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-neutral-200 disabled:hover:text-neutral-700"
             disabled={!canCompare}
             onClick={onCompare}
-            title={canCompare ? '히스토리 페이지에서 두 스캔을 비교합니다' : '완료된 스캔이 2개 이상 필요합니다'}
+            title={canCompare ? '히스토리 페이지에서 프로젝트 스캔 결과를 비교합니다.' : '비교하려면 완료된 스캔이 2개 이상 필요합니다.'}
             type="button"
           >
             <BarChart3 className="h-4 w-4" />
@@ -137,25 +131,9 @@ function ProjectDetailHero({
       </motion.div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <StatTile
-          accent="sky"
-          isActive={activeScanCount > 0}
-          label="진행 중"
-          spinning={activeScanCount > 0}
-          value={activeScanCount}
-        />
-        <StatTile
-          accent="lime"
-          isActive={completedScanCount > 0}
-          label="완료"
-          value={completedScanCount}
-        />
-        <StatTile
-          accent="rose"
-          isActive={failedScanCount > 0}
-          label="실패 / 취소"
-          value={failedScanCount}
-        />
+        <StatTile accent="sky" isActive={activeScanCount > 0} label="진행 중" spinning={activeScanCount > 0} value={activeScanCount} />
+        <StatTile accent="lime" isActive={completedScanCount > 0} label="완료" value={completedScanCount} />
+        <StatTile accent="rose" isActive={failedScanCount > 0} label="실패 / 취소" value={failedScanCount} />
       </div>
     </header>
   );

@@ -14,9 +14,13 @@ type LatestResultCardProps = {
   projectId: string;
 };
 
-function ScanTypeLabel(scanType: string | undefined) {
-  if (scanType === 'PROJECT_FILE') return '프로젝트 스캔';
-  if (scanType === 'SERVER_AUDIT') return '서버 점검';
+function scanTypeLabel(scanType: string | undefined) {
+  if (scanType === 'PROJECT_FILE') {
+    return '프로젝트 스캔';
+  }
+  if (scanType === 'SERVER_AUDIT') {
+    return '서버 점검';
+  }
   return scanType ?? '-';
 }
 
@@ -34,14 +38,13 @@ function LatestResultCard({ scan, summary, isLoading, projectId }: LatestResultC
       <div className="flex flex-col items-center gap-3 border border-dashed border-neutral-300 bg-white/40 p-10 text-center backdrop-blur-sm landing-card-radius">
         <Clock4 className="h-7 w-7 text-neutral-300" />
         <p className="text-sm font-bold text-neutral-700">아직 완료된 스캔이 없습니다</p>
-        <p className="text-xs text-neutral-500">새 스캔을 시작하면 결과가 여기 나타납니다.</p>
+        <p className="text-xs text-neutral-500">새 스캔을 시작하면 결과가 여기에 표시됩니다.</p>
       </div>
     );
   }
 
   const totalFindings = summary?.totalFindings ?? 0;
-  const resolved =
-    summary?.resolutionCounts?.RESOLVED ?? summary?.resolutionCounts?.IGNORED ?? 0;
+  const resolved = summary?.resolutionCounts?.RESOLVED ?? summary?.resolutionCounts?.IGNORED ?? 0;
   const sourceEntries = Object.entries(summary?.sourceCounts ?? {});
 
   return (
@@ -60,16 +63,14 @@ function LatestResultCard({ scan, summary, isLoading, projectId }: LatestResultC
             <span className="h-1.5 w-1.5 rounded-full bg-[#7CB300]" />
             완료
           </span>
-          <span className="text-xs text-neutral-500">
-            {formatCompactDateTime(scan.completedAt ?? scan.requestedAt)}
-          </span>
+          <span className="text-xs text-neutral-500">{formatCompactDateTime(scan.completedAt ?? scan.requestedAt)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="border border-neutral-200 bg-white px-3 py-1 font-mono text-[11px] font-bold text-neutral-700 landing-inner-radius">
             {getScanModeLabel(scan.scanMode)}
           </span>
           <span className="border border-neutral-200 bg-white px-3 py-1 font-mono text-[11px] font-bold text-neutral-700 landing-inner-radius">
-            {ScanTypeLabel(scan.scanType ?? undefined)}
+            {scanTypeLabel(scan.scanType ?? undefined)}
           </span>
         </div>
       </div>
@@ -82,15 +83,17 @@ function LatestResultCard({ scan, summary, isLoading, projectId }: LatestResultC
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-6 md:max-w-2xl">
-        <Stat label="총 탐지" value={`${totalFindings}건`} />
+        <Stat label="총 이슈" value={`${totalFindings}건`} />
         <Stat label="해결 완료" value={`${resolved}건`} valueClass="text-[#4A7A00]" />
         {sourceEntries.length > 0 ? (
           <Stat
             label="소스"
-            value={sourceEntries.map(([s, c]) => `${s} ${c}`).join(' · ')}
+            value={sourceEntries.map(([source, count]) => `${source} ${count}`).join(' | ')}
             valueClass="text-[#0F0F0F]"
           />
-        ) : <Stat label="소스" value="-" />}
+        ) : (
+          <Stat label="소스" value="-" />
+        )}
       </div>
 
       <div className="mt-6 flex flex-wrap gap-2">

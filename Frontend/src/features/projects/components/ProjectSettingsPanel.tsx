@@ -27,17 +27,17 @@ function ProjectSettingsPanel({
   return (
     <div className="space-y-4 landing-anim">
       <div className="grid gap-4 md:grid-cols-2">
-        <Card delay={0} emoji="📁" subtitle="기본 설정과 프로젝트 메타데이터" title="프로젝트 정보">
+        <Card delay={0} emoji="📚" subtitle="기본 설정과 프로젝트 메타데이터입니다." title="프로젝트 정보">
           <Row label="프로젝트 이름" value={project?.name ?? '-'} />
           {project?.createdAt ? <Row label="생성일" value={formatCompactDateTime(project.createdAt) ?? '-'} /> : null}
-          <Row label="전체 스캔" value={`${scanCount}회`} />
+          <Row label="전체 스캔" value={`${scanCount}건`} />
           <Row label="기본 스캔 방식" value={project ? getScanModeLabel(project.defaultScanMode) : '-'} />
         </Card>
 
         <Card
           action={
             <button
-              aria-label="Agent 상태 새로고침"
+              aria-label="에이전트 상태 새로고침"
               className="inline-flex items-center gap-1 border border-neutral-200 bg-white px-2.5 py-1 text-[11px] font-bold text-neutral-600 transition landing-inner-radius hover:border-black hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isAgentLoading}
               onClick={onRefreshAgent}
@@ -48,9 +48,9 @@ function ProjectSettingsPanel({
             </button>
           }
           delay={0.05}
-          emoji="🤖"
-          subtitle="연결된 로컬 Agent 정보"
-          title="Agent 상태"
+          emoji="🛰"
+          subtitle="연결된 로컬 에이전트 정보입니다."
+          title="에이전트 상태"
         >
           {agentErrorMessage ? (
             <p className="border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 landing-inner-radius">
@@ -83,13 +83,10 @@ function ProjectSettingsPanel({
           <Row label="Agent ID" value={agentStatus ? `Agent #${agentStatus.agentId}` : '-'} />
           <Row label="연결 시각" value={formatCompactDateTime(agentStatus?.connectedAt) ?? '-'} />
           <Row label="마지막 확인" value={formatCompactDateTime(agentStatus?.lastSeenAt) ?? '-'} />
-          <Row
-            label="현재 작업"
-            value={agentStatus?.currentTaskType ? formatTaskType(agentStatus.currentTaskType) : '없음'}
-          />
+          <Row label="현재 작업" value={agentStatus?.currentTaskType ? formatTaskType(agentStatus.currentTaskType) : '없음'} />
         </Card>
 
-        <Card delay={0.1} emoji="🔒" subtitle="업로드 시 자동 마스킹되는 패턴" title="마스킹 정책">
+        <Card delay={0.1} emoji="🔏" subtitle="업로드 중 민감정보는 자동으로 마스킹됩니다." title="마스킹 정책">
           <MaskingRow label="password / passwd / pwd" />
           <MaskingRow label="api_key / token / secret" />
           <MaskingRow label="private key 블록" />
@@ -103,8 +100,12 @@ function ProjectSettingsPanel({
 }
 
 function formatTaskType(type: string) {
-  if (type === 'SCAN_REQUEST') return '스캔 요청';
-  if (type === 'PATCH_APPLY') return '패치 적용';
+  if (type === 'SCAN_REQUEST') {
+    return '스캔 요청';
+  }
+  if (type === 'PATCH_APPLY') {
+    return '패치 적용';
+  }
   return type;
 }
 
@@ -163,7 +164,7 @@ function MaskingRow({ label }: { label: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <dt className="font-mono text-xs text-neutral-700">{label}</dt>
-      <dd className="text-xs font-bold text-[#4A7A00]">활성</dd>
+      <dd className="text-xs font-bold text-[#4A7A00]">적용</dd>
     </div>
   );
 }
@@ -187,7 +188,7 @@ function DangerCard({
       <header>
         <h3 className="flex items-center gap-2 text-base font-black tracking-tight text-rose-900">
           <span aria-hidden className="text-lg leading-none">
-            ⚠️
+            ⚠
           </span>
           프로젝트 삭제
         </h3>
@@ -197,7 +198,7 @@ function DangerCard({
       </header>
       <dl className="space-y-3 text-sm">
         <Row label="프로젝트 이름" value={projectName || '-'} valueClass="text-rose-900" />
-        <Row label="영향 범위" value="모든 스캔 · 결과 · 패치" valueClass="text-rose-900" />
+        <Row label="영향 범위" value="모든 스캔 | 결과 | 패치" valueClass="text-rose-900" />
       </dl>
       <button
         className="inline-flex w-full items-center justify-center gap-2 border border-rose-300 bg-white px-4 py-2.5 text-sm font-bold text-rose-700 transition landing-inner-radius hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
