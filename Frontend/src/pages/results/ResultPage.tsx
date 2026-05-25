@@ -76,7 +76,7 @@ function ResultPage() {
           to={projectBackPath}
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to project
+          프로젝트로 돌아가기
         </Link>
       </div>
 
@@ -86,7 +86,7 @@ function ResultPage() {
             <p className="font-mono text-[11px] font-bold uppercase tracking-[0.32em] text-neutral-400">SCAN RESULT</p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <h1 className="text-4xl font-black tracking-tight text-black md:text-5xl">
-                {isServerAudit ? 'Server audit result' : 'Scan result'}
+                {isServerAudit ? '서버 점검 결과' : '스캔 결과'}
               </h1>
               <span className="rounded-full bg-black px-3 py-1 font-mono text-xs font-bold text-white">#{scanId}</span>
             </div>
@@ -98,7 +98,7 @@ function ResultPage() {
                   state={routeState}
                   to={ROUTES.projectDetail.replace(':projectId', String(currentProjectId))}
                 >
-                  {projectName ?? `Project #${currentProjectId}`}
+                  {projectName ?? `프로젝트 #${currentProjectId}`}
                   <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
                 </Link>
               ) : null}
@@ -109,16 +109,16 @@ function ResultPage() {
 
             <div className="mt-6 grid gap-3 text-sm text-neutral-600 sm:grid-cols-2 xl:max-w-3xl">
               <div className="border border-neutral-100 bg-neutral-50 px-4 py-3">
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">Completed</p>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">완료 시각</p>
                 <p className="mt-1 font-bold text-neutral-900">
-                  {scanBasic?.completedAt ? formatDateTime(scanBasic.completedAt) : 'Not completed yet'}
+                  {scanBasic?.completedAt ? formatDateTime(scanBasic.completedAt) : '아직 완료되지 않았습니다'}
                 </p>
               </div>
               <div className="border border-neutral-100 bg-neutral-50 px-4 py-3">
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">Action Needed</p>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-neutral-400">조치 필요</p>
                 <p className="mt-1 font-bold text-neutral-900">
                   {openCount + inProgressCount}
-                  <span className="ml-2 font-normal text-neutral-500">open + in progress</span>
+                  <span className="ml-2 font-normal text-neutral-500">미조치 + 진행 중</span>
                 </p>
               </div>
             </div>
@@ -129,7 +129,7 @@ function ResultPage() {
                 to={ROUTES.history}
               >
                 <GitBranch className="h-4 w-4" />
-                Compare results
+                결과 비교
               </Link>
               <button
                 className="inline-flex items-center gap-2 border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
@@ -137,7 +137,7 @@ function ResultPage() {
                 type="button"
               >
                 <RefreshCw className="h-4 w-4" />
-                Refresh
+                새로고침
               </button>
               <button
                 className="inline-flex items-center gap-2 border border-neutral-200 px-4 py-2 text-sm font-bold text-neutral-400"
@@ -145,7 +145,7 @@ function ResultPage() {
                 type="button"
               >
                 <FileText className="h-4 w-4" />
-                Export coming soon
+                내보내기 준비 중
               </button>
             </div>
           </div>
@@ -158,21 +158,21 @@ function ResultPage() {
                 <p className="mt-1 text-3xl font-black text-black">{summary?.totalFindings ?? 0}</p>
               </div>
               <div className="bg-white p-4">
-                <p className="text-xs font-bold text-neutral-500">Critical</p>
+                <p className="text-xs font-bold text-neutral-500">치명적</p>
                 <p className="mt-1 text-3xl font-black text-[#E63946]">{counts.CRITICAL}</p>
               </div>
               <div className="bg-white p-4">
-                <p className="text-xs font-bold text-neutral-500">Resolved</p>
+                <p className="text-xs font-bold text-neutral-500">조치 완료</p>
                 <p className="mt-1 text-3xl font-black text-[#4A7A00]">{resolvedCount}</p>
               </div>
               <div className="bg-white p-4">
-                <p className="text-xs font-bold text-neutral-500">Ignored</p>
+                <p className="text-xs font-bold text-neutral-500">무시</p>
                 <p className="mt-1 text-3xl font-black text-neutral-400">{ignoredCount}</p>
               </div>
             </div>
             <div className="mt-5">
               <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
-                <span>Resolved ratio</span>
+                <span>조치 완료 비율</span>
                 <span className="font-mono font-bold text-black">{resolvedRatio}%</span>
               </div>
               <div className="h-2 bg-neutral-200">
@@ -187,7 +187,7 @@ function ResultPage() {
 
       {isInitialLoading ? (
         <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">
-          Loading scan result...
+          스캔 결과를 불러오는 중입니다...
         </div>
       ) : (
         <>
@@ -196,14 +196,14 @@ function ResultPage() {
               <div className="border border-neutral-100 bg-white px-5 py-5">
                 <div className="flex items-end justify-between gap-3">
                   <div>
-                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400">Overview</p>
+                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400">개요</p>
                     <h2 className="mt-2 text-2xl font-black text-black">
                       {summary?.totalFindings ?? 0}
-                      <span className="ml-2 text-base text-neutral-300">findings</span>
+                      <span className="ml-2 text-base text-neutral-300">건</span>
                     </h2>
                   </div>
                   <div className="text-right">
-                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400">Resolved</p>
+                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400">조치 완료</p>
                     <p className="mt-2 text-2xl font-black text-black">
                       {resolvedCount}
                       <span className="text-neutral-300"> / {Math.max((summary?.totalFindings ?? 0) - ignoredCount, 1)}</span>
@@ -246,7 +246,7 @@ function ResultPage() {
 
               <div className="border border-neutral-100 bg-white px-5 py-5">
                 <div className="mb-3 flex items-center justify-between text-sm">
-                  <span className="font-bold text-neutral-700">Resolution progress</span>
+                  <span className="font-bold text-neutral-700">조치 진행 현황</span>
                   <span className="font-mono font-black text-black">{resolvedRatio}%</span>
                 </div>
                 <div className="h-2 bg-neutral-100">
@@ -282,7 +282,7 @@ function ResultPage() {
             <div className="space-y-4">
               <div className="border border-neutral-100 bg-white px-5 py-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="mr-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">Filter</span>
+                  <span className="mr-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">필터</span>
                   <button
                     className={`border px-3 py-1.5 text-xs font-bold transition ${
                       severityFilter === 'all' ? 'border-black bg-black text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'
@@ -290,7 +290,7 @@ function ResultPage() {
                     onClick={clearSeverityFilter}
                     type="button"
                   >
-                    All severities
+                    전체 심각도
                   </button>
                   <button
                     className={`border px-3 py-1.5 text-xs font-bold transition ${
@@ -299,7 +299,7 @@ function ResultPage() {
                     onClick={clearResolutionFilter}
                     type="button"
                   >
-                    All statuses
+                    전체 상태
                   </button>
                   <div className="ml-auto flex flex-wrap items-center gap-3 font-mono text-[11px] text-neutral-400">
                     <span>Trivy {getSourceCount(summary, 'TRIVY')}</span>
@@ -312,11 +312,11 @@ function ResultPage() {
               <div className="space-y-4">
                 {isFindingsLoading ? (
                   <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">
-                    Loading findings...
+                    취약점 목록을 불러오는 중입니다...
                   </div>
                 ) : groupedFindings.length === 0 ? (
                   <div className="border border-neutral-200 bg-white px-5 py-12 text-center text-sm text-neutral-500">
-                    No findings match the current filters.
+                    현재 필터에 맞는 취약점이 없습니다.
                   </div>
                 ) : (
                   groupedFindings.map((group) => {
@@ -351,11 +351,11 @@ function ResultPage() {
                               {group.severity}
                             </span>
                             <span className="text-sm font-bold">
-                              {group.severity} {group.items.length}
+                              {group.severity} {group.items.length}건
                             </span>
                           </div>
                           <span className="text-xs text-neutral-500">
-                            {shouldCollapseSeverity ? (severityExpanded ? 'Collapse' : 'Expand') : 'Single item'}
+                            {shouldCollapseSeverity ? (severityExpanded ? '접기' : '펼치기') : '단일 항목'}
                           </span>
                         </button>
 
@@ -379,7 +379,7 @@ function ResultPage() {
                                       <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap items-center gap-2">
                                           <span className="rounded-full bg-black px-2.5 py-1 text-xs font-black text-white">
-                                            Related {titleGroup.items.length}
+                                            관련 항목 {titleGroup.items.length}
                                           </span>
                                           <span className="font-mono text-[11px] text-neutral-500">
                                             findingId #{titleGroup.items.map((item) => item.findingId).join(', #')}
@@ -388,7 +388,7 @@ function ResultPage() {
                                         <div className="mt-2 truncate text-base font-black text-black">{titleGroup.title}</div>
                                       </div>
                                       <span className="hidden text-xs font-bold text-neutral-500 sm:inline">
-                                        {titleExpanded ? 'Collapse' : 'Expand'}
+                                        {titleExpanded ? '접기' : '펼치기'}
                                       </span>
                                     </button>
                                   ) : null}
@@ -443,7 +443,7 @@ function ResultPage() {
                                             {currentScanType === 'SERVER_AUDIT' ? (
                                               <div className="mt-3 space-y-2">
                                                 <div className="rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs leading-6 text-neutral-700">
-                                                  <span className="mr-2 font-bold uppercase tracking-[0.16em] text-neutral-400">Evidence</span>
+                                                  <span className="mr-2 font-bold uppercase tracking-[0.16em] text-neutral-400">근거</span>
                                                   <span className="font-mono">{serverDetail?.maskedEvidence ?? formatFindingLocation(finding)}</span>
                                                 </div>
                                                 {serverRecommendation ? (
@@ -485,7 +485,7 @@ function ResultPage() {
                                               to={findingUrl}
                                             >
                                               <Wrench className="h-3.5 w-3.5" />
-                                              Apply view
+                                              패치 보기
                                             </Link>
                                           ) : null}
                                         </div>
@@ -504,9 +504,9 @@ function ResultPage() {
 
               <div className="flex items-center justify-between border border-neutral-200 bg-white px-5 py-4 text-sm text-neutral-500">
                 <span>
-                  Total {findingsData.totalElements} items, showing{' '}
+                  총 {findingsData.totalElements}건 중{' '}
                   {findingsData.totalElements === 0 ? 0 : page * findingsData.size + 1}-
-                  {Math.min((page + 1) * findingsData.size, findingsData.totalElements)}
+                  {Math.min((page + 1) * findingsData.size, findingsData.totalElements)}건 표시
                 </span>
                 <div className="flex items-center gap-2">
                   <button
@@ -515,7 +515,7 @@ function ResultPage() {
                     onClick={goToPreviousPage}
                     type="button"
                   >
-                    Prev
+                    이전
                   </button>
                   <span className="font-mono text-xs">
                     {findingsData.totalPages === 0 ? 0 : page + 1} / {findingsData.totalPages}
@@ -526,7 +526,7 @@ function ResultPage() {
                     onClick={goToNextPage}
                     type="button"
                   >
-                    Next
+                    다음
                   </button>
                 </div>
               </div>

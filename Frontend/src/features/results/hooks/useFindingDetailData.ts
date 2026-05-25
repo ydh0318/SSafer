@@ -68,7 +68,7 @@ function useFindingDetailData(scanId: string, findingId: string) {
           return;
         }
 
-        setErrorMessage(error instanceof Error ? error.message : 'Failed to load finding details.');
+        setErrorMessage(error instanceof Error ? error.message : '취약점 상세 정보를 불러오지 못했습니다.');
         setScanBasic(null);
         setFinding(null);
         setRelatedFindings([]);
@@ -127,9 +127,9 @@ function useFindingDetailData(scanId: string, findingId: string) {
     try {
       await approveFindingPatch(scanId, findingId);
       await refreshFindingData();
-      toast.success('Patch approval requested.', { durationMs: 2000 });
+      toast.success('패치 적용 요청을 전송했습니다.', { durationMs: 2000 });
     } catch (error) {
-      setApproveErrorMessage(error instanceof Error ? error.message : 'Failed to request patch approval.');
+      setApproveErrorMessage(error instanceof Error ? error.message : '패치 적용 요청에 실패했습니다.');
     } finally {
       setIsApprovingPatch(false);
     }
@@ -146,9 +146,9 @@ function useFindingDetailData(scanId: string, findingId: string) {
       try {
         await updateFindingResolutionStatus(findingId, nextStatus);
         await refreshFindingData();
-        toast.success('Finding status updated.', { durationMs: 2000 });
+        toast.success('조치 상태를 변경했습니다.', { durationMs: 2000 });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to update finding status.';
+        const message = error instanceof Error ? error.message : '조치 상태를 변경하지 못했습니다.';
         toast.error(message, { durationMs: 2500 });
       } finally {
         setIsUpdatingResolutionStatus(false);
