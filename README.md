@@ -274,7 +274,7 @@
 
 ## 🏗 시스템 아키텍처
 
-![System Architecture](./assets/img/system_architecture.png)
+![System Architecture](./docs/assets/img/system_architecture.png)
 
 ```
 [웹 업로드 경로]
